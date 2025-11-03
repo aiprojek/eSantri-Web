@@ -1,0 +1,26 @@
+{
+  "name": "eSantri Web",
+  "short_name": "eSantri Web",
+  "description": "Aplikasi modern untuk manajemen data santri di Pondok Pesantren. Fitur lengkap, offline-first, dan mudah digunakan.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/public/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

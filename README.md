@@ -3,7 +3,7 @@
 ![eSantri Web Logo](public/icon.svg)
 
 [![Lisensi](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Repo-black.svg?logo=github)](https://github.com/aiprojek/esantri-app)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repo-black.svg?logo=github)](https://github.com/aiprojek/eSantri-Web)
 
 **eSantri Web** adalah aplikasi berbasis web yang dirancang untuk membantu administrasi Pondok Pesantren dalam mengelola data santri secara efisien. Aplikasi ini bersifat **offline-first**, artinya semua data disimpan secara lokal di browser Anda, memungkinkan penggunaan tanpa koneksi internet dan menjamin privasi data sepenuhnya.
 
@@ -82,6 +82,6 @@ Proyek ini dilisensikan di bawah **GNU General Public License v3.0**.
 
 ## 📞 Kontak & Dukungan
 
--   **Diskusi & Laporan Bug**: [GitHub Issues](https://github.com/aiprojek/esantri-app/issues)
+-   **Diskusi & Laporan Bug**: [GitHub Issues](https://github.com/aiprojek/eSantri-Web/issues)
 -   **Komunitas Telegram**: [Diskusi eSantri Web](https://t.me/aiprojek_community/32)
 -   **Dukung Pengembang**: [Traktir Kopi](https://lynk.id/aiprojek/s/bvBJvdA)

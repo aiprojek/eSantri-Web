@@ -146,7 +146,7 @@ const Tentang: React.FC = () => {
                                         <i className="bi bi-cup-hot-fill"></i>
                                         <span>Traktir Kopi</span>
                                     </a>
-                                    <a href="https://github.com/aiprojek/esantri-app" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-lg hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
+                                    <a href="https://github.com/aiprojek/eSantri-Web" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-lg hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
                                         <i className="bi bi-github"></i>
                                         <span>GitHub</span>
                                     </a>

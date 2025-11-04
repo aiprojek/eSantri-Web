@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useAppContext, ToastData } from './AppContext';
 import Sidebar from './components/Sidebar';
@@ -224,7 +225,7 @@ const AppContent: React.FC = () => {
             
             <button 
                 onClick={() => setSidebarOpen(!isSidebarOpen)}
-                className="fixed top-4 left-4 z-50 p-2 text-gray-600 bg-white rounded-md shadow-md md:hidden"
+                className={`fixed top-4 left-4 z-50 p-2 text-gray-600 bg-white rounded-md shadow-md md:hidden transition-transform ${isSidebarOpen ? 'translate-x-64' : ''}`}
                 aria-label={isSidebarOpen ? 'Tutup sidebar' : 'Buka sidebar'}
             >
                 <i className={`bi ${isSidebarOpen ? 'bi-x-lg' : 'bi-list'}`}></i>

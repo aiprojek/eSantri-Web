@@ -171,6 +171,7 @@ const AppContent: React.FC = () => {
 
     const handleSetPage = (page: Page) => {
         setCurrentPage(page);
+        setSidebarOpen(false);
     };
 
     const renderContent = () => {

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import { GedungAsrama, Kamar, Santri, TenagaPengajar } from '../types';
@@ -421,7 +422,7 @@ const Asrama: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Manajemen Keasramaan</h1>
 
             <div className="mb-6 border-b border-gray-200">
-                <nav className="flex -mb-px">
+                <nav className="flex -mb-px overflow-x-auto">
                     <TabButton tabId="dashboard" label="Dashboard Asrama" />
                     <TabButton tabId="manajemen" label="Manajemen Asrama" />
                     <TabButton tabId="penempatan" label="Penempatan Santri" />

@@ -307,7 +307,7 @@ const Tentang: React.FC = () => {
                                             <p className="mt-2">
                                                 Jika ingin mengisinya, gunakan format JSON Array. Contoh untuk kolom <code>prestasi_json</code> jika santri memiliki satu prestasi:
                                             </p>
-                                            <pre className="bg-gray-800 text-white p-2 rounded-md text-xs mt-2 overflow-x-auto">
+                                            <pre className="bg-gray-800 text-white p-2 rounded-md text-xs mt-2 whitespace-pre-wrap break-all">
                                                 <code>
                                                 {`[{"id":1,"jenis":"Akademik","tingkat":"Kabupaten","nama":"Juara 1 Cerdas Cermat","tahun":2024,"penyelenggara":"Dinas Pendidikan"}]`}
                                                 </code>

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAppContext } from '../../../AppContext';
 
@@ -55,7 +56,7 @@ export const GenerateTagihanModal: React.FC<GenerateTagihanModalProps> = ({ isOp
                     <div>
                         <h4 className="font-semibold text-gray-800">1. Generate Tagihan Bulanan (SPP, dll)</h4>
                         <p className="text-sm text-gray-600 mb-2">Membuat tagihan untuk semua biaya berjenis 'Bulanan' bagi santri aktif.</p>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5">
                                 {months.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
                             </select>

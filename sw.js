@@ -1,4 +1,4 @@
-const CACHE_NAME = 'esantri-web-v1.4';
+const CACHE_NAME = 'esantri-web-v1.5';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -8,7 +8,11 @@ const urlsToCache = [
   '/icons/icon-512x512.png',
   'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
-  'https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs'
+  'https://aistudiocdn.com/react-dom@^19.2.0/',
+  'https://aistudiocdn.com/react@^19.2.0',
+  'https://aistudiocdn.com/react@^19.2.0/',
+  'https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs',
+  'https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs'
 ];
 
 // Install a service worker
@@ -16,7 +20,7 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Service Worker: Caching app shell');
+        console.log('Service Worker: Caching app shell and critical assets');
         return cache.addAll(urlsToCache);
       })
       .then(() => {

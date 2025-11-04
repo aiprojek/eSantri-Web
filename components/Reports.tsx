@@ -315,7 +315,9 @@ const Reports: React.FC = () => {
             </div>
             <div className="relative">
                 <div id="preview-area" ref={previewContainerRef} className="p-8 bg-gray-200 rounded-lg overflow-auto flex justify-center max-h-[80vh]">
-                    <div ref={contentWrapperRef} style={{ transform: `scale(${smartZoomScale * manualZoom})`, transformOrigin: 'top center', transition: 'transform 0.2s ease-in-out' }}>{previewContent}</div>
+                    <div ref={contentWrapperRef} className="printable-content-wrapper" style={{ transform: `scale(${smartZoomScale * manualZoom})`, transformOrigin: 'top center', transition: 'transform 0.2s ease-in-out' }}>
+                        {previewContent}
+                    </div>
                 </div>
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 opacity-30 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300">
                     <div className="flex items-center gap-2 bg-gray-900/80 backdrop-blur-sm text-white rounded-full p-2 shadow-lg"><button onClick={() => setManualZoom(z => Math.max(0.25, z - 0.1))} className="w-10 h-10 rounded-full hover:bg-white/20 transition-colors flex items-center justify-center" aria-label="Zoom Out" title="Zoom Out"><i className="bi bi-zoom-out text-xl"></i></button><span className="font-mono text-sm w-16 text-center select-none">{Math.round(smartZoomScale * manualZoom * 100)}%</span><button onClick={() => setManualZoom(z => Math.min(3, z + 0.1))} className="w-10 h-10 rounded-full hover:bg-white/20 transition-colors flex items-center justify-center" aria-label="Zoom In" title="Zoom In"><i className="bi bi-zoom-in text-xl"></i></button></div>

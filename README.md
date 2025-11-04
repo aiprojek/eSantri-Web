@@ -78,7 +78,7 @@ Kode sumber lengkap dapat diakses di repositori GitHub kami.
 
 ## 📦 Panduan Build Lokal (Local Build Guide)
 
-Secara default, aplikasi ini memuat beberapa pustaka (seperti React) dari CDN (*Content Delivery Network*), yang memerlukan koneksi internet saat pertama kali dibuka. Untuk menjalankan aplikasi ini sepenuhnya secara offline, ikuti langkah-langkah berikut.
+Secara default, aplikasi ini memuat beberapa pustaka (seperti React) dari CDN (*Content Delivery Network*), yang memerlukan koneksi internet saat pertama kali dibuka. Untuk menjalankan aplikasi ini sepenuhnya offline, ikuti langkah-langkah berikut.
 
 **Prasyarat:**
 Pastikan Anda memiliki [Node.js](https://nodejs.org/) (yang sudah termasuk `npm`) terinstal di komputer Anda.

@@ -77,8 +77,8 @@ const Finance: React.FC = () => {
             {historySantri && <RiwayatKeuanganSantriModal isOpen={!!historySantri} onClose={() => setHistorySantri(null)} santri={historySantri} onPrint={handlePrintKuitansi} />}
 
             <div className="hidden print:block">
-                {printableData && <div id="preview-area"><KuitansiTemplate data={printableData} settings={settings} /></div>}
-                {printableSuratTagihanData && <div id="preview-area">{printableSuratTagihanData.map((data, i) => <div key={i} className="page-break-after"><SuratTagihanTemplate {...data} settings={settings} /></div>)}</div>}
+                {printableData && <div className="printable-content-wrapper"><KuitansiTemplate data={printableData} settings={settings} /></div>}
+                {printableSuratTagihanData && <div className="printable-content-wrapper">{printableSuratTagihanData.map((data, i) => <div key={i} className="page-break-after"><SuratTagihanTemplate {...data} settings={settings} /></div>)}</div>}
             </div>
         </div>
     );

@@ -405,12 +405,12 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                     if (!santriData.namaLengkap) {
                         preview.errors.push(`Baris ${i + 1}: 'namaLengkap' wajib diisi.`); continue;
                     }
-                    // FIX: The spread of `processRow()` could cause a type error if it's not an object.
-                    // Using a ternary operator ensures an object is always spread.
+                    // FIX: Cast `processedData` to a compatible type, as TypeScript can't infer it correctly,
+                    // causing a spread operator error.
                     const processedData = processRow();
                     const newSantri: Omit<Santri, 'id'> = {
                         namaLengkap: '', nis: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki', alamat: {detail: ''}, namaAyah: '', namaIbu: '', teleponWali: '', tanggalMasuk: new Date().toISOString().slice(0,7)+'-01', jenjangId: 0, kelasId: 0, rombelId: 0, status: 'Aktif',
-                        ...(processedData ? processedData : {})
+                        ...processedData as Partial<Santri>
                     };
                     preview.toAdd.push(newSantri);
                 }

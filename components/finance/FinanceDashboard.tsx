@@ -180,11 +180,11 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
                 const jenjangData = data.get(jenjangId)!;
                 // FIX: Explicitly cast `t.nominal` to a Number before performing addition to prevent potential type errors
                 // where `t.nominal` might not be correctly inferred as a number.
-                jenjangData.totalTagihan += (parseFloat(String(t.nominal)) || 0);
+                jenjangData.totalTagihan += Number(t.nominal) || 0;
                 if (t.status === 'Belum Lunas') {
                 // FIX: Explicitly cast `t.nominal` to a Number before performing addition to prevent potential type errors
                 // where `t.nominal` might not be correctly inferred as a number.
-                    jenjangData.totalTunggakan += (parseFloat(String(t.nominal)) || 0);
+                    jenjangData.totalTunggakan += Number(t.nominal) || 0;
                 }
             }
         });

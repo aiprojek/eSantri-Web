@@ -76,6 +76,76 @@ Kode sumber lengkap dapat diakses di repositori GitHub kami.
 -   **Local Storage**: Dexie.js (IndexedDB Wrapper)
 -   **Form Management**: React Hook Form
 
+## 📦 Panduan Build Lokal (Local Build Guide)
+
+Secara default, aplikasi ini memuat beberapa pustaka (seperti React) dari CDN (*Content Delivery Network*), yang memerlukan koneksi internet saat pertama kali dibuka. Untuk menjalankan aplikasi ini sepenuhnya secara offline, ikuti langkah-langkah berikut.
+
+**Prasyarat:**
+Pastikan Anda memiliki [Node.js](https://nodejs.org/) (yang sudah termasuk `npm`) terinstal di komputer Anda.
+
+**Langkah 1: Unduh Dependensi**
+
+Buka terminal atau command prompt di direktori root proyek (folder tempat file `index.html` berada) dan jalankan perintah berikut untuk mengunduh semua pustaka yang diperlukan ke dalam folder `node_modules`:
+
+```bash
+npm install react react-dom dexie react-hook-form
+```
+
+**Langkah 2: Perbarui `index.html`**
+
+Buka file `index.html` dan modifikasi bagian `<script type="importmap">`. Ganti URL CDN dengan path lokal ke file di dalam folder `node_modules` yang baru saja Anda buat.
+
+**Ganti ini:**
+```html
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "dexie": "https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs",
+    "react-hook-form": "https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs"
+  }
+}
+</script>
+```
+
+**Menjadi ini:**
+```html
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "/node_modules/react-dom/",
+    "react": "/node_modules/react/index.js",
+    "react/": "/node_modules/react/",
+    "dexie": "/node_modules/dexie/dist/dexie.mjs",
+    "react-hook-form": "/node_modules/react-hook-form/dist/index.esm.mjs"
+  }
+}
+</script>
+```
+
+**Langkah 3: Jalankan Server Lokal**
+
+Karena browser membatasi pemuatan modul ES6 langsung dari sistem file (`file:///...`), Anda perlu menjalankan server web lokal. Cara termudah adalah menggunakan `http-server`.
+
+Jalankan perintah berikut di terminal dari direktori root proyek:
+
+```bash
+npx http-server -c-1
+```
+
+- `npx` akan menjalankan paket `http-server` tanpa perlu menginstalnya secara global.
+- `-c-1` adalah flag untuk menonaktifkan cache, yang penting untuk pengembangan agar perubahan langsung terlihat.
+
+**Langkah 4: Akses Aplikasi**
+
+Setelah server berjalan, buka browser Anda dan kunjungi alamat yang ditampilkan di terminal, biasanya:
+
+**http://localhost:8080**
+
+Sekarang aplikasi berjalan sepenuhnya dari komputer Anda tanpa ketergantungan pada CDN.
+
 ## 📜 Lisensi
 
 Proyek ini dilisensikan di bawah **GNU General Public License v3.0**.

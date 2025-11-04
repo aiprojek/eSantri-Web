@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 
 const FeatureItem: React.FC<{ icon: string; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (
@@ -39,6 +38,16 @@ const Tentang: React.FC = () => {
     const [contactName, setContactName] = useState('');
     const [contactSubject, setContactSubject] = useState('');
     const [contactMessage, setContactMessage] = useState('');
+    
+    const [sampleDataDeleted, setSampleDataDeleted] = useState(false);
+    const [showResetConfirmation, setShowResetConfirmation] = useState(false);
+    const [resetInput, setResetInput] = useState('');
+    const CONFIRM_RESET_TEXT = 'HAPUS SEMUA DATA';
+
+    useEffect(() => {
+        const deleted = localStorage.getItem('eSantriSampleDataDeleted') === 'true';
+        setSampleDataDeleted(deleted);
+    }, []);
 
     const mailtoLink = `mailto:aiprojek01@gmail.com?subject=${encodeURIComponent(contactSubject)}&body=${encodeURIComponent(`Halo,\n\nNama saya ${contactName}.\n\n${contactMessage}`)}`;
 
@@ -64,6 +73,8 @@ const Tentang: React.FC = () => {
             async () => {
                 try {
                     await onDeleteSampleData();
+                    localStorage.setItem('eSantriSampleDataDeleted', 'true');
+                    setSampleDataDeleted(true);
                     showToast('Data sampel berhasil dihapus. Aplikasi akan dimuat ulang.', 'success');
                     setTimeout(() => window.location.reload(), 2000);
                 } catch (error) {
@@ -73,6 +84,23 @@ const Tentang: React.FC = () => {
             { confirmText: 'Ya, Hapus Data Sampel', confirmColor: 'red' }
         );
     };
+
+    const handlePermanentReset = () => {
+        showConfirmation(
+            'Reset Seluruh Aplikasi?',
+            'Anda akan menghapus SEMUA data santri, keuangan, dan kas. Tindakan ini sama seperti menghapus data sampel dan TIDAK DAPAT DIBATALKAN. Yakin ingin melanjutkan?',
+             async () => {
+                try {
+                    await onDeleteSampleData();
+                    showToast('Aplikasi berhasil di-reset. Aplikasi akan dimuat ulang.', 'success');
+                    setTimeout(() => window.location.reload(), 2000);
+                } catch (error) {
+                    showToast('Gagal melakukan reset.', 'error');
+                }
+            },
+            { confirmText: 'Ya, Reset Sekarang', confirmColor: 'red' }
+        )
+    }
 
     return (
         <div>
@@ -171,17 +199,53 @@ const Tentang: React.FC = () => {
                                 <p className="mt-1 text-sm">Aplikasi ini dirancang untuk penggunaan <strong>terpusat oleh satu orang di satu komputer/laptop</strong>. Semua data disimpan secara lokal di browser Anda dan <strong>tidak dapat diakses</strong> dari komputer lain atau oleh pengguna lain.</p>
                                 <p className="mt-2 text-sm">Skenario ini sempurna untuk administrator tunggal, tetapi <strong>tidak cocok untuk tim</strong> yang membutuhkan kolaborasi atau akses data bersamaan.</p>
                             </div>
-                            <div className="p-4 mb-6 rounded-md border-l-4 border-red-500 bg-red-50 text-red-800">
-                                <h4 className="font-bold flex items-center gap-2"><i className="bi bi-exclamation-triangle-fill"></i>Penting: Data Sampel</h4>
-                                <p className="mt-1 text-sm">Data yang ada di aplikasi saat ini adalah data sampel untuk keperluan demonstrasi. Sangat disarankan untuk <strong>menghapus semua data sampel</strong> ini sebelum Anda mulai memasukkan data asli pondok pesantren Anda.</p>
-                                <button
-                                    onClick={handleDeleteSampleData}
-                                    className="mt-3 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                                >
-                                    <i className="bi bi-trash3-fill"></i>
-                                    Hapus Semua Data Sampel
-                                </button>
-                            </div>
+
+                            {!sampleDataDeleted ? (
+                                <div className="p-4 mb-6 rounded-md border-l-4 border-red-500 bg-red-50 text-red-800">
+                                    <h4 className="font-bold flex items-center gap-2"><i className="bi bi-exclamation-triangle-fill"></i>Penting: Data Sampel</h4>
+                                    <p className="mt-1 text-sm">Data yang ada di aplikasi saat ini adalah data sampel untuk keperluan demonstrasi. Sangat disarankan untuk <strong>menghapus semua data sampel</strong> ini sebelum Anda mulai memasukkan data asli pondok pesantren Anda.</p>
+                                    <button
+                                        onClick={handleDeleteSampleData}
+                                        className="mt-3 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                    >
+                                        <i className="bi bi-trash3-fill"></i>
+                                        Hapus Semua Data Sampel
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="p-4 mb-6 rounded-md border-l-4 border-red-500 bg-red-50 text-red-800">
+                                    <h4 className="font-bold flex items-center gap-2"><i className="bi bi-shield-exclamation"></i>Zona Berbahaya</h4>
+                                    <p className="mt-1 text-sm">Fitur ini akan menghapus semua data transaksi (santri, keuangan, kas) dan mengembalikan aplikasi ke kondisi awal. Gunakan dengan sangat hati-hati.</p>
+                                    {!showResetConfirmation ? (
+                                        <button
+                                            onClick={() => setShowResetConfirmation(true)}
+                                            className="mt-3 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200"
+                                        >
+                                            Reset Aplikasi
+                                        </button>
+                                    ) : (
+                                        <div className="mt-3 p-3 bg-white border border-red-200 rounded-md">
+                                            <label htmlFor="confirm-reset" className="block text-sm font-medium text-gray-700">Untuk konfirmasi, ketik "<strong className="text-red-700">{CONFIRM_RESET_TEXT}</strong>" di bawah ini:</label>
+                                            <input 
+                                                id="confirm-reset"
+                                                type="text"
+                                                value={resetInput}
+                                                onChange={(e) => setResetInput(e.target.value)}
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm"
+                                            />
+                                            <button
+                                                onClick={handlePermanentReset}
+                                                disabled={resetInput !== CONFIRM_RESET_TEXT}
+                                                className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed"
+                                            >
+                                                <i className="bi bi-trash3-fill"></i>
+                                                Hapus Permanen
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="p-4 mb-6 rounded-md border-l-4 border-blue-500 bg-blue-50 text-blue-800">
                                 <h4 className="font-bold flex items-center gap-2"><i className="bi bi-code-slash"></i>Untuk Pengembang (Developers)</h4>
                                 <p className="mt-1 text-sm">

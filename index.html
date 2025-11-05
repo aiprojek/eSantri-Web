@@ -33,22 +33,27 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
       @media print {
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        
         .no-print {
           display: none !important;
         }
 
         body, html {
           background: white !important;
+          margin: 0;
+          padding: 0;
         }
 
-        /* Remove padding/margin from main layout containers */
         main.p-4, main > .p-4 {
           padding: 0 !important;
           margin: 0 !important;
-          margin-top: 0 !important; /* Overrides mt-14 */
+          margin-top: 0 !important;
         }
         
-        /* Reset the preview area container for printing */
         .preview-container {
             background-color: transparent !important;
             padding: 0 !important;
@@ -56,7 +61,6 @@
             box-shadow: none !important;
         }
 
-        /* Reset the gray background and padding of the direct preview wrapper */
         #preview-area {
             background-color: transparent !important;
             padding: 0 !important;
@@ -65,17 +69,18 @@
             overflow: visible !important;
         }
         
-        /* Ensure the main content wrapper has no transformations */
         .printable-content-wrapper {
           transform: none !important;
         }
         
-        /* Remove shadows and margins from the individual page divs inside the wrapper */
+        /* The rule below was removed as it stripped necessary styles from the paper element */
+        /*
         .printable-content-wrapper > div {
           box-shadow: none !important;
           margin: 0 !important;
           border: none !important;
         }
+        */
 
         .page-break-after {
           page-break-after: always;

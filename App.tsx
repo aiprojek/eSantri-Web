@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useAppContext, ToastData } from './AppContext';
 import Sidebar from './components/Sidebar';
@@ -14,6 +15,7 @@ import ConfirmModal from './components/ConfirmModal';
 import Tentang from './components/Tentang';
 import WelcomeModal from './components/WelcomeModal';
 import { Page } from './types';
+import UpdateNotification from './components/UpdateNotification';
 
 
 // --- Alert Modal Component ---
@@ -145,12 +147,46 @@ const AppContent: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+    const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
 
     useEffect(() => {
         const welcomeShown = localStorage.getItem('eSantriWelcomeShown');
         if (welcomeShown !== 'true') {
             setShowWelcomeModal(true);
         }
+    }, []);
+
+    useEffect(() => {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(registration => {
+                console.log('SW registered: ', registration);
+
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    console.log('SW update found, new worker is installing:', newWorker);
+
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed') {
+                                if (registration.waiting) {
+                                    console.log('SW is installed and waiting for activation.');
+                                    setWaitingWorker(registration.waiting);
+                                }
+                            }
+                        });
+                    }
+                });
+            }).catch(registrationError => {
+                console.log('SW registration failed: ', registrationError);
+            });
+        }
+        
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            window.location.reload();
+            refreshing = true;
+        });
     }, []);
 
     const handleCloseWelcomeModal = () => {
@@ -173,6 +209,12 @@ const AppContent: React.FC = () => {
     const handleSetPage = (page: Page) => {
         setCurrentPage(page);
         setSidebarOpen(false);
+    };
+    
+    const handleUpdate = () => {
+        if (waitingWorker) {
+            waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+        }
     };
 
     const renderContent = () => {
@@ -216,6 +258,7 @@ const AppContent: React.FC = () => {
                 onClose={handleCloseWelcomeModal}
                 onGoToGuide={handleGoToGuide}
             />
+            {waitingWorker && <UpdateNotification onUpdate={handleUpdate} />}
             <ToastContainer toasts={toasts} onClose={removeToast} />
             <AlertModal 
                 isOpen={alertModal.isOpen}

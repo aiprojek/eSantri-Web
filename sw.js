@@ -1,4 +1,4 @@
-const CACHE_NAME = 'esantri-web-v1.5';
+const CACHE_NAME = 'esantri-web-v1.6';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -24,10 +24,17 @@ self.addEventListener('install', event => {
         return cache.addAll(urlsToCache);
       })
       .then(() => {
-        // Force the waiting service worker to become the active service worker.
-        return self.skipWaiting();
+        // No longer forcing activation. The new SW will wait for a message.
+        console.log('Service Worker: New version installed and waiting for activation.');
       })
   );
+});
+
+// Listener for the message from the client to skip waiting
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Activate the service worker

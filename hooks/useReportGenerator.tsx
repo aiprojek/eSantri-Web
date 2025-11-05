@@ -64,8 +64,8 @@ const PanduanPenilaianTemplate: React.FC = () => {
         <div className="font-sans text-black" style={{ fontSize: '10pt' }}>
             <h3 className="font-bold text-xl mb-6 text-center">Panduan Penilaian</h3>
             
-            <div className="space-y-4 text-justify">
-                <div>
+            <div className="columns-2 gap-8 text-justify">
+                <div className="break-inside-avoid mb-4">
                     <h4 className="font-bold text-base mb-2">A. Deskripsi Kolom Penilaian</h4>
                     <ul className="list-disc list-outside pl-5 space-y-1 text-sm">
                         <li><strong className="font-semibold">TP (Tujuan Pembelajaran):</strong> Nilai sumatif lingkup materi untuk mengukur ketercapaian satu atau lebih tujuan pembelajaran.</li>
@@ -78,7 +78,7 @@ const PanduanPenilaianTemplate: React.FC = () => {
                     </ul>
                 </div>
 
-                <div>
+                <div className="break-inside-avoid mb-4">
                     <h4 className="font-bold text-base mb-2">B. Contoh Pengolahan Nilai Akhir Rapor</h4>
                     <p className="text-sm mb-2">
                         Pengolahan nilai rapor dapat dilakukan dengan berbagai cara, salah satunya adalah menggunakan rata-rata dari semua nilai sumatif yang diperoleh santri. Lembaga pendidikan memiliki keleluasaan untuk menentukan pembobotan jika diperlukan.
@@ -96,7 +96,7 @@ const PanduanPenilaianTemplate: React.FC = () => {
                     </div>
                 </div>
 
-                <div>
+                <div className="break-inside-avoid">
                     <h4 className="font-bold text-base mb-2">C. Skala Penilaian (Contoh)</h4>
                      <table className="text-sm">
                         <tbody>
@@ -1350,7 +1350,7 @@ export const useReportGenerator = (settings: PondokSettings) => {
                     if (options.guidanceOption === 'show' && !hasGeneratedGuidance) {
                         results.push({
                             content: <PanduanPenilaianTemplate />,
-                            orientation: 'portrait'
+                            orientation: 'landscape'
                         });
                         hasGeneratedGuidance = true;
                     }

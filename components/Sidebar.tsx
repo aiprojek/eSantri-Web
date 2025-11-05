@@ -21,7 +21,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
   ];
 
   return (
-    <aside className={`fixed top-0 left-0 z-40 w-64 h-screen transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 bg-teal-800 text-white`}>
+    <aside className={`fixed top-0 left-0 z-40 w-64 h-screen transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 bg-teal-800 text-white no-print`}>
       <div className="h-full px-3 py-4 overflow-y-auto">
         <a href="#" className="flex items-center ps-2.5 mb-5">
           <svg className="h-8 w-8 mr-2 border border-white/30 rounded-md p-1" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img">

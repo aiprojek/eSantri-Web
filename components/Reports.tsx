@@ -233,8 +233,8 @@ const Reports: React.FC = () => {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Laporan & Cetak</h1>
-      <div className="bg-white p-6 rounded-lg shadow-md">
+      <h1 className="text-3xl font-bold text-gray-800 mb-6 no-print">Laporan & Cetak</h1>
+      <div className="bg-white p-6 rounded-lg shadow-md no-print">
         <h2 className="text-xl font-bold text-gray-700 mb-4">1. Pilih Jenis Laporan</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {reportTypes.map(report => (
@@ -308,8 +308,8 @@ const Reports: React.FC = () => {
       </div>
 
       {previewContent && (
-        <div className="bg-white p-6 rounded-lg shadow-md mt-6" ref={previewAreaRef}>
-            <div className="flex flex-wrap justify-between items-center gap-x-4 gap-y-2 mb-4">
+        <div className="bg-white p-6 rounded-lg shadow-md mt-6 preview-container" ref={previewAreaRef}>
+            <div className="flex flex-wrap justify-between items-center gap-x-4 gap-y-2 mb-4 no-print">
                 <div className="flex items-center gap-x-4 gap-y-2 flex-wrap"><h2 className="text-xl font-bold text-gray-700 whitespace-nowrap">3. Pratinjau Laporan</h2>{pageCount > 0 && (<span className="text-sm font-medium bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full">Estimasi: {pageCount} halaman</span>)}</div>
                 <button onClick={handlePrint} className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto"><i className="bi bi-printer-fill"></i><span className="hidden lg:inline">Cetak Laporan Ini</span><span className="lg:hidden">Cetak</span></button>
             </div>
@@ -319,14 +319,14 @@ const Reports: React.FC = () => {
                         {previewContent}
                     </div>
                 </div>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 opacity-30 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300">
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 opacity-30 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300 no-print">
                     <div className="flex items-center gap-2 bg-gray-900/80 backdrop-blur-sm text-white rounded-full p-2 shadow-lg"><button onClick={() => setManualZoom(z => Math.max(0.25, z - 0.1))} className="w-10 h-10 rounded-full hover:bg-white/20 transition-colors flex items-center justify-center" aria-label="Zoom Out" title="Zoom Out"><i className="bi bi-zoom-out text-xl"></i></button><span className="font-mono text-sm w-16 text-center select-none">{Math.round(smartZoomScale * manualZoom * 100)}%</span><button onClick={() => setManualZoom(z => Math.min(3, z + 0.1))} className="w-10 h-10 rounded-full hover:bg-white/20 transition-colors flex items-center justify-center" aria-label="Zoom In" title="Zoom In"><i className="bi bi-zoom-in text-xl"></i></button></div>
                 </div>
             </div>
         </div>
       )}
       {!activeReport && 
-        <div className="text-center py-10 px-6 bg-gray-50 mt-6 rounded-lg">
+        <div className="text-center py-10 px-6 bg-gray-50 mt-6 rounded-lg no-print">
             <i className="bi bi-journal-arrow-up text-5xl text-gray-300"></i>
             <p className="mt-4 text-gray-500">Pilih jenis laporan di atas untuk memulai.</p>
         </div>

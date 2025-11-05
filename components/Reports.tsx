@@ -147,6 +147,65 @@ const Reports: React.FC = () => {
   
   const handlePrint = () => { window.print(); };
 
+  const handleDownloadHtml = () => {
+    const previewHtml = contentWrapperRef.current?.innerHTML;
+    if (!previewHtml) {
+        alert("Tidak ada konten pratinjau untuk diunduh.");
+        return;
+    }
+
+    let allCss = '';
+    // Iterate over all stylesheets in the document to collect CSS rules
+    for (const sheet of Array.from(document.styleSheets)) {
+        try {
+            // Check if cssRules is accessible to avoid CORS errors
+            if (sheet.cssRules) {
+                for (const rule of Array.from(sheet.cssRules)) {
+                    allCss += rule.cssText + '\n';
+                }
+            }
+        } catch (e) {
+            console.warn('Gagal membaca aturan CSS dari stylesheet:', sheet.href, e);
+        }
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="id">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=1200">
+          <title>Laporan eSantri - ${activeReport ? reportTypes.find(r => r.id === activeReport)?.title : ''}</title>
+          <style>
+            /* Embedded CSS rules */
+            ${allCss}
+            /* Add a body style for better viewing of the downloaded file */
+            body {
+              background-color: #e5e7eb; /* bg-gray-200 */
+              padding: 2rem; /* p-8 */
+            }
+          </style>
+        </head>
+        <body>
+          <div class="printable-content-wrapper">
+            ${previewHtml}
+          </div>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `laporan_${activeReport}_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
+
   const handleGeneratePreview = () => {
     if (!activeReport) return;
     setIsPreviewGenerating(true);
@@ -311,7 +370,14 @@ const Reports: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow-md mt-6 preview-container" ref={previewAreaRef}>
             <div className="flex flex-wrap justify-between items-center gap-x-4 gap-y-2 mb-4 no-print">
                 <div className="flex items-center gap-x-4 gap-y-2 flex-wrap"><h2 className="text-xl font-bold text-gray-700 whitespace-nowrap">3. Pratinjau Laporan</h2>{pageCount > 0 && (<span className="text-sm font-medium bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full">Estimasi: {pageCount} halaman</span>)}</div>
-                <button onClick={handlePrint} className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto"><i className="bi bi-printer-fill"></i><span className="hidden lg:inline">Cetak Laporan Ini</span><span className="lg:hidden">Cetak</span></button>
+                <div className="flex items-center gap-2">
+                    <button onClick={handleDownloadHtml} className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto">
+                        <i className="bi bi-file-earmark-arrow-down-fill"></i><span className="hidden lg:inline">Download HTML</span><span className="lg:hidden">Download</span>
+                    </button>
+                    <button onClick={handlePrint} className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto">
+                        <i className="bi bi-printer-fill"></i><span className="hidden lg:inline">Cetak Laporan</span><span className="lg:hidden">Cetak</span>
+                    </button>
+                </div>
             </div>
             <div className="relative">
                 <div id="preview-area" ref={previewContainerRef} className="p-8 bg-gray-200 rounded-lg overflow-auto flex justify-center max-h-[80vh]">

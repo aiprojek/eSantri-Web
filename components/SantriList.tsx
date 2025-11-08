@@ -1,3 +1,5 @@
+
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Santri, RiwayatStatus } from '../types';
 import { useAppContext } from '../AppContext';
@@ -405,11 +407,11 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                     if (!santriData.namaLengkap) {
                         preview.errors.push(`Baris ${i + 1}: 'namaLengkap' wajib diisi.`); continue;
                     }
-                    // FIX: The original spread operator with a type assertion was causing a "Spread types may only be created from object types" error.
-                    // This is likely a misleading error message from TypeScript, with the underlying issue being type incompatibility from spreading an object
-                    // with an index signature into a strictly typed object. The fix is to cast the entire new object to the desired type, which is a common and robust pattern.
                     const processedData = processRow();
-                    const newSantri: Omit<Santri, 'id'> = {
+                    // FIX: The error "Spread types may only be created from object types" can occur when spreading an object with an index signature.
+                    // Removing the explicit type annotation on `newSantri` and relying solely on the type assertion after the object creation
+                    // is a common pattern to resolve type inference conflicts.
+                    const newSantri = {
                         namaLengkap: '', nis: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki', alamat: {detail: ''}, namaAyah: '', namaIbu: '', teleponWali: '', tanggalMasuk: new Date().toISOString().slice(0,7)+'-01', jenjangId: 0, kelasId: 0, rombelId: 0, status: 'Aktif',
                         ...processedData
                     } as Omit<Santri, 'id'>;
@@ -628,14 +630,30 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         <div className="bg-white p-6 rounded-lg shadow-md text-center py-20">
           <i className="bi bi-people text-6xl text-gray-300"></i>
           <h2 className="mt-4 text-2xl font-bold text-gray-700">Database Santri Masih Kosong</h2>
-          <p className="mt-2 text-gray-500">Mulai dengan menambahkan data santri pertama Anda.</p>
-          <button 
-            onClick={() => openModal()} 
-            className="mt-6 flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 mx-auto"
-          >
-            <i className="bi bi-person-plus-fill"></i>
-            Tambah Santri Baru
-          </button>
+          <p className="mt-2 text-gray-500">Mulai dengan menambahkan data santri baru atau impor data dari file CSV.</p>
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
+            <button 
+              onClick={() => openModal()} 
+              className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+            >
+              <i className="bi bi-person-plus-fill"></i>
+              Tambah Santri Baru
+            </button>
+            <button
+              onClick={() => setImportModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              <i className="bi bi-box-arrow-in-down"></i>
+              Impor dari CSV
+            </button>
+            <button
+              onClick={handleExportTemplate}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            >
+              <i className="bi bi-file-earmark-arrow-down"></i>
+              Unduh Template
+            </button>
+          </div>
         </div>
         {isModalOpen && (
           <SantriModal
@@ -645,6 +663,8 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
             santriData={selectedSantri}
           />
         )}
+        {isImportModalOpen && <ImportModal />}
+        {importPreview && <ImportPreviewModal />}
       </div>
     );
   }

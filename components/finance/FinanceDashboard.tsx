@@ -64,7 +64,7 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
 
         const totalTunggakan = tagihanList
             .filter(t => t.status === 'Belum Lunas')
-            .reduce((sum, t) => sum + (parseFloat(String(t.nominal)) || 0), 0);
+            .reduce((sum, t) => sum + (Number(t.nominal) || 0), 0);
 
         const penerimaanBulanIni = pembayaranList
             .filter(p => {
@@ -151,7 +151,7 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
         const arrearsMap = new Map<number, number>();
         tagihanList.forEach(t => {
             if (t.status === 'Belum Lunas') {
-                arrearsMap.set(t.santriId, (arrearsMap.get(t.santriId) || 0) + (parseFloat(String(t.nominal)) || 0));
+                arrearsMap.set(t.santriId, (arrearsMap.get(t.santriId) || 0) + (Number(t.nominal) || 0));
             }
         });
 
@@ -176,13 +176,13 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
 
         tagihanList.forEach(t => {
             const jenjangId = santriJenjangMap.get(t.santriId);
-            if (jenjangId && data.has(jenjangId)) {
+            if (typeof jenjangId === 'number' && data.has(jenjangId)) {
                 const jenjangData = data.get(jenjangId)!;
-                // FIX: Replaced `Number(t.nominal)` with a more robust `parseFloat(String(t.nominal))` to prevent type errors if `t.nominal` is not a clean number.
-                jenjangData.totalTagihan += parseFloat(String(t.nominal)) || 0;
+                // FIX: Use Number() for a more direct conversion, which can be safer if the underlying data type is inconsistent.
+                jenjangData.totalTagihan += Number(t.nominal) || 0;
                 if (t.status === 'Belum Lunas') {
-                // FIX: Replaced `Number(t.nominal)` with a more robust `parseFloat(String(t.nominal))` to prevent type errors if `t.nominal` is not a clean number.
-                    jenjangData.totalTunggakan += parseFloat(String(t.nominal)) || 0;
+                    // FIX: Use Number() for a more direct conversion, which can be safer if the underlying data type is inconsistent.
+                    jenjangData.totalTunggakan += Number(t.nominal) || 0;
                 }
             }
         });

@@ -405,13 +405,14 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                     if (!santriData.namaLengkap) {
                         preview.errors.push(`Baris ${i + 1}: 'namaLengkap' wajib diisi.`); continue;
                     }
-                    // FIX: Cast `processedData` to a compatible type, as TypeScript can't infer it correctly,
-                    // causing a spread operator error.
+                    // FIX: The original spread operator with a type assertion was causing a "Spread types may only be created from object types" error.
+                    // This is likely a misleading error message from TypeScript, with the underlying issue being type incompatibility from spreading an object
+                    // with an index signature into a strictly typed object. The fix is to cast the entire new object to the desired type, which is a common and robust pattern.
                     const processedData = processRow();
                     const newSantri: Omit<Santri, 'id'> = {
                         namaLengkap: '', nis: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki', alamat: {detail: ''}, namaAyah: '', namaIbu: '', teleponWali: '', tanggalMasuk: new Date().toISOString().slice(0,7)+'-01', jenjangId: 0, kelasId: 0, rombelId: 0, status: 'Aktif',
-                        ...processedData as Partial<Santri>
-                    };
+                        ...processedData
+                    } as Omit<Santri, 'id'>;
                     preview.toAdd.push(newSantri);
                 }
             }

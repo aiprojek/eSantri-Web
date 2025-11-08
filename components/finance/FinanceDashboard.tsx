@@ -178,13 +178,11 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
             const jenjangId = santriJenjangMap.get(t.santriId);
             if (jenjangId && data.has(jenjangId)) {
                 const jenjangData = data.get(jenjangId)!;
-                // FIX: Explicitly cast `t.nominal` to a Number before performing addition to prevent potential type errors
-                // where `t.nominal` might not be correctly inferred as a number.
-                jenjangData.totalTagihan += Number(t.nominal) || 0;
+                // FIX: Replaced `Number(t.nominal)` with a more robust `parseFloat(String(t.nominal))` to prevent type errors if `t.nominal` is not a clean number.
+                jenjangData.totalTagihan += parseFloat(String(t.nominal)) || 0;
                 if (t.status === 'Belum Lunas') {
-                // FIX: Explicitly cast `t.nominal` to a Number before performing addition to prevent potential type errors
-                // where `t.nominal` might not be correctly inferred as a number.
-                    jenjangData.totalTunggakan += Number(t.nominal) || 0;
+                // FIX: Replaced `Number(t.nominal)` with a more robust `parseFloat(String(t.nominal))` to prevent type errors if `t.nominal` is not a clean number.
+                    jenjangData.totalTunggakan += parseFloat(String(t.nominal)) || 0;
                 }
             }
         });

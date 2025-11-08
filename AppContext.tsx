@@ -103,8 +103,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             try {
                 const settingsCount = await db.settings.count();
                 const santriCount = await db.santri.count();
+                const sampleDataDeleted = localStorage.getItem('eSantriSampleDataDeleted') === 'true';
 
-                if (settingsCount === 0 || santriCount === 0) {
+                if ((settingsCount === 0 || santriCount === 0) && !sampleDataDeleted) {
                     await db.transaction('rw', db.settings, db.santri, async () => {
                         await db.settings.clear();
                         await db.santri.clear();

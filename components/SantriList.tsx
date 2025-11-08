@@ -409,10 +409,9 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                     }
                     const processedData = processRow();
                     // FIX: The error "Spread types may only be created from object types" can occur when spreading an object with an index signature.
-                    // Removing the explicit type annotation on `newSantri` and relying solely on the type assertion after the object creation
-                    // is a common pattern to resolve type inference conflicts.
+                    // By creating a fully typed default object and then spreading the loosely typed processedData, we ensure the final shape conforms to the Santri type.
                     const newSantri = {
-                        namaLengkap: '', nis: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki', alamat: {detail: ''}, namaAyah: '', namaIbu: '', teleponWali: '', tanggalMasuk: new Date().toISOString().slice(0,7)+'-01', jenjangId: 0, kelasId: 0, rombelId: 0, status: 'Aktif',
+                        namaLengkap: '', nis: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki' as const, alamat: {detail: ''}, namaAyah: '', namaIbu: '', teleponWali: '', tanggalMasuk: new Date().toISOString().slice(0,7)+'-01', jenjangId: 0, kelasId: 0, rombelId: 0, status: 'Aktif' as const,
                         ...processedData
                     } as Omit<Santri, 'id'>;
                     preview.toAdd.push(newSantri);

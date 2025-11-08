@@ -16,14 +16,19 @@ interface Filters {
 export const useSantriFilter = (santriList: Santri[], filters: Filters, setFilters: (filters: Filters) => void) => {
   
   const handleFilterChange = (field: keyof Filters, value: string) => {
-    setFilters({
+    const newFilters = {
         ...filters,
         [field]: value,
-        // FIX: The logical AND operator `&&` can return `false` which cannot be spread. Using a ternary operator ensures we always spread an object.
-        ...(field === 'jenjang' ? { kelas: '', rombel: '' } : {}),
-        // FIX: The logical AND operator `&&` can return `false` which cannot be spread. Using a ternary operator ensures we always spread an object.
-        ...(field === 'kelas' ? { rombel: '' } : {}),
-    });
+    };
+
+    if (field === 'jenjang') {
+        newFilters.kelas = '';
+        newFilters.rombel = '';
+    } else if (field === 'kelas') {
+        newFilters.rombel = '';
+    }
+    
+    setFilters(newFilters);
   };
 
   const filteredSantri = useMemo(() => {

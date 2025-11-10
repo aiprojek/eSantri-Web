@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Santri, RiwayatStatus } from '../types';
 import { useAppContext } from '../AppContext';
@@ -8,18 +6,16 @@ import { SantriModal } from './santri/SantriModal';
 import { Pagination } from './common/Pagination';
 import { BulkStatusModal } from './santri/modals/BulkStatusModal';
 import { BulkMoveModal } from './santri/modals/BulkMoveModal';
+// Import new service functions
+import { generateSantriCsvForUpdate, generateSantriCsvTemplate, parseSantriCsv, ParsedCsvResult } from '../services/csvService';
 
 interface SantriListProps {
   initialFilters?: any;
 }
 
 type ImportMode = 'update' | 'add';
-interface ImportPreview {
-  mode: ImportMode;
-  toAdd: Omit<Santri, 'id'>[];
-  toUpdate: Santri[];
-  errors: string[];
-}
+// The interface is now imported from the service
+type ImportPreview = ParsedCsvResult;
 
 
 const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
@@ -247,111 +243,27 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
     );
   };
 
-  const handleExportForUpdate = () => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    const headers = [
-        'id', 'nis', 'nik', 'nisn', 'namaLengkap', 'namaHijrah', 'kewarganegaraan',
-        'berkebutuhanKhusus', 'jenisSantri', 'tempatLahir', 'tanggalLahir', 'jenisKelamin',
-        'anakKe', 'statusKeluarga', 'alamat_detail', 'alamat_desa', 'alamat_kecamatan', 'alamat_kabupaten', 'alamat_provinsi', 'alamat_kodepos',
-        'tinggiBadan', 'beratBadan', 'jarakKePondok',
-        'jumlahSaudara', 'riwayatPenyakit', 'prestasi_json', 'pelanggaran_json', 'riwayatStatus_json', 'hobi_json', 'tanggalMasuk', 'sekolahAsal',
-        'alamatSekolahAsal', 'namaAyah', 'nikAyah', 'tempatLahirAyah', 'tanggalLahirAyah',
-        'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'alamatAyah_detail', 'agamaAyah',
-        'statusAyah', 'teleponAyah', 'namaIbu', 'nikIbu', 'tempatLahirIbu', 'tanggalLahirIbu',
-        'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'alamatIbu_detail', 'agamaIbu', 'statusIbu',
-        'teleponIbu', 'namaWali', 'tempatLahirWali', 'tanggalLahirWali', 'pekerjaanWali',
-        'pendidikanWali', 'penghasilanWali', 'agamaWali', 'statusWali', 'alamatWali_detail',
-        'teleponWali', 'jenjangId', 'kelasId', 'rombelId', 'status', 'tanggalStatus', 'fotoUrl'
-    ];
-    csvContent += headers.join(",") + "\r\n";
+  // --- Refactored Export/Import Logic ---
 
-    filteredSantri.forEach(santri => {
-        const rowData = headers.map(header => {
-            let value;
-            if (header.startsWith('alamat_')) {
-              const key = header.replace('alamat_', '');
-              value = (santri.alamat as any)[key === 'detail' ? 'detail' : key.replace(/_([a-z])/g, g => g[1].toUpperCase())];
-            } else {
-              value = (santri as any)[header];
-            }
-            
-            if (value === undefined || value === null) {
-                return "";
-            }
-            if (header === 'prestasi_json') value = JSON.stringify(santri.prestasi || []);
-            if (header === 'pelanggaran_json') value = JSON.stringify(santri.pelanggaran || []);
-            if (header === 'hobi_json') value = JSON.stringify(santri.hobi || []);
-            if (header === 'riwayatStatus_json') value = JSON.stringify(santri.riwayatStatus || []);
-
-
-            const stringValue = String(value);
-            if (stringValue.includes(',') || stringValue.includes('"')) {
-                return `"${stringValue.replace(/"/g, '""')}"`;
-            }
-            return stringValue;
-        });
-        csvContent += rowData.join(",") + "\r\n";
-    });
-
+  const downloadCsv = (csvContent: string, fileName: string) => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `data_santri_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleExportForUpdate = () => {
+    const csvContent = generateSantriCsvForUpdate(filteredSantri);
+    downloadCsv(csvContent, `data_santri_update_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   const handleExportTemplate = () => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    const headers = [
-        // 'id' is excluded for new entries
-        'nis', 'nik', 'nisn', 'namaLengkap', 'namaHijrah', 'kewarganegaraan',
-        'berkebutuhanKhusus', 'jenisSantri', 'tempatLahir', 'tanggalLahir', 'jenisKelamin',
-        'anakKe', 'statusKeluarga', 'alamat_detail', 'alamat_desa', 'alamat_kecamatan', 'alamat_kabupaten', 'alamat_provinsi', 'alamat_kodepos',
-        'tinggiBadan', 'beratBadan', 'jarakKePondok',
-        'jumlahSaudara', 'riwayatPenyakit', 'prestasi_json', 'pelanggaran_json', 'riwayatStatus_json', 'hobi_json', 'tanggalMasuk', 'sekolahAsal',
-        'alamatSekolahAsal', 'namaAyah', 'nikAyah', 'tempatLahirAyah', 'tanggalLahirAyah',
-        'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'alamatAyah_detail', 'agamaAyah',
-        'statusAyah', 'teleponAyah', 'namaIbu', 'nikIbu', 'tempatLahirIbu', 'tanggalLahirIbu',
-        'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'alamatIbu_detail', 'agamaIbu', 'statusIbu',
-        'teleponIbu', 'namaWali', 'tempatLahirWali', 'tanggalLahirWali', 'pekerjaanWali',
-        'pendidikanWali', 'penghasilanWali', 'agamaWali', 'statusWali', 'alamatWali_detail',
-        'teleponWali', 'jenjangId', 'kelasId', 'rombelId', 'status', 'tanggalStatus', 'fotoUrl'
-    ];
-    csvContent += headers.join(",") + "\r\n";
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `template_tambah_santri.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const csvContent = generateSantriCsvTemplate();
+    downloadCsv(csvContent, `template_tambah_santri.csv`);
   };
-  
-    const parseCsvRow = (row: string): string[] => {
-        const result: string[] = [];
-        let currentField = '';
-        let inQuotes = false;
-        for (let i = 0; i < row.length; i++) {
-            const char = row[i];
-            if (char === '"' && (i === 0 || row[i - 1] !== '"')) {
-                inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-                result.push(currentField.trim());
-                currentField = '';
-            } else if (char === '"' && row[i + 1] === '"') {
-                currentField += '"';
-                i++; 
-            } else {
-                currentField += char;
-            }
-        }
-        result.push(currentField.trim());
-        return result;
-    };
-
 
   const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>, mode: ImportMode) => {
     const file = event.target.files?.[0];
@@ -361,91 +273,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
     reader.onload = async (e) => {
         try {
             const text = e.target?.result as string;
-            const rows = text.split('\n').filter(row => row.trim() !== '');
-            if (rows.length < 2) throw new Error("File CSV kosong atau hanya berisi header.");
-            
-            const headerRow = rows[0].trim();
-            const headers = parseCsvRow(headerRow);
-            
-            const preview: ImportPreview = { mode, toAdd: [], toUpdate: [], errors: [] };
-
-            if (mode === 'update' && headers[0] !== 'id') {
-                 throw new Error("Mode 'Perbarui' memerlukan kolom 'id' sebagai kolom pertama.");
-            }
-            
-            const allSantriMap = new Map(santriList.map(s => [s.id, s]));
-
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i].trim();
-                if (!row) continue;
-                
-                const values = parseCsvRow(row);
-                const santriData: { [key: string]: any } = {};
-                headers.forEach((header, index) => {
-                    santriData[header] = values[index] || '';
-                });
-
-                const processRow = () => {
-                    const processedData: { [key: string]: any } = { alamat: {}, alamatAyah: {}, alamatIbu: {}, alamatWali: {} };
-                    for (const header of headers) {
-                      if (header === 'id' && mode === 'add') continue;
-                      let value = santriData[header];
-                      if (value === undefined || value === '') continue;
-                
-                      if (header.startsWith('alamat_')) {
-                        const key = header.split('_')[1];
-                        const targetAlamat = header.startsWith('alamatAyah') ? 'alamatAyah' : header.startsWith('alamatIbu') ? 'alamatIbu' : header.startsWith('alamatWali') ? 'alamatWali' : 'alamat';
-                        processedData[targetAlamat][key] = value;
-                        continue;
-                      }
-
-                      if (['anakKe', 'tinggiBadan', 'beratBadan', 'jumlahSaudara', 'jenjangId', 'kelasId', 'rombelId'].includes(header)) {
-                        value = value ? parseInt(value, 10) : undefined; if (isNaN(value as number)) value = undefined;
-                      }
-                      if (header === 'prestasi_json') {
-                         try { processedData['prestasi'] = JSON.parse(value || '[]'); } catch { processedData['prestasi'] = []; } continue;
-                      }
-                      if (header === 'pelanggaran_json') {
-                         try { processedData['pelanggaran'] = JSON.parse(value || '[]'); } catch { processedData['pelanggaran'] = []; } continue;
-                      }
-                      if (header === 'hobi_json') {
-                         try { processedData['hobi'] = JSON.parse(value || '[]'); } catch { processedData['hobi'] = []; } continue;
-                      }
-                       if (header === 'riwayatStatus_json') {
-                         try { processedData['riwayatStatus'] = JSON.parse(value || '[]'); } catch { processedData['riwayatStatus'] = []; } continue;
-                      }
-                      if (header.toLowerCase().includes('tanggal') && (value === '' || isNaN(new Date(value).getTime()))) {
-                          value = undefined;
-                      }
-                      processedData[header] = value;
-                    }
-                    return processedData;
-                };
-
-                if (mode === 'update') {
-                    const id = parseInt(santriData.id, 10);
-                    if (isNaN(id)) {
-                        preview.errors.push(`Baris ${i + 1}: ID tidak valid.`); continue;
-                    }
-                    const existingSantri = allSantriMap.get(id);
-                    if (!existingSantri) {
-                        preview.errors.push(`Baris ${i + 1}: Santri dengan ID ${id} tidak ditemukan.`); continue;
-                    }
-                    preview.toUpdate.push({ ...existingSantri, ...processRow() });
-                } else { // mode 'add'
-                    if (!santriData.namaLengkap) {
-                        preview.errors.push(`Baris ${i + 1}: 'namaLengkap' wajib diisi.`); continue;
-                    }
-                    const processedData = processRow();
-                    // FIX: The error "Spread types may only be created from object types" can occur when spreading an object with an index signature.
-                    // By creating a fully typed default object and then spreading the loosely typed processedData, we ensure the final shape conforms to the Santri type.
-                    const newSantri = {
-                        namaLengkap: '', nis: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki' as const, alamat: {detail: ''}, namaAyah: '', namaIbu: '', teleponWali: '', tanggalMasuk: new Date().toISOString().slice(0,7)+'-01', jenjangId: 0, kelasId: 0, rombelId: 0, status: 'Aktif' as const,
-                        ...processedData
-                    } as Omit<Santri, 'id'>;
-                    preview.toAdd.push(newSantri);
-                }
-            }
+            const preview = parseSantriCsv(text, mode, santriList);
             setImportPreview(preview);
         } catch (error) {
             showAlert(`Gagal Memproses File`, `Terjadi kesalahan saat membaca file CSV: ${(error as Error).message}`);
@@ -475,6 +303,8 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         setImportPreview(null);
     }
   };
+  
+  // --- End Refactored Logic ---
   
   const ImportModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex justify-center items-center p-4">

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Santri, RiwayatStatus } from '../types';
 import { useAppContext } from '../AppContext';
 import { useSantriFilter } from '../hooks/useSantriFilter';
+import { useDebounce } from '../hooks/useDebounce';
 import { SantriModal } from './santri/SantriModal';
 import { Pagination } from './common/Pagination';
 import { BulkStatusModal } from './santri/modals/BulkStatusModal';
@@ -36,6 +37,9 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   
   const { filters, handleFilterChange, filteredSantri, getAvailableOptions } = useSantriFilter(santriList, santriFilters, setSantriFilters);
   const { availableKelas, availableRombel } = getAvailableOptions(settings);
+  
+  const [searchTerm, setSearchTerm] = useState(filters.search);
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const [isModalOpen, setModalOpen] = useState(false);
   const [selectedSantri, setSelectedSantri] = useState<Santri | null>(null);
@@ -56,6 +60,10 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const [isBulkStatusModalOpen, setBulkStatusModalOpen] = useState(false);
   const [isBulkMoveModalOpen, setBulkMoveModalOpen] = useState(false);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    handleFilterChange('search', debouncedSearchTerm);
+  }, [debouncedSearchTerm]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -429,8 +437,8 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                         <input
                             type="text"
                             placeholder="Cari berdasarkan Nama, NIS, atau NIK..."
-                            value={filters.search}
-                            onChange={(e) => handleFilterChange('search', e.target.value)}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
                             className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 p-2.5"
                         />
                     </div>
@@ -637,7 +645,10 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                                     <h3 className="mt-4 text-xl font-semibold text-gray-700">Hasil Tidak Ditemukan</h3>
                                     <p className="mt-1">Tidak ada santri yang cocok dengan kriteria filter Anda.</p>
                                     <button 
-                                        onClick={() => setSantriFilters({ search: '', jenjang: '', kelas: '', rombel: '', status: '', gender: '', provinsi: '', kabupatenKota: '', kecamatan: '' })} 
+                                        onClick={() => {
+                                            setSearchTerm('');
+                                            setSantriFilters({ search: '', jenjang: '', kelas: '', rombel: '', status: '', gender: '', provinsi: '', kabupatenKota: '', kecamatan: '' });
+                                        }} 
                                         className="mt-4 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
                                     >
                                         Hapus Filter

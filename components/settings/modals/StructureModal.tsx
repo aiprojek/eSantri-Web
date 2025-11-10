@@ -1,4 +1,3 @@
-// FIX: Cannot find name 'useMemo'. Import `useMemo` from 'react'.
 import React, { useState, useEffect, useMemo } from 'react';
 import { Jenjang, Kelas, Rombel, TenagaPengajar } from '../../../types';
 import { useAppContext } from '../../../AppContext';
@@ -54,23 +53,58 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
             showAlert('Input Tidak Lengkap', 'Nama tidak boleh kosong.');
             return;
         }
-        if (listName === 'jenjang' && !kode.trim()) {
-            showAlert('Input Tidak Lengkap', 'Kode Jenjang tidak boleh kosong.');
-            return;
-        }
-        if (parentList && !parentId) {
-            showAlert('Input Tidak Lengkap', `Induk ${parentList} harus dipilih.`);
-            return;
+
+        // --- START of new validation logic ---
+        if (listName === 'jenjang') {
+            if (!kode.trim()) {
+                showAlert('Input Tidak Lengkap', 'Kode Jenjang tidak boleh kosong.');
+                return;
+            }
+            // Check for duplicate Jenjang name or code
+            const isDuplicate = settings.jenjang.some(
+                j => j.id !== item?.id && (j.nama.toLowerCase() === nama.trim().toLowerCase() || j.kode?.toLowerCase() === kode.trim().toLowerCase())
+            );
+            if (isDuplicate) {
+                showAlert('Data Duplikat', 'Nama atau Kode Jenjang sudah digunakan. Harap gunakan nama atau kode yang unik.');
+                return;
+            }
+        } else if (listName === 'kelas') {
+            if (!parentId) {
+                showAlert('Input Tidak Lengkap', 'Induk Jenjang harus dipilih.');
+                return;
+            }
+            // Check for duplicate Kelas name within the same Jenjang
+            const isDuplicate = settings.kelas.some(
+                k => k.id !== item?.id && k.nama.toLowerCase() === nama.trim().toLowerCase() && k.jenjangId === parseInt(parentId, 10)
+            );
+            if (isDuplicate) {
+                showAlert('Data Duplikat', `Kelas dengan nama "${nama.trim()}" sudah ada di jenjang ini.`);
+                return;
+            }
+        } else if (listName === 'rombel') {
+            if (!parentId) {
+                showAlert('Input Tidak Lengkap', 'Induk Kelas harus dipilih.');
+                return;
+            }
+            // Check for duplicate Rombel name within the same Kelas
+            const isDuplicate = settings.rombel.some(
+                r => r.id !== item?.id && r.nama.toLowerCase() === nama.trim().toLowerCase() && r.kelasId === parseInt(parentId, 10)
+            );
+            if (isDuplicate) {
+                showAlert('Data Duplikat', `Rombel dengan nama "${nama.trim()}" sudah ada di kelas ini.`);
+                return;
+            }
         }
 
         let newItem: StructureItem;
         const baseItem = {
             id: item?.id || Date.now(),
-            nama: nama,
+            nama: nama.trim(),
         };
+
         if (listName === 'kelas') newItem = { ...baseItem, jenjangId: parseInt(parentId, 10) };
         else if (listName === 'rombel') newItem = { ...baseItem, kelasId: parseInt(parentId, 10), waliKelasId: assignmentId ? parseInt(assignmentId) : undefined };
-        else if (listName === 'jenjang') newItem = { ...baseItem, kode: kode, mudirId: assignmentId ? parseInt(assignmentId) : undefined };
+        else if (listName === 'jenjang') newItem = { ...baseItem, kode: kode.trim(), mudirId: assignmentId ? parseInt(assignmentId) : undefined };
         else newItem = baseItem;
         
         onSave(newItem);

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { Santri } from '../../../types';
 import { useAppContext } from '../../../AppContext';
@@ -21,6 +21,42 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
   const watchJenjangId = watch('jenjangId');
   const watchKelasId = watch('kelasId');
   const watchStatus = watch('status');
+
+  // --- Start Tanggal Lahir Logic ---
+  register('tanggalLahir', {
+      required: 'Tanggal lahir wajib diisi.',
+      validate: value => {
+          if (!value) return true;
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || isNaN(new Date(value).getTime())) {
+              return 'Format tanggal harus DD/MM/YYYY dan valid.';
+          }
+          return true;
+      }
+  });
+
+  const formTanggalLahir = watch('tanggalLahir');
+  const [displayTanggalLahir, setDisplayTanggalLahir] = useState('');
+
+  useEffect(() => {
+      if (formTanggalLahir && /^\d{4}-\d{2}-\d{2}$/.test(formTanggalLahir)) {
+          const [y, m, d] = formTanggalLahir.split('-');
+          setDisplayTanggalLahir(`${d}/${m}/${y}`);
+      } else {
+          setDisplayTanggalLahir(formTanggalLahir || '');
+      }
+  }, [formTanggalLahir]);
+
+  const handleDateBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+      const displayValue = e.target.value;
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(displayValue)) {
+          const [d, m, y] = displayValue.split('/');
+          setValue('tanggalLahir', `${y}-${m}-${d}`, { shouldDirty: true });
+      } else {
+          setValue('tanggalLahir', displayValue, { shouldDirty: true });
+      }
+      trigger('tanggalLahir');
+  };
+  // --- End Tanggal Lahir Logic ---
 
   const availableKelas = useMemo(() => {
     if (!watchJenjangId) return [];
@@ -61,7 +97,14 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
           </div>
             <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Lahir</label>
-              <input type="date" {...register('tanggalLahir', { required: 'Tanggal lahir wajib diisi.' })} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.tanggalLahir ? 'border-red-500' : 'border-gray-300'}`} />
+              <input
+                  type="text"
+                  placeholder="DD/MM/YYYY"
+                  value={displayTanggalLahir}
+                  onChange={e => setDisplayTanggalLahir(e.target.value)}
+                  onBlur={handleDateBlur}
+                  className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.tanggalLahir ? 'border-red-500' : 'border-gray-300'}`}
+              />
               <FormError error={errors.tanggalLahir} />
           </div>
             <div className="lg:col-span-2">

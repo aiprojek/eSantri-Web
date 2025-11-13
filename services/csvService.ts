@@ -129,10 +129,16 @@ export const parseSantriCsv = (
               let value = santriData[header];
               if (value === undefined || value === '') continue;
         
-              if (header.startsWith('alamat_')) {
-                const key = header.split('_')[1];
-                const targetAlamat = header.startsWith('alamatAyah') ? 'alamatAyah' : header.startsWith('alamatIbu') ? 'alamatIbu' : header.startsWith('alamatWali') ? 'alamatWali' : 'alamat';
-                processedData[targetAlamat][key] = value;
+              if (header.startsWith('alamat_') || header.startsWith('alamatAyah_') || header.startsWith('alamatIbu_') || header.startsWith('alamatWali_')) {
+                const parts = header.split('_');
+                const targetAlamat = parts[0];
+                let fieldKey = parts[1];
+
+                if (fieldKey === 'desa') fieldKey = 'desaKelurahan';
+                if (fieldKey === 'kabupaten') fieldKey = 'kabupatenKota';
+                if (fieldKey === 'kodepos') fieldKey = 'kodePos';
+
+                processedData[targetAlamat][fieldKey] = value;
                 continue;
               }
 
@@ -151,8 +157,13 @@ export const parseSantriCsv = (
                if (header === 'riwayatStatus_json') {
                  try { processedData['riwayatStatus'] = JSON.parse(value || '[]'); } catch { processedData['riwayatStatus'] = []; } continue;
               }
-              if (header.toLowerCase().includes('tanggal') && (value === '' || isNaN(new Date(value).getTime()))) {
-                  value = undefined;
+              if (header.toLowerCase().includes('tanggal')) {
+                  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) { // Check for DD/MM/YYYY
+                    const [d, m, y] = value.split('/');
+                    value = `${y}-${m}-${d}`;
+                  } else if (value === '' || isNaN(new Date(value).getTime())) {
+                    value = undefined;
+                  }
               }
               processedData[header] = value;
             }

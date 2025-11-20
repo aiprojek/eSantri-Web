@@ -18,10 +18,37 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
     const [rows, setRows] = useState<EditableRow[]>([]);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Helper to convert YYYY-MM-DD to DD/MM/YYYY
+    const toDisplayDate = (isoDate?: string) => {
+        if (!isoDate) return '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+            const [y, m, d] = isoDate.split('-');
+            return `${d}/${m}/${y}`;
+        }
+        return isoDate;
+    };
+
+    // Helper to convert DD/MM/YYYY to YYYY-MM-DD
+    const toStorageDate = (val?: string) => {
+        if (!val) return '';
+        // Match d/m/yyyy or d-m-yyyy
+        const match = val.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+        if (match) {
+            const [_, d, m, y] = match;
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+        return val;
+    };
+
     useEffect(() => {
         if (isOpen) {
             if (mode === 'edit' && initialData) {
-                setRows(initialData.map(s => ({ ...s, tempId: s.id })));
+                setRows(initialData.map(s => ({ 
+                    ...s, 
+                    tempId: s.id,
+                    tanggalLahir: toDisplayDate(s.tanggalLahir),
+                    tanggalMasuk: toDisplayDate(s.tanggalMasuk)
+                })));
             } else {
                 // Mode Add: Start with 3 empty rows
                 const initialRows = Array.from({ length: 3 }).map((_, i) => createEmptyRow(i));
@@ -44,7 +71,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         jenjangId: 0,
         kelasId: 0,
         rombelId: 0,
-        tanggalMasuk: new Date().toISOString().split('T')[0],
+        tanggalMasuk: toDisplayDate(new Date().toISOString().split('T')[0]),
         alamat: { 
             detail: '',
             desaKelurahan: '',
@@ -136,8 +163,12 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
 
         setIsSaving(true);
         try {
-            // Clean up tempId before sending back
-            const cleanData = validRows.map(({ tempId, ...rest }) => rest);
+            // Clean up tempId and format dates back to YYYY-MM-DD before sending back
+            const cleanData = validRows.map(({ tempId, ...rest }) => ({
+                ...rest,
+                tanggalLahir: toStorageDate(rest.tanggalLahir),
+                tanggalMasuk: toStorageDate(rest.tanggalMasuk)
+            }));
             await onSave(cleanData);
             onClose();
         } catch (error) {
@@ -276,7 +307,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                                 </select>
                                             </td>
                                             <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.tempatLahir} onChange={e => updateRow(row.tempId, 'tempatLahir', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                            <td className="px-2 py-2 bg-blue-50/10"><input type="date" value={row.tanggalLahir} onChange={e => updateRow(row.tempId, 'tanggalLahir', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
+                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" placeholder="dd/mm/yyyy" value={row.tanggalLahir} onChange={e => updateRow(row.tempId, 'tanggalLahir', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
                                             <td className="px-2 py-2 bg-blue-50/10">
                                                  <select value={row.kewarganegaraan} onChange={e => updateRow(row.tempId, 'kewarganegaraan', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="WNI">WNI</option><option value="WNA">WNA</option><option value="Keturunan">Keturunan</option>
@@ -300,7 +331,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                                     <option value={0}>- Pilih -</option>{availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-green-50/10"><input type="date" value={row.tanggalMasuk} onChange={e => updateRow(row.tempId, 'tanggalMasuk', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
+                                            <td className="px-2 py-2 bg-green-50/10"><input type="text" placeholder="dd/mm/yyyy" value={row.tanggalMasuk} onChange={e => updateRow(row.tempId, 'tanggalMasuk', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
                                             <td className="px-2 py-2 bg-green-50/10">
                                                  <select value={row.status} onChange={e => updateRow(row.tempId, 'status', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="Aktif">Aktif</option><option value="Hiatus">Hiatus</option><option value="Lulus">Lulus</option><option value="Keluar/Pindah">Keluar</option>

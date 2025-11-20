@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 
@@ -23,7 +24,7 @@ const PanduanLangkah: React.FC<{ number: number; title: string; children: React.
             </div>
             {!isLast && <div className="w-px h-full bg-teal-300"></div>}
         </div>
-        <div className="pb-10">
+        <div className="pb-10 w-full">
             <h3 className="mb-2 text-xl font-semibold text-gray-800">{title}</h3>
             <div className="text-gray-700 space-y-3">{children}</div>
         </div>
@@ -159,8 +160,8 @@ const Tentang: React.FC = () => {
                                     <FeatureItem icon="bi-printer-fill" title="Fitur Laporan & Cetak Lengkap">
                                         Cetak berbagai dokumen penting seperti biodata, kuitansi, kartu santri, dan laporan lainnya.
                                     </FeatureItem>
-                                    <FeatureItem icon="bi-file-earmark-arrow-up-fill" title="Ekspor & Impor Data Massal">
-                                        Perbarui data santri dalam jumlah besar dengan mudah melalui file CSV.
+                                    <FeatureItem icon="bi-file-earmark-arrow-up-fill" title="Editor Massal & Impor Data">
+                                        Edit data banyak santri sekaligus seperti di Excel atau impor dari file CSV.
                                     </FeatureItem>
                                     <FeatureItem icon="bi-wifi-off" title="Fungsi Offline">
                                         Aplikasi tetap berjalan lancar dan semua data aman meski tanpa koneksi internet.
@@ -270,7 +271,7 @@ const Tentang: React.FC = () => {
                             <PanduanLangkah number={2} title="Manajemen Data Santri">
                                 <p>Setelah pengaturan selesai, kelola data santri di halaman <strong className="font-semibold text-teal-700">Data Santri</strong>.</p>
                                 <ul className="list-disc pl-5 space-y-2">
-                                    <li><strong>Menambah Santri:</strong> Klik tombol <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">+ Tambah Santri</span>. Manfaatkan tombol <i className="bi bi-arrow-clockwise bg-teal-600 text-white p-1 rounded-sm"></i> di sebelah kolom NIS untuk membuat NIS otomatis.</li>
+                                    <li><strong>Menambah Santri:</strong> Klik tombol <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">+ Tambah</span>. Manfaatkan tombol <i className="bi bi-arrow-clockwise bg-teal-600 text-white p-1 rounded-sm"></i> di sebelah kolom NIS untuk membuat NIS otomatis.</li>
                                      <li><strong>Mengedit & Melengkapi Data:</strong> Klik ikon pensil <i className="bi bi-pencil-square text-blue-600"></i>. Di dalam formulir edit, Anda bisa melengkapi data yang lebih detail melalui tab-tab yang tersedia:
                                         <ul className="list-['-_'] pl-5 mt-1">
                                             <li><strong className="font-semibold">Data Lain-lain:</strong> Catat <span className="italic">Prestasi</span>, <span className="italic">Pelanggaran</span>, dan <span className="italic">Hobi</span> santri.</li>
@@ -299,99 +300,82 @@ const Tentang: React.FC = () => {
                                     <li>Di modal yang muncul, pilih Jenjang, Kelas, dan Rombel tujuan yang baru (misal: `Salafiyah Wustho - Kelas 2 - SW-2A Putra`).</li>
                                     <li>Klik "Pindahkan". Data akademik santri akan diperbarui secara otomatis.</li>
                                 </ol>
-
-                                <h4 className="font-semibold text-base mt-4 mb-2">Alur Kerja yang Disarankan (Best Practice)</h4>
-                                <ol className="list-decimal pl-5 space-y-2 mt-2">
-                                    <li><strong className="font-semibold">Luluskan dulu:</strong> Proses semua santri di tingkat akhir dan ubah status mereka menjadi 'Lulus'.</li>
-                                    <li><strong className="font-semibold">Naikkan kelas dari atas ke bawah:</strong> Mulai dari kelas tertinggi (yang belum lulus) ke kelas terendah. Contoh: naikkan Kelas 2 ke Kelas 3, baru setelah itu naikkan Kelas 1 ke Kelas 2.</li>
-                                    <li><strong className="font-semibold">Tangani yang tinggal kelas:</strong> Setelah mayoritas santri naik kelas, sisa santri di rombel lama adalah mereka yang tinggal kelas. Anda bisa memindahkan mereka ke rombel yang sesuai jika diperlukan.</li>
-                                    <li><strong className="font-semibold">Cetak Laporan Mutasi:</strong> Setelah selesai, cetak laporan ini dari menu <strong className="font-semibold text-teal-700">Laporan & Cetak</strong> sebagai dokumentasi.</li>
-                                </ol>
                             </PanduanLangkah>
                              <PanduanLangkah number={4} title="Alur Kerja Modul Keuangan">
                                 <p>Modul <strong className="font-semibold text-teal-700">Keuangan</strong> dirancang untuk menyederhanakan administrasi pembayaran. Alur kerjanya sebagai berikut:</p>
                                 <ol className="list-decimal pl-5 space-y-3 mt-2">
                                     <li>
-                                        <strong>Memahami Dashboard Keuangan:</strong> Sebelum memulai alur kerja, luangkan waktu sejenak di tab <strong className="font-semibold">Dashboard</strong>. Di sini Anda akan menemukan ringkasan statistik penting. Perhatikan grafik baru <strong className="font-semibold">"Penerimaan Aktual & Proyeksi Pendapatan"</strong>. Grafik ini menampilkan data penerimaan aktual selama 6 bulan terakhir (warna solid) dan memproyeksikan pendapatan untuk 6 bulan ke depan (warna lebih terang) berdasarkan rata-rata historis. Ini adalah alat bantu visual yang kuat untuk perencanaan anggaran.
+                                        <strong>Memahami Dashboard Keuangan:</strong> Sebelum memulai alur kerja, luangkan waktu sejenak di tab <strong className="font-semibold">Dashboard</strong>. Perhatikan grafik <strong className="font-semibold">"Penerimaan Aktual & Proyeksi"</strong> sebagai alat bantu perencanaan anggaran.
                                     </li>
                                     <li>
-                                        <strong>Generate Tagihan:</strong> Buka tab <strong className="font-semibold">Status Pembayaran</strong>. Gunakan fitur <span className="font-semibold">"Generate Tagihan"</span> untuk membuat tagihan secara massal (misalnya, SPP bulan Juli untuk semua santri) berdasarkan Pengaturan Biaya yang telah Anda buat.
+                                        <strong>Generate Tagihan:</strong> Buka tab <strong className="font-semibold">Status Pembayaran</strong>. Gunakan fitur <span className="font-semibold">"Generate Tagihan"</span> untuk membuat tagihan secara massal (misalnya, SPP bulan Juli untuk semua santri).
                                     </li>
                                     <li>
-                                        <strong>Lihat Status & Catat Pembayaran:</strong> Di tabel <strong className="font-semibold">Status Pembayaran Santri</strong>, Anda dapat melihat total tunggakan setiap santri. Jika santri melakukan pembayaran, klik tombol <span className="font-semibold text-white bg-blue-600 px-2 py-0.5 rounded-md text-xs">Bayar</span>. Pilih tagihan mana saja yang dibayar, lalu simpan.
+                                        <strong>Lihat Status & Catat Pembayaran:</strong> Di tabel <strong className="font-semibold">Status Pembayaran Santri</strong>, klik tombol <span className="font-semibold text-white bg-blue-600 px-2 py-0.5 rounded-md text-xs">Bayar</span> untuk mencatat pelunasan tagihan.
                                     </li>
                                     <li>
-                                        <strong>Aksi Tindak Lanjut:</strong> Jika ada santri yang menunggak, Anda bisa melakukan tindakan massal:
-                                         <ul className="list-['-_'] pl-5 mt-1">
-                                            <li>Pilih santri dengan mencentang kotak di sebelah kiri nama mereka.</li>
-                                            <li>Klik tombol <span className="font-semibold bg-teal-600 text-white px-2 py-0.5 rounded-md text-xs">Tindakan Massal</span>.</li>
-                                            <li>Pilih <strong className="font-semibold">"Cetak Surat Tagihan"</strong> untuk membuat surat pemberitahuan resmi, atau <strong className="font-semibold">"Kirim Notifikasi WA"</strong> untuk membuka tautan WhatsApp dengan pesan pengingat.</li>
-                                        </ul>
+                                        <strong>Aksi Tindak Lanjut:</strong> Jika ada santri yang menunggak, pilih santri tersebut lalu klik tombol aksi massal untuk <strong className="font-semibold">"Cetak Surat Tagihan"</strong> atau <strong className="font-semibold">"Kirim Notifikasi WA"</strong>.
                                     </li>
                                      <li>
-                                        <strong>Cetak Kuitansi:</strong> Setelah pembayaran dicatat, Anda bisa mencetak kuitansi resminya dengan mengklik tombol <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Riwayat</span> di baris santri, lalu klik ikon printer di sebelah data pembayaran.
+                                        <strong>Cetak Kuitansi:</strong> Setelah pembayaran dicatat, cetak kuitansi resmi dengan mengklik tombol <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Riwayat</span> di baris santri.
                                     </li>
                                      <li>
-                                        <strong>Rekonsiliasi Kas:</strong> (Best Practice) Secara berkala, setorkan penerimaan yang tercatat ke buku kas umum melalui tombol <span className="font-semibold bg-green-600 text-white px-2 py-0.5 rounded-md text-xs">Setor ke Kas</span>. Ini akan membuat catatan pemasukan baru di halaman <strong className="font-semibold text-teal-700">Buku Kas</strong>.
+                                        <strong>Rekonsiliasi Kas:</strong> (Best Practice) Secara berkala, setorkan penerimaan yang tercatat ke buku kas umum melalui tombol <span className="font-semibold bg-green-600 text-white px-2 py-0.5 rounded-md text-xs">Setor ke Kas</span>.
                                     </li>
                                      <li>
-                                        <strong>Uang Saku:</strong> Gunakan tab <strong className="font-semibold">Uang Saku</strong> untuk mengelola saldo titipan santri, yang terpisah dari tagihan pondok.
+                                        <strong>Uang Saku:</strong> Gunakan tab <strong className="font-semibold">Uang Saku</strong> untuk mengelola saldo titipan santri (deposit/penarikan) yang terpisah dari tagihan pondok.
                                     </li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={5} title="Mencetak Laporan Administratif">
-                                <p>Semua kebutuhan administrasi cetak-mencetak terpusat di halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong>. Prosesnya sederhana:</p>
-                                <ol className="list-decimal pl-5 space-y-2">
-                                    <li>Pilih jenis laporan yang Anda butuhkan. Aplikasi menyediakan beragam pilihan, seperti:
-                                        <ul className="list-['-_'] pl-5 mt-1 text-sm">
-                                            <li><strong className="font-semibold">Kartu Tanda Santri:</strong> Cetak kartu identitas dengan desain profesional.</li>
-                                            <li><strong className="font-semibold">Lembar Pembinaan:</strong> Rekam jejak prestasi dan pelanggaran santri.</li>
-                                            <li><strong className="font-semibold">Laporan Mutasi Santri:</strong> Rekapitulasi santri yang masuk, keluar, atau lulus dalam rentang waktu tertentu.</li>
-                                            <li><strong className="font-semibold">Formulir Izin:</strong> Cetak surat izin keluar/pulang resmi.</li>
+                            <PanduanLangkah number={5} title="Manajemen Keasramaan">
+                                <p>Modul <strong className="font-semibold text-teal-700">Keasramaan</strong> membantu Anda memetakan lokasi tempat tinggal santri.</p>
+                                <ol className="list-decimal pl-5 space-y-2 mt-2">
+                                    <li>
+                                        <strong>Atur Gedung & Kamar:</strong> Buka tab <strong className="font-semibold">Manajemen Asrama</strong>. Tambahkan gedung (Putra/Putri), lalu tambahkan kamar-kamar di dalamnya beserta kapasitas dan musyrif/ah.
+                                    </li>
+                                    <li>
+                                        <strong>Penempatan Santri:</strong> Buka tab <strong className="font-semibold">Penempatan Santri</strong>.
+                                        <ul className="list-disc pl-5 mt-1 text-sm">
+                                            <li>Di kolom kiri, Anda akan melihat daftar santri aktif yang <strong>belum memiliki kamar</strong>. Gunakan filter untuk mempersempit daftar.</li>
+                                            <li>Pilih santri yang ingin ditempatkan.</li>
+                                            <li>Di kolom kanan (daftar kamar), cari kamar tujuan dan klik tombol <span className="font-semibold bg-teal-600 text-white px-2 py-0.5 rounded-md text-xs">Tempatkan</span>.</li>
                                         </ul>
                                     </li>
-                                    <li>Gunakan filter untuk memilih data spesifik yang ingin dicetak (biasanya berdasarkan Rombel).</li>
-                                    <li>Atur opsi tambahan yang tersedia untuk laporan tersebut.</li>
+                                    <li>
+                                        <strong>Laporan:</strong> Cetak rekapitulasi penghuni per gedung melalui menu <strong className="font-semibold text-teal-700">Laporan & Cetak</strong>.
+                                    </li>
+                                </ol>
+                            </PanduanLangkah>
+                            <PanduanLangkah number={6} title="Mencetak Laporan Administratif">
+                                <p>Semua kebutuhan administrasi cetak-mencetak terpusat di halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong>. Prosesnya sederhana:</p>
+                                <ol className="list-decimal pl-5 space-y-2">
+                                    <li>Pilih jenis laporan yang Anda butuhkan (misal: Biodata, Kartu Santri, Lembar Nilai, Rekening Koran, dll).</li>
+                                    <li>Gunakan filter untuk memilih data spesifik yang ingin dicetak (biasanya berdasarkan Rombel atau Individu).</li>
+                                    <li>Atur opsi tambahan yang tersedia untuk laporan tersebut (seperti format kertas, margin, atau opsi tanda tangan).</li>
                                     <li>Klik <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">Tampilkan Pratinjau</span>, lalu klik tombol <span className="font-semibold text-white bg-blue-600 px-2 py-0.5 rounded-md text-xs">Cetak</span>.</li>
                                 </ol>
                             </PanduanLangkah>
-                             <PanduanLangkah number={6} title="Efisiensi dengan Impor & Ekspor Data">
-                                <p>Fitur Impor & Ekspor memungkinkan Anda menambah dan memperbarui data santri dalam jumlah besar menggunakan file CSV. Buka halaman <strong className="font-semibold text-teal-700">Data Santri</strong> untuk memulai.</p>
+                             <PanduanLangkah number={7} title="Efisiensi Input Data: Editor Massal & Impor CSV">
+                                <p>Untuk mempercepat proses input data, eSantri Web menyediakan dua fitur canggih di halaman <strong className="font-semibold text-teal-700">Data Santri</strong>:</p>
                                 
-                                <h4 className="font-semibold text-base mt-4 mb-2">A. Menambah Santri Baru Secara Massal</h4>
-                                <ol className="list-decimal pl-5 space-y-2 mt-2">
-                                    <li>Klik tombol dropdown <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Ekspor</span>, lalu pilih <strong className="font-semibold">"Unduh Template (untuk Tambah)"</strong>.</li>
-                                    <li>
-                                        Isi data santri baru pada file template CSV tersebut.
-                                        <div className="mt-3 p-3 rounded-md border-l-4 border-yellow-500 bg-yellow-50 text-yellow-800 text-sm">
-                                            <strong className="font-bold">Tips untuk Kolom JSON:</strong>
-                                            <p className="mt-1">
-                                                Beberapa kolom seperti <code>prestasi_json</code>, <code>pelanggaran_json</code>, dan <code>hobi_json</code> memerlukan format khusus. <strong>Jika Anda tidak ingin mengisi data ini, Anda bisa mengosongkan kolom-kolom tersebut</strong> dan menambahkannya nanti melalui antarmuka aplikasi.
-                                            </p>
-                                            <p className="mt-2">
-                                                Jika ingin mengisinya, gunakan format JSON Array. Contoh untuk kolom <code>prestasi_json</code> jika santri memiliki satu prestasi:
-                                            </p>
-                                            <pre className="bg-gray-800 text-white p-2 rounded-md text-xs mt-2 whitespace-pre-wrap break-all">
-                                                <code>
-                                                {`[{"id":1,"jenis":"Akademik","tingkat":"Kabupaten","nama":"Juara 1 Cerdas Cermat","tahun":2024,"penyelenggara":"Dinas Pendidikan"}]`}
-                                                </code>
-                                            </pre>
-                                            <p className="mt-2">
-                                                Penting: Seluruh teks di atas harus berada di dalam satu sel dan diapit oleh tanda kutip ganda (<code>"</code>) jika berisi koma, agar tidak merusak struktur file CSV.
-                                            </p>
-                                        </div>
-                                    </li>
-                                    <li>Kembali ke aplikasi, klik tombol <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Impor</span>, lalu pilih <strong className="font-semibold">"Tambah sebagai Data Baru"</strong> dan unggah file Anda.</li>
-                                </ol>
+                                <h4 className="font-semibold text-base mt-4 mb-2">A. Editor Massal (Bulk Editor)</h4>
+                                <p className="text-sm mb-2">Fitur ini memungkinkan Anda mengedit data santri dalam tampilan tabel interaktif (seperti Excel). Sangat berguna untuk melengkapi data detail (NIK, Data Orang Tua, Alamat Lengkap) secara cepat tanpa perlu membuka formulir edit satu per satu.</p>
+                                <ul className="list-disc pl-5 space-y-1 mt-1 text-sm">
+                                    <li>Klik tombol <span className="font-semibold bg-teal-50 border border-teal-200 text-teal-700 px-2 py-0.5 rounded-md text-xs"><i className="bi bi-table"></i></span> di sebelah tombol Tambah.</li>
+                                    <li>Pilih mode <strong>"Tambah Massal"</strong> untuk input santri baru, atau pilih beberapa santri di tabel utama lalu klik <strong>"Edit Massal"</strong>.</li>
+                                    <li>Isi data langsung pada sel tabel. Gunakan TAB untuk pindah kolom.</li>
+                                    <li>Klik <strong>"Simpan Semua"</strong> untuk memproses perubahan sekaligus.</li>
+                                </ul>
 
-                                <h4 className="font-semibold text-base mt-4 mb-2">B. Memperbarui Data Santri Secara Massal</h4>
-                                <ol className="list-decimal pl-5 space-y-2 mt-2">
-                                    <li>Gunakan filter untuk menampilkan data yang ingin diubah. Klik <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Ekspor</span> dan pilih <strong className="font-semibold">"Ekspor Data (untuk Update)"</strong>. File ini akan berisi kolom `id`.</li>
-                                    <li>Edit file CSV tersebut. <strong className="font-bold text-red-600">JANGAN PERNAH MENGUBAH KOLOM `id`.</strong></li>
-                                    <li>Kembali ke aplikasi, klik <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Impor</span>, pilih <strong className="font-semibold">"Perbarui Data yang Ada"</strong>, dan unggah file yang sudah diedit.</li>
+                                <h4 className="font-semibold text-base mt-4 mb-2">B. Impor & Ekspor File CSV</h4>
+                                <p className="text-sm mb-2">Gunakan fitur ini jika Anda memiliki ribuan data santri dari aplikasi lain yang ingin dipindahkan.</p>
+                                <ol className="list-decimal pl-5 space-y-1 mt-1 text-sm">
+                                    <li>Klik tombol dropdown <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Ekspor</span>, lalu pilih <strong className="font-semibold">"Unduh Template"</strong>.</li>
+                                    <li>Isi data pada file CSV tersebut. Untuk kolom JSON (prestasi, hobi), ikuti format yang ditentukan di petunjuk.</li>
+                                    <li>Klik tombol <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Impor</span> dan unggah file Anda.</li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={7} title="Peringatan Kritis: Keamanan Data Anda" isLast={true}>
+                            <PanduanLangkah number={8} title="Peringatan Kritis: Keamanan Data Anda" isLast={true}>
                                 <div className="p-4 rounded-md border-l-4 border-yellow-500 bg-yellow-50 text-yellow-800">
                                     <h4 className="font-bold flex items-center gap-2"><i className="bi bi-wifi-off"></i>Aplikasi Dapat Bekerja Offline</h4>
                                     <p className="mt-1">Penting untuk dipahami bahwa semua data yang Anda masukkan disimpan <strong>secara eksklusif di dalam browser pada komputer/laptop yang Anda gunakan saat ini</strong>. Tidak ada data yang dikirim atau disimpan di internet.</p>

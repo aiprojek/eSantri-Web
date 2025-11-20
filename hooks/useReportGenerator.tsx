@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Santri, PondokSettings, RiwayatStatus, MataPelajaran, ReportType, Tagihan, Pembayaran, GedungAsrama, TransaksiKas, TransaksiSaldo, Alamat } from '../types';
 import { PrintHeader } from '../components/common/PrintHeader';
@@ -1044,11 +1045,11 @@ const LabelSantriTemplate: React.FC<{ santriList: Santri[]; settings: PondokSett
     );
 };
 
-const DaftarRombelTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: { rombelNama: string; kelasNama: string } }> = ({ santriList, settings, options }) => {
-    const rombel = settings.rombel.find(r => r.nama === options.rombelNama);
-    const waliKelas = settings.tenagaPengajar.find(tp => tp.id === rombel?.waliKelasId);
+const DaftarRombelTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: { rombelId: number } }> = ({ santriList, settings, options }) => {
+    const rombel = settings.rombel.find(r => r.id === options.rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    const waliKelas = settings.tenagaPengajar.find(tp => tp.id === rombel?.waliKelasId);
     
     const formatFullAlamat = (alamat: Alamat): string => {
         return [
@@ -1062,9 +1063,9 @@ const DaftarRombelTemplate: React.FC<{ santriList: Santri[]; settings: PondokSet
 
     return (
         <div className="text-black" style={{ fontSize: '9pt' }}>
-            <PrintHeader settings={settings} title={`DAFTAR SANTRI KELAS ${options.kelasNama.toUpperCase()} ROMBEL ${options.rombelNama.toUpperCase()}`} />
+            <PrintHeader settings={settings} title={`DAFTAR SANTRI ${jenjang?.nama?.toUpperCase() || ''}`} />
             <div className="text-sm font-semibold mb-4 grid grid-cols-2">
-              <span>Jenjang: {jenjang?.nama || 'N/A'}</span>
+              <span>Kelas / Rombel: {kelas?.nama || 'N/A'} / {rombel?.nama || 'N/A'}</span>
               <span className="text-right">Wali Kelas: {waliKelas?.nama || '...................................'}</span>
             </div>
             <table className="w-full text-left border-collapse border border-black">
@@ -1362,9 +1363,8 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 {
                     if (santriData.length === 0) return [];
                     const firstSantri = santriData[0];
-                    const rombel = settings.rombel.find(r => r.id === firstSantri.rombelId);
-                    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-                    return [{ content: <DaftarRombelTemplate santriList={santriData} settings={settings} options={{ rombelNama: rombel?.nama || '', kelasNama: kelas?.nama || '' }} />, orientation: 'landscape' }];
+                    // Pass ID instead of Name to avoid ambiguity
+                    return [{ content: <DaftarRombelTemplate santriList={santriData} settings={settings} options={{ rombelId: firstSantri.rombelId }} />, orientation: 'landscape' }];
                 }
             case ReportType.LembarNilai:
                 {

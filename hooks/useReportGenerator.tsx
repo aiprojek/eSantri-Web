@@ -668,28 +668,35 @@ const LembarKedatanganTemplate: React.FC<{
   santriList: Santri[]; 
   settings: PondokSettings; 
   options: { 
-    jenjangNama: string; 
-    kelasNama: string; 
-    rombelNama: string; 
+    rombelId: number; // Change from rombelNama to rombelId
     agendaKedatangan: string;
     semester: string;
     tahunAjaran: string;
-    waliKelasNama: string;
   } 
 }> = ({ santriList, settings, options }) => {
+    const rombel = settings.rombel.find(r => r.id === options.rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    const waliKelas = rombel?.waliKelasId ? settings.tenagaPengajar.find(p => p.id === rombel.waliKelasId) : null;
+
+    const jenjangNama = jenjang?.nama || 'N/A';
+    const kelasNama = kelas?.nama || 'N/A';
+    const rombelNama = rombel?.nama || 'N/A';
+    const waliKelasNama = waliKelas?.nama || '...................................';
+
     return (
         <div className="text-black" style={{ fontSize: '10pt' }}>
             <PrintHeader settings={settings} title="LEMBAR KEDATANGAN SANTRI" />
             <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
               <div>
-                  <p>Jenjang: {options.jenjangNama}</p>
-                  <p>Kelas / Rombel: {options.kelasNama} / {options.rombelNama}</p>
+                  <p>Jenjang: {jenjangNama}</p>
+                  <p>Kelas / Rombel: {kelasNama} / {rombelNama}</p>
                   <p>Agenda: {options.agendaKedatangan || '...................................'}</p>
               </div>
               <div className="text-right">
                   <p>Semester: {options.semester}</p>
                   <p>Tahun Ajaran: {options.tahunAjaran || '...................................'}</p>
-                  <p>Wali Kelas: {options.waliKelasNama || '...................................'}</p>
+                  <p>Wali Kelas: {waliKelasNama}</p>
               </div>
             </div>
             <table className="w-full text-left border-collapse border border-black">
@@ -732,24 +739,29 @@ const LembarRaporTemplate: React.FC<{
   santriList: Santri[]; 
   settings: PondokSettings; 
   options: { 
-    jenjangNama: string; 
-    kelasNama: string; 
-    rombelNama: string; 
+    rombelId: number; // Change from rombelNama to rombelId
     semester: string;
     tahunAjaran: string;
   } 
 }> = ({ santriList, settings, options }) => {
-    const rombel = settings.rombel.find(r => r.nama === options.rombelNama);
+    const rombel = settings.rombel.find(r => r.id === options.rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
     const waliKelas = rombel?.waliKelasId ? settings.tenagaPengajar.find(p => p.id === rombel.waliKelasId) : null;
+
+    const jenjangNama = jenjang?.nama || 'N/A';
+    const kelasNama = kelas?.nama || 'N/A';
+    const rombelNama = rombel?.nama || 'N/A';
+
     return (
         <div className="text-black" style={{ fontSize: '10pt' }}>
             <PrintHeader settings={settings} title="LEMBAR PENGAMBILAN DAN PENGUMPULAN RAPOR" />
             <div className="text-sm font-semibold mb-4 grid grid-cols-2">
-              <span>Jenjang: {options.jenjangNama}</span>
+              <span>Jenjang: {jenjangNama}</span>
               <span className="text-right">Semester: {options.semester}</span>
-              <span>Kelas: {options.kelasNama}</span>
+              <span>Kelas: {kelasNama}</span>
               <span className="text-right">Tahun Ajaran: {options.tahunAjaran || '...................................'}</span>
-              <span>Rombel: {options.rombelNama}</span>
+              <span>Rombel: {rombelNama}</span>
               <span className="text-right">Wali Kelas: {waliKelas?.nama || '...................................'}</span>
             </div>
             <table className="w-full text-left border-collapse border border-black">
@@ -812,7 +824,7 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 </div>
                 <div className="w-10 h-full flex items-center justify-center">
                     {settings.logoPonpesUrl && (
-                        <img src={settings.logoPonpesUrl} alt="Logo Pondok" className="max-h-8 max-w-full object-contain" />
+                        <img src={settings.logoPonpesUrl} alt="Logo Pondok" className="max-h-full max-w-full object-contain" />
                     )}
                 </div>
             </div>
@@ -1108,10 +1120,13 @@ const LembarNilaiTable: React.FC<{
     settings: PondokSettings;
     options: any;
     mapel: MataPelajaran;
-    jenjangNama: string;
-}> = ({ santriList, settings, options, mapel, jenjangNama }) => {
-    const { rombelNama, kelasNama, nilaiTpCount, nilaiSmCount, showNilaiTengahSemester, semester, tahunAjaran } = options;
-    const waliKelas = settings.tenagaPengajar.find(tp => tp.id === settings.rombel.find(r => r.nama === rombelNama)?.waliKelasId);
+}> = ({ santriList, settings, options, mapel }) => {
+    const { rombelId, nilaiTpCount, nilaiSmCount, showNilaiTengahSemester, semester, tahunAjaran } = options;
+    const rombel = settings.rombel.find(r => r.id === rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    const waliKelas = settings.tenagaPengajar.find(tp => tp.id === rombel?.waliKelasId);
+    
     const totalCols = 7 + nilaiTpCount + nilaiSmCount + (showNilaiTengahSemester ? 1 : 0);
 
     return (
@@ -1119,9 +1134,9 @@ const LembarNilaiTable: React.FC<{
             <PrintHeader settings={settings} title="LEMBAR PENILAIAN" />
             <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
                 <div>
-                    <p>Jenjang: {jenjangNama}</p>
-                    <p>Kelas: {kelasNama}</p>
-                    <p>Rombel: {rombelNama}</p>
+                    <p>Jenjang: {jenjang?.nama || 'N/A'}</p>
+                    <p>Kelas: {kelas?.nama || 'N/A'}</p>
+                    <p>Rombel: {rombel?.nama || 'N/A'}</p>
                 </div>
                 <div className="text-right">
                     <p>Semester: {semester}</p>
@@ -1179,26 +1194,31 @@ const LembarNilaiTable: React.FC<{
     );
 };
 
-const LembarAbsensiTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: { rombelNama: string; kelasNama: string; bulan: string; tahun: string; semester: string; tahunAjaran: string; } }> = ({ santriList, settings, options }) => {
-    const { rombelNama, kelasNama, bulan, tahun, semester, tahunAjaran } = options;
-    const rombel = settings.rombel.find(r => r.nama === rombelNama);
+const LembarAbsensiTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: { rombelId: number; bulan: string; tahun: string; semester: string; tahunAjaran: string; } }> = ({ santriList, settings, options }) => {
+    const { rombelId, bulan, tahun, semester, tahunAjaran } = options;
+    const rombel = settings.rombel.find(r => r.id === rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
     const waliKelas = settings.tenagaPengajar.find(tp => tp.id === rombel?.waliKelasId);
     
+    const jenjangNama = jenjang?.nama || 'N/A';
+    const kelasNama = kelas?.nama || 'N/A';
+    const rombelNama = rombel?.nama || 'N/A';
+    const waliKelasNama = waliKelas?.nama || '...........................';
+
     return (
         <div className="text-black" style={{ fontSize: '9pt' }}>
             <PrintHeader settings={settings} title="LEMBAR ABSENSI" />
             <div className="text-sm font-semibold mb-2 grid grid-cols-2 gap-x-4">
                 <div>
-                    <p>Jenjang: {jenjang?.nama || 'N/A'}</p>
+                    <p>Jenjang: {jenjangNama}</p>
                     <p>Kelas: {kelasNama}</p>
                     <p>Rombel: {rombelNama}</p>
                 </div>
                 <div className="text-right">
                     <p>Bulan: {bulan} {tahun}</p>
                     <p>Semester / Th. Ajaran: {semester} / {tahunAjaran || '...........................'}</p>
-                    <p>Wali Kelas: {waliKelas?.nama || '...........................'}</p>
+                    <p>Wali Kelas: {waliKelasNama}</p>
                 </div>
             </div>
             <table className="w-full text-left border-collapse border border-black">
@@ -1326,18 +1346,11 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 {
                     if (santriData.length === 0) return [];
                     const firstSantri = santriData[0];
-                    const rombel = settings.rombel.find(r => r.id === firstSantri.rombelId);
-                    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-                    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
-                    const waliKelas = rombel?.waliKelasId ? settings.tenagaPengajar.find(p => p.id === rombel.waliKelasId) : null;
                     const reportOptions = {
-                        jenjangNama: jenjang?.nama || '',
-                        kelasNama: kelas?.nama || '',
-                        rombelNama: rombel?.nama || '',
+                        rombelId: firstSantri.rombelId,
                         agendaKedatangan: options.agendaKedatangan,
                         semester: options.semester,
                         tahunAjaran: options.tahunAjaran,
-                        waliKelasNama: waliKelas?.nama || '',
                     };
                     return [{ content: <LembarKedatanganTemplate santriList={santriData} settings={settings} options={reportOptions} />, orientation: 'portrait' }];
                 }
@@ -1346,13 +1359,8 @@ export const useReportGenerator = (settings: PondokSettings) => {
                  {
                     if (santriData.length === 0) return [];
                     const firstSantri = santriData[0];
-                    const rombel = settings.rombel.find(r => r.id === firstSantri.rombelId);
-                    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-                    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
                     const reportOptions = {
-                        jenjangNama: jenjang?.nama || '',
-                        kelasNama: kelas?.nama || '',
-                        rombelNama: rombel?.nama || '',
+                        rombelId: firstSantri.rombelId,
                         semester: options.semester,
                         tahunAjaran: options.tahunAjaran,
                     };
@@ -1380,16 +1388,12 @@ export const useReportGenerator = (settings: PondokSettings) => {
                     }
 
                     const firstSantri = santriData[0];
-                    const rombel = settings.rombel.find(r => r.id === firstSantri.rombelId);
-                    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-                    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
-                    const jenjangNama = jenjang?.nama || 'N/A';
-                    const reportOptions = { rombelNama: rombel?.nama || '', kelasNama: kelas?.nama || '', ...options };
+                    const reportOptions = { rombelId: firstSantri.rombelId, ...options };
                     const selectedMapels = settings.mataPelajaran.filter(m => options.selectedMapelIds.includes(m.id));
 
                     selectedMapels.forEach(mapel => {
                         results.push({
-                            content: <LembarNilaiTable santriList={santriData} settings={settings} options={reportOptions} mapel={mapel} jenjangNama={jenjangNama} />,
+                            content: <LembarNilaiTable santriList={santriData} settings={settings} options={reportOptions} mapel={mapel} />,
                             orientation: 'landscape'
                         });
                     });
@@ -1400,9 +1404,8 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 {
                     if (santriData.length === 0) return [];
                     const firstSantri = santriData[0];
-                    const rombel = settings.rombel.find(r => r.id === firstSantri.rombelId);
-                    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
                     const results: { content: React.ReactNode; orientation: 'portrait' | 'landscape' }[] = [];
+                    const reportOptionsBase = { rombelId: firstSantri.rombelId, semester: options.semester, tahunAjaran: options.tahunAjaran };
 
                     if (options.attendanceCalendar === 'Masehi') {
                         const start = new Date(options.startMonth);
@@ -1410,7 +1413,7 @@ export const useReportGenerator = (settings: PondokSettings) => {
                         let current = start;
                         while (current <= end) {
                             results.push({
-                                content: <LembarAbsensiTemplate santriList={santriData} settings={settings} options={{ rombelNama: rombel?.nama || '', kelasNama: kelas?.nama || '', bulan: current.toLocaleString('id-ID', { month: 'long' }), tahun: current.getFullYear().toString(), semester: options.semester, tahunAjaran: options.tahunAjaran }} />,
+                                content: <LembarAbsensiTemplate santriList={santriData} settings={settings} options={{ ...reportOptionsBase, bulan: current.toLocaleString('id-ID', { month: 'long' }), tahun: current.getFullYear().toString() }} />,
                                 orientation: 'landscape'
                             });
                             current.setMonth(current.getMonth() + 1);
@@ -1424,7 +1427,7 @@ export const useReportGenerator = (settings: PondokSettings) => {
                         while (currentYear < endYear || (currentYear === endYear && currentMonth <= endMonth)) {
                             const hijriMonthName = hijriMonths.find(m => m.value === currentMonth)?.name || `Bulan ${currentMonth}`;
                             results.push({
-                                content: <LembarAbsensiTemplate santriList={santriData} settings={settings} options={{ rombelNama: rombel?.nama || '', kelasNama: kelas?.nama || '', bulan: hijriMonthName, tahun: `${currentYear} H`, semester: options.semester, tahunAjaran: options.tahunAjaran }} />,
+                                content: <LembarAbsensiTemplate santriList={santriData} settings={settings} options={{ ...reportOptionsBase, bulan: hijriMonthName, tahun: `${currentYear} H` }} />,
                                 orientation: 'landscape'
                             });
 

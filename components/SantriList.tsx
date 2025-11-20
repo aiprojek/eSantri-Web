@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Santri, RiwayatStatus } from '../types';
 import { useAppContext } from '../AppContext';
@@ -9,6 +10,7 @@ import { BulkStatusModal } from './santri/modals/BulkStatusModal';
 import { BulkMoveModal } from './santri/modals/BulkMoveModal';
 // Import new service functions
 import { generateSantriCsvForUpdate, generateSantriCsvTemplate, parseSantriCsv, ParsedCsvResult } from '../services/csvService';
+import { BulkSantriEditor } from './santri/modals/BulkSantriEditor';
 
 interface SantriListProps {
   initialFilters?: any;
@@ -59,6 +61,9 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
   const [isBulkStatusModalOpen, setBulkStatusModalOpen] = useState(false);
   const [isBulkMoveModalOpen, setBulkMoveModalOpen] = useState(false);
+  const [isBulkEditorOpen, setBulkEditorOpen] = useState(false);
+  const [bulkEditorMode, setBulkEditorMode] = useState<'add' | 'edit'>('add');
+
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -312,6 +317,33 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
     }
   };
   
+  // --- Bulk Editor Handler ---
+  const handleOpenBulkEditorAdd = () => {
+      setBulkEditorMode('add');
+      setBulkEditorOpen(true);
+  };
+
+  const handleOpenBulkEditorEdit = () => {
+      setBulkEditorMode('edit');
+      setBulkEditorOpen(true);
+  };
+
+  const handleSaveBulkEditor = async (data: any[]) => {
+      try {
+          if (bulkEditorMode === 'add') {
+              await onBulkAddSantri(data);
+              showToast(`${data.length} santri baru berhasil ditambahkan.`, 'success');
+          } else {
+              await onBulkUpdateSantri(data);
+              showToast(`${data.length} data santri berhasil diperbarui.`, 'success');
+              setSelectedSantriIds([]); // Clear selection after update
+          }
+      } catch (error) {
+          console.error(error);
+          showToast('Terjadi kesalahan saat menyimpan data massal.', 'error');
+      }
+  };
+  
   // --- End Refactored Logic ---
   
   const ImportModal = () => (
@@ -393,6 +425,13 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
               <i className="bi bi-person-plus-fill"></i>
               Tambah Santri Baru
             </button>
+             <button 
+              onClick={handleOpenBulkEditorAdd}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+            >
+              <i className="bi bi-table"></i>
+              Tambah Massal (Editor)
+            </button>
             <button
               onClick={() => setImportModalOpen(true)}
               className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
@@ -419,6 +458,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         )}
         {isImportModalOpen && <ImportModal />}
         {importPreview && <ImportPreviewModal />}
+        {isBulkEditorOpen && <BulkSantriEditor isOpen={isBulkEditorOpen} onClose={() => setBulkEditorOpen(false)} mode={bulkEditorMode} onSave={handleSaveBulkEditor} />}
       </div>
     );
   }
@@ -479,7 +519,10 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                             {selectedSantriIds.length} santri dipilih. 
                              <button onClick={() => setSelectedSantriIds([])} className="ml-2 text-red-600 hover:underline font-medium">Batalkan</button>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap justify-center">
+                            <button onClick={handleOpenBulkEditorEdit} className="flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-teal-700 bg-white rounded-md hover:bg-teal-50 border border-teal-300">
+                                <i className="bi bi-pencil-square"></i> Edit Massal
+                            </button>
                              <button onClick={() => setBulkMoveModalOpen(true)} className="flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white rounded-md hover:bg-gray-100 border border-gray-300">
                                 <i className="bi bi-arrows-move"></i> Pindahkan Rombel
                             </button>
@@ -559,10 +602,15 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                                 </div>
                             )}
                         </div>
-                        <button onClick={() => openModal()} className="col-span-2 md:col-span-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
-                            <i className="bi bi-person-plus-fill"></i>
-                            Tambah Santri
-                        </button>
+                         <div className="col-span-2 md:col-span-1 flex gap-1">
+                            <button onClick={handleOpenBulkEditorAdd} className="flex-1 flex items-center justify-center px-3 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-l-lg hover:bg-teal-100 focus:outline-none" title="Tambah Massal (Editor)">
+                                <i className="bi bi-table"></i>
+                            </button>
+                            <button onClick={() => openModal()} className="flex-grow flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-r-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                                <i className="bi bi-person-plus-fill"></i>
+                                Tambah
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -684,6 +732,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         {importPreview && <ImportPreviewModal />}
         {isBulkStatusModalOpen && <BulkStatusModal isOpen={isBulkStatusModalOpen} onClose={() => setBulkStatusModalOpen(false)} onSave={handleBulkStatusSave} selectedCount={selectedSantriIds.length} />}
         {isBulkMoveModalOpen && <BulkMoveModal isOpen={isBulkMoveModalOpen} onClose={() => setBulkMoveModalOpen(false)} onSave={handleBulkMoveSave} selectedCount={selectedSantriIds.length} />}
+        {isBulkEditorOpen && <BulkSantriEditor isOpen={isBulkEditorOpen} onClose={() => setBulkEditorOpen(false)} mode={bulkEditorMode} initialData={bulkEditorMode === 'edit' ? santriList.filter(s => selectedSantriIds.includes(s.id)) : undefined} onSave={handleSaveBulkEditor} />}
     </div>
   );
 };

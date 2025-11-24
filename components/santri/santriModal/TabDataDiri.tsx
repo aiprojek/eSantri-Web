@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { Santri } from '../../../types';
@@ -74,6 +75,20 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
     { value: 'Keturunan', label: 'Keturunan' },
   ];
 
+  const jenisSantriOptions = [
+    { value: 'Mondok - Baru', label: 'Mondok - Baru' },
+    { value: 'Mondok - Pindahan', label: 'Mondok - Pindahan' },
+    { value: 'Laju - Baru', label: 'Laju - Baru' },
+    { value: 'Laju - Pindahan', label: 'Laju - Pindahan' },
+  ];
+
+  const statusKeluargaOptions = [
+    { value: 'Anak Kandung', label: 'Anak Kandung' },
+    { value: 'Anak Tiri', label: 'Anak Tiri' },
+    { value: 'Anak Angkat', label: 'Anak Angkat' },
+    { value: 'Anak Asuh', label: 'Anak Asuh' },
+  ];
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
       <div className="lg:col-span-1">
@@ -87,8 +102,8 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
               <FormError error={errors.namaLengkap} />
           </div>
           <div className="lg:col-span-2">
-              <label className="block mb-1 text-sm font-medium text-gray-700">Nama Hijrah</label>
-              <input type="text" {...register('namaHijrah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" />
+              <label className="block mb-1 text-sm font-medium text-gray-700">Nama Hijrah / Panggilan</label>
+              <input type="text" {...register('namaHijrah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" placeholder="Nama panggilan akrab di pondok" />
           </div>
             <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">Tempat Lahir</label>
@@ -120,6 +135,13 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
                   {kewarganegaraanOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
           </div>
+          <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Status dalam Keluarga</label>
+              <select {...register('statusKeluarga')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                  <option value="">-- Pilih Status --</option>
+                  {statusKeluargaOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+          </div>
         </FormSection>
         <FormSection title="Alamat Santri">
           <AlamatFields fieldName="alamat" formMethods={formMethods} />
@@ -139,6 +161,12 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
                   <button onClick={onGenerateNis} type="button" title="Buat NIS Otomatis" className="bg-teal-600 hover:bg-teal-700 text-white p-2.5 rounded-r-lg"><i className="bi bi-arrow-clockwise"></i></button>
               </div>
               <FormError error={errors.nis} />
+          </div>
+          <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Jenis Santri</label>
+              <select {...register('jenisSantri')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                  {jenisSantriOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
           </div>
           <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">NIK</label>

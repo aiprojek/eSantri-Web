@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { UseFormReturn, FieldPath } from 'react-hook-form';
 import { Santri } from '../../../types';
@@ -84,6 +85,11 @@ export const TabDataOrangTua: React.FC<TabDataOrangTuaProps> = ({ formMethods })
         'Tidak Berpenghasilan',
         'Lainnya',
     ];
+    const statusHidupOptions = [
+        { value: 'Hidup', label: 'Hidup' },
+        { value: 'Meninggal', label: 'Meninggal' },
+        { value: 'Cerai', label: 'Cerai' },
+    ];
 
   return (
     <div>
@@ -92,6 +98,13 @@ export const TabDataOrangTua: React.FC<TabDataOrangTuaProps> = ({ formMethods })
               <label className="block mb-1 text-sm font-medium text-gray-700">Nama Lengkap Ayah</label>
               <input type="text" {...register('namaAyah', { required: 'Nama Ayah wajib diisi.' })} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.namaAyah ? 'border-red-500' : 'border-gray-300'}`} />
               <FormError error={errors.namaAyah} />
+          </div>
+          <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Status Ayah</label>
+              <select {...register('statusAyah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                  <option value="">-- Pilih Status --</option>
+                  {statusHidupOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
           </div>
           <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">NIK Ayah</label>
@@ -119,6 +132,13 @@ export const TabDataOrangTua: React.FC<TabDataOrangTuaProps> = ({ formMethods })
               <FormError error={errors.namaIbu} />
           </div>
           <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Status Ibu</label>
+              <select {...register('statusIbu')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                  <option value="">-- Pilih Status --</option>
+                  {statusHidupOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+          </div>
+          <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">NIK Ibu</label>
               <input type="text" {...register('nikIbu', { pattern: { value: /^\d*$/, message: 'NIK Ibu hanya boleh berisi angka.' }})} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.nikIbu ? 'border-red-500' : 'border-gray-300'}`} />
               <FormError error={errors.nikIbu} />
@@ -136,7 +156,14 @@ export const TabDataOrangTua: React.FC<TabDataOrangTuaProps> = ({ formMethods })
       </FormSection>
       <FormSection title="Data Wali (Isi jika berbeda dari Orang Tua)">
           <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Nama Lengkap Wali</label><input type="text" {...register('namaWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Status Hubungan Wali</label><select {...register('statusWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{['Kakek', 'Paman (Saudara Ayah)', 'Saudara Laki-laki Seayah', 'Saudara Laki-laki Kandung', 'Orang Tua Angkat', 'Orang Tua Asuh', 'Orang Tua Tiri', 'Kerabat Mahram Lainnya', 'Lainnya'].map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Hubungan dengan Santri</label><select {...register('statusWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{['Kakek', 'Paman (Saudara Ayah)', 'Saudara Laki-laki Seayah', 'Saudara Laki-laki Kandung', 'Orang Tua Angkat', 'Orang Tua Asuh', 'Orang Tua Tiri', 'Kerabat Mahram Lainnya', 'Lainnya'].map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Status Wali</label>
+              <select {...register('statusHidupWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                  <option value="">-- Pilih Status --</option>
+                  {statusHidupOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+          </div>
           <div className="lg:col-span-4">
             <DateInput fieldName="tanggalLahirWali" label="Tanggal Lahir Wali" formMethods={formMethods} />
           </div>

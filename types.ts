@@ -1,3 +1,4 @@
+
 export interface Prestasi {
   id: number;
   jenis: 'Akademik' | 'Non-Akademik' | 'Tahfidz' | 'Lainnya';
@@ -75,7 +76,7 @@ export interface Santri {
   penghasilanAyah?: string;
   alamatAyah?: Alamat;
   agamaAyah?: string;
-  statusAyah?: 'Hidup' | 'Cerai Hidup' | 'Cerai Wafat';
+  statusAyah?: 'Hidup' | 'Meninggal' | 'Cerai';
   teleponAyah?: string;
 
   // Data Ibu
@@ -88,7 +89,7 @@ export interface Santri {
   penghasilanIbu?: string;
   alamatIbu?: Alamat;
   agamaIbu?: string;
-  statusIbu?: 'Hidup' | 'Cerai Hidup' | 'Cerai Wafat';
+  statusIbu?: 'Hidup' | 'Meninggal' | 'Cerai';
   teleponIbu?: string;
 
   // Data Wali (opsional)
@@ -100,6 +101,7 @@ export interface Santri {
   penghasilanWali?: string;
   agamaWali?: string;
   statusWali?: 'Kakek' | 'Paman (Saudara Ayah)' | 'Saudara Laki-laki Seayah' | 'Saudara Laki-laki Kandung' | 'Orang Tua Angkat' | 'Orang Tua Asuh' | 'Orang Tua Tiri' | 'Kerabat Mahram Lainnya' | 'Lainnya';
+  statusHidupWali?: 'Hidup' | 'Meninggal' | 'Cerai';
   alamatWali?: Alamat;
   teleponWali: string; // Dipindah dari data utama
 

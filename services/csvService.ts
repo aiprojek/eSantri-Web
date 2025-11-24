@@ -1,3 +1,4 @@
+
 import { Santri } from '../types';
 
 // This is an internal helper and doesn't need to be exported.
@@ -28,8 +29,8 @@ const parseCsvRow = (row: string): string[] => {
 
 const CSV_HEADERS_UPDATE = [
     'id', 'nis', 'nik', 'nisn', 'namaLengkap', 'namaHijrah', 'kewarganegaraan',
-    'berkebutuhanKhusus', 'jenisSantri', 'tempatLahir', 'tanggalLahir', 'jenisKelamin',
-    'anakKe', 'statusKeluarga', 'alamat_detail', 'alamat_desa', 'alamat_kecamatan', 'alamat_kabupaten', 'alamat_provinsi', 'alamat_kodepos',
+    'berkebutuhanKhusus', 'jenisSantri', 'statusKeluarga', 'tempatLahir', 'tanggalLahir', 'jenisKelamin',
+    'anakKe', 'alamat_detail', 'alamat_desa', 'alamat_kecamatan', 'alamat_kabupaten', 'alamat_provinsi', 'alamat_kodepos',
     'tinggiBadan', 'beratBadan', 'jarakKePondok',
     'jumlahSaudara', 'riwayatPenyakit', 'prestasi_json', 'pelanggaran_json', 'riwayatStatus_json', 'hobi_json', 'tanggalMasuk', 'sekolahAsal',
     'alamatSekolahAsal', 'namaAyah', 'nikAyah', 'tempatLahirAyah', 'tanggalLahirAyah',
@@ -37,7 +38,7 @@ const CSV_HEADERS_UPDATE = [
     'statusAyah', 'teleponAyah', 'namaIbu', 'nikIbu', 'tempatLahirIbu', 'tanggalLahirIbu',
     'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'alamatIbu_detail', 'agamaIbu', 'statusIbu',
     'teleponIbu', 'namaWali', 'tempatLahirWali', 'tanggalLahirWali', 'pekerjaanWali',
-    'pendidikanWali', 'penghasilanWali', 'agamaWali', 'statusWali', 'alamatWali_detail',
+    'pendidikanWali', 'penghasilanWali', 'agamaWali', 'statusWali', 'statusHidupWali', 'alamatWali_detail',
     'teleponWali', 'jenjangId', 'kelasId', 'rombelId', 'status', 'tanggalStatus', 'fotoUrl'
 ];
 

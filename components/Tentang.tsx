@@ -157,8 +157,11 @@ const Tentang: React.FC = () => {
                                     <FeatureItem icon="bi-person-badge-fill" title="Generator NIS Otomatis">
                                         Buat Nomor Induk Santri secara otomatis dengan tiga metode yang dapat diatur.
                                     </FeatureItem>
-                                    <FeatureItem icon="bi-printer-fill" title="Fitur Laporan & Cetak Lengkap">
+                                    <FeatureItem icon="bi-printer-fill" title="Laporan Lengkap">
                                         Cetak berbagai dokumen penting seperti biodata, kuitansi, kartu santri, dan laporan lainnya.
+                                    </FeatureItem>
+                                    <FeatureItem icon="bi-file-pdf-fill" title="Ekspor PDF Cerdas">
+                                        Download laporan tabel dalam format PDF berkualitas tinggi. Teks dapat diseleksi (copy-paste) dan dicari.
                                     </FeatureItem>
                                     <FeatureItem icon="bi-file-earmark-arrow-up-fill" title="Editor Massal & Impor Data">
                                         Edit data banyak santri sekaligus seperti di Excel atau impor dari file CSV.
@@ -346,13 +349,19 @@ const Tentang: React.FC = () => {
                                     </li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={6} title="Mencetak Laporan Administratif">
-                                <p>Semua kebutuhan administrasi cetak-mencetak terpusat di halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong>. Prosesnya sederhana:</p>
+                            <PanduanLangkah number={6} title="Mencetak & Ekspor Laporan">
+                                <p>Semua kebutuhan administrasi terpusat di halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong>.</p>
                                 <ol className="list-decimal pl-5 space-y-2">
-                                    <li>Pilih jenis laporan yang Anda butuhkan (misal: Biodata, Kartu Santri, Lembar Nilai, Rekening Koran, dll).</li>
-                                    <li>Gunakan filter untuk memilih data spesifik yang ingin dicetak (biasanya berdasarkan Rombel atau Individu).</li>
-                                    <li>Atur opsi tambahan yang tersedia untuk laporan tersebut (seperti format kertas, margin, atau opsi tanda tangan).</li>
-                                    <li>Klik <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">Tampilkan Pratinjau</span>, lalu klik tombol <span className="font-semibold text-white bg-blue-600 px-2 py-0.5 rounded-md text-xs">Cetak</span>.</li>
+                                    <li>Pilih jenis laporan (misal: Daftar Santri, Lembar Nilai, dll).</li>
+                                    <li>Gunakan filter untuk memilih data spesifik.</li>
+                                    <li>Klik <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">Tampilkan Pratinjau</span>.</li>
+                                    <li>Pilih aksi selanjutnya:
+                                        <ul className="list-disc pl-5 mt-1">
+                                            <li><strong className="text-red-600">Download PDF:</strong> Menyimpan laporan sebagai file PDF. Untuk laporan berbentuk tabel (Daftar Santri, Lembar Nilai, dll), sistem menggunakan <em>Smart PDF Generation</em> sehingga teks tetap tajam dan bisa diseleksi.</li>
+                                            <li><strong className="text-green-600">Download HTML:</strong> Menyimpan sebagai halaman web untuk dibuka di Excel/Word.</li>
+                                            <li><strong className="text-blue-600">Cetak:</strong> Mengirim langsung ke printer.</li>
+                                        </ul>
+                                    </li>
                                 </ol>
                             </PanduanLangkah>
                              <PanduanLangkah number={7} title="Efisiensi Input Data: Editor Massal & Impor CSV">

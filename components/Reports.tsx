@@ -1,12 +1,14 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Santri, PondokSettings, ReportType, GedungAsrama, TransaksiKas } from '../types';
 import { useAppContext } from '../AppContext';
 import { useReportGenerator } from '../hooks/useReportGenerator';
 import { useReportConfig } from '../hooks/useReportConfig';
 import { ReportOptions } from './reports/ReportOptions';
+import { generatePdf, generateAutoTablePdf } from '../utils/pdfGenerator';
 
 const Reports: React.FC = () => {
-  const { santriList, settings, tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList } = useAppContext();
+  const { santriList, settings, tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList, showToast } = useAppContext();
   
   const [selectedJenjangId, setSelectedJenjangId] = useState<string>('');
   const [selectedKelasId, setSelectedKelasId] = useState<string>('');
@@ -21,6 +23,7 @@ const Reports: React.FC = () => {
   const [previewContent, setPreviewContent] = useState<React.ReactNode | null>(null);
   const [pageCount, setPageCount] = useState<number>(0);
   const [isPreviewGenerating, setIsPreviewGenerating] = useState(false);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
   const [manualZoom, setManualZoom] = useState(1);
   const [smartZoomScale, setSmartZoomScale] = useState(1);
@@ -146,6 +149,57 @@ const Reports: React.FC = () => {
   };
   
   const handlePrint = () => { window.print(); };
+
+  const handleDownloadPdf = async () => {
+      if (!previewContainerRef.current || !contentWrapperRef.current) return;
+      
+      setIsPdfGenerating(true);
+      
+      // Temporarily reset transform to ensure correct capture scale
+      const originalTransform = contentWrapperRef.current.style.transform;
+      contentWrapperRef.current.style.transform = 'none';
+
+      try {
+          const fileName = `Laporan_${activeReport}_${new Date().toISOString().slice(0, 10)}.pdf`;
+          const reportTitle = reportTypes.find(r => r.id === activeReport)?.title || 'Laporan eSantri';
+
+          // Determine which PDF generator to use
+          // AutoTable is better for pure data tables (Selectable text, better pagination)
+          // Html2Canvas is better for complex layouts (Cards, Forms, Labels)
+          const tableBasedReports = [
+              ReportType.DaftarRombel,
+              ReportType.LaporanArusKas,
+              ReportType.RekeningKoranSantri,
+              ReportType.LaporanMutasi,
+              ReportType.LaporanAsrama,
+              ReportType.LembarAbsensi,
+              ReportType.LembarNilai,
+              ReportType.LembarKedatangan,
+              ReportType.LembarRapor
+          ];
+
+          if (activeReport && tableBasedReports.includes(activeReport)) {
+              await generateAutoTablePdf('preview-area', {
+                  paperSize: paperSize,
+                  fileName: fileName
+              }, settings, reportTitle);
+          } else {
+              await generatePdf('preview-area', {
+                  paperSize: paperSize,
+                  fileName: fileName
+              });
+          }
+          
+          showToast('PDF berhasil diunduh', 'success');
+      } catch (error) {
+          console.error('Failed to generate PDF:', error);
+          showToast('Gagal membuat PDF', 'error');
+      } finally {
+          // Restore transform
+          contentWrapperRef.current.style.transform = originalTransform;
+          setIsPdfGenerating(false);
+      }
+  };
 
   const handleDownloadHtml = () => {
     const previewHtml = contentWrapperRef.current?.innerHTML;
@@ -371,8 +425,15 @@ const Reports: React.FC = () => {
             <div className="flex flex-wrap justify-between items-center gap-x-4 gap-y-2 mb-4 no-print">
                 <div className="flex items-center gap-x-4 gap-y-2 flex-wrap"><h2 className="text-xl font-bold text-gray-700 whitespace-nowrap">3. Pratinjau Laporan</h2>{pageCount > 0 && (<span className="text-sm font-medium bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full">Estimasi: {pageCount} halaman</span>)}</div>
                 <div className="flex items-center gap-2">
+                    <button onClick={handleDownloadPdf} disabled={isPdfGenerating} className="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto disabled:bg-gray-300">
+                        {isPdfGenerating ? (
+                            <><span className="animate-spin h-4 w-4 border-b-2 border-white rounded-full"></span> Proses...</>
+                        ) : (
+                            <><i className="bi bi-file-pdf-fill"></i><span className="hidden lg:inline">Download PDF</span><span className="lg:hidden">PDF</span></>
+                        )}
+                    </button>
                     <button onClick={handleDownloadHtml} className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto">
-                        <i className="bi bi-file-earmark-arrow-down-fill"></i><span className="hidden lg:inline">Download HTML</span><span className="lg:hidden">Download</span>
+                        <i className="bi bi-file-earmark-arrow-down-fill"></i><span className="hidden lg:inline">Download HTML</span><span className="lg:hidden">HTML</span>
                     </button>
                     <button onClick={handlePrint} className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto">
                         <i className="bi bi-printer-fill"></i><span className="hidden lg:inline">Cetak Laporan</span><span className="lg:hidden">Cetak</span>

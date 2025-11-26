@@ -5,7 +5,7 @@ import { useAppContext } from '../AppContext';
 import { useReportGenerator } from '../hooks/useReportGenerator';
 import { useReportConfig } from '../hooks/useReportConfig';
 import { ReportOptions } from './reports/ReportOptions';
-import { generatePdf, generateAutoTablePdf } from '../utils/pdfGenerator';
+import { generatePdf } from '../utils/pdfGenerator';
 
 const Reports: React.FC = () => {
   const { santriList, settings, tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList, showToast } = useAppContext();
@@ -30,6 +30,30 @@ const Reports: React.FC = () => {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const previewAreaRef = useRef<HTMLDivElement>(null);
+  
+  // State for download dropdown
+  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
+
+  // Define report types early so handlers can use them
+  const reportTypes = useMemo(() => [
+    { id: ReportType.DashboardSummary, title: 'Laporan Ringkas Dashboard', description: "Cetak ringkasan statistik utama dari dashboard.", icon: 'bi-pie-chart-fill' },
+    { id: ReportType.FinanceSummary, title: 'Laporan Ringkas Keuangan', description: "Cetak ringkasan statistik utama dari dashboard keuangan.", icon: 'bi-graph-up' },
+    { id: ReportType.LaporanArusKas, title: 'Laporan Arus Kas Umum', description: "Cetak riwayat transaksi dari buku kas umum untuk periode tertentu.", icon: 'bi-journal-arrow-up' },
+    { id: ReportType.LaporanAsrama, title: 'Laporan Keasramaan', description: "Cetak rekapitulasi data gedung, kamar, musyrif, dan penghuni.", icon: 'bi-building-check' },
+    { id: ReportType.RekeningKoranSantri, title: 'Rekening Koran Santri', description: "Cetak mutasi keuangan (tagihan, pembayaran, uang saku) per santri.", icon: 'bi-file-earmark-person' },
+    { id: ReportType.Biodata, title: 'Biodata Santri', description: "Cetak biodata lengkap untuk satu atau semua santri per rombel.", icon: 'bi-person-badge' },
+    { id: ReportType.KartuSantri, title: 'Kartu Tanda Santri', description: "Cetak kartu identitas profesional untuk santri.", icon: 'bi-person-vcard' },
+    { id: ReportType.LembarPembinaan, title: 'Lembar Pembinaan Santri', description: "Cetak rekam jejak prestasi dan pelanggaran santri.", icon: 'bi-file-person-fill' },
+    { id: ReportType.LaporanMutasi, title: 'Laporan Mutasi Santri', description: "Cetak rekapitulasi santri yang masuk, keluar, atau lulus.", icon: 'bi-arrow-left-right' },
+    { id: ReportType.FormulirIzin, title: 'Formulir Izin Santri', description: "Cetak surat izin keluar/pulang resmi untuk santri.", icon: 'bi-box-arrow-right' },
+    { id: ReportType.LabelSantri, title: 'Cetak Label Santri', description: "Cetak label nama, NIS, dan rombel untuk satu rombel.", icon: 'bi-tags-fill' },
+    { id: ReportType.DaftarRombel, title: 'Daftar Santri per Rombel', description: "Cetak daftar nama santri dalam satu rombel.", icon: 'bi-people' },
+    { id: ReportType.LembarKedatangan, title: 'Lembar Kedatangan Santri', description: "Rekapitulasi kedatangan santri setelah liburan.", icon: 'bi-calendar2-check-fill' },
+    { id: ReportType.LembarRapor, title: 'Pengambilan & Pengumpulan Rapor', description: "Cetak lembar rekapitulasi pengambilan dan pengumpulan rapor.", icon: 'bi-file-earmark-check-fill' },
+    { id: ReportType.LembarNilai, title: 'Lembar Nilai', description: "Cetak lembar nilai kosong untuk satu rombel.", icon: 'bi-card-checklist' },
+    { id: ReportType.LembarAbsensi, title: 'Lembar Absensi', description: "Cetak lembar absensi bulanan untuk satu rombel.", icon: 'bi-calendar-check' },
+  ], []);
 
   const availableKelas = useMemo(() => {
     if (!selectedJenjangId) return settings.kelas;
@@ -108,25 +132,19 @@ const Reports: React.FC = () => {
       styleEl.innerHTML = `${portraitRule}\n${landscapeRule}`;
     }
   }, [paperSize, margin, paperDimensions, marginValues]);
-  
-  const reportTypes = useMemo(() => [
-    { id: ReportType.DashboardSummary, title: 'Laporan Ringkas Dashboard', description: "Cetak ringkasan statistik utama dari dashboard.", icon: 'bi-pie-chart-fill' },
-    { id: ReportType.FinanceSummary, title: 'Laporan Ringkas Keuangan', description: "Cetak ringkasan statistik utama dari dashboard keuangan.", icon: 'bi-graph-up' },
-    { id: ReportType.LaporanArusKas, title: 'Laporan Arus Kas Umum', description: "Cetak riwayat transaksi dari buku kas umum untuk periode tertentu.", icon: 'bi-journal-arrow-up' },
-    { id: ReportType.LaporanAsrama, title: 'Laporan Keasramaan', description: "Cetak rekapitulasi data gedung, kamar, musyrif, dan penghuni.", icon: 'bi-building-check' },
-    { id: ReportType.RekeningKoranSantri, title: 'Rekening Koran Santri', description: "Cetak mutasi keuangan (tagihan, pembayaran, uang saku) per santri.", icon: 'bi-file-earmark-person' },
-    { id: ReportType.Biodata, title: 'Biodata Santri', description: "Cetak biodata lengkap untuk satu atau semua santri per rombel.", icon: 'bi-person-badge' },
-    { id: ReportType.KartuSantri, title: 'Kartu Tanda Santri', description: "Cetak kartu identitas profesional untuk santri.", icon: 'bi-person-vcard' },
-    { id: ReportType.LembarPembinaan, title: 'Lembar Pembinaan Santri', description: "Cetak rekam jejak prestasi dan pelanggaran santri.", icon: 'bi-file-person-fill' },
-    { id: ReportType.LaporanMutasi, title: 'Laporan Mutasi Santri', description: "Cetak rekapitulasi santri yang masuk, keluar, atau lulus.", icon: 'bi-arrow-left-right' },
-    { id: ReportType.FormulirIzin, title: 'Formulir Izin Santri', description: "Cetak surat izin keluar/pulang resmi untuk santri.", icon: 'bi-box-arrow-right' },
-    { id: ReportType.LabelSantri, title: 'Cetak Label Santri', description: "Cetak label nama, NIS, dan rombel untuk satu rombel.", icon: 'bi-tags-fill' },
-    { id: ReportType.DaftarRombel, title: 'Daftar Santri per Rombel', description: "Cetak daftar nama santri dalam satu rombel.", icon: 'bi-people' },
-    { id: ReportType.LembarKedatangan, title: 'Lembar Kedatangan Santri', description: "Rekapitulasi kedatangan santri setelah liburan.", icon: 'bi-calendar2-check-fill' },
-    { id: ReportType.LembarRapor, title: 'Pengambilan & Pengumpulan Rapor', description: "Cetak lembar rekapitulasi pengambilan dan pengumpulan rapor.", icon: 'bi-file-earmark-check-fill' },
-    { id: ReportType.LembarNilai, title: 'Lembar Nilai', description: "Cetak lembar nilai kosong untuk satu rombel.", icon: 'bi-card-checklist' },
-    { id: ReportType.LembarAbsensi, title: 'Lembar Absensi', description: "Cetak lembar absensi bulanan untuk satu rombel.", icon: 'bi-calendar-check' },
-  ], []);
+
+  // Click outside handler for download menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target as Node)) {
+            setIsDownloadMenuOpen(false);
+        }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const clearPreview = () => {
     setPreviewContent(null);
@@ -161,34 +179,11 @@ const Reports: React.FC = () => {
 
       try {
           const fileName = `Laporan_${activeReport}_${new Date().toISOString().slice(0, 10)}.pdf`;
-          const reportTitle = reportTypes.find(r => r.id === activeReport)?.title || 'Laporan eSantri';
-
-          // Determine which PDF generator to use
-          // AutoTable is better for pure data tables (Selectable text, better pagination)
-          // Html2Canvas is better for complex layouts (Cards, Forms, Labels)
-          const tableBasedReports = [
-              ReportType.DaftarRombel,
-              ReportType.LaporanArusKas,
-              ReportType.RekeningKoranSantri,
-              ReportType.LaporanMutasi,
-              ReportType.LaporanAsrama,
-              ReportType.LembarAbsensi,
-              ReportType.LembarNilai,
-              ReportType.LembarKedatangan,
-              ReportType.LembarRapor
-          ];
-
-          if (activeReport && tableBasedReports.includes(activeReport)) {
-              await generateAutoTablePdf('preview-area', {
-                  paperSize: paperSize,
-                  fileName: fileName
-              }, settings, reportTitle);
-          } else {
-              await generatePdf('preview-area', {
-                  paperSize: paperSize,
-                  fileName: fileName
-              });
-          }
+          
+          await generatePdf('preview-area', {
+              paperSize: paperSize,
+              fileName: fileName
+          });
           
           showToast('PDF berhasil diunduh', 'success');
       } catch (error) {
@@ -209,10 +204,8 @@ const Reports: React.FC = () => {
     }
 
     let allCss = '';
-    // Iterate over all stylesheets in the document to collect CSS rules
     for (const sheet of Array.from(document.styleSheets)) {
         try {
-            // Check if cssRules is accessible to avoid CORS errors
             if (sheet.cssRules) {
                 for (const rule of Array.from(sheet.cssRules)) {
                     allCss += rule.cssText + '\n';
@@ -330,7 +323,10 @@ const Reports: React.FC = () => {
             <>
                 {allPreviews.map((p, i) => (
                   <div key={i} className={`bg-white shadow-lg mx-auto page-break-after ${p.orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} ${i < allPreviews.length - 1 ? 'mb-8' : 'mb-2'}`}
-                      style={{ width: `${p.orientation === 'landscape' ? currentPaper.height : currentPaper.width}cm` }}>
+                      style={{ 
+                          width: `${p.orientation === 'landscape' ? currentPaper.height : currentPaper.width}cm`,
+                          minHeight: `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`
+                      }}>
                       <div style={{ padding: `${currentMarginCm}cm` }}>{p.content}</div>
                   </div>
                 ))}
@@ -425,16 +421,37 @@ const Reports: React.FC = () => {
             <div className="flex flex-wrap justify-between items-center gap-x-4 gap-y-2 mb-4 no-print">
                 <div className="flex items-center gap-x-4 gap-y-2 flex-wrap"><h2 className="text-xl font-bold text-gray-700 whitespace-nowrap">3. Pratinjau Laporan</h2>{pageCount > 0 && (<span className="text-sm font-medium bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full">Estimasi: {pageCount} halaman</span>)}</div>
                 <div className="flex items-center gap-2">
-                    <button onClick={handleDownloadPdf} disabled={isPdfGenerating} className="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto disabled:bg-gray-300">
-                        {isPdfGenerating ? (
-                            <><span className="animate-spin h-4 w-4 border-b-2 border-white rounded-full"></span> Proses...</>
-                        ) : (
-                            <><i className="bi bi-file-pdf-fill"></i><span className="hidden lg:inline">Download PDF</span><span className="lg:hidden">PDF</span></>
+                    {/* Combined Download Dropdown */}
+                    <div className="relative" ref={downloadMenuRef}>
+                        <button
+                            onClick={() => setIsDownloadMenuOpen(!isDownloadMenuOpen)}
+                            disabled={isPdfGenerating}
+                            className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        >
+                            {isPdfGenerating ? (
+                                <><span className="animate-spin h-4 w-4 border-b-2 border-white rounded-full"></span> Proses...</>
+                            ) : (
+                                <><i className="bi bi-download"></i> Unduh <i className={`bi bi-chevron-down text-xs transition-transform duration-200 ${isDownloadMenuOpen ? 'rotate-180' : ''}`}></i></>
+                            )}
+                        </button>
+                        {isDownloadMenuOpen && !isPdfGenerating && (
+                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
+                                <button
+                                    onClick={() => { handleDownloadPdf(); setIsDownloadMenuOpen(false); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                    <i className="bi bi-file-pdf-fill text-red-600"></i> Format PDF
+                                </button>
+                                <button
+                                    onClick={() => { handleDownloadHtml(); setIsDownloadMenuOpen(false); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                    <i className="bi bi-filetype-html text-green-600"></i> Format HTML
+                                </button>
+                            </div>
                         )}
-                    </button>
-                    <button onClick={handleDownloadHtml} className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto">
-                        <i className="bi bi-file-earmark-arrow-down-fill"></i><span className="hidden lg:inline">Download HTML</span><span className="lg:hidden">HTML</span>
-                    </button>
+                    </div>
+
                     <button onClick={handlePrint} className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium w-full sm:w-auto">
                         <i className="bi bi-printer-fill"></i><span className="hidden lg:inline">Cetak Laporan</span><span className="lg:hidden">Cetak</span>
                     </button>

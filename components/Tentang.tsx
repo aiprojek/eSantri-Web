@@ -140,7 +140,7 @@ const Tentang: React.FC = () => {
                                         Ringkasan visual data santri dan keuangan secara cepat dan mudah dipahami.
                                     </FeatureItem>
                                     <FeatureItem icon="bi-database-fill" title="Database Santri Terpusat">
-                                        Kelola semua data santri, orang tua, prestasi, dan riwayat di satu tempat.
+                                        Kelola data lengkap santri, orang tua/wali, prestasi, hingga pelanggaran di satu tempat.
                                     </FeatureItem>
                                      <FeatureItem icon="bi-cash-coin" title="Manajemen Keuangan Terintegrasi">
                                         Mulai dari pembuatan tagihan massal, pencatatan pembayaran, hingga notifikasi tunggakan.
@@ -157,14 +157,17 @@ const Tentang: React.FC = () => {
                                     <FeatureItem icon="bi-person-badge-fill" title="Generator NIS Otomatis">
                                         Buat Nomor Induk Santri secara otomatis dengan tiga metode yang dapat diatur.
                                     </FeatureItem>
-                                    <FeatureItem icon="bi-printer-fill" title="Laporan Lengkap">
+                                    <FeatureItem icon="bi-printer-fill" title="Fitur Laporan & Cetak Lengkap">
                                         Cetak berbagai dokumen penting seperti biodata, kuitansi, kartu santri, dan laporan lainnya.
-                                    </FeatureItem>
-                                    <FeatureItem icon="bi-file-pdf-fill" title="Ekspor PDF Cerdas">
-                                        Download laporan tabel dalam format PDF berkualitas tinggi. Teks dapat diseleksi (copy-paste) dan dicari.
                                     </FeatureItem>
                                     <FeatureItem icon="bi-file-earmark-arrow-up-fill" title="Editor Massal & Impor Data">
                                         Edit data banyak santri sekaligus seperti di Excel atau impor dari file CSV.
+                                    </FeatureItem>
+                                    <FeatureItem icon="bi-file-pdf-fill" title="Ekspor PDF">
+                                        Unduh laporan dalam format PDF sesuai dengan tampilan layar (WYSIWYG).
+                                    </FeatureItem>
+                                    <FeatureItem icon="bi-filetype-html" title="Ekspor Laporan HTML">
+                                        Unduh laporan dalam format HTML untuk arsip digital yang ringan atau untuk dibuka kembali di browser tanpa koneksi internet.
                                     </FeatureItem>
                                     <FeatureItem icon="bi-wifi-off" title="Fungsi Offline">
                                         Aplikasi tetap berjalan lancar dan semua data aman meski tanpa koneksi internet.
@@ -349,17 +352,18 @@ const Tentang: React.FC = () => {
                                     </li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={6} title="Mencetak & Ekspor Laporan">
-                                <p>Semua kebutuhan administrasi terpusat di halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong>.</p>
+                            <PanduanLangkah number={6} title="Mencetak, Ekspor PDF, & HTML">
+                                <p>Semua kebutuhan administrasi cetak-mencetak terpusat di halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong>. Prosesnya sederhana:</p>
                                 <ol className="list-decimal pl-5 space-y-2">
-                                    <li>Pilih jenis laporan (misal: Daftar Santri, Lembar Nilai, dll).</li>
-                                    <li>Gunakan filter untuk memilih data spesifik.</li>
+                                    <li>Pilih jenis laporan yang Anda butuhkan (misal: Biodata, Kartu Santri, Lembar Nilai, Rekening Koran, dll).</li>
+                                    <li>Gunakan filter untuk memilih data spesifik yang ingin dicetak (biasanya berdasarkan Rombel atau Individu).</li>
+                                    <li>Atur opsi tambahan yang tersedia untuk laporan tersebut (seperti format kertas, margin, atau opsi tanda tangan).</li>
                                     <li>Klik <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">Tampilkan Pratinjau</span>.</li>
                                     <li>Pilih aksi selanjutnya:
                                         <ul className="list-disc pl-5 mt-1">
-                                            <li><strong className="text-red-600">Download PDF:</strong> Menyimpan laporan sebagai file PDF. Untuk laporan berbentuk tabel (Daftar Santri, Lembar Nilai, dll), sistem menggunakan <em>Smart PDF Generation</em> sehingga teks tetap tajam dan bisa diseleksi.</li>
-                                            <li><strong className="text-green-600">Download HTML:</strong> Menyimpan sebagai halaman web untuk dibuka di Excel/Word.</li>
-                                            <li><strong className="text-blue-600">Cetak:</strong> Mengirim langsung ke printer.</li>
+                                            <li>Klik <span className="font-semibold text-white bg-blue-600 px-2 py-0.5 rounded-md text-xs">Cetak</span> untuk mencetak langsung ke printer.</li>
+                                            <li>Klik <span className="font-semibold text-white bg-red-600 px-2 py-0.5 rounded-md text-xs">Download PDF</span> untuk menyimpan sebagai file PDF dengan tampilan visual yang presisi sesuai pratinjau (teks mungkin tidak dapat diseleksi).</li>
+                                            <li>Klik <span className="font-semibold text-white bg-green-600 px-2 py-0.5 rounded-md text-xs">Download HTML</span> untuk menyimpan laporan sebagai halaman web. Berguna untuk arsip data mentah yang tampilannya sama persis dengan aplikasi.</li>
                                         </ul>
                                     </li>
                                 </ol>

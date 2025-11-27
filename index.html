@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
   <head>
@@ -32,8 +31,39 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <!-- Quill CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet" />
+    <!-- Quill JS -->
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+
     <style>
+      /* Custom Scrollbar for Quill Editor */
+      .ql-editor {
+        min-height: 200px;
+        max-height: 400px;
+        overflow-y: auto;
+        background-color: white;
+      }
+      
+      /* Ensure Quill toolbar looks good */
+      .ql-toolbar.ql-snow {
+        border-top-left-radius: 0.5rem;
+        border-top-right-radius: 0.5rem;
+        border-color: #d1d5db;
+        background-color: #f9fafb;
+      }
+      .ql-container.ql-snow {
+        border-bottom-left-radius: 0.5rem;
+        border-bottom-right-radius: 0.5rem;
+        border-color: #d1d5db;
+      }
+      
       @media print {
+        @page {
+          margin: 0;
+        }
+        
         * {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
@@ -47,12 +77,50 @@
           background: white !important;
           margin: 0;
           padding: 0;
+          height: auto;
+          overflow: visible;
+        }
+
+        /* Hide all top level elements except the one we want to print if necessary, 
+           but typically hiding .no-print handles the UI. 
+           For modals, we need to ensure the modal container doesn't clip content. */
+        
+        /* Reset Modal Styling for Print */
+        .fixed.inset-0 {
+            position: absolute !important;
+            inset: 0 !important;
+            z-index: 9999 !important;
+            background: white !important;
+            width: 100% !important;
+            height: auto !important;
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+
+        .fixed.inset-0 .bg-white {
+             box-shadow: none !important;
+             max-width: none !important;
+             width: 100% !important;
+             height: auto !important;
+             border-radius: 0 !important;
+        }
+        
+        /* Hide sidebar and other layout elements explicitly if needed */
+        aside, nav, header, footer {
+            display: none !important;
         }
 
         main.p-4, main > .p-4 {
           padding: 0 !important;
           margin: 0 !important;
           margin-top: 0 !important;
+          width: 100% !important;
+          display: none; /* Hide main content when printing from modal usually */
+        }
+        
+        /* If printing from main content (not modal), unhide main */
+        body:not(:has(.fixed.inset-0)) main.p-4 {
+             display: block !important;
         }
         
         .preview-container {
@@ -60,23 +128,34 @@
             padding: 0 !important;
             margin: 0 !important;
             box-shadow: none !important;
+            width: 100% !important;
         }
 
-        #preview-area {
-            background-color: transparent !important;
+        #preview-area, #print-preview-surat, #print-view-arsip, #surat-preview-container, #arsip-preview-container {
+            background-color: white !important;
             padding: 0 !important;
+            margin: 0 !important;
             border: none !important;
             max-height: none !important;
             overflow: visible !important;
+            box-shadow: none !important;
+            transform: none !important; /* Reset zoom scales */
+            width: 100% !important;
         }
         
         .printable-content-wrapper {
           transform: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 100% !important;
+          box-shadow: none !important;
         }
         
         /* Menghilangkan bayangan dari elemen kertas saat dicetak */
-        .printable-content-wrapper > div {
+        .printable-content-wrapper > div, .bg-white.shadow-xl, .bg-white.shadow-lg {
           box-shadow: none !important;
+          border: none !important;
+          margin: 0 auto !important;
         }
 
         .page-break-after {
@@ -100,7 +179,8 @@
     "dexie": "https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs",
     "react-hook-form": "https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs",
     "jspdf": "https://esm.sh/jspdf@2.5.1",
-    "html2canvas": "https://esm.sh/html2canvas@1.4.1"
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
+    "react-quill": "https://aistudiocdn.com/react-quill@^2.0.0"
   }
 }
 </script>

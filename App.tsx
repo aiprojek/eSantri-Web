@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useAppContext, ToastData } from './AppContext';
 import Sidebar from './components/Sidebar';
@@ -11,6 +9,7 @@ import Reports from './components/Reports';
 import Finance from './components/Finance';
 import Asrama from './components/Asrama';
 import BukuKas from './components/BukuKas';
+import SuratMenyurat from './components/SuratMenyurat';
 import ConfirmModal from './components/ConfirmModal';
 import Tentang from './components/Tentang';
 import WelcomeModal from './components/WelcomeModal';
@@ -229,6 +228,8 @@ const AppContent: React.FC = () => {
                 return <Asrama />;
             case Page.BukuKas:
                 return <BukuKas />;
+            case Page.Surat:
+                return <SuratMenyurat />;
             case Page.Pengaturan:
                 return <Settings />;
             case Page.Laporan:

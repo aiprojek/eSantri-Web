@@ -1,5 +1,6 @@
+
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { PondokSettings, Santri, Tagihan, Pembayaran, Alamat, SaldoSantri, TransaksiSaldo, TransaksiKas } from './types';
+import { PondokSettings, Santri, Tagihan, Pembayaran, Alamat, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat } from './types';
 import { db, PondokSettingsWithId } from './db';
 import { initialSantri, initialSettings } from './data/mock';
 import { generateTagihanBulanan, generateTagihanAwal } from './services/financeService';
@@ -47,6 +48,8 @@ interface AppContextType {
   saldoSantriList: SaldoSantri[];
   transaksiSaldoList: TransaksiSaldo[];
   transaksiKasList: TransaksiKas[];
+  suratTemplates: SuratTemplate[];
+  arsipSuratList: ArsipSurat[];
   santriFilters: SantriFilters;
   setSantriFilters: React.Dispatch<React.SetStateAction<SantriFilters>>;
   toasts: ToastData[];
@@ -65,6 +68,10 @@ interface AppContextType {
   onAddTransaksiSaldo: (data: Omit<TransaksiSaldo, 'id' | 'saldoSetelah' | 'tanggal'>) => Promise<void>;
   onAddTransaksiKas: (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => Promise<void>;
   onSetorKeKas: (pembayaranIds: number[], totalSetoran: number, tanggalSetor: string, penanggungJawab: string, catatan: string) => Promise<void>;
+  onSaveSuratTemplate: (template: SuratTemplate) => Promise<void>;
+  onDeleteSuratTemplate: (id: number) => Promise<void>;
+  onSaveArsipSurat: (surat: Omit<ArsipSurat, 'id'>) => Promise<void>;
+  onDeleteArsipSurat: (id: number) => Promise<void>;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   removeToast: (id: number) => void;
   showAlert: (title: string, message: string) => void;
@@ -89,6 +96,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [saldoSantriList, setSaldoSantriList] = useState<SaldoSantri[]>([]);
     const [transaksiSaldoList, setTransaksiSaldoList] = useState<TransaksiSaldo[]>([]);
     const [transaksiKasList, setTransaksiKasList] = useState<TransaksiKas[]>([]);
+    const [suratTemplates, setSuratTemplates] = useState<SuratTemplate[]>([]);
+    const [arsipSuratList, setArsipSuratList] = useState<ArsipSurat[]>([]);
+    
     const [santriFilters, setSantriFilters] = useState<SantriFilters>({
       search: '', jenjang: '', kelas: '', rombel: '', status: '', gender: '', provinsi: '', kabupatenKota: '', kecamatan: ''
     });
@@ -114,7 +124,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     });
                 }
 
-                const [currentSettings, currentSantri, currentTagihan, currentPembayaran, currentSaldo, currentTransaksi, currentKas] = await Promise.all([
+                const [currentSettings, currentSantri, currentTagihan, currentPembayaran, currentSaldo, currentTransaksi, currentKas, currentTemplates, currentArsip] = await Promise.all([
                     db.settings.toCollection().first(),
                     db.santri.toArray(),
                     db.tagihan.toArray(),
@@ -122,6 +132,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     db.saldoSantri.toArray(),
                     db.transaksiSaldo.toArray(),
                     db.transaksiKas.toArray(),
+                    db.suratTemplates.toArray(),
+                    db.arsipSurat.toArray(),
                 ]);
 
                 // Migration logic for address format
@@ -149,6 +161,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setSaldoSantriList(currentSaldo);
                 setTransaksiSaldoList(currentTransaksi);
                 setTransaksiKasList(currentKas);
+                setSuratTemplates(currentTemplates);
+                setArsipSuratList(currentArsip);
 
             } catch (error) {
                 console.error("Failed to load data from DexieDB", error);
@@ -277,13 +291,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const onDeleteSampleData = useCallback(async () => {
         try {
-            await db.transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, async () => {
+            await db.transaction('rw', [db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat], async () => {
                 await db.santri.clear();
                 await db.tagihan.clear();
                 await db.pembayaran.clear();
                 await db.saldoSantri.clear();
                 await db.transaksiSaldo.clear();
                 await db.transaksiKas.clear();
+                await db.suratTemplates.clear();
+                await db.arsipSurat.clear();
             });
             // Update state to reflect changes immediately before reload
             setSantriList([]);
@@ -292,6 +308,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setSaldoSantriList([]);
             setTransaksiSaldoList([]);
             setTransaksiKasList([]);
+            setSuratTemplates([]);
+            setArsipSuratList([]);
         } catch (error) {
             console.error("Failed to delete sample data", error);
             throw error;
@@ -463,6 +481,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, []);
 
+    // --- Surat Menyurat Logic ---
+    const onSaveSuratTemplate = useCallback(async (template: SuratTemplate) => {
+        try {
+            const id = await db.suratTemplates.put(template);
+            setSuratTemplates(prev => {
+                const existing = prev.findIndex(t => t.id === template.id);
+                if (existing > -1) {
+                    return prev.map(t => t.id === template.id ? template : t);
+                }
+                return [...prev, { ...template, id: id as number }];
+            });
+        } catch (error) {
+            console.error("Gagal menyimpan template surat:", error);
+            throw error;
+        }
+    }, []);
+
+    const onDeleteSuratTemplate = useCallback(async (id: number) => {
+        try {
+            await db.suratTemplates.delete(id);
+            setSuratTemplates(prev => prev.filter(t => t.id !== id));
+        } catch (error) {
+            console.error("Gagal menghapus template surat:", error);
+            throw error;
+        }
+    }, []);
+
+    const onSaveArsipSurat = useCallback(async (surat: Omit<ArsipSurat, 'id'>) => {
+        try {
+            const id = await db.arsipSurat.add(surat as ArsipSurat);
+            setArsipSuratList(prev => [...prev, { ...surat, id: id as number }]);
+        } catch (error) {
+            console.error("Gagal menyimpan arsip surat:", error);
+            throw error;
+        }
+    }, []);
+
+    const onDeleteArsipSurat = useCallback(async (id: number) => {
+        try {
+            await db.arsipSurat.delete(id);
+            setArsipSuratList(prev => prev.filter(s => s.id !== id));
+        } catch (error) {
+            console.error("Gagal menghapus arsip surat:", error);
+            throw error;
+        }
+    }, []);
+
     const value: AppContextType = useMemo(() => ({
         isLoading,
         settings,
@@ -472,6 +537,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saldoSantriList,
         transaksiSaldoList,
         transaksiKasList,
+        suratTemplates,
+        arsipSuratList,
         santriFilters,
         setSantriFilters,
         toasts,
@@ -490,6 +557,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         onAddTransaksiSaldo,
         onAddTransaksiKas,
         onSetorKeKas,
+        onSaveSuratTemplate,
+        onDeleteSuratTemplate,
+        onSaveArsipSurat,
+        onDeleteArsipSurat,
         showToast,
         removeToast,
         showAlert,
@@ -505,6 +576,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saldoSantriList,
         transaksiSaldoList,
         transaksiKasList,
+        suratTemplates,
+        arsipSuratList,
         santriFilters,
         toasts,
         confirmation,
@@ -522,6 +595,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         onAddTransaksiSaldo,
         onAddTransaksiKas,
         onSetorKeKas,
+        onSaveSuratTemplate,
+        onDeleteSuratTemplate,
+        onSaveArsipSurat,
+        onDeleteArsipSurat,
         showToast,
         removeToast,
         showAlert,

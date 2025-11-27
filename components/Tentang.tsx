@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 
@@ -154,6 +153,9 @@ const Tentang: React.FC = () => {
                                     <FeatureItem icon="bi-sliders" title="Pengaturan Sangat Fleksibel">
                                         Sesuaikan struktur pendidikan, biaya, format NIS, hingga redaksi surat dan pesan WhatsApp.
                                     </FeatureItem>
+                                    <FeatureItem icon="bi-envelope-paper-fill" title="Surat Menyurat (Baru)">
+                                        Buat, kelola template, dan arsipkan surat resmi pondok dengan mudah. Dilengkapi editor teks kaya dan mail merge.
+                                    </FeatureItem>
                                     <FeatureItem icon="bi-person-badge-fill" title="Generator NIS Otomatis">
                                         Buat Nomor Induk Santri secara otomatis dengan tiga metode yang dapat diatur.
                                     </FeatureItem>
@@ -164,7 +166,7 @@ const Tentang: React.FC = () => {
                                         Edit data banyak santri sekaligus seperti di Excel atau impor dari file CSV.
                                     </FeatureItem>
                                     <FeatureItem icon="bi-file-pdf-fill" title="Ekspor PDF">
-                                        Unduh laporan dalam format PDF sesuai dengan tampilan layar (WYSIWYG).
+                                        Unduh laporan dan surat dalam format PDF sesuai dengan tampilan layar (WYSIWYG).
                                     </FeatureItem>
                                     <FeatureItem icon="bi-filetype-html" title="Ekspor Laporan HTML">
                                         Unduh laporan dalam format HTML untuk arsip digital yang ringan atau untuk dibuka kembali di browser tanpa koneksi internet.
@@ -388,7 +390,38 @@ const Tentang: React.FC = () => {
                                     <li>Klik tombol <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Impor</span> dan unggah file Anda.</li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={8} title="Peringatan Kritis: Keamanan Data Anda" isLast={true}>
+                            <PanduanLangkah number={8} title="Membuat & Mengelola Surat Menyurat">
+                                <p>Modul <strong className="font-semibold text-teal-700">Surat Menyurat</strong> memudahkan Anda membuat surat resmi, pemberitahuan, atau izin dengan cepat menggunakan template.</p>
+                                <ol className="list-decimal pl-5 space-y-2 mt-2">
+                                    <li>
+                                        <strong>Manajemen Template:</strong> Buka tab <strong className="font-semibold">Manajemen Template</strong>. Buat template baru atau edit yang sudah ada. Gunakan editor teks (Rich Text Editor) untuk memformat isi surat. Anda bisa mengatur:
+                                        <ul className="list-disc pl-5 mt-1 text-sm">
+                                            <li>Isi surat dengan <em>placeholders</em> otomatis (misal: <code>{'{NAMA_SANTRI}'}</code>).</li>
+                                            <li>Pengaturan margin halaman (Atas, Kanan, Bawah, Kiri).</li>
+                                            <li>Posisi dan format Tempat & Tanggal surat.</li>
+                                            <li>Daftar penanda tangan utama (1-3 orang) dan bagian "Mengetahui".</li>
+                                        </ul>
+                                    </li>
+                                    <li>
+                                        <strong>Buat Surat:</strong> Buka tab <strong className="font-semibold">Buat Surat</strong>.
+                                        <ul className="list-disc pl-5 mt-1 text-sm">
+                                            <li>Pilih template yang diinginkan.</li>
+                                            <li>Pilih <strong>Mode Surat</strong>: <em>Perorangan</em> (untuk satu santri) atau <em>Mail Merge</em> (untuk banyak santri sekaligus berdasarkan filter).</li>
+                                            <li>Isi nomor surat dan periksa kembali data pada pratinjau.</li>
+                                            <li>Klik tombol <strong>Arsipkan</strong> untuk menyimpan riwayat surat ke database.</li>
+                                        </ul>
+                                    </li>
+                                    <li>
+                                        <strong>Cetak & Unduh:</strong> Dari halaman pratinjau atau Arsip Surat, Anda bisa:
+                                        <ul className="list-disc pl-5 mt-1 text-sm">
+                                            <li><strong>Cetak Langsung:</strong> Klik tombol Cetak untuk mencetak ke printer.</li>
+                                            <li><strong>Unduh PDF:</strong> Simpan surat sebagai file PDF siap cetak.</li>
+                                            <li><strong>Unduh HTML:</strong> Simpan sebagai file HTML mandiri yang bisa dibuka offline.</li>
+                                        </ul>
+                                    </li>
+                                </ol>
+                            </PanduanLangkah>
+                            <PanduanLangkah number={9} title="Peringatan Kritis: Keamanan Data Anda" isLast={true}>
                                 <div className="p-4 rounded-md border-l-4 border-yellow-500 bg-yellow-50 text-yellow-800">
                                     <h4 className="font-bold flex items-center gap-2"><i className="bi bi-wifi-off"></i>Aplikasi Dapat Bekerja Offline</h4>
                                     <p className="mt-1">Penting untuk dipahami bahwa semua data yang Anda masukkan disimpan <strong>secara eksklusif di dalam browser pada komputer/laptop yang Anda gunakan saat ini</strong>. Tidak ada data yang dikirim atau disimpan di internet.</p>

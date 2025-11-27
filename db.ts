@@ -3,7 +3,7 @@
 // which can occur in certain TypeScript build environments. This direct approach ensures `db` is
 // correctly recognized as a full Dexie instance with all its methods.
 import Dexie, { type Table } from 'dexie';
-import { type PondokSettings, type Santri, type Tagihan, type Pembayaran, type SaldoSantri, type TransaksiSaldo, type TransaksiKas } from './types';
+import { type PondokSettings, type Santri, type Tagihan, type Pembayaran, type SaldoSantri, type TransaksiSaldo, type TransaksiKas, type SuratTemplate, type ArsipSurat } from './types';
 
 // Define a type for settings that includes the internal ID from Dexie
 export type PondokSettingsWithId = PondokSettings & { id?: number };
@@ -16,7 +16,85 @@ export const db = new Dexie('eSantriDB') as Dexie & {
     saldoSantri: Table<SaldoSantri, number>; // santriId is the key
     transaksiSaldo: Table<TransaksiSaldo, number>;
     transaksiKas: Table<TransaksiKas, number>;
+    suratTemplates: Table<SuratTemplate, number>;
+    arsipSurat: Table<ArsipSurat, number>;
 };
+
+db.version(12).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+}).upgrade(tx => {
+    // 12: Add tempatTanggalConfig to templates and archives
+});
+
+db.version(11).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+});
+
+db.version(10).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+});
+
+db.version(9).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+});
+
+db.version(8).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+}).upgrade(tx => {
+    // Upgrade to ensure existing templates have valid structure if needed
+});
+
+db.version(7).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+});
 
 db.version(6).stores({
   santri: '++id, nis, namaLengkap, kamarId',
@@ -26,10 +104,6 @@ db.version(6).stores({
   saldoSantri: 'santriId',
   transaksiSaldo: '++id, santriId, tanggal',
   transaksiKas: '++id, tanggal, jenis, kategori',
-}).upgrade(() => {
-    // This upgrade is for adding the 'disetorKeKas' index to the 'pembayaran' table.
-    // Dexie handles adding new indexes automatically when an upgrade function is present,
-    // so no data migration code is needed here. This ensures smooth upgrades for existing users.
 });
 
 db.version(5).stores({

@@ -1,4 +1,50 @@
+// Add new interface for Margin Configuration
+export interface MarginConfig {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+}
 
+// Add new interface for Tempat Tanggal Configuration
+export interface TempatTanggalConfig {
+  show: boolean;
+  position: 'top-right' | 'bottom-right' | 'bottom-left';
+  align: 'left' | 'center' | 'right';
+}
+
+// Update SuratTemplate to include marginConfig and tempatTanggalConfig
+export interface SuratTemplate {
+  id: number;
+  nama: string;
+  judul: string;
+  konten: string; // HTML content from ReactQuill
+  kategori: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Lainnya';
+  // Remove old margin string type, use marginConfig object
+  marginConfig?: MarginConfig; 
+  signatories?: SuratSignatory[]; 
+  mengetahuiConfig?: MengetahuiConfig; 
+  tempatTanggalConfig?: TempatTanggalConfig;
+}
+
+// Update ArsipSurat to include marginConfig snapshot
+export interface ArsipSurat {
+  id: number;
+  nomorSurat: string;
+  perihal: string;
+  tujuan: string; 
+  isiSurat: string; // HTML content
+  tanggalBuat: string; 
+  templateId?: number;
+  tempatCetak?: string;
+  tanggalCetak?: string;
+  tempatTanggalConfig?: TempatTanggalConfig;
+  signatoriesSnapshot?: SuratSignatory[];
+  mengetahuiSnapshot?: MengetahuiConfig;
+  marginConfig?: MarginConfig; // Snapshot of margins used
+}
+
+// ... (Rest of existing types remains unchanged - Prestasi, Pelanggaran, Santri, etc.)
 export interface Prestasi {
   id: number;
   jenis: 'Akademik' | 'Non-Akademik' | 'Tahfidz' | 'Lainnya';
@@ -261,6 +307,20 @@ export interface TransaksiKas {
   penanggungJawab: string;
 }
 
+// --- Surat Menyurat Types ---
+export interface SuratSignatory {
+  id: string; // Unique ID for the signatory field
+  jabatan: string; // e.g. "Kepala Sekolah", "Sekretaris"
+  nama?: string; // Default name if any, otherwise empty
+  nip?: string; // Optional ID number
+}
+
+export interface MengetahuiConfig {
+  show: boolean;
+  jabatan: string;
+  align: 'left' | 'center' | 'right';
+}
+
 export interface PondokSettings {
   namaYayasan: string;
   skMenteri: string;
@@ -296,6 +356,7 @@ export enum Page {
   Keuangan = 'Keuangan',
   Keasramaan = 'Keasramaan',
   BukuKas = 'Buku Kas',
+  Surat = 'Surat Menyurat',
   Pengaturan = 'Pengaturan',
   Laporan = 'Laporan & Cetak',
   Tentang = 'Tentang',

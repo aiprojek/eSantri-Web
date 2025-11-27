@@ -58,14 +58,21 @@ const formatRupiah = (number: number) => {
     }).format(number);
 };
 
+// --- Footer Component ---
+const ReportFooter: React.FC = () => (
+    <div className="mt-auto pt-2 border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full" style={{ breakInside: 'avoid' }}>
+        dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
+    </div>
+);
+
 // --- Template Components ---
 
 const PanduanPenilaianTemplate: React.FC = () => {
     return (
-        <div className="font-sans text-black" style={{ fontSize: '10pt' }}>
+        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
             <h3 className="font-bold text-xl mb-6 text-center">Panduan Penilaian</h3>
             
-            <div className="columns-2 gap-8 text-justify">
+            <div className="columns-2 gap-8 text-justify flex-grow">
                 <div className="break-inside-avoid mb-4">
                     <h4 className="font-bold text-base mb-2">A. Deskripsi Kolom Penilaian</h4>
                     <ul className="list-disc list-outside pl-5 space-y-1 text-sm">
@@ -110,6 +117,7 @@ const PanduanPenilaianTemplate: React.FC = () => {
                     <p className="text-xs italic mt-2">(Rentang nilai dapat disesuaikan dengan kebijakan lembaga pendidikan).</p>
                 </div>
             </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -138,49 +146,52 @@ const LaporanArusKasTemplate: React.FC<{
     const totalPengeluaran = filteredKas.filter(t => t.jenis === 'Pengeluaran').reduce((sum, t) => sum + t.jumlah, 0);
 
     return (
-        <div className="font-sans text-black" style={{ fontSize: '10pt' }}>
-            <PrintHeader settings={settings} title="Laporan Arus Kas Umum" />
-            <p className="text-center text-sm mb-4">Periode: {formatDate(kasStartDate)} s.d. {formatDate(kasEndDate)}</p>
+        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="Laporan Arus Kas Umum" />
+                <p className="text-center text-sm mb-4">Periode: {formatDate(kasStartDate)} s.d. {formatDate(kasEndDate)}</p>
 
-            <table className="w-full text-sm my-4">
-                <tbody>
-                    <tr className="border-b"><td className="py-1 font-medium">Saldo Awal</td><td className="py-1 text-right font-semibold">{formatRupiah(saldoAwal)}</td></tr>
-                    <tr className="border-b text-green-700"><td className="py-1 font-medium">Total Pemasukan</td><td className="py-1 text-right font-semibold">{formatRupiah(totalPemasukan)}</td></tr>
-                    <tr className="border-b text-red-700"><td className="py-1 font-medium">Total Pengeluaran</td><td className="py-1 text-right font-semibold">{formatRupiah(totalPengeluaran)}</td></tr>
-                    <tr className="border-t-2 border-black"><td className="py-1 font-bold">Saldo Akhir</td><td className="py-1 text-right font-bold">{formatRupiah(saldoAkhir)}</td></tr>
-                </tbody>
-            </table>
-            
-            <table className="w-full text-left border-collapse border border-black text-xs mt-6">
-                <thead className="bg-gray-200 uppercase">
-                    <tr>
-                        <th className="p-1 border border-black w-8">No</th>
-                        <th className="p-1 border border-black">Tanggal</th>
-                        <th className="p-1 border border-black">Kategori</th>
-                        <th className="p-1 border border-black">Deskripsi</th>
-                        <th className="p-1 border border-black text-right">Pemasukan</th>
-                        <th className="p-1 border border-black text-right">Pengeluaran</th>
-                        <th className="p-1 border border-black text-right">Saldo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {filteredKas.length > 0 ? (
-                        [...filteredKas].reverse().map((t, index) => (
-                            <tr key={t.id}>
-                                <td className="p-1 border border-black text-center">{index + 1}</td>
-                                <td className="p-1 border border-black">{formatDateTime(t.tanggal)}</td>
-                                <td className="p-1 border border-black">{t.kategori}</td>
-                                <td className="p-1 border border-black">{t.deskripsi}</td>
-                                <td className="p-1 border border-black text-right text-green-700">{t.jenis === 'Pemasukan' ? formatRupiah(t.jumlah) : '-'}</td>
-                                <td className="p-1 border border-black text-right text-red-700">{t.jenis === 'Pengeluaran' ? formatRupiah(t.jumlah) : '-'}</td>
-                                <td className="p-1 border border-black text-right font-semibold">{formatRupiah(t.saldoSetelah)}</td>
-                            </tr>
-                        ))
-                    ) : (
-                        <tr><td colSpan={7} className="text-center p-4 italic text-gray-500">Tidak ada transaksi pada periode ini.</td></tr>
-                    )}
-                </tbody>
-            </table>
+                <table className="w-full text-sm my-4">
+                    <tbody>
+                        <tr className="border-b"><td className="py-1 font-medium">Saldo Awal</td><td className="py-1 text-right font-semibold">{formatRupiah(saldoAwal)}</td></tr>
+                        <tr className="border-b text-green-700"><td className="py-1 font-medium">Total Pemasukan</td><td className="py-1 text-right font-semibold">{formatRupiah(totalPemasukan)}</td></tr>
+                        <tr className="border-b text-red-700"><td className="py-1 font-medium">Total Pengeluaran</td><td className="py-1 text-right font-semibold">{formatRupiah(totalPengeluaran)}</td></tr>
+                        <tr className="border-t-2 border-black"><td className="py-1 font-bold">Saldo Akhir</td><td className="py-1 text-right font-bold">{formatRupiah(saldoAkhir)}</td></tr>
+                    </tbody>
+                </table>
+                
+                <table className="w-full text-left border-collapse border border-black text-xs mt-6">
+                    <thead className="bg-gray-200 uppercase">
+                        <tr>
+                            <th className="p-1 border border-black w-8">No</th>
+                            <th className="p-1 border border-black">Tanggal</th>
+                            <th className="p-1 border border-black">Kategori</th>
+                            <th className="p-1 border border-black">Deskripsi</th>
+                            <th className="p-1 border border-black text-right">Pemasukan</th>
+                            <th className="p-1 border border-black text-right">Pengeluaran</th>
+                            <th className="p-1 border border-black text-right">Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredKas.length > 0 ? (
+                            [...filteredKas].reverse().map((t, index) => (
+                                <tr key={t.id}>
+                                    <td className="p-1 border border-black text-center">{index + 1}</td>
+                                    <td className="p-1 border border-black">{formatDateTime(t.tanggal)}</td>
+                                    <td className="p-1 border border-black">{t.kategori}</td>
+                                    <td className="p-1 border border-black">{t.deskripsi}</td>
+                                    <td className="p-1 border border-black text-right text-green-700">{t.jenis === 'Pemasukan' ? formatRupiah(t.jumlah) : '-'}</td>
+                                    <td className="p-1 border border-black text-right text-red-700">{t.jenis === 'Pengeluaran' ? formatRupiah(t.jumlah) : '-'}</td>
+                                    <td className="p-1 border border-black text-right font-semibold">{formatRupiah(t.saldoSetelah)}</td>
+                                </tr>
+                            ))
+                        ) : (
+                            <tr><td colSpan={7} className="text-center p-4 italic text-gray-500">Tidak ada transaksi pada periode ini.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -235,52 +246,55 @@ const RekeningKoranSantriTemplate: React.FC<{
     const saldoAkhir = saldoBerjalan;
     
     return (
-        <div className="font-sans text-black" style={{ fontSize: '10pt' }}>
-            <PrintHeader settings={settings} title="Rekening Koran Santri" />
-            
-            <table className="w-full text-sm my-4">
-                <tbody>
-                    <tr><td className="pr-4 font-medium">Nama Santri</td><td>: {santri.namaLengkap}</td></tr>
-                    <tr><td className="pr-4 font-medium">NIS</td><td>: {santri.nis}</td></tr>
-                    <tr><td className="pr-4 font-medium">Periode</td><td>: {formatDate(rekeningKoranStartDate)} s.d. {formatDate(rekeningKoranEndDate)}</td></tr>
-                </tbody>
-            </table>
+        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="Rekening Koran Santri" />
+                
+                <table className="w-full text-sm my-4">
+                    <tbody>
+                        <tr><td className="pr-4 font-medium">Nama Santri</td><td>: {santri.namaLengkap}</td></tr>
+                        <tr><td className="pr-4 font-medium">NIS</td><td>: {santri.nis}</td></tr>
+                        <tr><td className="pr-4 font-medium">Periode</td><td>: {formatDate(rekeningKoranStartDate)} s.d. {formatDate(rekeningKoranEndDate)}</td></tr>
+                    </tbody>
+                </table>
 
-            <table className="w-full text-left border-collapse border border-black text-xs mt-6">
-                <thead className="bg-gray-200 uppercase">
-                    <tr>
-                        <th className="p-1 border border-black">Tanggal</th>
-                        <th className="p-1 border border-black">Deskripsi</th>
-                        <th className="p-1 border border-black text-right">Debit</th>
-                        <th className="p-1 border border-black text-right">Kredit</th>
-                        <th className="p-1 border border-black text-right">Saldo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td colSpan={4} className="p-1 border border-black font-semibold">Saldo Awal</td>
-                        <td className="p-1 border border-black text-right font-semibold">{formatRupiah(saldoAwal)}</td>
-                    </tr>
-                    {transactionsWithRunningBalance.map((tx, index) => (
-                        <tr key={index}>
-                            <td className="p-1 border border-black">{formatDateTime(tx.tanggal)}</td>
-                            <td className="p-1 border border-black">{tx.deskripsi}</td>
-                            <td className="p-1 border border-black text-right text-red-700">{tx.debit > 0 ? formatRupiah(tx.debit) : '-'}</td>
-                            <td className="p-1 border border-black text-right text-green-700">{tx.kredit > 0 ? formatRupiah(tx.kredit) : '-'}</td>
-                            <td className="p-1 border border-black text-right font-semibold">{formatRupiah(tx.saldo)}</td>
+                <table className="w-full text-left border-collapse border border-black text-xs mt-6">
+                    <thead className="bg-gray-200 uppercase">
+                        <tr>
+                            <th className="p-1 border border-black">Tanggal</th>
+                            <th className="p-1 border border-black">Deskripsi</th>
+                            <th className="p-1 border border-black text-right">Debit</th>
+                            <th className="p-1 border border-black text-right">Kredit</th>
+                            <th className="p-1 border border-black text-right">Saldo</th>
                         </tr>
-                    ))}
-                     {transactionsWithRunningBalance.length === 0 && (
-                        <tr><td colSpan={5} className="text-center p-4 italic text-gray-500">Tidak ada transaksi pada periode ini.</td></tr>
-                    )}
-                </tbody>
-                 <tfoot>
-                    <tr className="bg-gray-200">
-                        <td colSpan={4} className="p-1 border border-black font-bold text-right">SALDO AKHIR</td>
-                        <td className="p-1 border border-black text-right font-bold">{formatRupiah(saldoAkhir)}</td>
-                    </tr>
-                </tfoot>
-            </table>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colSpan={4} className="p-1 border border-black font-semibold">Saldo Awal</td>
+                            <td className="p-1 border border-black text-right font-semibold">{formatRupiah(saldoAwal)}</td>
+                        </tr>
+                        {transactionsWithRunningBalance.map((tx, index) => (
+                            <tr key={index}>
+                                <td className="p-1 border border-black">{formatDateTime(tx.tanggal)}</td>
+                                <td className="p-1 border border-black">{tx.deskripsi}</td>
+                                <td className="p-1 border border-black text-right text-red-700">{tx.debit > 0 ? formatRupiah(tx.debit) : '-'}</td>
+                                <td className="p-1 border border-black text-right text-green-700">{tx.kredit > 0 ? formatRupiah(tx.kredit) : '-'}</td>
+                                <td className="p-1 border border-black text-right font-semibold">{formatRupiah(tx.saldo)}</td>
+                            </tr>
+                        ))}
+                        {transactionsWithRunningBalance.length === 0 && (
+                            <tr><td colSpan={5} className="text-center p-4 italic text-gray-500">Tidak ada transaksi pada periode ini.</td></tr>
+                        )}
+                    </tbody>
+                    <tfoot>
+                        <tr className="bg-gray-200">
+                            <td colSpan={4} className="p-1 border border-black font-bold text-right">SALDO AKHIR</td>
+                            <td className="p-1 border border-black text-right font-bold">{formatRupiah(saldoAkhir)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -304,79 +318,82 @@ const LaporanAsramaTemplate: React.FC<{
     }, [santriList]);
 
     return (
-        <div className="font-sans text-black" style={{ fontSize: '10pt' }}>
-            <PrintHeader settings={settings} title="Laporan Rekapitulasi Keasramaan" />
-            <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
+        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="Laporan Rekapitulasi Keasramaan" />
+                <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
 
-            <div className="space-y-6">
-                {gedungList.map(gedung => {
-                    const kamarDiGedung = kamar.filter(k => k.gedungId === gedung.id);
-                    return (
-                        <div key={gedung.id} style={{ breakInside: 'avoid' }}>
-                            <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">
-                                {gedung.nama} ({gedung.jenis})
-                            </h4>
-                            {kamarDiGedung.length > 0 ? (
-                                <div className="space-y-4">
-                                    {kamarDiGedung.map(k => {
-                                        const penghuni = penghuniPerKamar.get(k.id) || [];
-                                        const musyrif = tenagaPengajar.find(tp => tp.id === k.musyrifId);
-                                        return (
-                                            <div key={k.id} className="pl-4 border-l-2 border-gray-300" style={{ breakInside: 'avoid' }}>
-                                                <table className="w-full text-sm mb-2">
-                                                    <tbody>
-                                                        <tr className="bg-gray-100">
-                                                            <td className="p-2 font-semibold" colSpan={2}>{k.nama}</td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td className="p-2 w-1/3">Kapasitas</td>
-                                                            <td className="p-2 font-medium">{penghuni.length} / {k.kapasitas}</td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td className="p-2 w-1/3">Musyrif/ah</td>
-                                                            <td className="p-2 font-medium">{musyrif?.nama || '-'}</td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
-                                                <p className="font-semibold text-sm mb-1">Daftar Penghuni:</p>
-                                                {penghuni.length > 0 ? (
-                                                    <table className="w-full text-left border-collapse border border-black text-xs">
-                                                        <thead className="bg-gray-200">
-                                                            <tr>
-                                                                <th className="p-1 border border-black w-8">No</th>
-                                                                <th className="p-1 border border-black">NIS</th>
-                                                                <th className="p-1 border border-black">Nama Lengkap</th>
-                                                                <th className="p-1 border border-black">Rombel</th>
-                                                            </tr>
-                                                        </thead>
+                <div className="space-y-6">
+                    {gedungList.map(gedung => {
+                        const kamarDiGedung = kamar.filter(k => k.gedungId === gedung.id);
+                        return (
+                            <div key={gedung.id} style={{ breakInside: 'avoid' }}>
+                                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">
+                                    {gedung.nama} ({gedung.jenis})
+                                </h4>
+                                {kamarDiGedung.length > 0 ? (
+                                    <div className="space-y-4">
+                                        {kamarDiGedung.map(k => {
+                                            const penghuni = penghuniPerKamar.get(k.id) || [];
+                                            const musyrif = tenagaPengajar.find(tp => tp.id === k.musyrifId);
+                                            return (
+                                                <div key={k.id} className="pl-4 border-l-2 border-gray-300" style={{ breakInside: 'avoid' }}>
+                                                    <table className="w-full text-sm mb-2">
                                                         <tbody>
-                                                            {penghuni.map((santri, index) => {
-                                                                const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-                                                                return (
-                                                                    <tr key={santri.id}>
-                                                                        <td className="p-1 border border-black text-center">{index + 1}</td>
-                                                                        <td className="p-1 border border-black">{santri.nis}</td>
-                                                                        <td className="p-1 border border-black">{santri.namaLengkap}</td>
-                                                                        <td className="p-1 border border-black">{rombel?.nama || 'N/A'}</td>
-                                                                    </tr>
-                                                                );
-                                                            })}
+                                                            <tr className="bg-gray-100">
+                                                                <td className="p-2 font-semibold" colSpan={2}>{k.nama}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td className="p-2 w-1/3">Kapasitas</td>
+                                                                <td className="p-2 font-medium">{penghuni.length} / {k.kapasitas}</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td className="p-2 w-1/3">Musyrif/ah</td>
+                                                                <td className="p-2 font-medium">{musyrif?.nama || '-'}</td>
+                                                            </tr>
                                                         </tbody>
                                                     </table>
-                                                ) : (
-                                                    <p className="text-xs italic text-gray-500">Kamar kosong.</p>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="pl-4 text-sm italic text-gray-500">Tidak ada kamar di gedung ini.</p>
-                            )}
-                        </div>
-                    );
-                })}
+                                                    <p className="font-semibold text-sm mb-1">Daftar Penghuni:</p>
+                                                    {penghuni.length > 0 ? (
+                                                        <table className="w-full text-left border-collapse border border-black text-xs">
+                                                            <thead className="bg-gray-200">
+                                                                <tr>
+                                                                    <th className="p-1 border border-black w-8">No</th>
+                                                                    <th className="p-1 border border-black">NIS</th>
+                                                                    <th className="p-1 border border-black">Nama Lengkap</th>
+                                                                    <th className="p-1 border border-black">Rombel</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {penghuni.map((santri, index) => {
+                                                                    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
+                                                                    return (
+                                                                        <tr key={santri.id}>
+                                                                            <td className="p-1 border border-black text-center">{index + 1}</td>
+                                                                            <td className="p-1 border border-black">{santri.nis}</td>
+                                                                            <td className="p-1 border border-black">{santri.namaLengkap}</td>
+                                                                            <td className="p-1 border border-black">{rombel?.nama || 'N/A'}</td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    ) : (
+                                                        <p className="text-xs italic text-gray-500">Kamar kosong.</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="pl-4 text-sm italic text-gray-500">Tidak ada kamar di gedung ini.</p>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -415,73 +432,76 @@ const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings: Pondo
     }, [santriList, settings]);
 
     return (
-        <div className="font-sans text-black" style={{ fontSize: '10pt' }}>
-            <PrintHeader settings={settings} title="Laporan Ringkas Dashboard Utama" />
-            <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
+        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="Laporan Ringkas Dashboard Utama" />
+                <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
 
-            <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Utama</h4>
-            <div className="grid grid-cols-3 gap-4 text-center mb-6">
-                <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Total Santri</div><div className="text-2xl font-bold">{data.totalSantri}</div></div>
-                <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Santri Putra</div><div className="text-2xl font-bold">{data.totalPutra}</div></div>
-                <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Santri Putri</div><div className="text-2xl font-bold">{data.totalPutri}</div></div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6" style={{ breakInside: 'avoid' }}>
-                <div>
-                    <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Komposisi Status</h4>
-                    <table className="w-full text-sm">
-                        <tbody>
-                            {(['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah'] as Santri['status'][]).map(status => {
-                                const count = data.statusCounts[status] || 0;
-                                const percentage = data.totalSantri > 0 ? (count / data.totalSantri) * 100 : 0;
-                                return (<tr key={status}>
-                                    <td className="py-1 font-medium">{status}</td>
-                                    <td className="py-1 text-right">{count} santri</td>
-                                    <td className="py-1 text-right w-24">({percentage.toFixed(1)}%)</td>
-                                </tr>);
-                            })}
-                        </tbody>
-                    </table>
+                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Utama</h4>
+                <div className="grid grid-cols-3 gap-4 text-center mb-6">
+                    <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Total Santri</div><div className="text-2xl font-bold">{data.totalSantri}</div></div>
+                    <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Santri Putra</div><div className="text-2xl font-bold">{data.totalPutra}</div></div>
+                    <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Santri Putri</div><div className="text-2xl font-bold">{data.totalPutri}</div></div>
                 </div>
-                <div>
-                    <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Struktur Pendidikan</h4>
-                     <table className="w-full text-sm">
-                        <tbody>
-                            <tr><td className="py-1 font-medium">Jumlah Jenjang</td><td className="py-1 text-right">{settings.jenjang.length}</td></tr>
-                            <tr><td className="py-1 font-medium">Jumlah Rombel</td><td className="py-1 text-right">{settings.rombel.length}</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
 
-            <div className="mt-6" style={{ breakInside: 'avoid' }}>
-                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Distribusi Santri per Jenjang</h4>
-                <div className="space-y-4">
-                    {data.santriByJenjang.map(item => (
-                        <div key={item.id} className="border border-black p-3 rounded">
-                            <div className="flex justify-between items-start mb-2">
-                                <div>
-                                    <span className="text-base font-medium text-gray-800">{item.nama}</span>
-                                    <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
-                                        <span>{item.putra} Putra</span><span>{item.putri} Putri</span>
-                                    </div>
-                                </div>
-                                <span className="text-lg font-semibold text-gray-900">{item.total} <span className="text-sm font-normal">Santri</span></span>
-                            </div>
-                             <div className="pl-4 border-l-2 border-gray-300 space-y-2 text-sm">
-                                {item.kelasBreakdown.filter(k => k.total > 0).map(kelas => (
-                                    <div key={kelas.id}>
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-medium text-gray-700">{kelas.nama} ({kelas.total} santri)</span>
-                                            <span className="text-gray-600">{kelas.putra} Putra, {kelas.putri} Putri</span>
+                <div className="grid grid-cols-2 gap-6" style={{ breakInside: 'avoid' }}>
+                    <div>
+                        <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Komposisi Status</h4>
+                        <table className="w-full text-sm">
+                            <tbody>
+                                {(['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah'] as Santri['status'][]).map(status => {
+                                    const count = data.statusCounts[status] || 0;
+                                    const percentage = data.totalSantri > 0 ? (count / data.totalSantri) * 100 : 0;
+                                    return (<tr key={status}>
+                                        <td className="py-1 font-medium">{status}</td>
+                                        <td className="py-1 text-right">{count} santri</td>
+                                        <td className="py-1 text-right w-24">({percentage.toFixed(1)}%)</td>
+                                    </tr>);
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Struktur Pendidikan</h4>
+                        <table className="w-full text-sm">
+                            <tbody>
+                                <tr><td className="py-1 font-medium">Jumlah Jenjang</td><td className="py-1 text-right">{settings.jenjang.length}</td></tr>
+                                <tr><td className="py-1 font-medium">Jumlah Rombel</td><td className="py-1 text-right">{settings.rombel.length}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div className="mt-6" style={{ breakInside: 'avoid' }}>
+                    <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Distribusi Santri per Jenjang</h4>
+                    <div className="space-y-4">
+                        {data.santriByJenjang.map(item => (
+                            <div key={item.id} className="border border-black p-3 rounded">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <span className="text-base font-medium text-gray-800">{item.nama}</span>
+                                        <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                                            <span>{item.putra} Putra</span><span>{item.putri} Putri</span>
                                         </div>
                                     </div>
-                                ))}
+                                    <span className="text-lg font-semibold text-gray-900">{item.total} <span className="text-sm font-normal">Santri</span></span>
+                                </div>
+                                <div className="pl-4 border-l-2 border-gray-300 space-y-2 text-sm">
+                                    {item.kelasBreakdown.filter(k => k.total > 0).map(kelas => (
+                                        <div key={kelas.id}>
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-medium text-gray-700">{kelas.nama} ({kelas.total} santri)</span>
+                                                <span className="text-gray-600">{kelas.putra} Putra, {kelas.putri} Putri</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -502,44 +522,47 @@ const FinanceSummaryTemplate: React.FC<{ santriList: Santri[], tagihanList: Tagi
     }, [santriList, tagihanList, pembayaranList]);
 
     return (
-         <div className="font-sans text-black" style={{ fontSize: '10pt' }}>
-            <PrintHeader settings={settings} title="Laporan Ringkas Keuangan" />
-            <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
-            
-            <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Keuangan Utama</h4>
-            <table className="w-full text-sm my-4">
-                <tbody>
-                    <tr className="border-b"><td className="py-2 font-medium">Total Tunggakan</td><td className="py-2 text-right font-bold text-lg">{formatRupiah(data.totalTunggakan)}</td></tr>
-                    <tr className="border-b"><td className="py-2 font-medium">Penerimaan Bulan Ini</td><td className="py-2 text-right font-bold text-lg">{formatRupiah(data.penerimaanBulanIni)}</td></tr>
-                    <tr className="border-b"><td className="py-2 font-medium">Total Penerimaan Tahun Ini</td><td className="py-2 text-right font-bold text-lg">{formatRupiah(data.penerimaanTahunIni)}</td></tr>
-                    <tr className="border-b"><td className="py-2 font-medium">Jumlah Santri Aktif Menunggak</td><td className="py-2 text-right font-bold text-lg">{data.jumlahSantriMenunggak} Santri</td></tr>
-                </tbody>
-            </table>
-
-             <div className="mt-6" style={{ breakInside: 'avoid' }}>
-                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Komposisi Seluruh Tagihan</h4>
-                <table className="w-full text-sm">
+         <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="Laporan Ringkas Keuangan" />
+                <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
+                
+                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Keuangan Utama</h4>
+                <table className="w-full text-sm my-4">
                     <tbody>
-                        <tr>
-                            <td className="py-1 font-medium">Lunas</td>
-                            <td className="py-1 text-right">{formatRupiah(data.totalLunasValue)}</td>
-                            <td className="py-1 text-right w-24">({(data.totalTagihanValue > 0 ? (data.totalLunasValue / data.totalTagihanValue) * 100 : 0).toFixed(1)}%)</td>
-                        </tr>
-                        <tr>
-                            <td className="py-1 font-medium">Belum Lunas</td>
-                            <td className="py-1 text-right">{formatRupiah(data.totalTunggakan)}</td>
-                            <td className="py-1 text-right w-24">({(data.totalTagihanValue > 0 ? (data.totalTunggakan / data.totalTagihanValue) * 100 : 0).toFixed(1)}%)</td>
-                        </tr>
+                        <tr className="border-b"><td className="py-2 font-medium">Total Tunggakan</td><td className="py-2 text-right font-bold text-lg">{formatRupiah(data.totalTunggakan)}</td></tr>
+                        <tr className="border-b"><td className="py-2 font-medium">Penerimaan Bulan Ini</td><td className="py-2 text-right font-bold text-lg">{formatRupiah(data.penerimaanBulanIni)}</td></tr>
+                        <tr className="border-b"><td className="py-2 font-medium">Total Penerimaan Tahun Ini</td><td className="py-2 text-right font-bold text-lg">{formatRupiah(data.penerimaanTahunIni)}</td></tr>
+                        <tr className="border-b"><td className="py-2 font-medium">Jumlah Santri Aktif Menunggak</td><td className="py-2 text-right font-bold text-lg">{data.jumlahSantriMenunggak} Santri</td></tr>
                     </tbody>
-                    <tfoot>
-                        <tr className="border-t-2 border-black">
-                            <td className="pt-2 font-bold">Total Keseluruhan Tagihan</td>
-                            <td className="pt-2 text-right font-bold">{formatRupiah(data.totalTagihanValue)}</td>
-                            <td className="pt-2 text-right w-24"></td>
-                        </tr>
-                    </tfoot>
                 </table>
+
+                <div className="mt-6" style={{ breakInside: 'avoid' }}>
+                    <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Komposisi Seluruh Tagihan</h4>
+                    <table className="w-full text-sm">
+                        <tbody>
+                            <tr>
+                                <td className="py-1 font-medium">Lunas</td>
+                                <td className="py-1 text-right">{formatRupiah(data.totalLunasValue)}</td>
+                                <td className="py-1 text-right w-24">({(data.totalTagihanValue > 0 ? (data.totalLunasValue / data.totalTagihanValue) * 100 : 0).toFixed(1)}%)</td>
+                            </tr>
+                            <tr>
+                                <td className="py-1 font-medium">Belum Lunas</td>
+                                <td className="py-1 text-right">{formatRupiah(data.totalTunggakan)}</td>
+                                <td className="py-1 text-right w-24">({(data.totalTagihanValue > 0 ? (data.totalTunggakan / data.totalTagihanValue) * 100 : 0).toFixed(1)}%)</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr className="border-t-2 border-black">
+                                <td className="pt-2 font-bold">Total Keseluruhan Tagihan</td>
+                                <td className="pt-2 text-right font-bold">{formatRupiah(data.totalTagihanValue)}</td>
+                                <td className="pt-2 text-right w-24"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
              </div>
+             <ReportFooter />
         </div>
     );
 };
@@ -551,45 +574,48 @@ const LaporanMutasiTemplate: React.FC<{
   endDate: string;
 }> = ({ mutasiEvents, settings, startDate, endDate }) => {
     return (
-        <div className="text-black" style={{ fontSize: '10pt' }}>
-            <PrintHeader settings={settings} title="LAPORAN MUTASI SANTRI" />
-            <div className="text-sm font-semibold mb-4">
-              <span>Periode: {formatDate(startDate)} s.d. {formatDate(endDate)}</span>
-            </div>
-            <table className="w-full text-left border-collapse border border-black">
-                <thead className="text-xs uppercase bg-gray-200 text-center">
-                    <tr>
-                        <th className="px-2 py-2 border border-black">No</th>
-                        <th className="px-2 py-2 border border-black">Tanggal</th>
-                        <th className="px-2 py-2 border border-black">NIS</th>
-                        <th className="px-2 py-2 border border-black text-left" style={{minWidth: '150px'}}>Nama Lengkap</th>
-                        <th className="px-2 py-2 border border-black text-left">Jenjang Pendidikan</th>
-                        <th className="px-2 py-2 border border-black">Status Baru</th>
-                        <th className="px-2 py-2 border border-black text-left" style={{minWidth: '200px'}}>Keterangan</th>
-                    </tr>
-                </thead>
-                <tbody style={{ fontSize: '9pt' }}>
-                    {mutasiEvents.map(({ santri, mutasi }, i) => {
-                        const jenjang = settings.jenjang.find(j => j.id === santri.jenjangId);
-                        return (
-                        <tr key={`${santri.id}-${mutasi.id}`}>
-                            <td className="px-2 py-2 border border-black text-center" style={{ fontSize: '9pt' }}>{i + 1}</td>
-                            <td className="px-2 py-2 border border-black whitespace-nowrap" style={{ fontSize: '9pt' }}>{formatDate(mutasi.tanggal)}</td>
-                            <td className="px-2 py-2 border border-black" style={{ fontSize: '9pt' }}>{santri.nis}</td>
-                            <td className="px-2 py-2 border border-black" style={{ fontSize: '9pt' }}>{santri.namaLengkap}</td>
-                            <td className="px-2 py-2 border border-black" style={{ fontSize: '9pt' }}>{jenjang?.nama || 'N/A'}</td>
-                            <td className="px-2 py-2 border border-black text-center" style={{ fontSize: '9pt' }}>{mutasi.status}</td>
-                            <td className="px-2 py-2 border border-black" style={{ fontSize: '9pt' }}>{mutasi.keterangan}</td>
-                        </tr>
-                        )
-                    })}
-                    {mutasiEvents.length === 0 && (
+        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="LAPORAN MUTASI SANTRI" />
+                <div className="text-sm font-semibold mb-4">
+                <span>Periode: {formatDate(startDate)} s.d. {formatDate(endDate)}</span>
+                </div>
+                <table className="w-full text-left border-collapse border border-black">
+                    <thead className="text-xs uppercase bg-gray-200 text-center">
                         <tr>
-                            <td colSpan={7} className="text-center py-4 border border-black italic text-gray-500">Tidak ada data mutasi pada rentang tanggal yang dipilih.</td>
+                            <th className="px-2 py-2 border border-black">No</th>
+                            <th className="px-2 py-2 border border-black">Tanggal</th>
+                            <th className="px-2 py-2 border border-black">NIS</th>
+                            <th className="px-2 py-2 border border-black text-left" style={{minWidth: '150px'}}>Nama Lengkap</th>
+                            <th className="px-2 py-2 border border-black text-left">Jenjang Pendidikan</th>
+                            <th className="px-2 py-2 border border-black">Status Baru</th>
+                            <th className="px-2 py-2 border border-black text-left" style={{minWidth: '200px'}}>Keterangan</th>
                         </tr>
-                    )}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody style={{ fontSize: '9pt' }}>
+                        {mutasiEvents.map(({ santri, mutasi }, i) => {
+                            const jenjang = settings.jenjang.find(j => j.id === santri.jenjangId);
+                            return (
+                            <tr key={`${santri.id}-${mutasi.id}`}>
+                                <td className="px-2 py-2 border border-black text-center" style={{ fontSize: '9pt' }}>{i + 1}</td>
+                                <td className="px-2 py-2 border border-black whitespace-nowrap" style={{ fontSize: '9pt' }}>{formatDate(mutasi.tanggal)}</td>
+                                <td className="px-2 py-2 border border-black" style={{ fontSize: '9pt' }}>{santri.nis}</td>
+                                <td className="px-2 py-2 border border-black" style={{ fontSize: '9pt' }}>{santri.namaLengkap}</td>
+                                <td className="px-2 py-2 border border-black" style={{ fontSize: '9pt' }}>{jenjang?.nama || 'N/A'}</td>
+                                <td className="px-2 py-2 border border-black text-center" style={{ fontSize: '9pt' }}>{mutasi.status}</td>
+                                <td className="px-2 py-2 border border-black" style={{ fontSize: '9pt' }}>{mutasi.keterangan}</td>
+                            </tr>
+                            )
+                        })}
+                        {mutasiEvents.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="text-center py-4 border border-black italic text-gray-500">Tidak ada data mutasi pada rentang tanggal yang dipilih.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -627,39 +653,42 @@ const BiodataTemplate: React.FC<{ santri: Santri; settings: PondokSettings; useH
     }
 
     return (
-      <div className="font-serif text-black" style={{ fontSize: '12pt', lineHeight: '1.5' }}>
-        <PrintHeader settings={settings} title={`BIODATA SANTRI ${jenjang?.nama?.toUpperCase()} ${kelas?.nama?.toUpperCase()} ROMBEL ${rombel?.nama?.toUpperCase()}`} />
-        <table className="w-full">
-            <BiodataSection title="A. KETERANGAN PRIBADI SANTRI">
-                <BiodataItem number="1." label="Nama Lengkap" value={santri.namaLengkap} />
-                <BiodataItem number="2." label="Nama Panggilan (Hijrah)" value={santri.namaHijrah} />
-                <BiodataItem number="3." label="Nomor Induk" /><BiodataItem label="a. NIS" value={santri.nis} sub /><BiodataItem label="b. NIK" value={santri.nik} sub /><BiodataItem label="c. NISN" value={santri.nisn} sub />
-                <BiodataItem number="4." label="Jenis Kelamin" value={santri.jenisKelamin} /><BiodataItem number="5." label="Tempat, Tanggal Lahir" value={`${santri.tempatLahir}, ${formatDate(santri.tanggalLahir)}`} />
-                <BiodataItem number="6." label="Kewarganegaraan" value={santri.kewarganegaraan} /><BiodataItem number="7." label="Jenis Santri" value={santri.jenisSantri} /><BiodataItem number="8." label="Berkebutuhan Khusus" value={santri.berkebutuhanKhusus} />
-                <BiodataItem number="9." label="Anak Ke" value={santri.anakKe} /><BiodataItem number="10." label="Jumlah Saudara" value={santri.jumlahSaudara} /><BiodataItem number="11." label="Status Keluarga" value={santri.statusKeluarga} />
-                <BiodataItem number="12." label="Alamat Santri" value={santri.alamat.detail} /><BiodataItem number="13." label="Diterima di Ponpes ini" /><BiodataItem label="a. Di Jenjang" value={jenjang?.nama} sub /><BiodataItem label="b. Di Rombel" value={rombel?.nama} sub /><BiodataItem label="c. Pada Tanggal" value={formatDate(santri.tanggalMasuk)} sub />
-                <BiodataItem number="14." label="Sekolah Asal" /><BiodataItem label="a. Nama Sekolah" value={santri.sekolahAsal} sub /><BiodataItem label="b. Alamat Sekolah" value={santri.alamatSekolahAsal} sub />
-            </BiodataSection>
-            <BiodataSection title="B. KETERANGAN ORANG TUA KANDUNG">
-                <BiodataItem number="15." label="Nama Ayah" value={santri.namaAyah} /><BiodataItem number="16." label="Tempat, Tanggal Lahir Ayah" value={santri.tempatLahirAyah ? `${santri.tempatLahirAyah}, ${formatDate(santri.tanggalLahirAyah)}` : formatDate(santri.tanggalLahirAyah)} />
-                <BiodataItem number="17." label="Pendidikan Terakhir Ayah" value={santri.pendidikanAyah} /><BiodataItem number="18." label="Pekerjaan Ayah" value={santri.pekerjaanAyah} /><BiodataItem number="19." label="Penghasilan Ayah" value={santri.penghasilanAyah} /><BiodataItem number="20." label="No. Telepon Ayah" value={santri.teleponAyah} />
-                <BiodataItem number="21." label="Nama Ibu" value={santri.namaIbu} /><BiodataItem number="22." label="Tempat, Tanggal Lahir Ibu" value={santri.tempatLahirIbu ? `${santri.tempatLahirIbu}, ${formatDate(santri.tanggalLahirIbu)}` : formatDate(santri.tanggalLahirIbu)} />
-                <BiodataItem number="23." label="Pendidikan Terakhir Ibu" value={santri.pendidikanIbu} /><BiodataItem number="24." label="Pekerjaan Ibu" value={santri.pekerjaanIbu} /><BiodataItem number="25." label="Penghasilan Ibu" value={santri.penghasilanIbu} /><BiodataItem number="26." label="No. Telepon Ibu" value={santri.teleponIbu} />
-                <BiodataItem number="27." label="Alamat Orang Tua" value={santri.alamatAyah?.detail || santri.alamatIbu?.detail} />
-            </BiodataSection>
-            {santri.namaWali && (
-              <BiodataSection title="C. KETERANGAN WALI">
-                <BiodataItem number="28." label="Nama Wali" value={santri.namaWali} /><BiodataItem number="29." label="Hubungan dengan Santri" value={santri.statusWali} /><BiodataItem number="30." label="Pekerjaan Wali" value={santri.pekerjaanWali} /><BiodataItem number="31." label="Penghasilan Wali" value={santri.penghasilanWali} /><BiodataItem number="32." label="No. Telepon Wali" value={santri.teleponWali} /><BiodataItem number="33." label="Alamat Wali" value={santri.alamatWali?.detail} />
-              </BiodataSection>
-            )}
-        </table>
-        <div className="mt-16 flow-root" style={{ breakInside: 'avoid' }}>
-          <div className="float-right w-72 text-center">
-            <p>Sumpiuh, {gregorianDateString}</p>
-            {hijriDateString && <p className="text-sm">{hijriDateString}</p>}
-            <p className="mt-4">Mudir Marhalah,</p><div className="h-20"></div><p className="font-bold underline">{mudir ? mudir.nama : '_____________________'}</p>
-          </div>
+      <div className="font-serif text-black flex flex-col min-h-full" style={{ fontSize: '12pt', lineHeight: '1.5' }}>
+        <div className="flex-grow">
+            <PrintHeader settings={settings} title={`BIODATA SANTRI ${jenjang?.nama?.toUpperCase()} ${kelas?.nama?.toUpperCase()} ROMBEL ${rombel?.nama?.toUpperCase()}`} />
+            <table className="w-full">
+                <BiodataSection title="A. KETERANGAN PRIBADI SANTRI">
+                    <BiodataItem number="1." label="Nama Lengkap" value={santri.namaLengkap} />
+                    <BiodataItem number="2." label="Nama Panggilan (Hijrah)" value={santri.namaHijrah} />
+                    <BiodataItem number="3." label="Nomor Induk" /><BiodataItem label="a. NIS" value={santri.nis} sub /><BiodataItem label="b. NIK" value={santri.nik} sub /><BiodataItem label="c. NISN" value={santri.nisn} sub />
+                    <BiodataItem number="4." label="Jenis Kelamin" value={santri.jenisKelamin} /><BiodataItem number="5." label="Tempat, Tanggal Lahir" value={`${santri.tempatLahir}, ${formatDate(santri.tanggalLahir)}`} />
+                    <BiodataItem number="6." label="Kewarganegaraan" value={santri.kewarganegaraan} /><BiodataItem number="7." label="Jenis Santri" value={santri.jenisSantri} /><BiodataItem number="8." label="Berkebutuhan Khusus" value={santri.berkebutuhanKhusus} />
+                    <BiodataItem number="9." label="Anak Ke" value={santri.anakKe} /><BiodataItem number="10." label="Jumlah Saudara" value={santri.jumlahSaudara} /><BiodataItem number="11." label="Status Keluarga" value={santri.statusKeluarga} />
+                    <BiodataItem number="12." label="Alamat Santri" value={santri.alamat.detail} /><BiodataItem number="13." label="Diterima di Ponpes ini" /><BiodataItem label="a. Di Jenjang" value={jenjang?.nama} sub /><BiodataItem label="b. Di Rombel" value={rombel?.nama} sub /><BiodataItem label="c. Pada Tanggal" value={formatDate(santri.tanggalMasuk)} sub />
+                    <BiodataItem number="14." label="Sekolah Asal" /><BiodataItem label="a. Nama Sekolah" value={santri.sekolahAsal} sub /><BiodataItem label="b. Alamat Sekolah" value={santri.alamatSekolahAsal} sub />
+                </BiodataSection>
+                <BiodataSection title="B. KETERANGAN ORANG TUA KANDUNG">
+                    <BiodataItem number="15." label="Nama Ayah" value={santri.namaAyah} /><BiodataItem number="16." label="Tempat, Tanggal Lahir Ayah" value={santri.tempatLahirAyah ? `${santri.tempatLahirAyah}, ${formatDate(santri.tanggalLahirAyah)}` : formatDate(santri.tanggalLahirAyah)} />
+                    <BiodataItem number="17." label="Pendidikan Terakhir Ayah" value={santri.pendidikanAyah} /><BiodataItem number="18." label="Pekerjaan Ayah" value={santri.pekerjaanAyah} /><BiodataItem number="19." label="Penghasilan Ayah" value={santri.penghasilanAyah} /><BiodataItem number="20." label="No. Telepon Ayah" value={santri.teleponAyah} />
+                    <BiodataItem number="21." label="Nama Ibu" value={santri.namaIbu} /><BiodataItem number="22." label="Tempat, Tanggal Lahir Ibu" value={santri.tempatLahirIbu ? `${santri.tempatLahirIbu}, ${formatDate(santri.tanggalLahirIbu)}` : formatDate(santri.tanggalLahirIbu)} />
+                    <BiodataItem number="23." label="Pendidikan Terakhir Ibu" value={santri.pendidikanIbu} /><BiodataItem number="24." label="Pekerjaan Ibu" value={santri.pekerjaanIbu} /><BiodataItem number="25." label="Penghasilan Ibu" value={santri.penghasilanIbu} /><BiodataItem number="26." label="No. Telepon Ibu" value={santri.teleponIbu} />
+                    <BiodataItem number="27." label="Alamat Orang Tua" value={santri.alamatAyah?.detail || santri.alamatIbu?.detail} />
+                </BiodataSection>
+                {santri.namaWali && (
+                <BiodataSection title="C. KETERANGAN WALI">
+                    <BiodataItem number="28." label="Nama Wali" value={santri.namaWali} /><BiodataItem number="29." label="Hubungan dengan Santri" value={santri.statusWali} /><BiodataItem number="30." label="Pekerjaan Wali" value={santri.pekerjaanWali} /><BiodataItem number="31." label="Penghasilan Wali" value={santri.penghasilanWali} /><BiodataItem number="32." label="No. Telepon Wali" value={santri.teleponWali} /><BiodataItem number="33." label="Alamat Wali" value={santri.alamatWali?.detail} />
+                </BiodataSection>
+                )}
+            </table>
+            <div className="mt-16 flow-root" style={{ breakInside: 'avoid' }}>
+                <div className="float-right w-72 text-center">
+                    <p>Sumpiuh, {gregorianDateString}</p>
+                    {hijriDateString && <p className="text-sm">{hijriDateString}</p>}
+                    <p className="mt-4">Mudir Marhalah,</p><div className="h-20"></div><p className="font-bold underline">{mudir ? mudir.nama : '_____________________'}</p>
+                </div>
+            </div>
         </div>
+        <ReportFooter />
       </div>
     );
 };
@@ -685,52 +714,55 @@ const LembarKedatanganTemplate: React.FC<{
     const waliKelasNama = waliKelas?.nama || '...................................';
 
     return (
-        <div className="text-black" style={{ fontSize: '10pt' }}>
-            <PrintHeader settings={settings} title="LEMBAR KEDATANGAN SANTRI" />
-            <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
-              <div>
-                  <p>Jenjang: {jenjangNama}</p>
-                  <p>Kelas / Rombel: {kelasNama} / {rombelNama}</p>
-                  <p>Agenda: {options.agendaKedatangan || '...................................'}</p>
-              </div>
-              <div className="text-right">
-                  <p>Semester: {options.semester}</p>
-                  <p>Tahun Ajaran: {options.tahunAjaran || '...................................'}</p>
-                  <p>Wali Kelas: {waliKelasNama}</p>
-              </div>
-            </div>
-            <table className="w-full text-left border-collapse border border-black">
-                <thead className="text-xs uppercase bg-gray-200 text-center">
-                    <tr>
-                        <th rowSpan={2} className="px-2 py-2 border border-black align-middle">No</th>
-                        <th rowSpan={2} className="px-2 py-2 border border-black align-middle">NIS</th>
-                        <th rowSpan={2} className="px-2 py-2 border border-black align-middle" style={{minWidth: '200px'}}>Nama Lengkap</th>
-                        <th colSpan={2} className="px-2 py-2 border border-black">Waktu Kedatangan</th>
-                        <th rowSpan={2} className="px-2 py-2 border border-black align-middle">Paraf</th>
-                    </tr>
-                    <tr>
-                        <th className="px-2 py-2 border border-black font-medium" style={{minWidth: '150px'}}>Hari, Tanggal</th>
-                        <th className="px-2 py-2 border border-black font-medium" style={{minWidth: '100px'}}>Pukul</th>
-                    </tr>
-                </thead>
-                <tbody className="text-xs">
-                    {santriList.map((s, i) => (
-                        <tr key={s.id}>
-                            <td className="px-2 py-2 border border-black text-center">{i + 1}</td>
-                            <td className="px-2 py-2 border border-black">{s.nis}</td>
-                            <td className="px-2 py-2 border border-black">{s.namaLengkap}</td>
-                            <td className="px-2 py-2 border border-black h-8"></td>
-                            <td className="px-2 py-2 border border-black h-8"></td>
-                            <td className="px-2 py-2 border border-black h-8"></td>
-                        </tr>
-                    ))}
-                    {santriList.length === 0 && (
+        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="LEMBAR KEDATANGAN SANTRI" />
+                <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
+                <div>
+                    <p>Jenjang: {jenjangNama}</p>
+                    <p>Kelas / Rombel: {kelasNama} / {rombelNama}</p>
+                    <p>Agenda: {options.agendaKedatangan || '...................................'}</p>
+                </div>
+                <div className="text-right">
+                    <p>Semester: {options.semester}</p>
+                    <p>Tahun Ajaran: {options.tahunAjaran || '...................................'}</p>
+                    <p>Wali Kelas: {waliKelasNama}</p>
+                </div>
+                </div>
+                <table className="w-full text-left border-collapse border border-black">
+                    <thead className="text-xs uppercase bg-gray-200 text-center">
                         <tr>
-                            <td colSpan={6} className="text-center py-4 border border-black">Tidak ada santri aktif di rombel ini.</td>
+                            <th rowSpan={2} className="px-2 py-2 border border-black align-middle">No</th>
+                            <th rowSpan={2} className="px-2 py-2 border border-black align-middle">NIS</th>
+                            <th rowSpan={2} className="px-2 py-2 border border-black align-middle" style={{minWidth: '200px'}}>Nama Lengkap</th>
+                            <th colSpan={2} className="px-2 py-2 border border-black">Waktu Kedatangan</th>
+                            <th rowSpan={2} className="px-2 py-2 border border-black align-middle">Paraf</th>
                         </tr>
-                    )}
-                </tbody>
-            </table>
+                        <tr>
+                            <th className="px-2 py-2 border border-black font-medium" style={{minWidth: '150px'}}>Hari, Tanggal</th>
+                            <th className="px-2 py-2 border border-black font-medium" style={{minWidth: '100px'}}>Pukul</th>
+                        </tr>
+                    </thead>
+                    <tbody className="text-xs">
+                        {santriList.map((s, i) => (
+                            <tr key={s.id}>
+                                <td className="px-2 py-2 border border-black text-center">{i + 1}</td>
+                                <td className="px-2 py-2 border border-black">{s.nis}</td>
+                                <td className="px-2 py-2 border border-black">{s.namaLengkap}</td>
+                                <td className="px-2 py-2 border border-black h-8"></td>
+                                <td className="px-2 py-2 border border-black h-8"></td>
+                                <td className="px-2 py-2 border border-black h-8"></td>
+                            </tr>
+                        ))}
+                        {santriList.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="text-center py-4 border border-black">Tidak ada santri aktif di rombel ini.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -754,46 +786,49 @@ const LembarRaporTemplate: React.FC<{
     const rombelNama = rombel?.nama || 'N/A';
 
     return (
-        <div className="text-black" style={{ fontSize: '10pt' }}>
-            <PrintHeader settings={settings} title="LEMBAR PENGAMBILAN DAN PENGUMPULAN RAPOR" />
-            <div className="text-sm font-semibold mb-4 grid grid-cols-2">
-              <span>Jenjang: {jenjangNama}</span>
-              <span className="text-right">Semester: {options.semester}</span>
-              <span>Kelas: {kelasNama}</span>
-              <span className="text-right">Tahun Ajaran: {options.tahunAjaran || '...................................'}</span>
-              <span>Rombel: {rombelNama}</span>
-              <span className="text-right">Wali Kelas: {waliKelas?.nama || '...................................'}</span>
-            </div>
-            <table className="w-full text-left border-collapse border border-black">
-                <thead className="text-xs uppercase bg-gray-200 text-center">
-                    <tr>
-                        <th rowSpan={2} className="p-2 border border-black">No</th>
-                        <th rowSpan={2} className="p-2 border border-black">NIS</th>
-                        <th rowSpan={2} className="p-2 border border-black">Nama Lengkap</th>
-                        <th colSpan={2} className="p-2 border border-black">Pengambilan</th>
-                        <th colSpan={2} className="p-2 border border-black">Pengumpulan</th>
-                    </tr>
-                    <tr>
-                        <th className="p-2 border border-black font-medium">Tanggal</th>
-                        <th className="p-2 border border-black font-medium">Tanda Tangan</th>
-                        <th className="p-2 border border-black font-medium">Tanggal</th>
-                        <th className="p-2 border border-black font-medium">Tanda Tangan</th>
-                    </tr>
-                </thead>
-                <tbody className="text-xs">
-                    {santriList.map((s, i) => (
-                        <tr key={s.id}>
-                            <td className="p-2 border border-black text-center">{i + 1}</td>
-                            <td className="p-2 border border-black">{s.nis}</td>
-                            <td className="p-2 border border-black">{s.namaLengkap}</td>
-                            <td className="p-2 border border-black h-12"></td>
-                            <td className="p-2 border border-black"></td>
-                            <td className="p-2 border border-black"></td>
-                            <td className="p-2 border border-black"></td>
+        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="LEMBAR PENGAMBILAN DAN PENGUMPULAN RAPOR" />
+                <div className="text-sm font-semibold mb-4 grid grid-cols-2">
+                <span>Jenjang: {jenjangNama}</span>
+                <span className="text-right">Semester: {options.semester}</span>
+                <span>Kelas: {kelasNama}</span>
+                <span className="text-right">Tahun Ajaran: {options.tahunAjaran || '...................................'}</span>
+                <span>Rombel: {rombelNama}</span>
+                <span className="text-right">Wali Kelas: {waliKelas?.nama || '...................................'}</span>
+                </div>
+                <table className="w-full text-left border-collapse border border-black">
+                    <thead className="text-xs uppercase bg-gray-200 text-center">
+                        <tr>
+                            <th rowSpan={2} className="p-2 border border-black">No</th>
+                            <th rowSpan={2} className="p-2 border border-black">NIS</th>
+                            <th rowSpan={2} className="p-2 border border-black">Nama Lengkap</th>
+                            <th colSpan={2} className="p-2 border border-black">Pengambilan</th>
+                            <th colSpan={2} className="p-2 border border-black">Pengumpulan</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                        <tr>
+                            <th className="p-2 border border-black font-medium">Tanggal</th>
+                            <th className="p-2 border border-black font-medium">Tanda Tangan</th>
+                            <th className="p-2 border border-black font-medium">Tanggal</th>
+                            <th className="p-2 border border-black font-medium">Tanda Tangan</th>
+                        </tr>
+                    </thead>
+                    <tbody className="text-xs">
+                        {santriList.map((s, i) => (
+                            <tr key={s.id}>
+                                <td className="p-2 border border-black text-center">{i + 1}</td>
+                                <td className="p-2 border border-black">{s.nis}</td>
+                                <td className="p-2 border border-black">{s.namaLengkap}</td>
+                                <td className="p-2 border border-black h-12"></td>
+                                <td className="p-2 border border-black"></td>
+                                <td className="p-2 border border-black"></td>
+                                <td className="p-2 border border-black"></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -868,74 +903,77 @@ const LembarPembinaanTemplate: React.FC<{ santri: Santri; settings: PondokSettin
     const rombel = settings.rombel.find(r => r.id === santri.rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     return (
-        <div className="font-sans text-black" style={{ fontSize: '9pt' }}>
-            <PrintHeader settings={settings} title="LEMBAR PEMBINAAN" />
-            <div className="grid grid-cols-2 gap-x-4 mb-4" style={{ fontSize: '8pt' }}>
-                <div>
-                    <p><span className="font-semibold">Nama Santri:</span> {santri.namaLengkap}</p>
-                    <p><span className="font-semibold">NIS:</span> {santri.nis}</p>
+        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '9pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="LEMBAR PEMBINAAN" />
+                <div className="grid grid-cols-2 gap-x-4 mb-4" style={{ fontSize: '8pt' }}>
+                    <div>
+                        <p><span className="font-semibold">Nama Santri:</span> {santri.namaLengkap}</p>
+                        <p><span className="font-semibold">NIS:</span> {santri.nis}</p>
+                    </div>
+                    <div className="text-right">
+                        <p><span className="font-semibold">Kelas:</span> {kelas?.nama || 'N/A'}</p>
+                        <p><span className="font-semibold">Rombel:</span> {rombel?.nama || 'N/A'}</p>
+                    </div>
                 </div>
-                <div className="text-right">
-                    <p><span className="font-semibold">Kelas:</span> {kelas?.nama || 'N/A'}</p>
-                    <p><span className="font-semibold">Rombel:</span> {rombel?.nama || 'N/A'}</p>
-                </div>
+
+                <h4 className="font-bold text-base mt-6 mb-2">Catatan Prestasi</h4>
+                <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
+                    <thead className="bg-gray-200 uppercase">
+                        <tr>
+                            <th className="p-1 border border-black w-8">No</th>
+                            <th className="p-1 border border-black">Tahun</th>
+                            <th className="p-1 border border-black">Nama Prestasi</th>
+                            <th className="p-1 border border-black">Tingkat</th>
+                            <th className="p-1 border border-black">Penyelenggara</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {(santri.prestasi || []).map((p, i) => (
+                            <tr key={p.id}>
+                                <td className="p-1 border border-black text-center">{i + 1}</td>
+                                <td className="p-1 border border-black text-center">{p.tahun}</td>
+                                <td className="p-1 border border-black">{p.nama}</td>
+                                <td className="p-1 border border-black">{p.tingkat}</td>
+                                <td className="p-1 border border-black">{p.penyelenggara}</td>
+                            </tr>
+                        ))}
+                        {(santri.prestasi || []).length === 0 && (
+                            <tr><td colSpan={5} className="text-center p-4 italic text-gray-500">Belum ada catatan prestasi.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+
+                <h4 className="font-bold text-base mt-6 mb-2">Catatan Pelanggaran</h4>
+                <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
+                    <thead className="bg-gray-200 uppercase">
+                        <tr>
+                            <th className="p-1 border border-black w-8">No</th>
+                            <th className="p-1 border border-black">Tanggal</th>
+                            <th className="p-1 border border-black">Deskripsi</th>
+                            <th className="p-1 border border-black">Jenis</th>
+                            <th className="p-1 border border-black">Tindak Lanjut</th>
+                            <th className="p-1 border border-black">Pelapor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {(santri.pelanggaran || []).map((p, i) => (
+                            <tr key={p.id}>
+                                <td className="p-1 border border-black text-center">{i + 1}</td>
+                                <td className="p-1 border border-black text-center">{formatDate(p.tanggal)}</td>
+                                <td className="p-1 border border-black">{p.deskripsi}</td>
+                                <td className="p-1 border border-black">{p.jenis}</td>
+                                <td className="p-1 border border-black">{p.tindakLanjut}</td>
+                                <td className="p-1 border border-black">{p.pelapor}</td>
+                            </tr>
+                        ))}
+                        {(santri.pelanggaran || []).length === 0 && (
+                            <tr><td colSpan={6} className="text-center p-4 italic text-gray-500">Belum ada catatan pelanggaran.</td></tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
-
-            <h4 className="font-bold text-base mt-6 mb-2">Catatan Prestasi</h4>
-            <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
-                <thead className="bg-gray-200 uppercase">
-                    <tr>
-                        <th className="p-1 border border-black w-8">No</th>
-                        <th className="p-1 border border-black">Tahun</th>
-                        <th className="p-1 border border-black">Nama Prestasi</th>
-                        <th className="p-1 border border-black">Tingkat</th>
-                        <th className="p-1 border border-black">Penyelenggara</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {(santri.prestasi || []).map((p, i) => (
-                        <tr key={p.id}>
-                            <td className="p-1 border border-black text-center">{i + 1}</td>
-                            <td className="p-1 border border-black text-center">{p.tahun}</td>
-                            <td className="p-1 border border-black">{p.nama}</td>
-                            <td className="p-1 border border-black">{p.tingkat}</td>
-                            <td className="p-1 border border-black">{p.penyelenggara}</td>
-                        </tr>
-                    ))}
-                    {(santri.prestasi || []).length === 0 && (
-                        <tr><td colSpan={5} className="text-center p-4 italic text-gray-500">Belum ada catatan prestasi.</td></tr>
-                    )}
-                </tbody>
-            </table>
-
-            <h4 className="font-bold text-base mt-6 mb-2">Catatan Pelanggaran</h4>
-            <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
-                <thead className="bg-gray-200 uppercase">
-                    <tr>
-                        <th className="p-1 border border-black w-8">No</th>
-                        <th className="p-1 border border-black">Tanggal</th>
-                        <th className="p-1 border border-black">Deskripsi</th>
-                        <th className="p-1 border border-black">Jenis</th>
-                        <th className="p-1 border border-black">Tindak Lanjut</th>
-                        <th className="p-1 border border-black">Pelapor</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {(santri.pelanggaran || []).map((p, i) => (
-                        <tr key={p.id}>
-                            <td className="p-1 border border-black text-center">{i + 1}</td>
-                            <td className="p-1 border border-black text-center">{formatDate(p.tanggal)}</td>
-                            <td className="p-1 border border-black">{p.deskripsi}</td>
-                            <td className="p-1 border border-black">{p.jenis}</td>
-                            <td className="p-1 border border-black">{p.tindakLanjut}</td>
-                            <td className="p-1 border border-black">{p.pelapor}</td>
-                        </tr>
-                    ))}
-                    {(santri.pelanggaran || []).length === 0 && (
-                         <tr><td colSpan={6} className="text-center p-4 italic text-gray-500">Belum ada catatan pelanggaran.</td></tr>
-                    )}
-                </tbody>
-            </table>
+            <ReportFooter />
         </div>
     );
 };
@@ -945,45 +983,48 @@ const FormulirIzinTemplate: React.FC<{ santri: Santri; settings: PondokSettings;
     const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(options.izinSignatoryId));
     
     return (
-        <div className="font-serif text-black" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
-            <PrintHeader settings={settings} title="FORMULIR IZIN SANTRI" />
-            <p className="text-center text-sm mb-4">No: ....../IZN/PP-AH/...../{new Date().getFullYear()}</p>
-            <p className="mb-4">Yang bertanda tangan di bawah ini, Bagian Keamanan {settings.namaPonpes} memberikan izin kepada santri:</p>
-            <table className="w-full my-2 ml-4">
-                <tbody>
-                    <tr><td className="pr-4 w-40">Nama</td><td>: {santri.namaLengkap}</td></tr>
-                    <tr><td>NIS</td><td>: {santri.nis}</td></tr>
-                    <tr><td>Rombel</td><td>: {rombel?.nama || 'N/A'}</td></tr>
-                    <tr><td>Alamat</td><td>: {santri.alamat.detail}</td></tr>
-                </tbody>
-            </table>
-            <p className="my-4">Untuk meninggalkan area pondok pesantren dengan rincian sebagai berikut:</p>
-             <table className="w-full my-2 ml-4">
-                <tbody>
-                    <tr><td className="pr-4 w-40">Tujuan</td><td>: {options.izinTujuan}</td></tr>
-                    <tr><td>Keperluan</td><td>: {options.izinKeperluan}</td></tr>
-                    <tr><td>Tanggal Berangkat</td><td>: {formatDate(options.izinTanggalBerangkat)}</td></tr>
-                    <tr><td>Tanggal Kembali</td><td>: {formatDate(options.izinTanggalKembali)}</td></tr>
-                    <tr><td>Penjemput</td><td>: {options.izinPenjemput}</td></tr>
-                </tbody>
-            </table>
-            <h4 className="font-bold text-sm mt-6 mb-2">Ketentuan Izin:</h4>
-            <div className="text-xs border p-2 bg-gray-50 rounded-md" style={{whiteSpace: 'pre-wrap'}}>
-                {options.izinKetentuan}
-            </div>
-            <div className="mt-8 flow-root">
-                <div className="float-left text-center w-60">
-                    <p>Orang Tua/Wali Santri,</p>
-                    <div className="h-20"></div>
-                    <p className="font-bold underline">( {santri.namaWali || santri.namaAyah} )</p>
+        <div className="font-serif text-black flex flex-col min-h-full" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="FORMULIR IZIN SANTRI" />
+                <p className="text-center text-sm mb-4">No: ....../IZN/PP-AH/...../{new Date().getFullYear()}</p>
+                <p className="mb-4">Yang bertanda tangan di bawah ini, Bagian Keamanan {settings.namaPonpes} memberikan izin kepada santri:</p>
+                <table className="w-full my-2 ml-4">
+                    <tbody>
+                        <tr><td className="pr-4 w-40">Nama</td><td>: {santri.namaLengkap}</td></tr>
+                        <tr><td>NIS</td><td>: {santri.nis}</td></tr>
+                        <tr><td>Rombel</td><td>: {rombel?.nama || 'N/A'}</td></tr>
+                        <tr><td>Alamat</td><td>: {santri.alamat.detail}</td></tr>
+                    </tbody>
+                </table>
+                <p className="my-4">Untuk meninggalkan area pondok pesantren dengan rincian sebagai berikut:</p>
+                <table className="w-full my-2 ml-4">
+                    <tbody>
+                        <tr><td className="pr-4 w-40">Tujuan</td><td>: {options.izinTujuan}</td></tr>
+                        <tr><td>Keperluan</td><td>: {options.izinKeperluan}</td></tr>
+                        <tr><td>Tanggal Berangkat</td><td>: {formatDate(options.izinTanggalBerangkat)}</td></tr>
+                        <tr><td>Tanggal Kembali</td><td>: {formatDate(options.izinTanggalKembali)}</td></tr>
+                        <tr><td>Penjemput</td><td>: {options.izinPenjemput}</td></tr>
+                    </tbody>
+                </table>
+                <h4 className="font-bold text-sm mt-6 mb-2">Ketentuan Izin:</h4>
+                <div className="text-xs border p-2 bg-gray-50 rounded-md" style={{whiteSpace: 'pre-wrap'}}>
+                    {options.izinKetentuan}
                 </div>
-                <div className="float-right text-center w-60">
-                    <p>{settings.alamat.split(',')[1] || 'Sumpiuh'}, {formatDate(new Date().toISOString())}</p>
-                    <p>{options.izinSignatoryTitle},</p>
-                    <div className="h-20"></div>
-                    <p className="font-bold underline">{signatory ? signatory.nama : '( ............................................ )'}</p>
+                <div className="mt-8 flow-root">
+                    <div className="float-left text-center w-60">
+                        <p>Orang Tua/Wali Santri,</p>
+                        <div className="h-20"></div>
+                        <p className="font-bold underline">( {santri.namaWali || santri.namaAyah} )</p>
+                    </div>
+                    <div className="float-right text-center w-60">
+                        <p>{settings.alamat.split(',')[1] || 'Sumpiuh'}, {formatDate(new Date().toISOString())}</p>
+                        <p>{options.izinSignatoryTitle},</p>
+                        <div className="h-20"></div>
+                        <p className="font-bold underline">{signatory ? signatory.nama : '( ............................................ )'}</p>
+                    </div>
                 </div>
             </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -1074,43 +1115,46 @@ const DaftarRombelTemplate: React.FC<{ santriList: Santri[]; settings: PondokSet
     };
 
     return (
-        <div className="text-black" style={{ fontSize: '9pt' }}>
-            <PrintHeader settings={settings} title={`DAFTAR SANTRI ${jenjang?.nama?.toUpperCase() || ''}`} />
-            <div className="text-sm font-semibold mb-4 grid grid-cols-2">
-              <span>Kelas / Rombel: {kelas?.nama || 'N/A'} / {rombel?.nama || 'N/A'}</span>
-              <span className="text-right">Wali Kelas: {waliKelas?.nama || '...................................'}</span>
-            </div>
-            <table className="w-full text-left border-collapse border border-black">
-                <thead className="text-xs uppercase bg-gray-200 text-center">
-                    <tr>
-                        <th className="px-1 py-1 border border-black">No</th>
-                        <th className="px-1 py-1 border border-black">NIS</th>
-                        <th className="px-1 py-1 border border-black text-left">Nama Lengkap</th>
-                        <th className="px-1 py-1 border border-black text-left">Tempat, Tgl. Lahir</th>
-                        <th className="px-1 py-1 border border-black text-left">Wali / Ayah</th>
-                        <th className="px-1 py-1 border border-black text-left">Alamat</th>
-                        <th className="px-1 py-1 border border-black text-left">No. Telepon</th>
-                    </tr>
-                </thead>
-                <tbody style={{ fontSize: '8pt' }}>
-                    {santriList.map((s, i) => (
-                        <tr key={s.id}>
-                            <td className="px-1 py-1 border border-black text-center align-top">{i + 1}</td>
-                            <td className="px-1 py-1 border border-black align-top">{s.nis}</td>
-                            <td className="px-1 py-1 border border-black align-top">{s.namaLengkap}</td>
-                            <td className="px-1 py-1 border border-black align-top">{`${s.tempatLahir}, ${formatDate(s.tanggalLahir)}`}</td>
-                            <td className="px-1 py-1 border border-black align-top">{s.namaWali || s.namaAyah}</td>
-                            <td className="px-1 py-1 border border-black align-top">{formatFullAlamat(s.alamat)}</td>
-                            <td className="px-1 py-1 border border-black align-top">{s.teleponWali || s.teleponAyah || s.teleponIbu}</td>
-                        </tr>
-                    ))}
-                    {santriList.length === 0 && (
+        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '9pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title={`DAFTAR SANTRI ${jenjang?.nama?.toUpperCase() || ''}`} />
+                <div className="text-sm font-semibold mb-4 grid grid-cols-2">
+                <span>Kelas / Rombel: {kelas?.nama || 'N/A'} / {rombel?.nama || 'N/A'}</span>
+                <span className="text-right">Wali Kelas: {waliKelas?.nama || '...................................'}</span>
+                </div>
+                <table className="w-full text-left border-collapse border border-black">
+                    <thead className="text-xs uppercase bg-gray-200 text-center">
                         <tr>
-                            <td colSpan={7} className="text-center py-4 border border-black">Tidak ada santri aktif di rombel ini.</td>
+                            <th className="px-1 py-1 border border-black">No</th>
+                            <th className="px-1 py-1 border border-black">NIS</th>
+                            <th className="px-1 py-1 border border-black text-left">Nama Lengkap</th>
+                            <th className="px-1 py-1 border border-black text-left">Tempat, Tgl. Lahir</th>
+                            <th className="px-1 py-1 border border-black text-left">Wali / Ayah</th>
+                            <th className="px-1 py-1 border border-black text-left">Alamat</th>
+                            <th className="px-1 py-1 border border-black text-left">No. Telepon</th>
                         </tr>
-                    )}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody style={{ fontSize: '8pt' }}>
+                        {santriList.map((s, i) => (
+                            <tr key={s.id}>
+                                <td className="px-1 py-1 border border-black text-center align-top">{i + 1}</td>
+                                <td className="px-1 py-1 border border-black align-top">{s.nis}</td>
+                                <td className="px-1 py-1 border border-black align-top">{s.namaLengkap}</td>
+                                <td className="px-1 py-1 border border-black align-top">{`${s.tempatLahir}, ${formatDate(s.tanggalLahir)}`}</td>
+                                <td className="px-1 py-1 border border-black align-top">{s.namaWali || s.namaAyah}</td>
+                                <td className="px-1 py-1 border border-black align-top">{formatFullAlamat(s.alamat)}</td>
+                                <td className="px-1 py-1 border border-black align-top">{s.teleponWali || s.teleponAyah || s.teleponIbu}</td>
+                            </tr>
+                        ))}
+                        {santriList.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="text-center py-4 border border-black">Tidak ada santri aktif di rombel ini.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -1130,66 +1174,69 @@ const LembarNilaiTable: React.FC<{
     const totalCols = 7 + nilaiTpCount + nilaiSmCount + (showNilaiTengahSemester ? 1 : 0);
 
     return (
-        <div className="text-black" style={{ fontSize: '9pt' }}>
-            <PrintHeader settings={settings} title="LEMBAR PENILAIAN" />
-            <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
-                <div>
-                    <p>Jenjang: {jenjang?.nama || 'N/A'}</p>
-                    <p>Kelas: {kelas?.nama || 'N/A'}</p>
-                    <p>Rombel: {rombel?.nama || 'N/A'}</p>
+        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '9pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="LEMBAR PENILAIAN" />
+                <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
+                    <div>
+                        <p>Jenjang: {jenjang?.nama || 'N/A'}</p>
+                        <p>Kelas: {kelas?.nama || 'N/A'}</p>
+                        <p>Rombel: {rombel?.nama || 'N/A'}</p>
+                    </div>
+                    <div className="text-right">
+                        <p>Semester: {semester}</p>
+                        <p>Tahun Ajaran: {tahunAjaran || '...........................'}</p>
+                        <p>Wali Kelas: {waliKelas?.nama || '...........................'}</p>
+                    </div>
+                    <div className="col-span-2 font-bold mt-2">
+                        <p>Mata Pelajaran: {mapel.nama}</p>
+                    </div>
                 </div>
-                <div className="text-right">
-                    <p>Semester: {semester}</p>
-                    <p>Tahun Ajaran: {tahunAjaran || '...........................'}</p>
-                    <p>Wali Kelas: {waliKelas?.nama || '...........................'}</p>
-                </div>
-                 <div className="col-span-2 font-bold mt-2">
-                    <p>Mata Pelajaran: {mapel.nama}</p>
-                </div>
-            </div>
-            <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
-                <thead className="uppercase bg-gray-200 text-center align-middle">
-                    <tr>
-                        <th rowSpan={2} className="p-1 border border-black w-6">No</th>
-                        <th rowSpan={2} className="p-1 border border-black w-16">NIS</th>
-                        <th rowSpan={2} className="p-1 border border-black" style={{ minWidth: '150px' }}>Nama Lengkap</th>
-                        <th colSpan={nilaiTpCount + 1} className="p-1 border border-black">TP</th>
-                        <th colSpan={nilaiSmCount + 1} className="p-1 border border-black">SM</th>
-                        {showNilaiTengahSemester && <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>STS</th>}
-                        <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>SAS</th>
-                        <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>NA</th>
-                    </tr>
-                    <tr>
-                        {[...Array(nilaiTpCount)].map((_, i) => <th key={`tp-${i}`} className="p-0.5 border border-black font-medium w-6">{i + 1}</th>)}
-                        <th className="p-1 border border-black font-medium bg-gray-300 w-8" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', textAlign: 'center' }}>Rerata TP</th>
-                        {[...Array(nilaiSmCount)].map((_, i) => <th key={`sm-${i}`} className="p-0.5 border border-black font-medium w-6">{i + 1}</th>)}
-                        <th className="p-1 border border-black font-medium bg-gray-300 w-8" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', textAlign: 'center' }}>Rerata SM</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {santriList.map((s, i) => (
-                        <tr key={s.id}>
-                            <td className="p-1 border border-black text-center h-7">{i + 1}</td>
-                            <td className="p-1 border border-black">{s.nis}</td>
-                            <td className="p-1 border border-black">{s.namaLengkap}</td>
-                            {[...Array(nilaiTpCount)].map((_, j) => <td key={`tp-val-${j}`} className="p-1 border border-black"></td>)}
-                            <td className="p-1 border border-black bg-gray-100"></td>
-                            {[...Array(nilaiSmCount)].map((_, j) => <td key={`sm-val-${j}`} className="p-1 border border-black"></td>)}
-                            <td className="p-1 border border-black bg-gray-100"></td>
-                            {showNilaiTengahSemester && <td className="p-1 border border-black"></td>}
-                            <td className="p-1 border border-black"></td>
-                            <td className="p-1 border border-black bg-gray-100"></td>
+                <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
+                    <thead className="uppercase bg-gray-200 text-center align-middle">
+                        <tr>
+                            <th rowSpan={2} className="p-1 border border-black w-6">No</th>
+                            <th rowSpan={2} className="p-1 border border-black w-16">NIS</th>
+                            <th rowSpan={2} className="p-1 border border-black" style={{ minWidth: '150px' }}>Nama Lengkap</th>
+                            <th colSpan={nilaiTpCount + 1} className="p-1 border border-black">TP</th>
+                            <th colSpan={nilaiSmCount + 1} className="p-1 border border-black">SM</th>
+                            {showNilaiTengahSemester && <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>STS</th>}
+                            <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>SAS</th>
+                            <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>NA</th>
                         </tr>
-                    ))}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td colSpan={totalCols} className="p-2 text-xs border border-black">
-                            <strong>Keterangan:</strong> TP = Tujuan Pembelajaran, SM = Sumatif Lingkup Materi, STS = Sumatif Tengah Semester, SAS = Sumatif Akhir Semester, NA = Nilai Akhir
-                        </td>
-                    </tr>
-                </tfoot>
-            </table>
+                        <tr>
+                            {[...Array(nilaiTpCount)].map((_, i) => <th key={`tp-${i}`} className="p-0.5 border border-black font-medium w-6">{i + 1}</th>)}
+                            <th className="p-1 border border-black font-medium bg-gray-300 w-8" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', textAlign: 'center' }}>Rerata TP</th>
+                            {[...Array(nilaiSmCount)].map((_, i) => <th key={`sm-${i}`} className="p-0.5 border border-black font-medium w-6">{i + 1}</th>)}
+                            <th className="p-1 border border-black font-medium bg-gray-300 w-8" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', textAlign: 'center' }}>Rerata SM</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {santriList.map((s, i) => (
+                            <tr key={s.id}>
+                                <td className="p-1 border border-black text-center h-7">{i + 1}</td>
+                                <td className="p-1 border border-black">{s.nis}</td>
+                                <td className="p-1 border border-black">{s.namaLengkap}</td>
+                                {[...Array(nilaiTpCount)].map((_, j) => <td key={`tp-val-${j}`} className="p-1 border border-black"></td>)}
+                                <td className="p-1 border border-black bg-gray-100"></td>
+                                {[...Array(nilaiSmCount)].map((_, j) => <td key={`sm-val-${j}`} className="p-1 border border-black"></td>)}
+                                <td className="p-1 border border-black bg-gray-100"></td>
+                                {showNilaiTengahSemester && <td className="p-1 border border-black"></td>}
+                                <td className="p-1 border border-black"></td>
+                                <td className="p-1 border border-black bg-gray-100"></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colSpan={totalCols} className="p-2 text-xs border border-black">
+                                <strong>Keterangan:</strong> TP = Tujuan Pembelajaran, SM = Sumatif Lingkup Materi, STS = Sumatif Tengah Semester, SAS = Sumatif Akhir Semester, NA = Nilai Akhir
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -1207,49 +1254,52 @@ const LembarAbsensiTemplate: React.FC<{ santriList: Santri[]; settings: PondokSe
     const waliKelasNama = waliKelas?.nama || '...........................';
 
     return (
-        <div className="text-black" style={{ fontSize: '9pt' }}>
-            <PrintHeader settings={settings} title="LEMBAR ABSENSI" />
-            <div className="text-sm font-semibold mb-2 grid grid-cols-2 gap-x-4">
-                <div>
-                    <p>Jenjang: {jenjangNama}</p>
-                    <p>Kelas: {kelasNama}</p>
-                    <p>Rombel: {rombelNama}</p>
+        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '9pt' }}>
+            <div className="flex-grow">
+                <PrintHeader settings={settings} title="LEMBAR ABSENSI" />
+                <div className="text-sm font-semibold mb-2 grid grid-cols-2 gap-x-4">
+                    <div>
+                        <p>Jenjang: {jenjangNama}</p>
+                        <p>Kelas: {kelasNama}</p>
+                        <p>Rombel: {rombelNama}</p>
+                    </div>
+                    <div className="text-right">
+                        <p>Bulan: {bulan} {tahun}</p>
+                        <p>Semester / Th. Ajaran: {semester} / {tahunAjaran || '...........................'}</p>
+                        <p>Wali Kelas: {waliKelasNama}</p>
+                    </div>
                 </div>
-                <div className="text-right">
-                    <p>Bulan: {bulan} {tahun}</p>
-                    <p>Semester / Th. Ajaran: {semester} / {tahunAjaran || '...........................'}</p>
-                    <p>Wali Kelas: {waliKelasNama}</p>
-                </div>
-            </div>
-            <table className="w-full text-left border-collapse border border-black">
-                <thead className="text-[8pt] uppercase bg-gray-200 text-center">
-                    <tr>
-                        <th rowSpan={2} className="p-1 border border-black align-middle w-6">No</th>
-                        <th rowSpan={2} className="p-1 border border-black align-middle" style={{minWidth: '200px'}}>Nama Lengkap</th>
-                        <th colSpan={31} className="p-1 border border-black">Tanggal</th>
-                        <th colSpan={3} className="p-1 border border-black">Jumlah</th>
-                    </tr>
-                    <tr>
-                        {[...Array(31)].map((_, i) => <th key={i} className="p-1 border border-black font-medium w-6">{i + 1}</th>)}
-                        <th className="p-1 border border-black font-medium bg-blue-100">S</th>
-                        <th className="p-1 border border-black font-medium bg-yellow-100">I</th>
-                        <th className="p-1 border border-black font-medium bg-red-100">A</th>
-                    </tr>
-                </thead>
-                <tbody style={{ fontSize: '9pt' }}>
-                    {santriList.map((s, i) => (
-                        <tr key={s.id}>
-                            <td className="p-1 border border-black text-center h-7" style={{ fontSize: '9pt' }}>{i + 1}</td>
-                            <td className="p-1 border border-black" style={{ fontSize: '9pt' }}>{s.namaLengkap}</td>
-                            {[...Array(31)].map((_, i) => <td key={i} className="p-1 border border-black text-center"></td>)}
-                            <td className="p-1 border border-black bg-blue-50"></td>
-                            <td className="p-1 border border-black bg-yellow-50"></td>
-                            <td className="p-1 border border-black bg-red-50"></td>
+                <table className="w-full text-left border-collapse border border-black">
+                    <thead className="text-[8pt] uppercase bg-gray-200 text-center">
+                        <tr>
+                            <th rowSpan={2} className="p-1 border border-black align-middle w-6">No</th>
+                            <th rowSpan={2} className="p-1 border border-black align-middle" style={{minWidth: '200px'}}>Nama Lengkap</th>
+                            <th colSpan={31} className="p-1 border border-black">Tanggal</th>
+                            <th colSpan={3} className="p-1 border border-black">Jumlah</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
-            <div className="text-xs mt-2">Keterangan: S=Sakit, I=Izin, A=Alpa</div>
+                        <tr>
+                            {[...Array(31)].map((_, i) => <th key={i} className="p-1 border border-black font-medium w-6">{i + 1}</th>)}
+                            <th className="p-1 border border-black font-medium bg-blue-100">S</th>
+                            <th className="p-1 border border-black font-medium bg-yellow-100">I</th>
+                            <th className="p-1 border border-black font-medium bg-red-100">A</th>
+                        </tr>
+                    </thead>
+                    <tbody style={{ fontSize: '9pt' }}>
+                        {santriList.map((s, i) => (
+                            <tr key={s.id}>
+                                <td className="p-1 border border-black text-center h-7" style={{ fontSize: '9pt' }}>{i + 1}</td>
+                                <td className="p-1 border border-black" style={{ fontSize: '9pt' }}>{s.namaLengkap}</td>
+                                {[...Array(31)].map((_, i) => <td key={i} className="p-1 border border-black text-center"></td>)}
+                                <td className="p-1 border border-black bg-blue-50"></td>
+                                <td className="p-1 border border-black bg-yellow-50"></td>
+                                <td className="p-1 border border-black bg-red-50"></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                <div className="text-xs mt-2">Keterangan: S=Sakit, I=Izin, A=Alpa</div>
+            </div>
+            <ReportFooter />
         </div>
     );
 };
@@ -1441,13 +1491,29 @@ export const useReportGenerator = (settings: PondokSettings) => {
                     return results;
                 }
             case ReportType.LabelSantri:
-                return [{ content: <LabelSantriTemplate santriList={santriData} settings={settings} options={options} />, orientation: 'portrait' }];
+                // Footer for labels/cards is added to the container in the returned structure below
+                return [{ 
+                    content: (
+                        <div className="flex flex-col min-h-full">
+                            <div className="flex-grow">
+                                <LabelSantriTemplate santriList={santriData} settings={settings} options={options} />
+                            </div>
+                            <ReportFooter />
+                        </div>
+                    ), 
+                    orientation: 'portrait' 
+                }];
             case ReportType.KartuSantri: {
                 const cards = santriData.map(santri => <KartuSantriTemplate key={santri.id} santri={santri} settings={settings} options={options} />);
                 const cardsPerPage = 8;
                 const pages: React.ReactNode[] = [];
                 for (let i = 0; i < cards.length; i += cardsPerPage) {
-                    pages.push(<div className="grid grid-cols-2 gap-2 p-2">{cards.slice(i, i + cardsPerPage)}</div>);
+                    pages.push(
+                        <div key={i} className="flex flex-col min-h-full">
+                            <div className="grid grid-cols-2 gap-2 p-2 flex-grow">{cards.slice(i, i + cardsPerPage)}</div>
+                            <ReportFooter />
+                        </div>
+                    );
                 }
                 return pages.map(page => ({ content: page, orientation: 'portrait' }));
             }

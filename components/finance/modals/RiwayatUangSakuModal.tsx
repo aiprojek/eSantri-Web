@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../../../AppContext';
 import { Santri } from '../../../types';
@@ -68,6 +69,8 @@ export const RiwayatUangSakuModal: React.FC<RiwayatUangSakuModalProps> = ({ isOp
         } else {
              message += "_Tidak ada riwayat transaksi._\n";
         }
+
+        message += "\n\n_dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id_";
 
         const encodedMessage = encodeURIComponent(message);
         window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAppContext } from '../../AppContext';
 import { Santri, Tagihan } from '../../types';
@@ -111,10 +112,11 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                     const santri = d!.santri;
                     const phone = santri.teleponWali || santri.teleponAyah || santri.teleponIbu;
                     if (phone) {
-                        const message = settings.pesanWaTunggakan
+                        let message = settings.pesanWaTunggakan
                             .replace('{NAMA_SANTRI}', santri.namaLengkap)
                             .replace('{JUMLAH_TUNGGAKAN}', `Rp ${d!.tunggakan.total.toLocaleString('id-ID')}`)
                             .replace('{NAMA_PONPES}', settings.namaPonpes);
+                        message += "\n\n_dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id_";
                         window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
                     }
                 });

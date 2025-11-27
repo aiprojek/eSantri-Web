@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../AppContext';
 import { SuratTemplate, ArsipSurat, Santri, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig } from '../types';
@@ -601,60 +602,65 @@ const SuratGenerator: React.FC = () => {
                                             marginBottom: index < targetSantris.length - 1 ? '2rem' : '0' 
                                         }}
                                     >
-                                        <PrintHeader settings={settings} title={template.kategori === 'Resmi' ? '' : ''} />
-                                        
-                                        {/* Top Date */}
-                                        {tempatTanggalConfig.show && tempatTanggalConfig.position === 'top-right' && (
-                                            <div className={`mb-4 flex w-full ${tempatTanggalConfig.align === 'center' ? 'justify-center' : tempatTanggalConfig.align === 'right' ? 'justify-end' : 'justify-start'}`}>
-                                                <div className="text-center" style={{ minWidth: '200px' }}>
-                                                    <p>{tempatSurat}, {formattedTanggalSurat}</p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {!template.kategori.includes('Resmi') && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{template.judul}</h3>}
-                                        
-                                        <div className="font-serif text-black text-justify leading-relaxed flex-grow ql-editor p-0" dangerouslySetInnerHTML={{ __html: getProcessedContent(currentSantri) }} />
-                                        
-                                        <div className="mt-8">
-                                            {/* Bottom Date */}
-                                            {tempatTanggalConfig.show && tempatTanggalConfig.position !== 'top-right' && (
-                                                 <div className={`mb-4 flex w-full ${
-                                                     tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 
-                                                     tempatTanggalConfig.position === 'bottom-right' ? 'justify-end' : 'justify-end'
-                                                 }`}>
-                                                    <div className={`text-${tempatTanggalConfig.align}`} style={{ minWidth: '200px' }}>
+                                        <div className="flex-grow">
+                                            <PrintHeader settings={settings} title={template.kategori === 'Resmi' ? '' : ''} />
+                                            
+                                            {/* Top Date */}
+                                            {tempatTanggalConfig.show && tempatTanggalConfig.position === 'top-right' && (
+                                                <div className={`mb-4 flex w-full ${tempatTanggalConfig.align === 'center' ? 'justify-center' : tempatTanggalConfig.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                                                    <div className="text-center" style={{ minWidth: '200px' }}>
                                                         <p>{tempatSurat}, {formattedTanggalSurat}</p>
                                                     </div>
                                                 </div>
                                             )}
 
-                                            {/* Mengetahui */}
-                                            {mengetahui.show && (
-                                                <div className={`mb-8 flex w-full ${mengetahui.align === 'center' ? 'justify-center' : mengetahui.align === 'right' ? 'justify-end' : 'justify-start'}`}>
-                                                    <div className="text-center" style={{ minWidth: '200px' }}>
-                                                        <p className="font-medium">{mengetahui.jabatan}</p>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Main Signature Grid */}
-                                            <div className={`grid gap-8 ${
-                                                activeSignatories.length === 1 ? 'grid-cols-1 justify-items-end' : 
-                                                activeSignatories.length === 2 ? 'grid-cols-2' : 
-                                                'grid-cols-3'
-                                            }`}>
-                                                {activeSignatories.map((sig, i) => (
-                                                    <div key={i} className="text-center flex flex-col items-center" style={{ minWidth: '200px' }}>
-                                                        <div className="flex flex-col items-center w-full">
-                                                            <p className="font-medium">{sig.jabatan}</p>
-                                                            <div className="h-20"></div>
-                                                            <p className="font-bold underline">{sig.nama}</p>
-                                                            {sig.nip && <p>NIP. {sig.nip}</p>}
+                                            {!template.kategori.includes('Resmi') && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{template.judul}</h3>}
+                                            
+                                            <div className="font-serif text-black text-justify leading-relaxed flex-grow ql-editor p-0" dangerouslySetInnerHTML={{ __html: getProcessedContent(currentSantri) }} />
+                                            
+                                            <div className="mt-8">
+                                                {/* Bottom Date */}
+                                                {tempatTanggalConfig.show && tempatTanggalConfig.position !== 'top-right' && (
+                                                     <div className={`mb-4 flex w-full ${
+                                                         tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 
+                                                         tempatTanggalConfig.position === 'bottom-right' ? 'justify-end' : 'justify-end'
+                                                     }`}>
+                                                        <div className={`text-${tempatTanggalConfig.align}`} style={{ minWidth: '200px' }}>
+                                                            <p>{tempatSurat}, {formattedTanggalSurat}</p>
                                                         </div>
                                                     </div>
-                                                ))}
+                                                )}
+
+                                                {/* Mengetahui */}
+                                                {mengetahui.show && (
+                                                    <div className={`mb-8 flex w-full ${mengetahui.align === 'center' ? 'justify-center' : mengetahui.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                                                        <div className="text-center" style={{ minWidth: '200px' }}>
+                                                            <p className="font-medium">{mengetahui.jabatan}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Main Signature Grid */}
+                                                <div className={`grid gap-8 ${
+                                                    activeSignatories.length === 1 ? 'grid-cols-1 justify-items-end' : 
+                                                    activeSignatories.length === 2 ? 'grid-cols-2' : 
+                                                    'grid-cols-3'
+                                                }`}>
+                                                    {activeSignatories.map((sig, i) => (
+                                                        <div key={i} className="text-center flex flex-col items-center" style={{ minWidth: '200px' }}>
+                                                            <div className="flex flex-col items-center w-full">
+                                                                <p className="font-medium">{sig.jabatan}</p>
+                                                                <div className="h-20"></div>
+                                                                <p className="font-bold underline">{sig.nama}</p>
+                                                                {sig.nip && <p>NIP. {sig.nip}</p>}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
+                                        </div>
+                                        <div className="mt-auto pt-2 border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full">
+                                            dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
                                         </div>
                                     </div>
                                 ))}
@@ -823,59 +829,64 @@ const ArsipViewerModal: React.FC<{
                              paddingBottom: `${marginConfig.bottom}cm`,
                              paddingLeft: `${marginConfig.left}cm`
                         }}>
-                            <PrintHeader settings={settings} title={template?.kategori === 'Resmi' ? '' : ''} />
-                            {template?.kategori !== 'Resmi' && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{arsip.perihal}</h3>}
-                            
-                            <div className="font-serif text-black text-justify leading-relaxed flex-grow ql-editor p-0" dangerouslySetInnerHTML={{ __html: arsip.isiSurat }} />
-                            
-                            <div className="mt-8">
-                                {/* Top Date */}
-                                {tempatTanggalConfig.show && tempatTanggalConfig.position === 'top-right' && (
-                                    <div className={`mb-4 flex w-full ${tempatTanggalConfig.align === 'center' ? 'justify-center' : tempatTanggalConfig.align === 'right' ? 'justify-end' : 'justify-start'}`}>
-                                        <div className="text-center" style={{ minWidth: '200px' }}>
-                                            <p>{tempatStr}, {tanggalStr}</p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Bottom Date */}
-                                {tempatTanggalConfig.show && tempatTanggalConfig.position !== 'top-right' && (
-                                    <div className={`mb-4 flex w-full ${
-                                        tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 
-                                        tempatTanggalConfig.position === 'bottom-right' ? 'justify-end' : 'justify-end'
-                                    }`}>
-                                        <div className={`text-${tempatTanggalConfig.align}`} style={{ minWidth: '200px' }}>
-                                            <p>{tempatStr}, {tanggalStr}</p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Mengetahui */}
-                                {mengetahuiRender.show && (
-                                    <div className={`mb-8 flex w-full ${mengetahuiRender.align === 'center' ? 'justify-center' : mengetahuiRender.align === 'right' ? 'justify-end' : 'justify-start'}`}>
-                                        <div className="text-center" style={{ minWidth: '200px' }}>
-                                            <p className="font-medium">{mengetahuiRender.jabatan}</p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Grid */}
-                                <div className={`grid gap-8 ${
-                                    signatoriesToRender.length === 1 ? 'grid-cols-1 justify-items-end' : 
-                                    signatoriesToRender.length === 2 ? 'grid-cols-2' : 
-                                    'grid-cols-3'
-                                }`}>
-                                    {signatoriesToRender.map((sig, i) => (
-                                        <div key={i} className="text-center flex flex-col items-center" style={{ minWidth: '200px' }}>
-                                            <div className="flex flex-col items-center w-full">
-                                                <p className="font-medium">{sig.jabatan}</p>
-                                                <div className="h-20"></div>
-                                                <p className="font-bold underline">{sig.nama}</p>
-                                                {sig.nip && <p>NIP. {sig.nip}</p>}
+                            <div className="flex-grow">
+                                <PrintHeader settings={settings} title={template?.kategori === 'Resmi' ? '' : ''} />
+                                {template?.kategori !== 'Resmi' && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{arsip.perihal}</h3>}
+                                
+                                <div className="font-serif text-black text-justify leading-relaxed flex-grow ql-editor p-0" dangerouslySetInnerHTML={{ __html: arsip.isiSurat }} />
+                                
+                                <div className="mt-8">
+                                    {/* Top Date */}
+                                    {tempatTanggalConfig.show && tempatTanggalConfig.position === 'top-right' && (
+                                        <div className={`mb-4 flex w-full ${tempatTanggalConfig.align === 'center' ? 'justify-center' : tempatTanggalConfig.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className="text-center" style={{ minWidth: '200px' }}>
+                                                <p>{tempatStr}, {tanggalStr}</p>
                                             </div>
                                         </div>
-                                    ))}
+                                    )}
+
+                                    {/* Bottom Date */}
+                                    {tempatTanggalConfig.show && tempatTanggalConfig.position !== 'top-right' && (
+                                        <div className={`mb-4 flex w-full ${
+                                            tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 
+                                            tempatTanggalConfig.position === 'bottom-right' ? 'justify-end' : 'justify-end'
+                                        }`}>
+                                            <div className={`text-${tempatTanggalConfig.align}`} style={{ minWidth: '200px' }}>
+                                                <p>{tempatStr}, {tanggalStr}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Mengetahui */}
+                                    {mengetahuiRender.show && (
+                                        <div className={`mb-8 flex w-full ${mengetahuiRender.align === 'center' ? 'justify-center' : mengetahuiRender.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className="text-center" style={{ minWidth: '200px' }}>
+                                                <p className="font-medium">{mengetahuiRender.jabatan}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Grid */}
+                                    <div className={`grid gap-8 ${
+                                        signatoriesToRender.length === 1 ? 'grid-cols-1 justify-items-end' : 
+                                        signatoriesToRender.length === 2 ? 'grid-cols-2' : 
+                                        'grid-cols-3'
+                                    }`}>
+                                        {signatoriesToRender.map((sig, i) => (
+                                            <div key={i} className="text-center flex flex-col items-center" style={{ minWidth: '200px' }}>
+                                                <div className="flex flex-col items-center w-full">
+                                                    <p className="font-medium">{sig.jabatan}</p>
+                                                    <div className="h-20"></div>
+                                                    <p className="font-bold underline">{sig.nama}</p>
+                                                    {sig.nip && <p>NIP. {sig.nip}</p>}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
+                            </div>
+                            <div className="mt-auto pt-2 border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full">
+                                dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
                             </div>
                         </div>
                     </div>
@@ -907,6 +918,74 @@ const ArsipViewerModal: React.FC<{
                     </div>
                 </div>
             </div>
+        </div>
+    );
+};
+
+const ArsipManager: React.FC = () => {
+    const { arsipSuratList, onDeleteArsipSurat, showConfirmation, showToast } = useAppContext();
+    const [selectedArsip, setSelectedArsip] = useState<ArsipSurat | null>(null);
+    const [isViewerOpen, setIsViewerOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredArsip = useMemo(() => {
+        return arsipSuratList.filter(a =>
+            a.perihal.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            a.tujuan.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            a.nomorSurat.toLowerCase().includes(searchTerm.toLowerCase())
+        ).sort((a, b) => new Date(b.tanggalBuat).getTime() - new Date(a.tanggalBuat).getTime());
+    }, [arsipSuratList, searchTerm]);
+
+    const handleDelete = (id: number) => {
+        showConfirmation('Hapus Arsip', 'Anda yakin ingin menghapus arsip surat ini? Tindakan ini tidak dapat dibatalkan.', async () => {
+            await onDeleteArsipSurat(id);
+            showToast('Arsip berhasil dihapus', 'success');
+        }, { confirmColor: 'red' });
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-gray-700">Arsip Surat</h3>
+                <input
+                    type="text"
+                    placeholder="Cari No. Surat / Perihal / Tujuan..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="border rounded-lg px-3 py-2 text-sm w-64"
+                />
+            </div>
+            <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-2 text-left">Tanggal</th>
+                            <th className="px-4 py-2 text-left">Nomor Surat</th>
+                            <th className="px-4 py-2 text-left">Perihal</th>
+                            <th className="px-4 py-2 text-left">Tujuan</th>
+                            <th className="px-4 py-2 text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredArsip.map(a => (
+                            <tr key={a.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-2 whitespace-nowrap">{new Date(a.tanggalBuat).toLocaleDateString('id-ID')}</td>
+                                <td className="px-4 py-2">{a.nomorSurat}</td>
+                                <td className="px-4 py-2">{a.perihal}</td>
+                                <td className="px-4 py-2">{a.tujuan}</td>
+                                <td className="px-4 py-2 text-center space-x-2">
+                                    <button onClick={() => { setSelectedArsip(a); setIsViewerOpen(true); }} className="text-blue-600 hover:text-blue-800" title="Lihat"><i className="bi bi-eye"></i></button>
+                                    <button onClick={() => handleDelete(a.id)} className="text-red-600 hover:text-red-800" title="Hapus"><i className="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredArsip.length === 0 && (
+                            <tr><td colSpan={5} className="text-center py-4 text-gray-500">Tidak ada arsip surat.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            {selectedArsip && <ArsipViewerModal isOpen={isViewerOpen} onClose={() => { setIsViewerOpen(false); setSelectedArsip(null); }} arsip={selectedArsip} />}
         </div>
     );
 };
@@ -988,15 +1067,6 @@ const TemplateModal: React.FC<{
         { label: 'Tanggal Surat', val: '{TANGGAL}' },
         { label: 'Nomor Surat', val: '{NOMOR_SURAT}' },
     ];
-
-    const modules = {
-        toolbar: [
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-            [{ 'align': [] }],
-            ['clean']
-        ],
-    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[70] flex justify-center items-center p-4">

@@ -591,7 +591,7 @@ const SuratGenerator: React.FC = () => {
                                 {targetSantris.map((currentSantri, index) => (
                                     <div 
                                         key={currentSantri ? currentSantri.id : `common-${index}`} 
-                                        className={`bg-white shadow-xl mx-auto flex flex-col ${index < targetSantris.length - 1 ? 'page-break-after' : ''}`} 
+                                        className={`bg-white shadow-xl mx-auto flex flex-col h-full justify-between ${index < targetSantris.length - 1 ? 'page-break-after' : ''}`} 
                                         style={{ 
                                             width: '21cm', 
                                             minHeight: '29.7cm', 
@@ -602,7 +602,7 @@ const SuratGenerator: React.FC = () => {
                                             marginBottom: index < targetSantris.length - 1 ? '2rem' : '0' 
                                         }}
                                     >
-                                        <div className="flex-grow">
+                                        <div>
                                             <PrintHeader settings={settings} title={template.kategori === 'Resmi' ? '' : ''} />
                                             
                                             {/* Top Date */}
@@ -821,7 +821,7 @@ const ArsipViewerModal: React.FC<{
                 </div>
                 <div className="flex-grow bg-gray-100 p-6 overflow-auto flex justify-center" ref={contentRef} id="arsip-preview-container">
                     <div ref={wrapperRef} className="printable-content-wrapper flex flex-col origin-top" style={{ transform: 'scale(0.9)' }}>
-                        <div id="print-view-arsip" className="bg-white shadow-lg mx-auto flex flex-col" style={{ 
+                        <div id="print-view-arsip" className="bg-white shadow-lg mx-auto flex flex-col h-full justify-between" style={{ 
                              width: '21cm', 
                              minHeight: '29.7cm', 
                              paddingTop: `${marginConfig.top}cm`,
@@ -829,7 +829,7 @@ const ArsipViewerModal: React.FC<{
                              paddingBottom: `${marginConfig.bottom}cm`,
                              paddingLeft: `${marginConfig.left}cm`
                         }}>
-                            <div className="flex-grow">
+                            <div>
                                 <PrintHeader settings={settings} title={template?.kategori === 'Resmi' ? '' : ''} />
                                 {template?.kategori !== 'Resmi' && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{arsip.perihal}</h3>}
                                 

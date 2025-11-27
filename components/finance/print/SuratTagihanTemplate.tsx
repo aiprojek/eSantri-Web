@@ -7,8 +7,8 @@ import { PrintHeader } from '../../common/PrintHeader';
 export const SuratTagihanTemplate: React.FC<{ santri: Santri; tunggakan: Tagihan[]; total: number; settings: PondokSettings; }> = ({ santri, tunggakan, total, settings }) => {
     const bendahara = "Bendahara Pondok";
     return (
-        <div className="font-serif text-black p-4 flex flex-col min-h-full" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
-            <div className="flex-grow">
+        <div className="font-serif text-black p-4 flex flex-col h-full justify-between" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
+            <div>
                 <PrintHeader settings={settings} title="PEMBERITAHUAN TUNGGAKAN" />
                 <div className="my-6">
                     <div className="flow-root">

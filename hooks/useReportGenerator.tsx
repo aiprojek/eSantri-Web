@@ -69,52 +69,54 @@ const ReportFooter: React.FC = () => (
 
 const PanduanPenilaianTemplate: React.FC = () => {
     return (
-        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <h3 className="font-bold text-xl mb-6 text-center">Panduan Penilaian</h3>
-            
-            <div className="columns-2 gap-8 text-justify flex-grow">
-                <div className="break-inside-avoid mb-4">
-                    <h4 className="font-bold text-base mb-2">A. Deskripsi Kolom Penilaian</h4>
-                    <ul className="list-disc list-outside pl-5 space-y-1 text-sm">
-                        <li><strong className="font-semibold">TP (Tujuan Pembelajaran):</strong> Nilai sumatif lingkup materi untuk mengukur ketercapaian satu atau lebih tujuan pembelajaran.</li>
-                        <li><strong className="font-semibold">Rerata TP:</strong> Nilai rata-rata dari seluruh nilai TP.</li>
-                        <li><strong className="font-semibold">SM (Sumatif Lingkup Materi):</strong> Nilai sumatif untuk lingkup materi yang lebih luas, mencakup beberapa TP.</li>
-                        <li><strong className="font-semibold">Rerata SM:</strong> Nilai rata-rata dari seluruh nilai SM.</li>
-                        <li><strong className="font-semibold">STS (Sumatif Tengah Semester):</strong> Penilaian sumatif yang dilaksanakan pada pertengahan semester.</li>
-                        <li><strong className="font-semibold">SAS (Sumatif Akhir Semester):</strong> Penilaian sumatif yang dilaksanakan pada akhir semester untuk mengukur capaian santri.</li>
-                        <li><strong className="font-semibold">NA (Nilai Akhir):</strong> Nilai rapor yang diolah dari semua bentuk penilaian sumatif.</li>
-                    </ul>
-                </div>
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <h3 className="font-bold text-xl mb-6 text-center">Panduan Penilaian</h3>
+                
+                <div className="columns-2 gap-8 text-justify">
+                    <div className="break-inside-avoid mb-4">
+                        <h4 className="font-bold text-base mb-2">A. Deskripsi Kolom Penilaian</h4>
+                        <ul className="list-disc list-outside pl-5 space-y-1 text-sm">
+                            <li><strong className="font-semibold">TP (Tujuan Pembelajaran):</strong> Nilai sumatif lingkup materi untuk mengukur ketercapaian satu atau lebih tujuan pembelajaran.</li>
+                            <li><strong className="font-semibold">Rerata TP:</strong> Nilai rata-rata dari seluruh nilai TP.</li>
+                            <li><strong className="font-semibold">SM (Sumatif Lingkup Materi):</strong> Nilai sumatif untuk lingkup materi yang lebih luas, mencakup beberapa TP.</li>
+                            <li><strong className="font-semibold">Rerata SM:</strong> Nilai rata-rata dari seluruh nilai SM.</li>
+                            <li><strong className="font-semibold">STS (Sumatif Tengah Semester):</strong> Penilaian sumatif yang dilaksanakan pada pertengahan semester.</li>
+                            <li><strong className="font-semibold">SAS (Sumatif Akhir Semester):</strong> Penilaian sumatif yang dilaksanakan pada akhir semester untuk mengukur capaian santri.</li>
+                            <li><strong className="font-semibold">NA (Nilai Akhir):</strong> Nilai rapor yang diolah dari semua bentuk penilaian sumatif.</li>
+                        </ul>
+                    </div>
 
-                <div className="break-inside-avoid mb-4">
-                    <h4 className="font-bold text-base mb-2">B. Contoh Pengolahan Nilai Akhir Rapor</h4>
-                    <p className="text-sm mb-2">
-                        Pengolahan nilai rapor dapat dilakukan dengan berbagai cara, salah satunya adalah menggunakan rata-rata dari semua nilai sumatif yang diperoleh santri. Lembaga pendidikan memiliki keleluasaan untuk menentukan pembobotan jika diperlukan.
-                    </p>
-                    <div className="pl-5 space-y-3 text-sm">
-                        <div>
-                            <p className="font-semibold">Contoh 1: Rata-rata Sederhana</p>
-                            <p className="font-mono text-xs bg-gray-100 p-2 rounded mt-1 inline-block">NA = Rata-rata( Rerata TP, Rerata SM, STS, SAS )</p>
-                        </div>
-                        <div>
-                            <p className="font-semibold">Contoh 2: Dengan Pembobotan (Kebijakan Lembaga Pendidikan)</p>
-                            <p className="mt-1">Misal: Bobot TP=2, Bobot SM=1, Bobot STS=1, Bobot SAS=2</p>
-                            <p className="font-mono text-xs bg-gray-100 p-2 rounded mt-1 inline-block">NA = ( (2 * Rerata TP) + Rerata SM + STS + (2 * SAS) ) / 6</p>
+                    <div className="break-inside-avoid mb-4">
+                        <h4 className="font-bold text-base mb-2">B. Contoh Pengolahan Nilai Akhir Rapor</h4>
+                        <p className="text-sm mb-2">
+                            Pengolahan nilai rapor dapat dilakukan dengan berbagai cara, salah satunya adalah menggunakan rata-rata dari semua nilai sumatif yang diperoleh santri. Lembaga pendidikan memiliki keleluasaan untuk menentukan pembobotan jika diperlukan.
+                        </p>
+                        <div className="pl-5 space-y-3 text-sm">
+                            <div>
+                                <p className="font-semibold">Contoh 1: Rata-rata Sederhana</p>
+                                <p className="font-mono text-xs bg-gray-100 p-2 rounded mt-1 inline-block">NA = Rata-rata( Rerata TP, Rerata SM, STS, SAS )</p>
+                            </div>
+                            <div>
+                                <p className="font-semibold">Contoh 2: Dengan Pembobotan (Kebijakan Lembaga Pendidikan)</p>
+                                <p className="mt-1">Misal: Bobot TP=2, Bobot SM=1, Bobot STS=1, Bobot SAS=2</p>
+                                <p className="font-mono text-xs bg-gray-100 p-2 rounded mt-1 inline-block">NA = ( (2 * Rerata TP) + Rerata SM + STS + (2 * SAS) ) / 6</p>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div className="break-inside-avoid">
-                    <h4 className="font-bold text-base mb-2">C. Skala Penilaian (Contoh)</h4>
-                     <table className="text-sm">
-                        <tbody>
-                            <tr><td className="font-semibold pr-4">A (Sangat Baik)</td><td className="pr-2">:</td><td>90 - 100</td></tr>
-                            <tr><td className="font-semibold pr-4">B (Baik)</td><td className="pr-2">:</td><td>80 - 89</td></tr>
-                            <tr><td className="font-semibold pr-4">C (Cukup)</td><td className="pr-2">:</td><td>70 - 79</td></tr>
-                            <tr><td className="font-semibold pr-4">D (Kurang)</td><td className="pr-2">:</td><td>&lt; 70</td></tr>
-                        </tbody>
-                    </table>
-                    <p className="text-xs italic mt-2">(Rentang nilai dapat disesuaikan dengan kebijakan lembaga pendidikan).</p>
+                    <div className="break-inside-avoid">
+                        <h4 className="font-bold text-base mb-2">C. Skala Penilaian (Contoh)</h4>
+                        <table className="text-sm">
+                            <tbody>
+                                <tr><td className="font-semibold pr-4">A (Sangat Baik)</td><td className="pr-2">:</td><td>90 - 100</td></tr>
+                                <tr><td className="font-semibold pr-4">B (Baik)</td><td className="pr-2">:</td><td>80 - 89</td></tr>
+                                <tr><td className="font-semibold pr-4">C (Cukup)</td><td className="pr-2">:</td><td>70 - 79</td></tr>
+                                <tr><td className="font-semibold pr-4">D (Kurang)</td><td className="pr-2">:</td><td>&lt; 70</td></tr>
+                            </tbody>
+                        </table>
+                        <p className="text-xs italic mt-2">(Rentang nilai dapat disesuaikan dengan kebijakan lembaga pendidikan).</p>
+                    </div>
                 </div>
             </div>
             <ReportFooter />
@@ -146,8 +148,8 @@ const LaporanArusKasTemplate: React.FC<{
     const totalPengeluaran = filteredKas.filter(t => t.jenis === 'Pengeluaran').reduce((sum, t) => sum + t.jumlah, 0);
 
     return (
-        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <div className="flex-grow">
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="Laporan Arus Kas Umum" />
                 <p className="text-center text-sm mb-4">Periode: {formatDate(kasStartDate)} s.d. {formatDate(kasEndDate)}</p>
 
@@ -246,8 +248,8 @@ const RekeningKoranSantriTemplate: React.FC<{
     const saldoAkhir = saldoBerjalan;
     
     return (
-        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <div className="flex-grow">
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="Rekening Koran Santri" />
                 
                 <table className="w-full text-sm my-4">
@@ -318,8 +320,8 @@ const LaporanAsramaTemplate: React.FC<{
     }, [santriList]);
 
     return (
-        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <div className="flex-grow">
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="Laporan Rekapitulasi Keasramaan" />
                 <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
 
@@ -432,8 +434,8 @@ const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings: Pondo
     }, [santriList, settings]);
 
     return (
-        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <div className="flex-grow">
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="Laporan Ringkas Dashboard Utama" />
                 <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
 
@@ -522,8 +524,8 @@ const FinanceSummaryTemplate: React.FC<{ santriList: Santri[], tagihanList: Tagi
     }, [santriList, tagihanList, pembayaranList]);
 
     return (
-         <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <div className="flex-grow">
+         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="Laporan Ringkas Keuangan" />
                 <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
                 
@@ -574,8 +576,8 @@ const LaporanMutasiTemplate: React.FC<{
   endDate: string;
 }> = ({ mutasiEvents, settings, startDate, endDate }) => {
     return (
-        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <div className="flex-grow">
+        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="LAPORAN MUTASI SANTRI" />
                 <div className="text-sm font-semibold mb-4">
                 <span>Periode: {formatDate(startDate)} s.d. {formatDate(endDate)}</span>
@@ -653,8 +655,8 @@ const BiodataTemplate: React.FC<{ santri: Santri; settings: PondokSettings; useH
     }
 
     return (
-      <div className="font-serif text-black flex flex-col min-h-full" style={{ fontSize: '12pt', lineHeight: '1.5' }}>
-        <div className="flex-grow">
+      <div className="font-serif text-black flex flex-col h-full justify-between" style={{ fontSize: '12pt', lineHeight: '1.5' }}>
+        <div>
             <PrintHeader settings={settings} title={`BIODATA SANTRI ${jenjang?.nama?.toUpperCase()} ${kelas?.nama?.toUpperCase()} ROMBEL ${rombel?.nama?.toUpperCase()}`} />
             <table className="w-full">
                 <BiodataSection title="A. KETERANGAN PRIBADI SANTRI">
@@ -714,8 +716,8 @@ const LembarKedatanganTemplate: React.FC<{
     const waliKelasNama = waliKelas?.nama || '...................................';
 
     return (
-        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <div className="flex-grow">
+        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="LEMBAR KEDATANGAN SANTRI" />
                 <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
                 <div>
@@ -786,8 +788,8 @@ const LembarRaporTemplate: React.FC<{
     const rombelNama = rombel?.nama || 'N/A';
 
     return (
-        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '10pt' }}>
-            <div className="flex-grow">
+        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="LEMBAR PENGAMBILAN DAN PENGUMPULAN RAPOR" />
                 <div className="text-sm font-semibold mb-4 grid grid-cols-2">
                 <span>Jenjang: {jenjangNama}</span>
@@ -903,8 +905,8 @@ const LembarPembinaanTemplate: React.FC<{ santri: Santri; settings: PondokSettin
     const rombel = settings.rombel.find(r => r.id === santri.rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     return (
-        <div className="font-sans text-black flex flex-col min-h-full" style={{ fontSize: '9pt' }}>
-            <div className="flex-grow">
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="LEMBAR PEMBINAAN" />
                 <div className="grid grid-cols-2 gap-x-4 mb-4" style={{ fontSize: '8pt' }}>
                     <div>
@@ -983,8 +985,8 @@ const FormulirIzinTemplate: React.FC<{ santri: Santri; settings: PondokSettings;
     const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(options.izinSignatoryId));
     
     return (
-        <div className="font-serif text-black flex flex-col min-h-full" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
-            <div className="flex-grow">
+        <div className="font-serif text-black flex flex-col h-full justify-between" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
+            <div>
                 <PrintHeader settings={settings} title="FORMULIR IZIN SANTRI" />
                 <p className="text-center text-sm mb-4">No: ....../IZN/PP-AH/...../{new Date().getFullYear()}</p>
                 <p className="mb-4">Yang bertanda tangan di bawah ini, Bagian Keamanan {settings.namaPonpes} memberikan izin kepada santri:</p>
@@ -1115,8 +1117,8 @@ const DaftarRombelTemplate: React.FC<{ santriList: Santri[]; settings: PondokSet
     };
 
     return (
-        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '9pt' }}>
-            <div className="flex-grow">
+        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt' }}>
+            <div>
                 <PrintHeader settings={settings} title={`DAFTAR SANTRI ${jenjang?.nama?.toUpperCase() || ''}`} />
                 <div className="text-sm font-semibold mb-4 grid grid-cols-2">
                 <span>Kelas / Rombel: {kelas?.nama || 'N/A'} / {rombel?.nama || 'N/A'}</span>
@@ -1174,8 +1176,8 @@ const LembarNilaiTable: React.FC<{
     const totalCols = 7 + nilaiTpCount + nilaiSmCount + (showNilaiTengahSemester ? 1 : 0);
 
     return (
-        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '9pt' }}>
-            <div className="flex-grow">
+        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="LEMBAR PENILAIAN" />
                 <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
                     <div>
@@ -1254,8 +1256,8 @@ const LembarAbsensiTemplate: React.FC<{ santriList: Santri[]; settings: PondokSe
     const waliKelasNama = waliKelas?.nama || '...........................';
 
     return (
-        <div className="text-black flex flex-col min-h-full" style={{ fontSize: '9pt' }}>
-            <div className="flex-grow">
+        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt' }}>
+            <div>
                 <PrintHeader settings={settings} title="LEMBAR ABSENSI" />
                 <div className="text-sm font-semibold mb-2 grid grid-cols-2 gap-x-4">
                     <div>
@@ -1494,7 +1496,7 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 // Footer for labels/cards is added to the container in the returned structure below
                 return [{ 
                     content: (
-                        <div className="flex flex-col min-h-full">
+                        <div className="flex flex-col h-full justify-between">
                             <div className="flex-grow">
                                 <LabelSantriTemplate santriList={santriData} settings={settings} options={options} />
                             </div>
@@ -1509,7 +1511,7 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 const pages: React.ReactNode[] = [];
                 for (let i = 0; i < cards.length; i += cardsPerPage) {
                     pages.push(
-                        <div key={i} className="flex flex-col min-h-full">
+                        <div key={i} className="flex flex-col h-full justify-between">
                             <div className="grid grid-cols-2 gap-2 p-2 flex-grow">{cards.slice(i, i + cardsPerPage)}</div>
                             <ReportFooter />
                         </div>

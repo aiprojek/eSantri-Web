@@ -27,13 +27,14 @@ Kerja sama ini memungkinkan eSantri Web dikembangkan dengan cepat dan efisien, m
 
 -   **Dashboard Interaktif**: Ringkasan visual data santri, keuangan, dan keasramaan secara cepat dan mudah dipahami.
 -   **Database Santri Terpusat**: Kelola data lengkap santri, orang tua/wali, riwayat status, prestasi, hingga pelanggaran di satu tempat.
--   **Manajemen Keuangan Terintegrasi**: Fitur lengkap mulai dari pembuatan tagihan massal, pencatatan pembayaran, manajemen uang saku, hingga notifikasi tunggakan.
+-   **Surat Menyurat Otomatis**: Buat surat resmi, izin, atau pemberitahuan dengan sistem template dan *mail merge*. Surat otomatis terisi data santri, siap cetak, dan tersimpan dalam arsip digital.
+-   **Laporan Profesional**: Cetak lebih dari 15 jenis dokumen (Biodata, Kuitansi, Rapor, dll) dengan tata letak rapi, kop surat otomatis, dan footer identitas aplikasi. Mendukung ekspor PDF dan HTML.
+-   **Manajemen Keuangan Terintegrasi**: Fitur lengkap mulai dari pembuatan tagihan massal, pencatatan pembayaran, manajemen uang saku, hingga notifikasi tunggakan via WhatsApp.
 -   **Manajemen Keasramaan**: Atur data gedung, kamar, musyrif/ah, dan penempatan santri di asrama dengan mudah.
 -   **Buku Kas Umum**: Catat semua pemasukan dan pengeluaran umum pondok untuk laporan arus kas yang transparan.
 -   **Generator NIS Otomatis**: Buat Nomor Induk Santri secara otomatis dengan tiga metode yang dapat diatur sesuai kebutuhan.
--   **Laporan & Cetak Lengkap**: Cetak lebih dari 15 jenis dokumen penting seperti biodata, kartu santri, lembar nilai, absensi, rapor, formulir izin, hingga laporan keuangan.
 -   **Ekspor & Impor Massal**: Tambah dan perbarui data santri dalam jumlah besar dengan mudah melalui file CSV.
--   **Pengaturan Fleksibel**: Kustomisasi struktur pendidikan, komponen biaya, format NIS, hingga redaksi surat tagihan dan pesan WhatsApp.
+-   **Pengaturan Fleksibel**: Kustomisasi struktur pendidikan, komponen biaya, format NIS, hingga redaksi surat tagihan.
 -   **Fungsi Offline Penuh**: Aplikasi tetap berjalan lancar dan semua data aman meski tanpa koneksi internet.
 
 ## 🚀 Panduan Cepat
@@ -53,9 +54,11 @@ Kerja sama ini memungkinkan eSantri Web dikembangkan dengan cepat dan efisien, m
     -   Kirim **Surat Tagihan** atau notifikasi **WhatsApp** untuk tunggakan.
     -   Kelola **Uang Saku** (saldo titipan).
 
-4.  **Cetak Laporan**: Kunjungi halaman `Laporan & Cetak` untuk mencetak berbagai dokumen administratif yang dibutuhkan.
+4.  **Surat Menyurat**: Gunakan menu `Surat Menyurat` untuk membuat template surat dan mencetak surat massal atau perorangan dengan mudah.
 
-5.  **Backup Data (Sangat Penting!)**: Secara berkala, buka halaman `Pengaturan` -> `Cadangkan & Pulihkan Data`, lalu klik **Unduh Cadangan Data**. Simpan file backup di tempat yang aman.
+5.  **Cetak Laporan**: Kunjungi halaman `Laporan & Cetak` untuk mencetak berbagai dokumen administratif yang dibutuhkan.
+
+6.  **Backup Data (Sangat Penting!)**: Secara berkala, buka halaman `Pengaturan` -> `Cadangkan & Pulihkan Data`, lalu klik **Unduh Cadangan Data**. Simpan file backup di tempat yang aman.
 
 ## 🛡️ Keamanan Data & Backup
 
@@ -75,6 +78,8 @@ Kode sumber lengkap dapat diakses di repositori GitHub kami.
 -   **Styling**: Tailwind CSS, Bootstrap Icons
 -   **Local Storage**: Dexie.js (IndexedDB Wrapper)
 -   **Form Management**: React Hook Form
+-   **Editor**: React Quill (Rich Text Editor)
+-   **Export**: jsPDF, html2canvas
 
 ## 📦 Panduan Build Lokal (Local Build Guide)
 
@@ -88,7 +93,7 @@ Pastikan Anda memiliki [Node.js](https://nodejs.org/) (yang sudah termasuk `npm`
 Buka terminal atau command prompt di direktori root proyek (folder tempat file `index.html` berada) dan jalankan perintah berikut untuk mengunduh semua pustaka yang diperlukan ke dalam folder `node_modules`:
 
 ```bash
-npm install react react-dom dexie react-hook-form
+npm install react react-dom dexie react-hook-form react-quill jspdf html2canvas
 ```
 
 **Langkah 2: Perbarui `index.html`**
@@ -104,7 +109,10 @@ Buka file `index.html` dan modifikasi bagian `<script type="importmap">`. Ganti 
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "dexie": "https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs",
-    "react-hook-form": "https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs"
+    "react-hook-form": "https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
+    "react-quill": "https://aistudiocdn.com/react-quill@^2.0.0"
   }
 }
 </script>
@@ -119,7 +127,10 @@ Buka file `index.html` dan modifikasi bagian `<script type="importmap">`. Ganti 
     "react": "/node_modules/react/index.js",
     "react/": "/node_modules/react/",
     "dexie": "/node_modules/dexie/dist/dexie.mjs",
-    "react-hook-form": "/node_modules/react-hook-form/dist/index.esm.mjs"
+    "react-hook-form": "/node_modules/react-hook-form/dist/index.esm.mjs",
+    "jspdf": "/node_modules/jspdf/dist/jspdf.es.min.js",
+    "html2canvas": "/node_modules/html2canvas/dist/html2canvas.esm.js",
+    "react-quill": "/node_modules/react-quill/lib/index.js"
   }
 }
 </script>

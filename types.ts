@@ -27,7 +27,7 @@ export interface SuratTemplate {
   nama: string;
   judul: string;
   konten: string; // HTML content from ReactQuill
-  kategori: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Lainnya';
+  kategori: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Panggilan' | 'Pencabutan' | 'Lainnya';
   marginConfig?: MarginConfig; 
   signatories?: SuratSignatory[]; 
   mengetahuiConfig?: MengetahuiConfig; 
@@ -44,6 +44,7 @@ export interface ArsipSurat {
   isiSurat: string; // HTML content
   tanggalBuat: string; 
   templateId?: number;
+  kategori?: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Panggilan' | 'Pencabutan' | 'Lainnya';
   tempatCetak?: string;
   tanggalCetak?: string;
   tempatTanggalConfig?: TempatTanggalConfig;

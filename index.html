@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
   <head>
@@ -32,33 +33,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     
-    <!-- Quill CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet" />
-    <!-- Quill JS -->
-    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
-
     <style>
-      /* Custom Scrollbar for Quill Editor */
-      .ql-editor {
-        min-height: 200px;
-        max-height: 400px;
-        overflow-y: auto;
-        background-color: white;
-      }
-      
-      /* Ensure Quill toolbar looks good */
-      .ql-toolbar.ql-snow {
-        border-top-left-radius: 0.5rem;
-        border-top-right-radius: 0.5rem;
-        border-color: #d1d5db;
-        background-color: #f9fafb;
-      }
-      .ql-container.ql-snow {
-        border-bottom-left-radius: 0.5rem;
-        border-bottom-right-radius: 0.5rem;
-        border-color: #d1d5db;
-      }
-      
       @media print {
         @page {
           margin: 0;
@@ -81,10 +56,6 @@
           overflow: visible;
         }
 
-        /* Hide all top level elements except the one we want to print if necessary, 
-           but typically hiding .no-print handles the UI. 
-           For modals, we need to ensure the modal container doesn't clip content. */
-        
         /* Reset Modal Styling for Print */
         .fixed.inset-0 {
             position: absolute !important;
@@ -173,15 +144,15 @@
 <script type="importmap">
 {
   "imports": {
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
-    "html2canvas": "https://aistudiocdn.com/html2canvas@^1.4.1",
-    "jspdf": "https://aistudiocdn.com/jspdf@^3.0.4",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "dexie": "https://aistudiocdn.com/dexie@^4.2.1",
+    "jspdf": "https://aistudiocdn.com/jspdf@^3.0.4",
     "react-hook-form": "https://aistudiocdn.com/react-hook-form@^7.67.0",
-    "dexie": "https://aistudiocdn.com/dexie@^4.2.1"
+    "html2canvas": "https://aistudiocdn.com/html2canvas@^1.4.1",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
   }
 }
 </script>

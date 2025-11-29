@@ -10,7 +10,7 @@ export const KuitansiTemplate: React.FC<{ data: { pembayaran: Pembayaran; santri
     const bendahara = "Bendahara Pondok"; // This could be a setting in the future
 
     return (
-        <div className="font-serif text-black p-4 flex flex-col h-full justify-between" style={{ fontSize: '12pt', lineHeight: '1.6' }}>
+        <div className="font-sans text-black p-4 flex flex-col h-full justify-between" style={{ fontSize: '12pt', lineHeight: '1.6' }}>
             <div>
                 <PrintHeader settings={settings} title="KUITANSI PEMBAYARAN" />
                 <div className="my-4">

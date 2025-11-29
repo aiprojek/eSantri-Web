@@ -4,7 +4,7 @@ import { useAppContext } from '../AppContext';
 import { SuratTemplate, ArsipSurat, Santri, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig, StampConfig } from '../types';
 import { generatePdf } from '../utils/pdfGenerator';
 import { PrintHeader } from './common/PrintHeader';
-import { QuillEditor } from './common/QuillEditor';
+import { SimpleEditor } from './common/SimpleEditor';
 
 // --- Helper Functions ---
 const fileToBase64 = (file: File): Promise<string> =>
@@ -245,25 +245,67 @@ const SuratGenerator: React.FC = () => {
         if (!template) return '';
         let content = customContent;
         
+        // General Placeholders
         content = content.replace(/{TANGGAL}/g, formattedTanggalSurat);
         content = content.replace(/{NOMOR_SURAT}/g, nomorSurat || '...../...../.....');
 
         if (santri) {
+            // Data Pribadi
             content = content.replace(/{NAMA_SANTRI}/g, santri.namaLengkap);
             content = content.replace(/{NIS}/g, santri.nis);
-            content = content.replace(/{TTL}/g, `${santri.tempatLahir}, ${new Date(santri.tanggalLahir).toLocaleDateString('id-ID')}`);
-            content = content.replace(/{ALAMAT}/g, santri.alamat.detail);
-            content = content.replace(/{WALI}/g, santri.namaWali || santri.namaAyah);
+            content = content.replace(/{TEMPAT_LAHIR}/g, santri.tempatLahir || '');
+            content = content.replace(/{TANGGAL_LAHIR}/g, santri.tanggalLahir ? new Date(santri.tanggalLahir).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+            
+            // Legacy TTL support
+            content = content.replace(/{TTL}/g, `${santri.tempatLahir}, ${new Date(santri.tanggalLahir).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`);
+
+            // Data Pendidikan
+            content = content.replace(/{JENJANG}/g, settings.jenjang.find(j => j.id === santri.jenjangId)?.nama || '');
             content = content.replace(/{KELAS}/g, settings.kelas.find(k => k.id === santri.kelasId)?.nama || '');
             content = content.replace(/{ROMBEL}/g, settings.rombel.find(r => r.id === santri.rombelId)?.nama || '');
+
+            // Data Orang Tua & Wali
+            content = content.replace(/{NAMA_AYAH}/g, santri.namaAyah || '');
+            content = content.replace(/{NAMA_IBU}/g, santri.namaIbu || '');
+            content = content.replace(/{NAMA_WALI}/g, santri.namaWali || '');
+            
+            // Smart Fallback for Wali/Ortu
+            const waliSmart = santri.namaWali || santri.namaAyah || santri.namaIbu || '';
+            content = content.replace(/{ORTU_WALI}/g, waliSmart);
+            // Legacy Wali support
+            content = content.replace(/{WALI}/g, waliSmart);
+
+            // Alamat
+            content = content.replace(/{ALAMAT}/g, santri.alamat.detail);
+            
+            // Full Address Construction
+            const fullAddress = [
+                santri.alamat.detail,
+                santri.alamat.desaKelurahan ? `Desa ${santri.alamat.desaKelurahan}` : '',
+                santri.alamat.kecamatan ? `Kec. ${santri.alamat.kecamatan}` : '',
+                santri.alamat.kabupatenKota ? `${santri.alamat.kabupatenKota}` : '',
+                santri.alamat.provinsi
+            ].filter(Boolean).join(', ');
+            content = content.replace(/{ALAMAT_LENGKAP}/g, fullAddress);
+
         } else {
-            content = content.replace(/{NAMA_SANTRI}/g, '...........................');
+            // Empty Placeholders for General Letters
+            const dots = '...................................';
+            content = content.replace(/{NAMA_SANTRI}/g, dots);
             content = content.replace(/{NIS}/g, '................');
-            content = content.replace(/{TTL}/g, '...........................');
-            content = content.replace(/{ALAMAT}/g, '...........................');
-            content = content.replace(/{WALI}/g, '...........................');
-            content = content.replace(/{KELAS}/g, '................');
-            content = content.replace(/{ROMBEL}/g, '................');
+            content = content.replace(/{TEMPAT_LAHIR}/g, dots);
+            content = content.replace(/{TANGGAL_LAHIR}/g, dots);
+            content = content.replace(/{TTL}/g, dots);
+            content = content.replace(/{JENJANG}/g, dots);
+            content = content.replace(/{KELAS}/g, dots);
+            content = content.replace(/{ROMBEL}/g, dots);
+            content = content.replace(/{NAMA_AYAH}/g, dots);
+            content = content.replace(/{NAMA_IBU}/g, dots);
+            content = content.replace(/{NAMA_WALI}/g, dots);
+            content = content.replace(/{ORTU_WALI}/g, dots);
+            content = content.replace(/{WALI}/g, dots);
+            content = content.replace(/{ALAMAT}/g, dots);
+            content = content.replace(/{ALAMAT_LENGKAP}/g, dots);
         }
         return content;
     };
@@ -374,6 +416,7 @@ const SuratGenerator: React.FC = () => {
                     mengetahuiSnapshot: mengetahui,
                     marginConfig: marginConfig,
                     stampSnapshot: stampConfig,
+                    showJudulSnapshot: template.showJudul // Save toggle title setting
                 });
                 savedCount++;
             }
@@ -388,6 +431,20 @@ const SuratGenerator: React.FC = () => {
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-180px)]">
+            <style>{`
+                /* SimpleEditor Output Styles for Consistency */
+                .printable-content-wrapper ul { list-style-type: disc; padding-left: 1.5em; }
+                .printable-content-wrapper ol { list-style-type: decimal; padding-left: 1.5em; }
+                .printable-content-wrapper b, .printable-content-wrapper strong { font-weight: bold; }
+                .printable-content-wrapper i, .printable-content-wrapper em { font-style: italic; }
+                .printable-content-wrapper u { text-decoration: underline; }
+                
+                /* Ensure editor content inherits font size */
+                .ql-editor, .ql-editor p, .ql-editor span, .ql-editor li {
+                    font-size: 12pt !important;
+                    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important; 
+                }
+            `}</style>
             <div className="bg-white p-6 rounded-lg shadow-md space-y-4 overflow-y-auto no-print">
                 <h3 className="font-bold text-gray-700">1. Konfigurasi Surat</h3>
                 <div>
@@ -475,7 +532,7 @@ const SuratGenerator: React.FC = () => {
 
                         <div>
                             <label className="block mb-1 text-sm font-medium text-gray-700">Edit Isi (Jika Perlu)</label>
-                            <QuillEditor value={customContent} onChange={setCustomContent} />
+                            <SimpleEditor value={customContent} onChange={setCustomContent} />
                         </div>
 
                         <div className="border-t pt-4 mt-2">
@@ -625,7 +682,9 @@ const SuratGenerator: React.FC = () => {
                                                 paddingRight: `${marginConfig.right}cm`,
                                                 paddingBottom: `${marginConfig.bottom}cm`,
                                                 paddingLeft: `${marginConfig.left}cm`,
-                                                marginBottom: index < targetSantris.length - 1 ? '2rem' : '0' 
+                                                marginBottom: index < targetSantris.length - 1 ? '2rem' : '0',
+                                                fontSize: '12pt', // Ensure base font size is 12pt
+                                                lineHeight: '1.5'
                                             }}
                                         >
                                             <div>
@@ -640,9 +699,13 @@ const SuratGenerator: React.FC = () => {
                                                     </div>
                                                 )}
 
-                                                {!template.kategori.includes('Resmi') && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{template.judul}</h3>}
+                                                {template.judul && (template.showJudul !== false) && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{template.judul}</h3>}
                                                 
-                                                <div className="font-serif text-black text-justify leading-relaxed flex-grow ql-editor p-0" dangerouslySetInnerHTML={{ __html: getProcessedContent(currentSantri) }} />
+                                                <div 
+                                                    className="font-sans text-black text-justify leading-relaxed flex-grow p-0" 
+                                                    style={{ fontSize: '12pt' }} 
+                                                    dangerouslySetInnerHTML={{ __html: getProcessedContent(currentSantri) }} 
+                                                />
                                                 
                                                 <div className="mt-8">
                                                     {/* Bottom Date */}
@@ -764,6 +827,7 @@ const ArsipViewerModal: React.FC<{
     const tempatTanggalConfig = arsip.tempatTanggalConfig || (template?.tempatTanggalConfig ? template.tempatTanggalConfig : { show: true, position: 'bottom-right', align: 'right' });
     const marginConfig = arsip.marginConfig || (template?.marginConfig ? template.marginConfig : { top: 2, right: 2, bottom: 2, left: 2 });
     const stampConfig = arsip.stampSnapshot || template?.stampConfig;
+    const showJudul = arsip.showJudulSnapshot ?? template?.showJudul ?? true;
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -823,6 +887,7 @@ const ArsipViewerModal: React.FC<{
                  ${allCss}
                  body { background-color: #e5e7eb; padding: 2rem; display: flex; justify-content: center; }
                  #print-view-arsip { background: white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin: 0 auto; }
+                 .printable-content-wrapper * { font-size: 12pt !important; }
                  /* Hide shadow when printing */
                  @media print {
                     body { background-color: white; padding: 0; }
@@ -869,13 +934,19 @@ const ArsipViewerModal: React.FC<{
                              paddingTop: `${marginConfig.top}cm`,
                              paddingRight: `${marginConfig.right}cm`,
                              paddingBottom: `${marginConfig.bottom}cm`,
-                             paddingLeft: `${marginConfig.left}cm`
+                             paddingLeft: `${marginConfig.left}cm`,
+                             fontSize: '12pt', // Ensure base font size is 12pt
+                             lineHeight: '1.5'
                         }}>
                             <div>
                                 <PrintHeader settings={settings} title={template?.kategori === 'Resmi' ? '' : ''} />
-                                {template?.kategori !== 'Resmi' && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{arsip.perihal}</h3>}
+                                {arsip.perihal && showJudul && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{arsip.perihal}</h3>}
                                 
-                                <div className="font-serif text-black text-justify leading-relaxed flex-grow ql-editor p-0" dangerouslySetInnerHTML={{ __html: arsip.isiSurat }} />
+                                <div 
+                                    className="font-sans text-black text-justify leading-relaxed flex-grow p-0" 
+                                    style={{ fontSize: '12pt' }} 
+                                    dangerouslySetInnerHTML={{ __html: arsip.isiSurat }} 
+                                />
                                 
                                 <div className="mt-8">
                                     {/* Top Date */}
@@ -1060,6 +1131,7 @@ const TemplateModal: React.FC<{
     const [template, setTemplate] = useState<Partial<SuratTemplate>>({ 
         nama: '', 
         judul: '', 
+        showJudul: true,
         konten: '', 
         kategori: 'Resmi',
         signatories: [{ id: '1', jabatan: 'Ketua Panitia', nama: '...................................' }],
@@ -1074,6 +1146,7 @@ const TemplateModal: React.FC<{
             const defaultConfig = {
                 nama: '', 
                 judul: '', 
+                showJudul: true,
                 konten: '', 
                 kategori: 'Resmi' as 'Resmi',
                 signatories: [{ id: '1', jabatan: 'Ketua Panitia', nama: '...................................' }],
@@ -1085,13 +1158,14 @@ const TemplateModal: React.FC<{
             setTemplate({
                 ...defaultConfig,
                 ...initialData,
+                showJudul: initialData?.showJudul ?? defaultConfig.showJudul,
                 mengetahuiConfig: initialData?.mengetahuiConfig ?? defaultConfig.mengetahuiConfig,
                 tempatTanggalConfig: initialData?.tempatTanggalConfig ?? defaultConfig.tempatTanggalConfig,
                 marginConfig: initialData?.marginConfig ?? defaultConfig.marginConfig,
                 stampConfig: initialData?.stampConfig ?? defaultConfig.stampConfig,
             });
         }
-    }, [isOpen, initialData]);
+    }, [isOpen]); // DEPENDENCY CHANGED: removed initialData to prevent reset on type
 
     if (!isOpen) return null;
 
@@ -1134,11 +1208,17 @@ const TemplateModal: React.FC<{
     const placeholders = [
         { label: 'Nama Santri', val: '{NAMA_SANTRI}' },
         { label: 'NIS', val: '{NIS}' },
-        { label: 'Tempat Tgl Lahir', val: '{TTL}' },
-        { label: 'Alamat', val: '{ALAMAT}' },
-        { label: 'Nama Wali', val: '{WALI}' },
+        { label: 'Tempat Lahir', val: '{TEMPAT_LAHIR}' },
+        { label: 'Tgl Lahir', val: '{TANGGAL_LAHIR}' },
+        { label: 'Jenjang', val: '{JENJANG}' },
         { label: 'Kelas', val: '{KELAS}' },
         { label: 'Rombel', val: '{ROMBEL}' },
+        { label: 'Nama Ayah', val: '{NAMA_AYAH}' },
+        { label: 'Nama Ibu', val: '{NAMA_IBU}' },
+        { label: 'Nama Wali', val: '{NAMA_WALI}' },
+        { label: 'Ortu/Wali (Otomatis)', val: '{ORTU_WALI}' },
+        { label: 'Alamat Singkat', val: '{ALAMAT}' },
+        { label: 'Alamat Lengkap', val: '{ALAMAT_LENGKAP}' },
         { label: 'Tanggal Surat', val: '{TANGGAL}' },
         { label: 'Nomor Surat', val: '{NOMOR_SURAT}' },
     ];
@@ -1167,16 +1247,25 @@ const TemplateModal: React.FC<{
                         <div><label className="block text-sm font-medium">Nama Template</label><input type="text" value={template.nama} onChange={e => setTemplate({...template, nama: e.target.value})} className="w-full border rounded p-2" placeholder="cth: Surat Izin Pulang"/></div>
                         <div><label className="block text-sm font-medium">Kategori</label><select value={template.kategori} onChange={e => setTemplate({...template, kategori: e.target.value as any})} className="w-full border rounded p-2"><option value="Resmi">Resmi (Ada Kop)</option><option value="Pemberitahuan">Pemberitahuan</option><option value="Izin">Izin</option><option value="Lainnya">Lainnya</option></select></div>
                     </div>
-                    <div><label className="block text-sm font-medium">Judul / Perihal Surat</label><input type="text" value={template.judul} onChange={e => setTemplate({...template, judul: e.target.value})} className="w-full border rounded p-2" placeholder="cth: PERMOHONAN IZIN"/></div>
+                    <div className="grid grid-cols-2 gap-4 items-center">
+                        <div className="flex-grow">
+                            <label className="block text-sm font-medium">Judul / Perihal Surat</label>
+                            <input type="text" value={template.judul} onChange={e => setTemplate({...template, judul: e.target.value})} className="w-full border rounded p-2" placeholder="cth: PERMOHONAN IZIN"/>
+                        </div>
+                        <div className="flex items-center mt-5">
+                            <input type="checkbox" id="show-title" checked={template.showJudul !== false} onChange={e => setTemplate({...template, showJudul: e.target.checked})} className="w-4 h-4 text-teal-600 rounded" />
+                            <label htmlFor="show-title" className="ml-2 text-sm text-gray-700">Tampilkan Judul di Surat</label>
+                        </div>
+                    </div>
                     
                     <div>
-                        <label className="block text-sm font-medium mb-2">Isi Surat</label>
+                        <label className="block text-sm font-medium mb-2">Isi Surat (Klik tombol untuk menyisipkan data santri)</label>
                         <div className="flex gap-2 mb-2 flex-wrap">
                             {placeholders.map(p => (
-                                <button key={p.val} onClick={() => insertPlaceholder(p.val)} className="text-xs bg-gray-100 border border-gray-300 px-2 py-1 rounded hover:bg-gray-200" title="Klik untuk menyisipkan">+ {p.label}</button>
+                                <button key={p.val} onClick={() => insertPlaceholder(p.val)} className="text-xs bg-gray-100 border border-gray-300 px-2 py-1 rounded hover:bg-gray-200 transition-colors" title="Klik untuk menyisipkan">{p.label}</button>
                             ))}
                         </div>
-                        <QuillEditor value={template.konten || ''} onChange={(val) => setTemplate({...template, konten: val})} />
+                        <SimpleEditor value={template.konten || ''} onChange={(val) => setTemplate({...template, konten: val})} />
                     </div>
 
                     <div className="border-t pt-4 mt-2">
@@ -1251,7 +1340,7 @@ const TemplateModal: React.FC<{
                                 <div key={sig.id} className="bg-white p-3 rounded border shadow-sm relative">
                                     <button onClick={() => handleRemoveSignatory(index)} className="absolute top-1 right-1 text-red-400 hover:text-red-600"><i className="bi bi-x-circle-fill"></i></button>
                                     <div className="space-y-2">
-                                        <input type="text" value={sig.jabatan} onChange={e => handleSignatoryChange(index, 'jabatan', e.target.value)} className="w-full text-xs font-bold border-b border-transparent focus:border-gray-300 focus:outline-none" placeholder="Jabatan" />
+                                        <input type="text" value={sig.jabatan} onChange={e => handleSignatoryChange(index, 'jabatan', e.target.value)} className="w-full bg-transparent border-b border-gray-300 text-xs font-medium mb-1 focus:outline-none" placeholder="Jabatan" />
                                         <input type="text" value={sig.nama} onChange={e => handleSignatoryChange(index, 'nama', e.target.value)} className="w-full text-xs text-gray-600 border-b border-transparent focus:border-gray-300 focus:outline-none" placeholder="Nama Default" />
                                         <div className="flex items-center gap-2 pt-2 border-t mt-2">
                                             <img src={sig.signatureUrl || "https://placehold.co/100x50/f3f4f6/9ca3af?text=TTD"} alt="Preview TTD" className="w-16 h-8 object-contain bg-gray-100 rounded"/>

@@ -655,7 +655,7 @@ const BiodataTemplate: React.FC<{ santri: Santri; settings: PondokSettings; useH
     }
 
     return (
-      <div className="font-serif text-black flex flex-col h-full justify-between" style={{ fontSize: '12pt', lineHeight: '1.5' }}>
+      <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '12pt', lineHeight: '1.5' }}>
         <div>
             <PrintHeader settings={settings} title={`BIODATA SANTRI ${jenjang?.nama?.toUpperCase()} ${kelas?.nama?.toUpperCase()} ROMBEL ${rombel?.nama?.toUpperCase()}`} />
             <table className="w-full">
@@ -985,7 +985,7 @@ const FormulirIzinTemplate: React.FC<{ santri: Santri; settings: PondokSettings;
     const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(options.izinSignatoryId));
     
     return (
-        <div className="font-serif text-black flex flex-col h-full justify-between" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
             <div>
                 <PrintHeader settings={settings} title="FORMULIR IZIN SANTRI" />
                 <p className="text-center text-sm mb-4">No: ....../IZN/PP-AH/...../{new Date().getFullYear()}</p>

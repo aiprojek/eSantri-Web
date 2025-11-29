@@ -21,7 +21,7 @@ export const UangSakuPrintTemplate: React.FC<UangSakuPrintTemplateProps> = ({ da
     const saldoAwal = saldoAkhir - totalDeposit + totalPenarikan;
 
     return (
-        <div className="font-serif text-black p-4 flex flex-col h-full justify-between" style={{ fontSize: '11pt', lineHeight: '1.5' }}>
+        <div className="font-sans text-black p-4 flex flex-col h-full justify-between" style={{ fontSize: '11pt', lineHeight: '1.5' }}>
             <div>
                 <PrintHeader settings={settings} title="LAPORAN RIWAYAT UANG SAKU" />
                 

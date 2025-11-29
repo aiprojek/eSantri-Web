@@ -14,8 +14,7 @@
     "dexie": "^4.0.7",
     "react-hook-form": "^7.51.5",
     "jspdf": "^2.5.1",
-    "html2canvas": "^1.4.1",
-    "react-quill": "^2.0.0"
+    "html2canvas": "^1.4.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
@@ -24,11 +23,5 @@
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.5.3",
     "vite": "^5.4.1"
-  },
-  "overrides": {
-    "react-quill": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1"
-    }
   }
 }

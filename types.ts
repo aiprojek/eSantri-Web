@@ -1,3 +1,4 @@
+
 // Add new interface for Margin Configuration
 export interface MarginConfig {
     top: number;
@@ -26,6 +27,7 @@ export interface SuratTemplate {
   id: number;
   nama: string;
   judul: string;
+  showJudul?: boolean; // New option to toggle title visibility
   konten: string; // HTML content from ReactQuill
   kategori: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Lainnya';
   marginConfig?: MarginConfig; 
@@ -51,6 +53,7 @@ export interface ArsipSurat {
   mengetahuiSnapshot?: MengetahuiConfig;
   marginConfig?: MarginConfig;
   stampSnapshot?: StampConfig;
+  showJudulSnapshot?: boolean; // Snapshot for title visibility
 }
 
 // ... (Rest of existing types remains unchanged - Prestasi, Pelanggaran, Santri, etc.)

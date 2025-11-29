@@ -1,4 +1,5 @@
-const CACHE_NAME = 'esantri-web-v1.6';
+
+const CACHE_NAME = 'esantri-web-v1.7';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -8,9 +9,9 @@ const urlsToCache = [
   '/icons/icon-512x512.png',
   'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
-  'https://aistudiocdn.com/react-dom@^19.2.0/',
-  'https://aistudiocdn.com/react@^19.2.0',
-  'https://aistudiocdn.com/react@^19.2.0/',
+  'https://aistudiocdn.com/react-dom@^18.3.1/',
+  'https://aistudiocdn.com/react@^18.3.1',
+  'https://aistudiocdn.com/react@^18.3.1/',
   'https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs',
   'https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs'
 ];

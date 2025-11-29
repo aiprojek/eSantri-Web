@@ -1,7 +1,8 @@
+
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { PondokSettings, Santri, Tagihan, Pembayaran, Alamat, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat } from './types';
 import { db, PondokSettingsWithId } from './db';
-import { initialSantri, initialSettings, initialSuratTemplates } from './data/mock';
+import { initialSantri, initialSettings } from './data/mock';
 import { generateTagihanBulanan, generateTagihanAwal } from './services/financeService';
 
 // --- Types ---
@@ -112,17 +113,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             try {
                 const settingsCount = await db.settings.count();
                 const santriCount = await db.santri.count();
-                const templatesCount = await db.suratTemplates.count();
                 const sampleDataDeleted = localStorage.getItem('eSantriSampleDataDeleted') === 'true';
 
-                if ((settingsCount === 0 || santriCount === 0 || templatesCount === 0) && !sampleDataDeleted) {
-                    await db.transaction('rw', db.settings, db.santri, db.suratTemplates, async () => {
+                if ((settingsCount === 0 || santriCount === 0) && !sampleDataDeleted) {
+                    await db.transaction('rw', db.settings, db.santri, async () => {
                         await db.settings.clear();
                         await db.santri.clear();
-                        await db.suratTemplates.clear();
                         await db.settings.put(initialSettings);
                         await db.santri.bulkPut(initialSantri);
-                        await db.suratTemplates.bulkPut(initialSuratTemplates);
                     });
                 }
 

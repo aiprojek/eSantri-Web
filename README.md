@@ -90,12 +90,10 @@ Pastikan Anda memiliki [Node.js](https://nodejs.org/) (yang sudah termasuk `npm`
 
 **Langkah 1: Unduh Dependensi**
 
-Buka terminal atau command prompt di direktori root proyek (folder tempat file `index.html` berada) dan jalankan perintah berikut untuk mengunduh semua pustaka yang diperlukan ke dalam folder `node_modules`.
-
-**Catatan:** Kami menggunakan React 18.3.1 karena `react-quill` belum sepenuhnya mendukung React 19.
+Buka terminal atau command prompt di direktori root proyek (folder tempat file `index.html` berada) dan jalankan perintah berikut untuk mengunduh semua pustaka yang diperlukan ke dalam folder `node_modules`:
 
 ```bash
-npm install react@18.3.1 react-dom@18.3.1 dexie react-hook-form react-quill jspdf html2canvas
+npm install react react-dom dexie react-hook-form react-quill jspdf html2canvas
 ```
 
 **Langkah 2: Perbarui `index.html`**
@@ -107,9 +105,9 @@ Buka file `index.html` dan modifikasi bagian `<script type="importmap">`. Ganti 
 <script type="importmap">
 {
   "imports": {
-    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
-    "react": "https://esm.sh/react@18.3.1",
-    "react/": "https://esm.sh/react@18.3.1/",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "dexie": "https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs",
     "react-hook-form": "https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs",
     "jspdf": "https://esm.sh/jspdf@2.5.1",

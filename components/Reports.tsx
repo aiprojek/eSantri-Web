@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Santri, PondokSettings, ReportType, GedungAsrama, TransaksiKas } from '../types';
 import { useAppContext } from '../AppContext';
@@ -323,13 +322,14 @@ const Reports: React.FC = () => {
         setPreviewContent(
             <>
                 {allPreviews.map((p, i) => (
-                  <div key={i} className={`bg-white shadow-lg mx-auto page-break-after flex flex-col justify-between ${p.orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} ${i < allPreviews.length - 1 ? 'mb-8' : 'mb-2'}`}
+                  <div key={i} className={`bg-white shadow-lg mx-auto page-break-after flex flex-col ${p.orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} ${i < allPreviews.length - 1 ? 'mb-8' : 'mb-2'}`}
                       style={{ 
                           width: `${p.orientation === 'landscape' ? currentPaper.height : currentPaper.width}cm`,
-                          minHeight: `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`,
-                          padding: `${currentMarginCm}cm`,
+                          minHeight: `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`
                       }}>
+                      <div style={{ padding: `${currentMarginCm}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
                         {p.content}
+                      </div>
                   </div>
                 ))}
             </>

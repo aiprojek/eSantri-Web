@@ -1,4 +1,4 @@
-import { PondokSettings, Santri, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar, SuratTemplate } from '../types';
+import { PondokSettings, Santri, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar } from '../types';
 
 export const initialJenjang = [
   { id: 1, nama: 'Salafiyah Wustho', kode: 'SW', mudirId: 2 },
@@ -104,41 +104,6 @@ export const initialKamar: Kamar[] = [
   { id: 4, nama: 'Kamar A2', gedungId: 2, kapasitas: 6 },
 ];
 
-export const initialSuratTemplates: SuratTemplate[] = [
-  {
-    id: 1,
-    nama: "Surat Izin Pulang",
-    judul: "SURAT IZIN PULANG",
-    konten: "<p>Dengan ini memberikan izin kepada santri berikut:</p><p>Nama: {NAMA_SANTRI}</p><p>NIS: {NIS}</p><p>Untuk pulang ke rumah orang tua/wali dikarenakan.....................</p><p>Demikian surat ini dibuat untuk dapat dipergunakan sebagaimana mestinya.</p>",
-    kategori: 'Izin',
-    signatories: [{ id: '1', jabatan: 'Bagian Keamanan', nama: '...................................' }],
-  },
-  {
-    id: 2,
-    nama: "Surat Panggilan Orang Tua",
-    judul: "SURAT PANGGILAN ORANG TUA/WALI",
-    konten: "<p>Assalamu'alaikum Wr. Wb.</p><p>Dengan hormat, kami mengharap kehadiran Bapak/Ibu Orang Tua/Wali dari ananda:</p><p>Nama: {NAMA_SANTRI}</p><p>Kelas: {KELAS}</p><p>Untuk hadir di pondok pesantren pada ..........</p><p>Wassalamu'alaikum Wr. Wb.</p>",
-    kategori: 'Panggilan',
-    signatories: [{ id: '1', jabatan: 'Mudir Marhalah', nama: '...................................' }],
-    mengetahuiConfig: { show: true, jabatan: 'Mudir Aam', align: 'center' },
-  },
-  {
-    id: 3,
-    nama: "Pemberitahuan Kegiatan",
-    judul: "PEMBERITAHUAN",
-    konten: "<p>Diberitahukan kepada seluruh santri bahwa akan diadakan kegiatan ............ pada tanggal ............</p><p>Harap semua santri dapat berpartisipasi.</p>",
-    kategori: 'Pemberitahuan',
-    signatories: [{ id: '1', jabatan: 'Ketua Panitia', nama: '...................................' }],
-  },
-  {
-    id: 4,
-    nama: "Surat Pencabutan Status",
-    judul: "SURAT PENCABUTAN STATUS KESANTRIAN",
-    konten: "<p>Berdasarkan hasil rapat dewan asatidz, dengan ini kami memutuskan untuk mencabut status kesantrian dari:</p><p>Nama: {NAMA_SANTRI}</p><p>NIS: {NIS}</p><p>Terhitung sejak tanggal surat ini diterbitkan.</p>",
-    kategori: 'Pencabutan',
-    signatories: [{ id: '1', jabatan: 'Mudir Aam', nama: '...................................' }],
-  }
-];
 
 export const initialSettings: PondokSettings = {
   namaYayasan: 'Yayasan Cahaya Ilmu',

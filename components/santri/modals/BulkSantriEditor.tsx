@@ -189,6 +189,14 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
     
     const pendidikanOptions = ['SD/Sederajat', 'SLTP/Sederajat', 'SLTA/Sederajat', 'Diploma', 'Sarjana (S1)', 'Pascasarjana (S2/S3)', 'Tidak Sekolah'];
     const statusHidupOptions = ['Hidup', 'Meninggal', 'Cerai'];
+    const penghasilanOptions = [
+        'Kurang dari Rp. 1.000.000',
+        'Rp. 1.000.000 - Rp. 2.000.000',
+        'Lebih dari Rp. 2.000.000',
+        'Lebih dari Rp. 5.000.000',
+        'Tidak Berpenghasilan',
+        'Lainnya',
+    ];
 
     if (!isOpen) return null;
 

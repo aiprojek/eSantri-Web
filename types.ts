@@ -13,21 +13,29 @@ export interface TempatTanggalConfig {
   align: 'left' | 'center' | 'right';
 }
 
-// Update SuratTemplate to include marginConfig and tempatTanggalConfig
+// Add new interface for Stamp Configuration
+export interface StampConfig {
+  show: boolean;
+  stampUrl?: string; // Base64 data URL for stamp image
+  placementSignatoryId?: string; // ID of the signatory where the stamp is placed
+}
+
+
+// Update SuratTemplate to include new configurations
 export interface SuratTemplate {
   id: number;
   nama: string;
   judul: string;
   konten: string; // HTML content from ReactQuill
   kategori: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Lainnya';
-  // Remove old margin string type, use marginConfig object
   marginConfig?: MarginConfig; 
   signatories?: SuratSignatory[]; 
   mengetahuiConfig?: MengetahuiConfig; 
   tempatTanggalConfig?: TempatTanggalConfig;
+  stampConfig?: StampConfig;
 }
 
-// Update ArsipSurat to include marginConfig snapshot
+// Update ArsipSurat to include new configuration snapshots
 export interface ArsipSurat {
   id: number;
   nomorSurat: string;
@@ -41,7 +49,8 @@ export interface ArsipSurat {
   tempatTanggalConfig?: TempatTanggalConfig;
   signatoriesSnapshot?: SuratSignatory[];
   mengetahuiSnapshot?: MengetahuiConfig;
-  marginConfig?: MarginConfig; // Snapshot of margins used
+  marginConfig?: MarginConfig;
+  stampSnapshot?: StampConfig;
 }
 
 // ... (Rest of existing types remains unchanged - Prestasi, Pelanggaran, Santri, etc.)
@@ -313,6 +322,7 @@ export interface SuratSignatory {
   jabatan: string; // e.g. "Kepala Sekolah", "Sekretaris"
   nama?: string; // Default name if any, otherwise empty
   nip?: string; // Optional ID number
+  signatureUrl?: string; // Base64 data URL for signature image
 }
 
 export interface MengetahuiConfig {

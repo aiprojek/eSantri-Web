@@ -1,10 +1,20 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../AppContext';
-import { SuratTemplate, ArsipSurat, Santri, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig } from '../types';
+import { SuratTemplate, ArsipSurat, Santri, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig, StampConfig } from '../types';
 import { generatePdf } from '../utils/pdfGenerator';
 import { PrintHeader } from './common/PrintHeader';
 import { QuillEditor } from './common/QuillEditor';
+
+// --- Helper Functions ---
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = error => reject(error);
+  });
+
 
 // --- Components for Tabs ---
 
@@ -80,6 +90,12 @@ const SuratGenerator: React.FC = () => {
         show: false,
         jabatan: 'Mengetahui,',
         align: 'center'
+    });
+
+    const [stampConfig, setStampConfig] = useState<StampConfig>({
+        show: false,
+        stampUrl: undefined,
+        placementSignatoryId: undefined,
     });
 
     // Zoom & Preview State
@@ -182,6 +198,12 @@ const SuratGenerator: React.FC = () => {
                  setMarginConfig(template.marginConfig);
              } else {
                  setMarginConfig({ top: 2, right: 2, bottom: 2, left: 2 });
+             }
+             // Initialize Stamp
+             if (template.stampConfig) {
+                 setStampConfig(template.stampConfig);
+             } else {
+                 setStampConfig({ show: false, stampUrl: undefined, placementSignatoryId: undefined });
              }
         }
     }, [template]);
@@ -350,7 +372,8 @@ const SuratGenerator: React.FC = () => {
                     tempatTanggalConfig: tempatTanggalConfig,
                     signatoriesSnapshot: activeSignatories,
                     mengetahuiSnapshot: mengetahui,
-                    marginConfig: marginConfig
+                    marginConfig: marginConfig,
+                    stampSnapshot: stampConfig,
                 });
                 savedCount++;
             }
@@ -588,82 +611,100 @@ const SuratGenerator: React.FC = () => {
                                 className="printable-content-wrapper origin-top transition-transform duration-200 ease-out"
                                 style={{ transform: `scale(${smartZoomScale * manualZoom})` }}
                             >
-                                {targetSantris.map((currentSantri, index) => (
-                                    <div 
-                                        key={currentSantri ? currentSantri.id : `common-${index}`} 
-                                        className={`bg-white shadow-xl mx-auto flex flex-col h-full justify-between ${index < targetSantris.length - 1 ? 'page-break-after' : ''}`} 
-                                        style={{ 
-                                            width: '21cm', 
-                                            minHeight: '29.7cm', 
-                                            paddingTop: `${marginConfig.top}cm`,
-                                            paddingRight: `${marginConfig.right}cm`,
-                                            paddingBottom: `${marginConfig.bottom}cm`,
-                                            paddingLeft: `${marginConfig.left}cm`,
-                                            marginBottom: index < targetSantris.length - 1 ? '2rem' : '0' 
-                                        }}
-                                    >
-                                        <div>
-                                            <PrintHeader settings={settings} title={template.kategori === 'Resmi' ? '' : ''} />
-                                            
-                                            {/* Top Date */}
-                                            {tempatTanggalConfig.show && tempatTanggalConfig.position === 'top-right' && (
-                                                <div className={`mb-4 flex w-full ${tempatTanggalConfig.align === 'center' ? 'justify-center' : tempatTanggalConfig.align === 'right' ? 'justify-end' : 'justify-start'}`}>
-                                                    <div className="text-center" style={{ minWidth: '200px' }}>
-                                                        <p>{tempatSurat}, {formattedTanggalSurat}</p>
-                                                    </div>
-                                                </div>
-                                            )}
+                                {targetSantris.map((currentSantri, index) => {
+                                    const shouldRenderStamp = stampConfig.show && stampConfig.stampUrl;
 
-                                            {!template.kategori.includes('Resmi') && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{template.judul}</h3>}
-                                            
-                                            <div className="font-serif text-black text-justify leading-relaxed flex-grow ql-editor p-0" dangerouslySetInnerHTML={{ __html: getProcessedContent(currentSantri) }} />
-                                            
-                                            <div className="mt-8">
-                                                {/* Bottom Date */}
-                                                {tempatTanggalConfig.show && tempatTanggalConfig.position !== 'top-right' && (
-                                                     <div className={`mb-4 flex w-full ${
-                                                         tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 
-                                                         tempatTanggalConfig.position === 'bottom-right' ? 'justify-end' : 'justify-end'
-                                                     }`}>
-                                                        <div className={`text-${tempatTanggalConfig.align}`} style={{ minWidth: '200px' }}>
+                                    return (
+                                        <div 
+                                            key={currentSantri ? currentSantri.id : `common-${index}`} 
+                                            className={`bg-white shadow-xl mx-auto flex flex-col h-full justify-between ${index < targetSantris.length - 1 ? 'page-break-after' : ''}`} 
+                                            style={{ 
+                                                width: '21cm', 
+                                                minHeight: '29.7cm', 
+                                                paddingTop: `${marginConfig.top}cm`,
+                                                paddingRight: `${marginConfig.right}cm`,
+                                                paddingBottom: `${marginConfig.bottom}cm`,
+                                                paddingLeft: `${marginConfig.left}cm`,
+                                                marginBottom: index < targetSantris.length - 1 ? '2rem' : '0' 
+                                            }}
+                                        >
+                                            <div>
+                                                <PrintHeader settings={settings} title={template.kategori === 'Resmi' ? '' : ''} />
+                                                
+                                                {/* Top Date */}
+                                                {tempatTanggalConfig.show && tempatTanggalConfig.position === 'top-right' && (
+                                                    <div className={`mb-4 flex w-full ${tempatTanggalConfig.align === 'center' ? 'justify-center' : tempatTanggalConfig.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                                                        <div className="text-center" style={{ minWidth: '200px' }}>
                                                             <p>{tempatSurat}, {formattedTanggalSurat}</p>
                                                         </div>
                                                     </div>
                                                 )}
 
-                                                {/* Mengetahui */}
-                                                {mengetahui.show && (
-                                                    <div className={`mb-8 flex w-full ${mengetahui.align === 'center' ? 'justify-center' : mengetahui.align === 'right' ? 'justify-end' : 'justify-start'}`}>
-                                                        <div className="text-center" style={{ minWidth: '200px' }}>
-                                                            <p className="font-medium">{mengetahui.jabatan}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Main Signature Grid */}
-                                                <div className={`grid gap-8 ${
-                                                    activeSignatories.length === 1 ? 'grid-cols-1 justify-items-end' : 
-                                                    activeSignatories.length === 2 ? 'grid-cols-2' : 
-                                                    'grid-cols-3'
-                                                }`}>
-                                                    {activeSignatories.map((sig, i) => (
-                                                        <div key={i} className="text-center flex flex-col items-center" style={{ minWidth: '200px' }}>
-                                                            <div className="flex flex-col items-center w-full">
-                                                                <p className="font-medium">{sig.jabatan}</p>
-                                                                <div className="h-20"></div>
-                                                                <p className="font-bold underline">{sig.nama}</p>
-                                                                {sig.nip && <p>NIP. {sig.nip}</p>}
+                                                {!template.kategori.includes('Resmi') && <h3 className="text-center font-bold text-lg underline mb-4 uppercase">{template.judul}</h3>}
+                                                
+                                                <div className="font-serif text-black text-justify leading-relaxed flex-grow ql-editor p-0" dangerouslySetInnerHTML={{ __html: getProcessedContent(currentSantri) }} />
+                                                
+                                                <div className="mt-8">
+                                                    {/* Bottom Date */}
+                                                    {tempatTanggalConfig.show && tempatTanggalConfig.position !== 'top-right' && (
+                                                         <div className={`mb-4 flex w-full ${
+                                                             tempatTanggalConfig.position === 'bottom-left' ? 'justify-start' : 
+                                                             tempatTanggalConfig.position === 'bottom-right' ? 'justify-end' : 'justify-end'
+                                                         }`}>
+                                                            <div className={`text-${tempatTanggalConfig.align}`} style={{ minWidth: '200px' }}>
+                                                                <p>{tempatSurat}, {formattedTanggalSurat}</p>
                                                             </div>
                                                         </div>
-                                                    ))}
+                                                    )}
+
+                                                    {/* Mengetahui */}
+                                                    {mengetahui.show && (
+                                                        <div className={`mb-8 flex w-full ${mengetahui.align === 'center' ? 'justify-center' : mengetahui.align === 'right' ? 'justify-end' : 'justify-start'}`}>
+                                                            <div className="text-center" style={{ minWidth: '200px' }}>
+                                                                <p className="font-medium">{mengetahui.jabatan}</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Main Signature Grid */}
+                                                    <div className={`grid gap-8 ${
+                                                        activeSignatories.length === 1 ? 'grid-cols-1 justify-items-end' : 
+                                                        activeSignatories.length === 2 ? 'grid-cols-2' : 
+                                                        'grid-cols-3'
+                                                    }`}>
+                                                        {activeSignatories.map((sig, i) => {
+                                                            const renderStampHere = shouldRenderStamp && (activeSignatories.length === 1 || stampConfig.placementSignatoryId === sig.id);
+                                                            return (
+                                                                <div key={i} className="text-center flex flex-col items-center relative" style={{ minWidth: '200px' }}>
+                                                                    <div className="flex flex-col items-center w-full">
+                                                                        <p className="font-medium">{sig.jabatan}</p>
+                                                                        <div className="h-20 w-full flex justify-center items-center my-2">
+                                                                            {sig.signatureUrl && (
+                                                                                <img src={sig.signatureUrl} alt={`TTD ${sig.nama}`} className="max-h-full max-w-full object-contain mix-blend-darken" />
+                                                                            )}
+                                                                        </div>
+                                                                        {renderStampHere && (
+                                                                            <img
+                                                                                src={stampConfig.stampUrl}
+                                                                                alt="Stempel"
+                                                                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 object-contain opacity-75 mix-blend-multiply transform -rotate-12 pointer-events-none"
+                                                                            />
+                                                                        )}
+                                                                        <p className="font-bold underline">{sig.nama}</p>
+                                                                        {sig.nip && <p>NIP. {sig.nip}</p>}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
                                             </div>
+                                            <div className="mt-auto pt-2 border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full">
+                                                dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
+                                            </div>
                                         </div>
-                                        <div className="mt-auto pt-2 border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full">
-                                            dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                                 {targetSantris.length === 0 && (
                                     <div className="bg-white shadow-xl mx-auto flex flex-col justify-center items-center" style={{ width: '21cm', minHeight: '29.7cm', padding: '2cm' }}>
                                         <p className="text-gray-400">Belum ada santri yang dipilih untuk mode Mail Merge.</p>
@@ -722,6 +763,7 @@ const ArsipViewerModal: React.FC<{
     const mengetahuiRender = arsip.mengetahuiSnapshot || (template?.mengetahuiConfig ? template.mengetahuiConfig : { show: false, jabatan: '', align: 'center' });
     const tempatTanggalConfig = arsip.tempatTanggalConfig || (template?.tempatTanggalConfig ? template.tempatTanggalConfig : { show: true, position: 'bottom-right', align: 'right' });
     const marginConfig = arsip.marginConfig || (template?.marginConfig ? template.marginConfig : { top: 2, right: 2, bottom: 2, left: 2 });
+    const stampConfig = arsip.stampSnapshot || template?.stampConfig;
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -872,16 +914,30 @@ const ArsipViewerModal: React.FC<{
                                         signatoriesToRender.length === 2 ? 'grid-cols-2' : 
                                         'grid-cols-3'
                                     }`}>
-                                        {signatoriesToRender.map((sig, i) => (
-                                            <div key={i} className="text-center flex flex-col items-center" style={{ minWidth: '200px' }}>
+                                        {signatoriesToRender.map((sig, i) => {
+                                             const shouldRenderStamp = stampConfig?.show && stampConfig.stampUrl;
+                                             const renderStampHere = shouldRenderStamp && (signatoriesToRender.length === 1 || stampConfig.placementSignatoryId === sig.id);
+                                             return(
+                                            <div key={i} className="text-center flex flex-col items-center relative" style={{ minWidth: '200px' }}>
                                                 <div className="flex flex-col items-center w-full">
                                                     <p className="font-medium">{sig.jabatan}</p>
-                                                    <div className="h-20"></div>
+                                                    <div className="h-20 w-full flex justify-center items-center my-2">
+                                                        {sig.signatureUrl && (
+                                                            <img src={sig.signatureUrl} alt={`TTD ${sig.nama}`} className="max-h-full max-w-full object-contain mix-blend-darken" />
+                                                        )}
+                                                    </div>
+                                                    {renderStampHere && (
+                                                        <img
+                                                            src={stampConfig.stampUrl}
+                                                            alt="Stempel"
+                                                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 object-contain opacity-75 mix-blend-multiply transform -rotate-12 pointer-events-none"
+                                                        />
+                                                    )}
                                                     <p className="font-bold underline">{sig.nama}</p>
                                                     {sig.nip && <p>NIP. {sig.nip}</p>}
                                                 </div>
                                             </div>
-                                        ))}
+                                        )})}
                                     </div>
                                 </div>
                             </div>
@@ -998,6 +1054,9 @@ const TemplateModal: React.FC<{
     onSave: (t: SuratTemplate) => void; 
     initialData?: SuratTemplate; 
 }> = ({ isOpen, onClose, onSave, initialData }) => {
+    const [uploadingSignatureFor, setUploadingSignatureFor] = useState<string | null>(null);
+    const signatureInputRef = useRef<HTMLInputElement>(null);
+    const stampInputRef = useRef<HTMLInputElement>(null);
     const [template, setTemplate] = useState<Partial<SuratTemplate>>({ 
         nama: '', 
         judul: '', 
@@ -1006,7 +1065,8 @@ const TemplateModal: React.FC<{
         signatories: [{ id: '1', jabatan: 'Ketua Panitia', nama: '...................................' }],
         mengetahuiConfig: { show: false, jabatan: 'Mengetahui,', align: 'center' },
         tempatTanggalConfig: { show: true, position: 'bottom-right', align: 'right' },
-        marginConfig: { top: 2, right: 2, bottom: 2, left: 2 }
+        marginConfig: { top: 2, right: 2, bottom: 2, left: 2 },
+        stampConfig: { show: false }
     });
     
     useEffect(() => {
@@ -1019,19 +1079,34 @@ const TemplateModal: React.FC<{
                 signatories: [{ id: '1', jabatan: 'Ketua Panitia', nama: '...................................' }],
                 mengetahuiConfig: { show: false, jabatan: 'Mengetahui,', align: 'center' as 'center' },
                 tempatTanggalConfig: { show: true, position: 'bottom-right' as 'bottom-right', align: 'right' as 'right' },
-                marginConfig: { top: 2, right: 2, bottom: 2, left: 2 }
+                marginConfig: { top: 2, right: 2, bottom: 2, left: 2 },
+                stampConfig: { show: false }
             };
             setTemplate({
                 ...defaultConfig,
                 ...initialData,
                 mengetahuiConfig: initialData?.mengetahuiConfig ?? defaultConfig.mengetahuiConfig,
                 tempatTanggalConfig: initialData?.tempatTanggalConfig ?? defaultConfig.tempatTanggalConfig,
-                marginConfig: initialData?.marginConfig ?? defaultConfig.marginConfig
+                marginConfig: initialData?.marginConfig ?? defaultConfig.marginConfig,
+                stampConfig: initialData?.stampConfig ?? defaultConfig.stampConfig,
             });
         }
     }, [isOpen, initialData]);
 
     if (!isOpen) return null;
+
+    const handleImageUpload = async (file: File, target: 'stamp' | { type: 'signature', id: string }) => {
+        if (!file.type.startsWith('image/')) return;
+        const base64 = await fileToBase64(file);
+        if (target === 'stamp') {
+            setTemplate(prev => ({ ...prev, stampConfig: { ...prev.stampConfig!, stampUrl: base64 } }));
+        } else if (target.type === 'signature') {
+            setTemplate(prev => ({
+                ...prev,
+                signatories: prev.signatories?.map(s => s.id === target.id ? { ...s, signatureUrl: base64 } : s)
+            }));
+        }
+    };
 
     const insertPlaceholder = (placeholder: string) => {
         setTemplate(prev => ({ ...prev, konten: (prev.konten || '') + placeholder }));
@@ -1076,6 +1151,18 @@ const TemplateModal: React.FC<{
                     <button onClick={onClose}><i className="bi bi-x-lg"></i></button>
                 </div>
                 <div className="p-5 flex-grow overflow-auto space-y-6">
+                    <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        ref={signatureInputRef} 
+                        onChange={e => {
+                            if (e.target.files && e.target.files[0] && uploadingSignatureFor) {
+                                handleImageUpload(e.target.files[0], { type: 'signature', id: uploadingSignatureFor });
+                            }
+                            if(e.target) e.target.value = ''; // Reset input to allow re-uploading the same file
+                        }}
+                    />
                     <div className="grid grid-cols-2 gap-4">
                         <div><label className="block text-sm font-medium">Nama Template</label><input type="text" value={template.nama} onChange={e => setTemplate({...template, nama: e.target.value})} className="w-full border rounded p-2" placeholder="cth: Surat Izin Pulang"/></div>
                         <div><label className="block text-sm font-medium">Kategori</label><select value={template.kategori} onChange={e => setTemplate({...template, kategori: e.target.value as any})} className="w-full border rounded p-2"><option value="Resmi">Resmi (Ada Kop)</option><option value="Pemberitahuan">Pemberitahuan</option><option value="Izin">Izin</option><option value="Lainnya">Lainnya</option></select></div>
@@ -1154,23 +1241,69 @@ const TemplateModal: React.FC<{
                         )}
                     </div>
 
-                    <div className="bg-gray-50 p-4 rounded-lg border">
+                    <div className="border-t pt-4 mt-2">
                         <div className="flex justify-between items-center mb-2">
                             <h4 className="font-semibold text-gray-700 text-sm">Pengaturan Penanda Tangan Default</h4>
                             <button onClick={handleAddSignatory} className="text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700">+ Tambah</button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {template.signatories?.map((sig, index) => (
-                                <div key={index} className="bg-white p-3 rounded border shadow-sm relative">
+                                <div key={sig.id} className="bg-white p-3 rounded border shadow-sm relative">
                                     <button onClick={() => handleRemoveSignatory(index)} className="absolute top-1 right-1 text-red-400 hover:text-red-600"><i className="bi bi-x-circle-fill"></i></button>
                                     <div className="space-y-2">
-                                        <input type="text" value={sig.jabatan} onChange={e => handleSignatoryChange(index, 'jabatan', e.target.value)} className="w-full text-xs font-bold border-b border-transparent focus:border-gray-300 focus:outline-none" placeholder="Jabatan (cth: Ketua Panitia)" />
-                                        <input type="text" value={sig.nama} onChange={e => handleSignatoryChange(index, 'nama', e.target.value)} className="w-full text-xs text-gray-600 border-b border-transparent focus:border-gray-300 focus:outline-none" placeholder="Nama Default (Opsional)" />
+                                        <input type="text" value={sig.jabatan} onChange={e => handleSignatoryChange(index, 'jabatan', e.target.value)} className="w-full text-xs font-bold border-b border-transparent focus:border-gray-300 focus:outline-none" placeholder="Jabatan" />
+                                        <input type="text" value={sig.nama} onChange={e => handleSignatoryChange(index, 'nama', e.target.value)} className="w-full text-xs text-gray-600 border-b border-transparent focus:border-gray-300 focus:outline-none" placeholder="Nama Default" />
+                                        <div className="flex items-center gap-2 pt-2 border-t mt-2">
+                                            <img src={sig.signatureUrl || "https://placehold.co/100x50/f3f4f6/9ca3af?text=TTD"} alt="Preview TTD" className="w-16 h-8 object-contain bg-gray-100 rounded"/>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => {
+                                                    setUploadingSignatureFor(sig.id);
+                                                    signatureInputRef.current?.click();
+                                                }} 
+                                                className="text-xs text-blue-600"
+                                            >
+                                                Upload
+                                            </button>
+                                            {sig.signatureUrl && <button type="button" onClick={() => handleSignatoryChange(index, 'signatureUrl', '')} className="text-xs text-red-600">Hapus</button>}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
                             {(!template.signatories || template.signatories.length === 0) && <p className="text-xs text-gray-400 col-span-full text-center py-2">Belum ada penanda tangan.</p>}
                         </div>
+                    </div>
+                     <div className="border-t pt-4 mt-2">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-sm font-bold text-gray-700">Pengaturan Stempel</h4>
+                            <div className="flex items-center">
+                                <input type="checkbox" id="show-stamp" checked={template.stampConfig?.show} onChange={e => setTemplate({...template, stampConfig: {...template.stampConfig!, show: e.target.checked}})} className="w-4 h-4 text-teal-600 rounded"/>
+                                <label htmlFor="show-stamp" className="ml-2 text-xs">Aktifkan Stempel</label>
+                            </div>
+                        </div>
+                        {template.stampConfig?.show && (
+                            <div className="bg-gray-50 p-3 rounded border space-y-4">
+                                <div className="flex items-center gap-4">
+                                    <img src={template.stampConfig.stampUrl || "https://placehold.co/100x100/f3f4f6/9ca3af?text=Stempel"} alt="Preview Stempel" className="w-20 h-20 object-contain bg-gray-100 rounded-full border"/>
+                                    <div>
+                                        <input type="file" accept="image/*" className="hidden" ref={stampInputRef} onChange={e => e.target.files && handleImageUpload(e.target.files[0], 'stamp')}/>
+                                        <button type="button" onClick={() => stampInputRef.current?.click()} className="text-sm bg-blue-500 text-white px-3 py-1 rounded">Upload Stempel</button>
+                                        {template.stampConfig.stampUrl && <button type="button" onClick={() => setTemplate(prev => ({ ...prev, stampConfig: { ...prev.stampConfig!, stampUrl: undefined } }))} className="text-sm text-red-600 ml-2">Hapus</button>}
+                                    </div>
+                                </div>
+                                {template.signatories && template.signatories.length > 1 && (
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1">Letakkan Stempel di Atas TTD:</label>
+                                        <select value={template.stampConfig.placementSignatoryId || ''} onChange={e => setTemplate(prev => ({...prev, stampConfig: {...prev.stampConfig!, placementSignatoryId: e.target.value}}))} className="w-full border p-1 text-sm rounded">
+                                            <option value="">-- Pilih Penanda Tangan --</option>
+                                            {template.signatories.map(sig => (
+                                                <option key={sig.id} value={sig.id}>{sig.jabatan}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="p-4 border-t flex justify-end gap-2">

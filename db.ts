@@ -20,6 +20,20 @@ export const db = new Dexie('eSantriDB') as Dexie & {
     arsipSurat: Table<ArsipSurat, number>;
 };
 
+db.version(13).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+}).upgrade(tx => {
+    // 13: Add stampConfig and signatureUrl to surat module
+});
+
 db.version(12).stores({
   santri: '++id, nis, namaLengkap, kamarId',
   settings: '++id',

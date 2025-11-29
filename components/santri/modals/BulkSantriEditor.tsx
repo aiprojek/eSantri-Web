@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Santri } from '../../../types';
+import { Santri, Alamat } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 
 interface BulkSantriEditorProps {
@@ -129,10 +129,13 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
             // Handle Nested Address Updates
             if (field.startsWith('alamat.')) {
                 const addressField = field.split('.')[1];
+                // Ensure alamat exists and satisfies the Alamat type structure
+                const currentAlamat: Alamat = row.alamat || { detail: '' };
+                
                 return { 
                     ...row, 
                     alamat: { 
-                        ...row.alamat, 
+                        ...currentAlamat, 
                         [addressField]: value 
                     } 
                 };
@@ -185,7 +188,6 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
     };
     
     const pendidikanOptions = ['SD/Sederajat', 'SLTP/Sederajat', 'SLTA/Sederajat', 'Diploma', 'Sarjana (S1)', 'Pascasarjana (S2/S3)', 'Tidak Sekolah'];
-    const penghasilanOptions = ['< 1 Juta', '1 - 2 Juta', '2 - 5 Juta', '> 5 Juta', 'Tidak Berpenghasilan'];
     const statusHidupOptions = ['Hidup', 'Meninggal', 'Cerai'];
 
     if (!isOpen) return null;

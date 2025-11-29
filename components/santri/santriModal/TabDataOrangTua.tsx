@@ -17,7 +17,7 @@ const DateInput: React.FC<{
     register(fieldName, {
         validate: value => {
             if (!value) return true; // Allow empty
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || isNaN(new Date(value).getTime())) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(value as string) || isNaN(new Date(value as string).getTime())) {
                 return 'Format tanggal harus DD/MM/YYYY dan valid.';
             }
             return true;
@@ -28,6 +28,7 @@ const DateInput: React.FC<{
     const [displayValue, setDisplayValue] = useState('');
 
     useEffect(() => {
+        // Safe cast since we know DateInput is used for string fields like dates
         const value = formValue as string | undefined;
         if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
             const [y, m, d] = value.split('-');

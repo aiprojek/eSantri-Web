@@ -5,6 +5,7 @@ import { SuratTemplate, ArsipSurat, Santri, SuratSignatory, MengetahuiConfig, Te
 import { generatePdf } from '../utils/pdfGenerator';
 import { PrintHeader } from './common/PrintHeader';
 import { SimpleEditor } from './common/SimpleEditor';
+import { generateLetterDraft } from '../services/aiService';
 
 // --- Helper Functions ---
 const fileToBase64 = (file: File): Promise<string> =>
@@ -1049,74 +1050,6 @@ const ArsipViewerModal: React.FC<{
     );
 };
 
-const ArsipManager: React.FC = () => {
-    const { arsipSuratList, onDeleteArsipSurat, showConfirmation, showToast } = useAppContext();
-    const [selectedArsip, setSelectedArsip] = useState<ArsipSurat | null>(null);
-    const [isViewerOpen, setIsViewerOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-
-    const filteredArsip = useMemo(() => {
-        return arsipSuratList.filter(a =>
-            a.perihal.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            a.tujuan.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            a.nomorSurat.toLowerCase().includes(searchTerm.toLowerCase())
-        ).sort((a, b) => new Date(b.tanggalBuat).getTime() - new Date(a.tanggalBuat).getTime());
-    }, [arsipSuratList, searchTerm]);
-
-    const handleDelete = (id: number) => {
-        showConfirmation('Hapus Arsip', 'Anda yakin ingin menghapus arsip surat ini? Tindakan ini tidak dapat dibatalkan.', async () => {
-            await onDeleteArsipSurat(id);
-            showToast('Arsip berhasil dihapus', 'success');
-        }, { confirmColor: 'red' });
-    };
-
-    return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-700">Arsip Surat</h3>
-                <input
-                    type="text"
-                    placeholder="Cari No. Surat / Perihal / Tujuan..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="border rounded-lg px-3 py-2 text-sm w-64"
-                />
-            </div>
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-4 py-2 text-left">Tanggal</th>
-                            <th className="px-4 py-2 text-left">Nomor Surat</th>
-                            <th className="px-4 py-2 text-left">Perihal</th>
-                            <th className="px-4 py-2 text-left">Tujuan</th>
-                            <th className="px-4 py-2 text-center">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredArsip.map(a => (
-                            <tr key={a.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-2 whitespace-nowrap">{new Date(a.tanggalBuat).toLocaleDateString('id-ID')}</td>
-                                <td className="px-4 py-2">{a.nomorSurat}</td>
-                                <td className="px-4 py-2">{a.perihal}</td>
-                                <td className="px-4 py-2">{a.tujuan}</td>
-                                <td className="px-4 py-2 text-center space-x-2">
-                                    <button onClick={() => { setSelectedArsip(a); setIsViewerOpen(true); }} className="text-blue-600 hover:text-blue-800" title="Lihat"><i className="bi bi-eye"></i></button>
-                                    <button onClick={() => handleDelete(a.id)} className="text-red-600 hover:text-red-800" title="Hapus"><i className="bi bi-trash"></i></button>
-                                </td>
-                            </tr>
-                        ))}
-                        {filteredArsip.length === 0 && (
-                            <tr><td colSpan={5} className="text-center py-4 text-gray-500">Tidak ada arsip surat.</td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-            {selectedArsip && <ArsipViewerModal isOpen={isViewerOpen} onClose={() => { setIsViewerOpen(false); setSelectedArsip(null); }} arsip={selectedArsip} />}
-        </div>
-    );
-};
-
 // --- Modal for Template ---
 
 const TemplateModal: React.FC<{ 
@@ -1125,9 +1058,16 @@ const TemplateModal: React.FC<{
     onSave: (t: SuratTemplate) => void; 
     initialData?: SuratTemplate; 
 }> = ({ isOpen, onClose, onSave, initialData }) => {
+    const { showToast } = useAppContext();
     const [uploadingSignatureFor, setUploadingSignatureFor] = useState<string | null>(null);
     const signatureInputRef = useRef<HTMLInputElement>(null);
     const stampInputRef = useRef<HTMLInputElement>(null);
+    
+    // AI State
+    const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [isAiLoading, setIsAiLoading] = useState(false);
+
     const [template, setTemplate] = useState<Partial<SuratTemplate>>({ 
         nama: '', 
         judul: '', 
@@ -1165,7 +1105,7 @@ const TemplateModal: React.FC<{
                 stampConfig: initialData?.stampConfig ?? defaultConfig.stampConfig,
             });
         }
-    }, [isOpen]); // DEPENDENCY CHANGED: removed initialData to prevent reset on type
+    }, [isOpen]); 
 
     if (!isOpen) return null;
 
@@ -1203,6 +1143,22 @@ const TemplateModal: React.FC<{
         const updated = [...(template.signatories || [])];
         updated[index] = { ...updated[index], [field]: value };
         setTemplate(prev => ({ ...prev, signatories: updated }));
+    };
+
+    const handleAiGenerate = async () => {
+        if (!aiPrompt.trim()) return;
+        setIsAiLoading(true);
+        try {
+            const draft = await generateLetterDraft(aiPrompt);
+            setTemplate(prev => ({ ...prev, konten: draft }));
+            setIsAiModalOpen(false);
+            setAiPrompt('');
+            showToast('Draft surat berhasil dibuat oleh AI!', 'success');
+        } catch (error) {
+            showToast('Gagal membuat draft. Silakan coba lagi.', 'error');
+        } finally {
+            setIsAiLoading(false);
+        }
     };
 
     const placeholders = [
@@ -1260,7 +1216,15 @@ const TemplateModal: React.FC<{
                     
                     <div>
                         <label className="block text-sm font-medium mb-2">Isi Surat (Klik tombol untuk menyisipkan data santri)</label>
-                        <div className="flex gap-2 mb-2 flex-wrap">
+                        <div className="flex gap-2 mb-2 flex-wrap items-center">
+                            <button 
+                                onClick={() => setIsAiModalOpen(true)}
+                                className="text-xs bg-purple-100 text-purple-700 border border-purple-300 px-3 py-1.5 rounded-full hover:bg-purple-200 transition-colors font-semibold flex items-center gap-1"
+                                title="Buat draft otomatis dengan AI"
+                            >
+                                <i className="bi bi-stars"></i> Magic Draft (AI)
+                            </button>
+                            <div className="w-px h-4 bg-gray-300 mx-1"></div>
                             {placeholders.map(p => (
                                 <button key={p.val} onClick={() => insertPlaceholder(p.val)} className="text-xs bg-gray-100 border border-gray-300 px-2 py-1 rounded hover:bg-gray-200 transition-colors" title="Klik untuk menyisipkan">{p.label}</button>
                             ))}
@@ -1400,6 +1364,125 @@ const TemplateModal: React.FC<{
                     <button onClick={() => { if(template.nama) onSave(template as SuratTemplate); onClose(); }} className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700">Simpan Template</button>
                 </div>
             </div>
+
+            {/* AI Modal Overlay */}
+            {isAiModalOpen && (
+                <div className="fixed inset-0 bg-black/70 z-[80] flex justify-center items-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl p-6 relative">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                <i className="bi bi-stars text-purple-600"></i> Magic Draft (AI)
+                            </h3>
+                            <button onClick={() => setIsAiModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4">
+                            Deskripsikan surat yang ingin Anda buat. AI akan membuatkan draf awal untuk Anda.
+                        </p>
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4 text-xs text-yellow-800">
+                            <strong>Peringatan Privasi:</strong> Jangan masukkan data sensitif (Nama Asli, NIK, Alamat Lengkap) di sini. Gunakan placeholder nanti.
+                        </div>
+                        <textarea
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            placeholder="Contoh: Buatkan surat pemberitahuan libur Maulid Nabi untuk wali santri, libur mulai tanggal 20 sampai 23..."
+                            className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-purple-500 focus:border-purple-500 mb-4 h-32"
+                        ></textarea>
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => setIsAiModalOpen(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+                            <button 
+                                onClick={handleAiGenerate}
+                                disabled={!aiPrompt.trim() || isAiLoading}
+                                className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-purple-300 flex items-center gap-2"
+                            >
+                                {isAiLoading ? <span className="animate-spin h-4 w-4 border-b-2 border-white rounded-full"></span> : <i className="bi bi-magic"></i>}
+                                Buat Draft
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const ArsipManager: React.FC = () => {
+    const { arsipSuratList, onDeleteArsipSurat, showToast } = useAppContext();
+    const [viewingArsip, setViewingArsip] = useState<ArsipSurat | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredArsip = useMemo(() => {
+        return arsipSuratList.filter(a =>
+            a.nomorSurat.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            a.perihal.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            a.tujuan.toLowerCase().includes(searchTerm.toLowerCase())
+        ).sort((a, b) => new Date(b.tanggalBuat).getTime() - new Date(a.tanggalBuat).getTime());
+    }, [arsipSuratList, searchTerm]);
+
+    const handleDelete = async (id: number) => {
+        if (confirm('Yakin ingin menghapus arsip surat ini?')) {
+            await onDeleteArsipSurat(id);
+            showToast('Arsip surat berhasil dihapus', 'success');
+        }
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md no-print">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-gray-700 text-lg">Arsip Surat Keluar</h3>
+                <div className="w-64">
+                    <input
+                        type="text"
+                        placeholder="Cari..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg p-2 text-sm"
+                    />
+                </div>
+            </div>
+            
+            <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm text-left text-gray-600">
+                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3">Tanggal</th>
+                            <th className="px-4 py-3">Nomor Surat</th>
+                            <th className="px-4 py-3">Perihal</th>
+                            <th className="px-4 py-3">Tujuan</th>
+                            <th className="px-4 py-3 text-right">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredArsip.map((arsip) => (
+                            <tr key={arsip.id} className="bg-white border-b hover:bg-gray-50">
+                                <td className="px-4 py-3 whitespace-nowrap">{new Date(arsip.tanggalBuat).toLocaleDateString('id-ID')}</td>
+                                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{arsip.nomorSurat}</td>
+                                <td className="px-4 py-3">{arsip.perihal}</td>
+                                <td className="px-4 py-3">{arsip.tujuan}</td>
+                                <td className="px-4 py-3 text-right space-x-2">
+                                    <button onClick={() => setViewingArsip(arsip)} className="text-blue-600 hover:text-blue-800" title="Lihat"><i className="bi bi-eye-fill"></i></button>
+                                    <button onClick={() => handleDelete(arsip.id)} className="text-red-600 hover:text-red-800" title="Hapus"><i className="bi bi-trash-fill"></i></button>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredArsip.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                                    Tidak ada arsip surat yang ditemukan.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            {viewingArsip && (
+                <ArsipViewerModal
+                    isOpen={!!viewingArsip}
+                    onClose={() => setViewingArsip(null)}
+                    arsip={viewingArsip}
+                />
+            )}
         </div>
     );
 };

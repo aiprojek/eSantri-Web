@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 
@@ -420,6 +421,16 @@ const Tentang: React.FC = () => {
                                         </ul>
                                     </li>
                                 </ol>
+                                <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-md">
+                                    <h5 className="font-bold text-purple-800 text-sm mb-1"><i className="bi bi-stars"></i> Fitur Baru: Magic Draft (AI)</h5>
+                                    <p className="text-sm text-purple-900">
+                                        Anda dapat meminta bantuan AI untuk menyusun kata-kata surat. Klik tombol <strong>"Magic Draft"</strong> saat membuat template.
+                                    </p>
+                                    <p className="text-xs text-purple-800 mt-2">
+                                        <strong>Catatan Transparansi:</strong> Fitur kecerdasan buatan ini ditenagai oleh <strong>Pollinations.ai</strong> (Layanan AI Open Source).
+                                        Harap bijak dalam penggunaan data; jangan mengirimkan informasi pribadi sensitif (seperti Nama Lengkap asli santri atau NIK) ke dalam kolom instruksi AI. Gunakan <em>placeholder</em> sebagai gantinya.
+                                    </p>
+                                </div>
                             </PanduanLangkah>
                             <PanduanLangkah number={9} title="Peringatan Kritis: Keamanan Data Anda" isLast={true}>
                                 <div className="p-4 rounded-md border-l-4 border-yellow-500 bg-yellow-50 text-yellow-800">

@@ -37,106 +37,98 @@
       @media print {
         @page {
           margin: 0;
+          size: auto;
         }
         
-        * {
+        /* Reset Body */
+        body {
+          background-color: white !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
-        }
-        
-        .no-print {
-          display: none !important;
-        }
-
-        body, html {
-          background: white !important;
-          margin: 0;
-          padding: 0;
-          height: auto;
-          overflow: visible;
+          width: 100% !important;
+          height: auto !important;
+          overflow: visible !important;
         }
 
-        /* Reset Modal Styling for Print */
-        .fixed.inset-0 {
-            position: absolute !important;
-            inset: 0 !important;
-            z-index: 9999 !important;
-            background: white !important;
-            width: 100% !important;
-            height: auto !important;
-            padding: 0 !important;
-            overflow: visible !important;
-        }
-
-        .fixed.inset-0 .bg-white {
-             box-shadow: none !important;
-             max-width: none !important;
-             width: 100% !important;
-             height: auto !important;
-             border-radius: 0 !important;
-        }
-        
-        /* Hide sidebar and other layout elements explicitly if needed */
-        aside, nav, header, footer {
+        /* Hide UI Shell (Sidebar, Navbar, Buttons, etc) */
+        aside, nav, header, footer, .no-print, button {
             display: none !important;
         }
 
-        main.p-4, main > .p-4 {
-          padding: 0 !important;
-          margin: 0 !important;
-          margin-top: 0 !important;
-          width: 100% !important;
-          display: none; /* Hide main content when printing from modal usually */
-        }
-        
-        /* If printing from main content (not modal), unhide main */
-        body:not(:has(.fixed.inset-0)) main.p-4 {
-             display: block !important;
-        }
-        
-        .preview-container {
-            background-color: transparent !important;
-            padding: 0 !important;
+        /* Reset Containers to Ensure Visibility */
+        #root, main, .p-4 {
             margin: 0 !important;
-            box-shadow: none !important;
+            padding: 0 !important;
             width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            background: transparent !important;
+            display: block !important; /* Force visible by default */
+            position: static !important;
         }
 
-        #preview-area, #print-preview-surat, #print-view-arsip, #surat-preview-container, #arsip-preview-container {
-            background-color: white !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            border: none !important;
+        /* Reset Scrollable Preview Areas */
+        #preview-area, .preview-container, .overflow-auto {
+            height: auto !important;
             max-height: none !important;
             overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
             box-shadow: none !important;
-            transform: none !important; /* Reset zoom scales */
-            width: 100% !important;
-        }
-        
-        .printable-content-wrapper {
-          transform: none !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          width: 100% !important;
-          box-shadow: none !important;
-        }
-        
-        /* Menghilangkan bayangan dari elemen kertas saat dicetak */
-        .printable-content-wrapper > div, .bg-white.shadow-xl, .bg-white.shadow-lg {
-          box-shadow: none !important;
-          border: none !important;
-          margin: 0 auto !important;
+            transform: none !important; /* Remove zoom scaling */
         }
 
+        /* The Content Itself */
+        .printable-content-wrapper {
+            margin: 0 auto !important;
+            padding: 0 !important;
+            width: 100% !important;
+            box-shadow: none !important;
+            transform: none !important; /* Disable screen zoom logic */
+        }
+        
+        /* Remove paper shadow in print */
+        .printable-content-wrapper > div, .bg-white.shadow-xl, .bg-white.shadow-lg {
+            margin: 0 auto !important;
+            box-shadow: none !important;
+            border: none !important;
+            page-break-after: always;
+        }
+
+        /* Page Breaks */
         .page-break-after {
-          page-break-after: always;
+            page-break-after: always;
         }
-        .print-portrait {
-          page: portrait;
+        
+        /* Orientation Helpers */
+        .print-portrait { page: portrait; }
+        .print-landscape { page: landscape; }
+
+        /* --- Modal Printing Logic --- */
+        
+        /* If printing from a Modal (has .fixed.inset-0), hide the background main content */
+        body:has(.fixed.inset-0) main {
+            display: none !important;
         }
-        .print-landscape {
-          page: landscape;
+        
+        /* Ensure the Modal content is visible and resets positioning */
+        .fixed.inset-0 {
+            position: relative !important;
+            inset: auto !important;
+            width: 100% !important;
+            height: auto !important;
+            z-index: auto !important;
+            background: white !important;
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+        
+        .fixed.inset-0 .bg-white {
+            box-shadow: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            border-radius: 0 !important;
         }
       }
     </style>

@@ -28,6 +28,7 @@ Kerja sama ini memungkinkan eSantri Web dikembangkan dengan cepat dan efisien, m
 -   **Dashboard Interaktif**: Ringkasan visual data santri, keuangan, dan keasramaan secara cepat dan mudah dipahami.
 -   **Database Santri Terpusat**: Kelola data lengkap santri, orang tua/wali, riwayat status, prestasi, hingga pelanggaran di satu tempat.
 -   **Surat Menyurat Otomatis**: Buat surat resmi, izin, atau pemberitahuan dengan sistem template dan *mail merge*. Surat otomatis terisi data santri, siap cetak, dan tersimpan dalam arsip digital.
+-   **Magic Draft (AI)**: Fitur cerdas untuk membuat draf isi surat secara instan hanya dengan instruksi singkat. Menggunakan teknologi **Pollinations.ai** (gratis & open-source).
 -   **Laporan Profesional**: Cetak lebih dari 15 jenis dokumen (Biodata, Kuitansi, Rapor, dll) dengan tata letak rapi, kop surat otomatis, dan footer identitas aplikasi. Mendukung ekspor PDF dan HTML.
 -   **Manajemen Keuangan Terintegrasi**: Fitur lengkap mulai dari pembuatan tagihan massal, pencatatan pembayaran, manajemen uang saku, hingga notifikasi tunggakan via WhatsApp.
 -   **Manajemen Keasramaan**: Atur data gedung, kamar, musyrif/ah, dan penempatan santri di asrama dengan mudah.
@@ -54,7 +55,7 @@ Kerja sama ini memungkinkan eSantri Web dikembangkan dengan cepat dan efisien, m
     -   Kirim **Surat Tagihan** atau notifikasi **WhatsApp** untuk tunggakan.
     -   Kelola **Uang Saku** (saldo titipan).
 
-4.  **Surat Menyurat**: Gunakan menu `Surat Menyurat` untuk membuat template surat dan mencetak surat massal atau perorangan dengan mudah.
+4.  **Surat Menyurat**: Gunakan menu `Surat Menyurat` untuk membuat template surat dan mencetak surat massal atau perorangan dengan mudah. Gunakan tombol **Magic Draft** untuk bantuan AI.
 
 5.  **Cetak Laporan**: Kunjungi halaman `Laporan & Cetak` untuk mencetak berbagai dokumen administratif yang dibutuhkan.
 
@@ -80,6 +81,7 @@ Kode sumber lengkap dapat diakses di repositori GitHub kami.
 -   **Form Management**: React Hook Form
 -   **Editor**: React Quill (Rich Text Editor)
 -   **Export**: jsPDF, html2canvas
+-   **AI Integration**: Pollinations.ai (Text Generation API)
 
 ## 📦 Panduan Build Lokal (Local Build Guide)
 

@@ -1,3 +1,4 @@
+
 import { useState, useMemo, useCallback } from 'react';
 import { ReportType, Santri } from '../types';
 
@@ -26,8 +27,9 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
     const [hijriStartYear, setHijriStartYear] = useState<number>(1446);
     const [hijriEndMonth, setHijriEndMonth] = useState<number>(1);
     const [hijriEndYear, setHijriEndYear] = useState<number>(1446);
-    const [labelWidth, setLabelWidth] = useState<number>(6);
-    const [labelHeight, setLabelHeight] = useState<number>(3);
+    const [labelWidth, setLabelWidth] = useState<number>(6.4);
+    const [labelHeight, setLabelHeight] = useState<number>(3.2);
+    const [labelFontSize, setLabelFontSize] = useState<number>(10);
     const [labelFields, setLabelFields] = useState<string[]>(['namaLengkap', 'nis', 'rombel']);
     const [labelPrintMode, setLabelPrintMode] = useState<'all' | 'selected'>('all');
     const [selectedLabelSantriIds, setSelectedLabelSantriIds] = useState<number[]>([]);
@@ -44,13 +46,19 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
         return d.toISOString().split('T')[0];
     });
     const [mutasiEndDate, setMutasiEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-    const [cardTheme, setCardTheme] = useState<string>(predefinedCardThemes['Biru']);
+    
+    // Card Configs
+    const [cardDesign, setCardDesign] = useState<string>('classic'); // 'classic', 'modern', 'vertical', 'dark', 'ceria'
+    const [cardTheme, setCardTheme] = useState<string>(predefinedCardThemes['Biru']); 
     const [cardValidUntil, setCardValidUntil] = useState<string>('2028-07-31');
-    const [cardFields, setCardFields] = useState<string[]>(['foto', 'namaLengkap', 'nis', 'jenjang', 'rombel', 'ttl', 'ayahWali']);
+    const [cardFields, setCardFields] = useState<string[]>(['foto', 'namaLengkap', 'nis', 'jenjang', 'rombel', 'ttl', 'alamat', 'ayahWali']);
+    const [cardWidth, setCardWidth] = useState<number>(8.56);
+    const [cardHeight, setCardHeight] = useState<number>(5.398);
     const [cardPrintMode, setCardPrintMode] = useState<'all' | 'selected'>('all');
     const [selectedCardSantriIds, setSelectedCardSantriIds] = useState<number[]>([]);
     const [cardSignatoryTitle, setCardSignatoryTitle] = useState<string>('Mudir Marhalah');
     const [cardSignatoryId, setCardSignatoryId] = useState<string>('');
+    
     const [agendaKedatangan, setAgendaKedatangan] = useState<string>('');
     const [semester, setSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [tahunAjaran, setTahunAjaran] = useState<string>('1446/1447 H');
@@ -92,6 +100,7 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
         setSelectedCardSantriIds([]);
         setPembinaanPrintMode('all');
         setSelectedPembinaanSantriIds([]);
+        setCardDesign('classic');
         setCardTheme(predefinedCardThemes['Biru']);
         setCardSignatoryTitle('Mudir Marhalah');
         setCardSignatoryId('');
@@ -115,6 +124,12 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
         setNilaiSmCount(2);
         setShowNilaiTengahSemester(true);
         setGuidanceOption('show');
+        setCardFields(['foto', 'namaLengkap', 'nis', 'jenjang', 'rombel', 'ttl', 'alamat', 'ayahWali']);
+        setCardWidth(8.56);
+        setCardHeight(5.398);
+        setLabelWidth(6.4);
+        setLabelHeight(3.2);
+        setLabelFontSize(10);
     }, []);
 
     const canGenerate = useMemo(() => {
@@ -144,7 +159,7 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
             default:
                 return true;
         }
-    }, [activeReport, santriList.length, filteredSantri.length, biodataPrintMode, selectedBiodataSantriIds, pembinaanPrintMode, selectedPembinaanSantriIds, cardPrintMode, selectedCardSantriIds, labelPrintMode, selectedLabelSantriIds, selectedMapelIds, izinPrintMode, selectedIzinSantriIds, rekeningKoranPrintMode, selectedRekeningKoranSantriIds, isFinancialReport]);
+    }, [activeReport, santriList.length, filteredSantri.length, biodataPrintMode, selectedBiodataSantriIds, pembinaanPrintMode, selectedPembinaanSantriIds, cardPrintMode, selectedCardSantriIds, labelPrintMode, selectedMapelIds, izinPrintMode, selectedIzinSantriIds, rekeningKoranPrintMode, selectedRekeningKoranSantriIds, isFinancialReport]);
 
     return {
         activeReport, setActiveReport,
@@ -164,6 +179,7 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
             hijriEndYear, setHijriEndYear,
             labelWidth, setLabelWidth,
             labelHeight, setLabelHeight,
+            labelFontSize, setLabelFontSize,
             labelFields, setLabelFields,
             labelPrintMode, setLabelPrintMode,
             selectedLabelSantriIds, setSelectedLabelSantriIds,
@@ -176,9 +192,12 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
             selectedPembinaanSantriIds, setSelectedPembinaanSantriIds,
             mutasiStartDate, setMutasiStartDate,
             mutasiEndDate, setMutasiEndDate,
+            cardDesign, setCardDesign,
             cardTheme, setCardTheme,
             cardValidUntil, setCardValidUntil,
             cardFields, setCardFields,
+            cardWidth, setCardWidth,
+            cardHeight, setCardHeight,
             cardPrintMode, setCardPrintMode,
             selectedCardSantriIds, setSelectedCardSantriIds,
             cardSignatoryTitle, setCardSignatoryTitle,

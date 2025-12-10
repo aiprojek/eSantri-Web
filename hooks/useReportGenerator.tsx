@@ -65,6 +65,74 @@ const ReportFooter: React.FC = () => (
     </div>
 );
 
+// --- Card Avatar Components ---
+const AvatarPlaceholder: React.FC<{ variant: 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria' }> = ({ variant }) => {
+    // General Gender-Neutral Avatar: Circle Head + Curved Body
+    // Colors are adapted to the card theme
+
+    if (variant === 'classic') {
+        // Green Theme
+        return (
+            <svg viewBox="0 0 100 120" className="w-full h-full">
+                <rect width="100" height="120" fill="#f0fdf4"/> {/* Mint/Green 50 Background to match theme */}
+                <path d="M15 120 Q 50 70 85 120" fill="#1B4D3E" /> {/* Dark Green Body */}
+                <circle cx="50" cy="50" r="22" fill="#d1fae5"/> {/* Light Green Head */}
+            </svg>
+        );
+    } else if (variant === 'modern') {
+        // Blue Theme
+        return (
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+                <rect width="100" height="100" fill="#bfdbfe"/>
+                <path d="M15 100 Q 50 60 85 100" fill="#1e3a8a"/> {/* Dark Blue Body */}
+                <circle cx="50" cy="45" r="20" fill="#dbeafe"/> {/* Light Blue Head */}
+            </svg>
+        );
+    } else if (variant === 'vertical') {
+        // Red Theme
+        return (
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+                <rect width="100" height="100" fill="#f3f4f6"/>
+                <path d="M15 100 Q 50 65 85 100" fill="#991b1b"/> {/* Dark Red Body */}
+                <circle cx="50" cy="50" r="22" fill="#fee2e2"/> {/* Light Red Head */}
+            </svg>
+        );
+    } else if (variant === 'dark') {
+        // Dark/Slate Theme
+        return (
+            <svg viewBox="0 0 100 120" className="w-full h-full">
+                <rect width="100" height="120" fill="#1e293b"/>
+                <path d="M15 120 Q 50 70 85 120" fill="#0f172a"/> {/* Darker Slate Body */}
+                <circle cx="50" cy="50" r="22" fill="#94a3b8"/> {/* Slate Head */}
+            </svg>
+        );
+    } else { // ceria
+        // Teal/Orange Theme
+        return (
+            <svg viewBox="0 0 100 100" className="w-full h-full rounded-full">
+                <rect width="100" height="100" fill="#fff7ed"/>
+                <path d="M15 110 Q 50 65 85 110" fill="#14b8a6"/> {/* Teal Body */}
+                <circle cx="50" cy="45" r="20" fill="#ccfbf1"/> {/* Light Teal Head */}
+            </svg>
+        );
+    }
+};
+
+const SmartAvatar: React.FC<{ santri: Santri, variant: 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria', className?: string, forcePlaceholder?: boolean }> = ({ santri, variant, className, forcePlaceholder }) => {
+    // Treat placeholder images with text as invalid
+    const hasValidPhoto = santri.fotoUrl && !santri.fotoUrl.includes('text=Foto');
+
+    return (
+        <div className={`overflow-hidden ${className}`}>
+            {!forcePlaceholder && hasValidPhoto ? (
+                <img src={santri.fotoUrl} alt={santri.namaLengkap} className="w-full h-full object-cover" />
+            ) : (
+                <AvatarPlaceholder variant={variant} />
+            )}
+        </div>
+    );
+};
+
 // --- Template Components ---
 
 const PanduanPenilaianTemplate: React.FC = () => {
@@ -836,704 +904,798 @@ const LembarRaporTemplate: React.FC<{
 };
 
 const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
-    const { cardTheme, cardValidUntil, cardFields, cardSignatoryTitle, cardSignatoryId } = options;
-    const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(cardSignatoryId));
+    const { cardDesign, cardValidUntil, cardFields, cardWidth, cardHeight } = options;
     const rombel = settings.rombel.find(r => r.id === santri.rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
 
-    const bgColor = cardTheme;
-    const lighterBgColor = lightenColor(bgColor, 80);
+    const showPhoto = cardFields.includes('foto');
+    const showNama = cardFields.includes('namaLengkap');
+    const showNis = cardFields.includes('nis');
+    const showJenjang = cardFields.includes('jenjang');
+    const showRombel = cardFields.includes('rombel');
+    const showTtl = cardFields.includes('ttl');
+    const showAlamat = cardFields.includes('alamat');
+    const showAyahWali = cardFields.includes('ayahWali');
 
-    return (
-        <div className="rounded-lg overflow-hidden border border-gray-300 flex flex-col" style={{ width: '8.56cm', height: '5.398cm', backgroundColor: lighterBgColor }}>
-            {/* Header Section */}
-            <div style={{ backgroundColor: bgColor }} className="h-12 flex items-center justify-between p-2 text-white flex-shrink-0">
-                <div className="w-10 h-full flex items-center justify-center">
-                    {settings.logoYayasanUrl && (
-                        <img src={settings.logoYayasanUrl} alt="Logo Yayasan" className="max-h-8 max-w-full object-contain" />
-                    )}
+    // Data Helpers
+    const nama = santri.namaLengkap;
+    const nis = santri.nis;
+    const jenjangKelas = `${jenjang?.nama?.split(' ')[0] || ''} / ${kelas?.nama || ''}`; // e.g. Wustho / Kelas 1
+    const rombelNama = rombel?.nama || 'N/A';
+    const ttl = `${santri.tempatLahir}, ${formatDate(santri.tanggalLahir)}`;
+    const ayahWali = santri.namaAyah || santri.namaWali || '-';
+    const alamat = santri.alamat.detail || '-';
+    
+    // Dynamic Dimensions
+    const cardStyle = {
+        width: `${cardWidth}cm`,
+        height: `${cardHeight}cm`,
+        flexShrink: 0,
+    };
+
+    // --- Design 1: Classic Traditional ---
+    if (cardDesign === 'classic') {
+        return (
+            <div className="rounded-xl overflow-hidden relative flex flex-col text-white border-4 border-double border-[#D4AF37]" 
+                 style={{ ...cardStyle, backgroundColor: '#1B4D3E', borderColor: '#D4AF37' }}>
+                <div className="flex justify-between items-center px-2 py-1.5 border-b border-[#D4AF37]/30 bg-black/20 h-1/4">
+                    {/* Left Logo (Yayasan) */}
+                    <div className="w-10 h-full flex items-center justify-center">
+                        {settings.logoYayasanUrl && <img src={settings.logoYayasanUrl} alt="Logo Yayasan" className="max-h-full max-w-full object-contain" />}
+                    </div>
+                    <div className="text-center flex-grow">
+                        <div className="text-[7pt] font-bold uppercase tracking-wider text-[#D4AF37]">{settings.namaYayasan}</div>
+                        <div className="text-[9pt] font-bold leading-tight">{settings.namaPonpes}</div>
+                    </div>
+                    {/* Right Logo (Ponpes) */}
+                    <div className="w-10 h-full flex items-center justify-center">
+                        {settings.logoPonpesUrl && <img src={settings.logoPonpesUrl} alt="Logo Ponpes" className="max-h-full max-w-full object-contain" />}
+                    </div>
                 </div>
-                <div className="text-center flex-grow px-1">
-                    {settings.namaYayasan && <p className="text-[7pt] leading-tight opacity-80">{settings.namaYayasan}</p> }
-                    <p className="font-bold text-xs leading-tight">{settings.namaPonpes}</p>
-                    <p className="text-[7pt] font-semibold leading-tight mt-1">KARTU TANDA SANTRI</p>
+                
+                <div className="flex p-2 gap-2 flex-grow relative overflow-hidden">
+                    <div className="flex flex-col items-center justify-center h-full">
+                        <SmartAvatar santri={santri} variant="classic" className="w-[2cm] h-[2.5cm] bg-[#f0fdf4] border-2 border-[#D4AF37] shadow-lg rounded-sm" forcePlaceholder={!showPhoto} />
+                        <div className="mt-1 text-[6pt] text-center bg-[#D4AF37] text-[#1B4D3E] px-1 rounded font-bold w-full">SANTRI AKTIF</div>
+                    </div>
+                    <div className="flex-grow text-[7pt] space-y-0.5 z-10 flex flex-col justify-center">
+                        {showNama && <div className="font-bold text-[#D4AF37] text-[10pt] border-b border-[#D4AF37]/30 pb-0.5 mb-1">{nama}</div>}
+                        {showNis && <div className="grid grid-cols-[35px_1fr]"><span>NIS</span><span>: {nis}</span></div>}
+                        {showJenjang && <div className="grid grid-cols-[35px_1fr]"><span>Jenjang</span><span>: {jenjangKelas}</span></div>}
+                        {showRombel && <div className="grid grid-cols-[35px_1fr]"><span>Rombel</span><span>: {rombelNama}</span></div>}
+                        {showTtl && <div className="grid grid-cols-[35px_1fr]"><span>TTL</span><span>: {ttl}</span></div>}
+                        {showAyahWali && <div className="grid grid-cols-[35px_1fr]"><span>Wali</span><span>: {ayahWali}</span></div>}
+                        {showAlamat && <div className="grid grid-cols-[35px_1fr] items-start"><span>Alamat</span><span className="leading-tight line-clamp-2">: {alamat}</span></div>}
+                    </div>
+                    
+                    {/* Pattern Overlay */}
+                    <div className="absolute right-[-20px] bottom-[-20px] text-[#D4AF37] opacity-10 text-[80pt] pointer-events-none">
+                        <i className="bi bi-stars"></i>
+                    </div>
                 </div>
-                <div className="w-10 h-full flex items-center justify-center">
-                    {settings.logoPonpesUrl && (
-                        <img src={settings.logoPonpesUrl} alt="Logo Pondok" className="max-h-full max-w-full object-contain" />
-                    )}
+
+                <div className="bg-[#D4AF37] text-[#1B4D3E] text-[5pt] text-center py-0.5 font-bold h-[12px]">
+                    Kartu ini sah selama santri masih aktif di pondok pesantren. Berlaku s.d. {formatDate(cardValidUntil)}
                 </div>
             </div>
-            
-            {/* Main Content Section */}
-            <div className="p-2 flex gap-2 flex-grow min-h-0">
-                {cardFields.includes('foto') && (
-                    <div className="flex-shrink-0" style={{ width: '2.2cm' }}>
-                        <div className="w-full aspect-[3/4] bg-gray-200 border-2 border-white shadow-md">
-                             <img src={santri.fotoUrl || 'https://placehold.co/150x200/e2e8f0/334155?text=Foto'} alt="Foto Santri" className="w-full h-full object-cover" />
+        );
+    } 
+    
+    // --- Design 2: Modern Tech ---
+    else if (cardDesign === 'modern') {
+        return (
+            <div className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border border-gray-200 shadow-sm" style={cardStyle}>
+                {/* Background Shapes */}
+                <div className="absolute top-0 left-0 w-2/5 h-full bg-blue-600 skew-x-12 -ml-8 z-0"></div>
+                <div className="absolute top-0 left-0 w-2/5 h-full bg-blue-500 skew-x-12 -ml-4 z-0 opacity-50"></div>
+                
+                {/* Header Section (Moved to Top) */}
+                <div className="bg-blue-600/10 p-2 border-b border-blue-100 text-center z-10 relative">
+                     <div className="text-[6pt] font-light text-gray-500 uppercase tracking-widest">{settings.namaYayasan}</div>
+                     <div className="text-[9pt] font-bold text-blue-900 leading-none mt-0.5">{settings.namaPonpes}</div>
+                </div>
+
+                {/* Body Section: Photo and Data */}
+                <div className="flex justify-between items-start p-3 z-10 relative flex-grow overflow-hidden">
+                    <div className="text-white mt-1">
+                        <SmartAvatar santri={santri} variant="modern" className="w-[1.8cm] h-[1.8cm] rounded-full border-4 border-white shadow-md bg-white object-cover" forcePlaceholder={!showPhoto} />
+                    </div>
+                    <div className="text-right flex-grow pl-2 pt-1 flex flex-col items-end">
+                        <div className="text-[6pt] text-gray-400 tracking-[0.2em] uppercase mb-1">Kartu Tanda Santri</div>
+                        {showNama && <div className="text-[10pt] font-bold text-blue-900 leading-tight">{nama}</div>}
+                        {showNis && <div className="text-[8pt] font-mono text-blue-600 bg-blue-50 inline-block px-1 rounded mt-1">{nis}</div>}
+                        
+                        <div className="mt-2 text-[6.5pt] space-y-0.5 text-gray-600">
+                            {showJenjang && <div className="flex justify-end gap-1"><span className="font-semibold">Jenjang:</span> {jenjangKelas}</div>}
+                            {showRombel && <div className="flex justify-end gap-1"><span className="font-semibold">Rombel:</span> {rombelNama}</div>}
+                            {showTtl && <div className="flex justify-end gap-1"><span className="font-semibold">Lahir:</span> {ttl}</div>}
+                            {showAyahWali && <div className="flex justify-end gap-1"><span className="font-semibold">Wali:</span> {ayahWali}</div>}
+                            {showAlamat && <div className="flex justify-end gap-1 text-right"><span className="font-semibold">Alamat:</span> <span className="truncate max-w-[120px]">{alamat}</span></div>}
                         </div>
                     </div>
-                )}
-                <div className="flex-grow flex flex-col justify-center" style={{ fontSize: '7pt', lineHeight: '1.4' }}>
-                    {cardFields.includes('namaLengkap') && <p className="font-bold text-sm truncate" style={{ fontSize: '9pt' }}>{santri.namaLengkap}</p>}
-                    {cardFields.includes('nis') && <p>NIS: {santri.nis}</p>}
-                    {cardFields.includes('jenjang') && <p>Jenjang: {jenjang?.nama || 'N/A'}</p>}
-                    {cardFields.includes('rombel') && <p>Rombel: {rombel?.nama || 'N/A'}</p>}
-                    {cardFields.includes('ttl') && <p>TTL: {santri.tempatLahir}, {formatDate(santri.tanggalLahir)}</p>}
-                    {cardFields.includes('ayahWali') && <p>Wali: {santri.namaWali || santri.namaAyah}</p>}
                 </div>
-            </div>
-
-            {/* Footer Section */}
-             <div className="px-2 pb-1 flex justify-between items-end flex-shrink-0" style={{ fontSize: '6pt' }}>
-                <div>
-                    <p>Berlaku s/d:</p>
-                    <p className="font-semibold">{formatDate(cardValidUntil)}</p>
-                </div>
-                <div className="text-center">
-                    <p>{cardSignatoryTitle}</p>
-                    <div className="h-6"></div> 
-                    <p className="font-bold underline">{signatory ? signatory.nama : '(.....................)'}</p>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const LembarPembinaanTemplate: React.FC<{ santri: Santri; settings: PondokSettings; }> = ({ santri, settings }) => {
-    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-    return (
-        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt' }}>
-            <div>
-                <PrintHeader settings={settings} title="LEMBAR PEMBINAAN" />
-                <div className="grid grid-cols-2 gap-x-4 mb-4" style={{ fontSize: '8pt' }}>
-                    <div>
-                        <p><span className="font-semibold">Nama Santri:</span> {santri.namaLengkap}</p>
-                        <p><span className="font-semibold">NIS:</span> {santri.nis}</p>
-                    </div>
-                    <div className="text-right">
-                        <p><span className="font-semibold">Kelas:</span> {kelas?.nama || 'N/A'}</p>
-                        <p><span className="font-semibold">Rombel:</span> {rombel?.nama || 'N/A'}</p>
+                
+                {/* Footer: Validity Only */}
+                <div className="mt-auto bg-gray-50 px-3 py-1 border-t z-10 relative flex flex-col items-center justify-center text-center">
+                    <div className="text-[6pt] text-gray-500">
+                        Masa Berlaku: {formatDate(cardValidUntil)}
                     </div>
                 </div>
-
-                <h4 className="font-bold text-base mt-6 mb-2">Catatan Prestasi</h4>
-                <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
-                    <thead className="bg-gray-200 uppercase">
-                        <tr>
-                            <th className="p-1 border border-black w-8">No</th>
-                            <th className="p-1 border border-black">Tahun</th>
-                            <th className="p-1 border border-black">Nama Prestasi</th>
-                            <th className="p-1 border border-black">Tingkat</th>
-                            <th className="p-1 border border-black">Penyelenggara</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {(santri.prestasi || []).map((p, i) => (
-                            <tr key={p.id}>
-                                <td className="p-1 border border-black text-center">{i + 1}</td>
-                                <td className="p-1 border border-black text-center">{p.tahun}</td>
-                                <td className="p-1 border border-black">{p.nama}</td>
-                                <td className="p-1 border border-black">{p.tingkat}</td>
-                                <td className="p-1 border border-black">{p.penyelenggara}</td>
-                            </tr>
-                        ))}
-                        {(santri.prestasi || []).length === 0 && (
-                            <tr><td colSpan={5} className="text-center p-4 italic text-gray-500">Belum ada catatan prestasi.</td></tr>
-                        )}
-                    </tbody>
-                </table>
-
-                <h4 className="font-bold text-base mt-6 mb-2">Catatan Pelanggaran</h4>
-                <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
-                    <thead className="bg-gray-200 uppercase">
-                        <tr>
-                            <th className="p-1 border border-black w-8">No</th>
-                            <th className="p-1 border border-black">Tanggal</th>
-                            <th className="p-1 border border-black">Deskripsi</th>
-                            <th className="p-1 border border-black">Jenis</th>
-                            <th className="p-1 border border-black">Tindak Lanjut</th>
-                            <th className="p-1 border border-black">Pelapor</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {(santri.pelanggaran || []).map((p, i) => (
-                            <tr key={p.id}>
-                                <td className="p-1 border border-black text-center">{i + 1}</td>
-                                <td className="p-1 border border-black text-center">{formatDate(p.tanggal)}</td>
-                                <td className="p-1 border border-black">{p.deskripsi}</td>
-                                <td className="p-1 border border-black">{p.jenis}</td>
-                                <td className="p-1 border border-black">{p.tindakLanjut}</td>
-                                <td className="p-1 border border-black">{p.pelapor}</td>
-                            </tr>
-                        ))}
-                        {(santri.pelanggaran || []).length === 0 && (
-                            <tr><td colSpan={6} className="text-center p-4 italic text-gray-500">Belum ada catatan pelanggaran.</td></tr>
-                        )}
-                    </tbody>
-                </table>
             </div>
-            <ReportFooter />
-        </div>
-    );
-};
-
-const FormulirIzinTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
-    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-    const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(options.izinSignatoryId));
+        );
+    } 
     
-    return (
-        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '11pt', lineHeight: '1.6' }}>
-            <div>
-                <PrintHeader settings={settings} title="FORMULIR IZIN SANTRI" />
-                <p className="text-center text-sm mb-4">No: ....../IZN/PP-AH/...../{new Date().getFullYear()}</p>
-                <p className="mb-4">Yang bertanda tangan di bawah ini, Bagian Keamanan {settings.namaPonpes} memberikan izin kepada santri:</p>
-                <table className="w-full my-2 ml-4">
-                    <tbody>
-                        <tr><td className="pr-4 w-40">Nama</td><td>: {santri.namaLengkap}</td></tr>
-                        <tr><td>NIS</td><td>: {santri.nis}</td></tr>
-                        <tr><td>Rombel</td><td>: {rombel?.nama || 'N/A'}</td></tr>
-                        <tr><td>Alamat</td><td>: {santri.alamat.detail}</td></tr>
-                    </tbody>
-                </table>
-                <p className="my-4">Untuk meninggalkan area pondok pesantren dengan rincian sebagai berikut:</p>
-                <table className="w-full my-2 ml-4">
-                    <tbody>
-                        <tr><td className="pr-4 w-40">Tujuan</td><td>: {options.izinTujuan}</td></tr>
-                        <tr><td>Keperluan</td><td>: {options.izinKeperluan}</td></tr>
-                        <tr><td>Tanggal Berangkat</td><td>: {formatDate(options.izinTanggalBerangkat)}</td></tr>
-                        <tr><td>Tanggal Kembali</td><td>: {formatDate(options.izinTanggalKembali)}</td></tr>
-                        <tr><td>Penjemput</td><td>: {options.izinPenjemput}</td></tr>
-                    </tbody>
-                </table>
-                <h4 className="font-bold text-sm mt-6 mb-2">Ketentuan Izin:</h4>
-                <div className="text-xs border p-2 bg-gray-50 rounded-md" style={{whiteSpace: 'pre-wrap'}}>
-                    {options.izinKetentuan}
+    // --- Design 3: Vertical ID ---
+    else if (cardDesign === 'vertical') {
+        return (
+            <div className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border shadow-sm items-center text-center" style={cardStyle}>
+                <div className="w-full h-24 bg-red-700 absolute top-0 rounded-b-[50%] scale-x-150 z-0"></div>
+                
+                <div className="z-10 mt-3 text-white">
+                    <div className="text-[6pt] opacity-80 uppercase tracking-widest">KARTU SANTRI</div>
+                    <div className="text-[8pt] font-bold mt-0.5">{settings.namaPonpes}</div>
                 </div>
-                <div className="mt-8 flow-root">
-                    <div className="float-left text-center w-60">
-                        <p>Orang Tua/Wali Santri,</p>
-                        <div className="h-20"></div>
-                        <p className="font-bold underline">( {santri.namaWali || santri.namaAyah} )</p>
+
+                <div className="z-10 mt-3 relative">
+                    <SmartAvatar santri={santri} variant="vertical" className="w-[2.2cm] h-[2.8cm] rounded-lg shadow-lg border-2 border-white bg-gray-100 object-cover" forcePlaceholder={!showPhoto} />
+                </div>
+
+                <div className="z-10 mt-4 px-2 w-full flex-grow flex flex-col items-center overflow-hidden">
+                    {showNama && <div className="text-[9pt] font-bold text-gray-800 leading-tight">{nama}</div>}
+                    {showNis && <div className="text-[7pt] text-red-600 font-medium mt-0.5 mb-2">{nis}</div>}
+                    
+                    <div className="w-full border-t border-gray-200 my-1"></div>
+                    
+                    <div className="text-[6.5pt] text-gray-600 space-y-0.5 w-full text-left px-2">
+                        {showJenjang && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Kelas</span><span>: {jenjangKelas}</span></div>}
+                        {showRombel && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Rombel</span><span>: {rombelNama}</span></div>}
+                        {showAyahWali && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Wali</span><span>: {ayahWali}</span></div>}
+                        {showAlamat && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Alamat</span><span className="truncate">: {alamat}</span></div>}
                     </div>
-                    <div className="float-right text-center w-60">
-                        <p>{settings.alamat.split(',')[1] || 'Sumpiuh'}, {formatDate(new Date().toISOString())}</p>
-                        <p>{options.izinSignatoryTitle},</p>
-                        <div className="h-20"></div>
-                        <p className="font-bold underline">{signatory ? signatory.nama : '( ............................................ )'}</p>
-                    </div>
+                </div>
+                
+                <div className="w-full bg-gray-800 text-white text-[5pt] py-1 absolute bottom-0">
+                    Masa Berlaku: {formatDate(cardValidUntil)}
                 </div>
             </div>
-            <ReportFooter />
-        </div>
-    );
+        );
+    } 
+    
+    // --- Design 4: Dark Premium ---
+    else if (cardDesign === 'dark') {
+        return (
+            <div className="rounded-xl overflow-hidden relative flex flex-col bg-slate-900 text-white border border-slate-700" style={cardStyle}>
+                <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500 rounded-full blur-[40px] opacity-20 -mr-10 -mt-10"></div>
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500 rounded-full blur-[30px] opacity-20 -ml-8 -mb-8"></div>
+
+                <div className="flex items-center justify-between p-3 border-b border-slate-800 z-10">
+                    <div className="flex items-center gap-2">
+                        {settings.logoPonpesUrl && (
+                            <div className="w-8 h-8 flex items-center justify-center">
+                                <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+                            </div>
+                        )}
+                        <div>
+                            <div className="text-[8pt] font-normal text-teal-400">Kartu Santri</div>
+                            <div className="text-[7pt] font-bold tracking-wide uppercase leading-none">{settings.namaPonpes}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex p-3 gap-3 z-10 flex-grow overflow-hidden">
+                    <div className="flex flex-col gap-2">
+                        <SmartAvatar santri={santri} variant="dark" className="w-[2cm] h-[2cm] rounded-lg border border-slate-600 bg-slate-800 object-cover" forcePlaceholder={!showPhoto} />
+                        <div className="text-center">
+                            {showNis && <div className="text-[9pt] font-mono font-bold text-teal-400">{nis}</div>}
+                            <div className="text-[5pt] text-slate-500 uppercase tracking-widest">Nomor Induk</div>
+                        </div>
+                    </div>
+                    <div className="flex-grow space-y-1">
+                        {showNama && (
+                            <div className="mb-2">
+                                <div className="text-[5pt] text-slate-500 uppercase">Nama Lengkap</div>
+                                <div className="text-[8pt] font-bold leading-tight">{nama}</div>
+                            </div>
+                        )}
+                        
+                        <div className="grid grid-cols-2 gap-1">
+                            {showJenjang && <div><div className="text-[5pt] text-slate-500 uppercase">Jenjang</div><div className="text-[6.5pt]">{jenjangKelas}</div></div>}
+                            {showRombel && <div><div className="text-[5pt] text-slate-500 uppercase">Rombel</div><div className="text-[6.5pt]">{rombelNama}</div></div>}
+                        </div>
+                        {showAyahWali && <div><div className="text-[5pt] text-slate-500 uppercase">Orang Tua / Wali</div><div className="text-[6.5pt] truncate">{ayahWali}</div></div>}
+                        {showAlamat && <div><div className="text-[5pt] text-slate-500 uppercase">Alamat</div><div className="text-[6.5pt] leading-tight line-clamp-2">{alamat}</div></div>}
+                    </div>
+                </div>
+
+                <div className="px-3 pb-2 z-10 flex justify-between items-end">
+                    <div className="text-[5pt] text-slate-500 w-full text-center">Berlaku s.d. {formatDate(cardValidUntil)}</div>
+                </div>
+            </div>
+        );
+    } 
+    
+    // --- Design 5: Ceria / TPQ ---
+    else {
+        return (
+            <div className="rounded-2xl overflow-hidden relative flex flex-col bg-orange-50 text-orange-900 border-2 border-orange-200" style={cardStyle}>
+                <div className="bg-orange-400 p-2 text-center text-white relative overflow-hidden">
+                    <div className="absolute w-4 h-4 bg-white rounded-full opacity-20 top-1 left-2"></div>
+                    <div className="absolute w-6 h-6 bg-white rounded-full opacity-20 bottom-[-10px] right-4"></div>
+                    <div className="text-[8pt] font-normal mb-0.5 relative z-10">Kartu Santri</div>
+                    <div className="text-[8pt] font-bold relative z-10 leading-none">{settings.namaPonpes}</div>
+                </div>
+
+                <div className="flex p-2 gap-3 items-start flex-grow pl-4 overflow-hidden">
+                    <div className="relative mt-1">
+                        <div className="absolute inset-0 bg-teal-400 rounded-full transform translate-x-1 translate-y-1"></div>
+                        <SmartAvatar santri={santri} variant="ceria" className="w-[2cm] h-[2cm] rounded-full border-2 border-white bg-teal-200 relative z-10 object-cover" forcePlaceholder={!showPhoto} />
+                    </div>
+                    
+                    <div className="flex-grow pl-2 z-10 relative">
+                         {showNama && (
+                            <div className="mb-2 border-b border-orange-200 pb-1">
+                                <div className="text-[5pt] text-orange-400 uppercase tracking-wide">Nama Lengkap</div>
+                                <div className="text-[9pt] font-bold text-teal-800 leading-tight">{nama}</div>
+                            </div>
+                        )}
+                        
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[6.5pt]">
+                             {/* NIS */}
+                             {showNis && <div><div className="text-[5pt] text-orange-400 uppercase">NIS</div><div className="font-mono text-orange-700 bg-white/50 inline-block px-1 rounded font-bold">{nis}</div></div>}
+                             
+                             {/* Jenjang */}
+                             {showJenjang && <div><div className="text-[5pt] text-orange-400 uppercase">Jenjang</div><div className="text-teal-700 font-bold leading-tight">{jenjangKelas}</div></div>}
+                             
+                             {/* Rombel */}
+                             {showRombel && <div><div className="text-[5pt] text-orange-400 uppercase">Rombel</div><div className="text-teal-700 font-bold leading-tight">{rombelNama}</div></div>}
+                             
+                             {/* Wali */}
+                             {showAyahWali && <div className="col-span-2"><div className="text-[5pt] text-orange-400 uppercase">Wali</div><div className="text-teal-700 font-bold truncate">{ayahWali}</div></div>}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-teal-50 px-3 py-1 flex justify-center items-center text-[6pt] text-teal-700 border-t border-orange-100">
+                    <div>Masa Berlaku: {formatDate(cardValidUntil)}</div>
+                </div>
+            </div>
+        );
+    }
 };
 
-const LabelSantriTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: any }> = ({ santriList, settings, options }) => {
-    const { labelWidth, labelHeight, labelFields } = options;
+// --- Main Hook Export ---
 
-    const getFieldData = (santri: Santri, field: string): string => {
-        switch(field) {
-            case 'namaLengkap': return santri.namaLengkap;
-            case 'nis': return santri.nis;
-            case 'rombel': return settings.rombel.find(r => r.id === santri.rombelId)?.nama || '';
-            case 'jenjang': 
-                const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-                const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-                return kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId)?.nama || '' : '';
-            case 'namaHijrah': return santri.namaHijrah || '';
-            case 'ttl': return `${santri.tempatLahir}, ${formatDate(santri.tanggalLahir)}`;
-            default: return '';
-        }
+export const useReportGenerator = (settings: PondokSettings) => {
+    const paperDimensions = {
+        'A4': { width: 21.0, height: 29.7 },
+        'F4': { width: 21.5, height: 33.0 },
+        'Legal': { width: 21.6, height: 35.6 },
+        'Letter': { width: 21.6, height: 27.9 },
     };
-    
-    const getDynamicStyles = (santri: Santri): React.CSSProperties => {
-        const totalLength = labelFields.reduce((sum: number, field: string) => sum + (getFieldData(santri, field)?.length || 0), 0);
-        const lineCount = labelFields.length;
+
+    const marginValues = {
+        'narrow': 1.27,
+        'normal': 2.0,
+        'wide': 3.0
+    };
+
+    const resetGuidanceFlag = () => { /* No-op for now, or reset logic if needed */ };
+
+    const generateReport = (reportType: ReportType, data: Santri[], options: any) => {
+        const previews: { content: React.ReactNode; orientation: 'portrait' | 'landscape' }[] = [];
         
-        let fontSizePt = 11; // Default size in points
+        // ... (Report generation logic switch)
+        // Ensure KartuSantri case uses the new component
+        if (reportType === ReportType.KartuSantri) {
+            
+            // Determine paper orientation based on card dimensions
+            // Standard ID card is usually landscape (~8.5cm w) or portrait (~5.4cm w).
+            // A4 is 21cm wide.
+            // If cardWidth > cardHeight (Landscape Card):
+            //   - Width ~8.5cm. 2 cards fit in A4 Portrait width (21cm).
+            //   - Width ~8.5cm. 3 cards fit in A4 Landscape width (29.7cm).
+            //   Standard sheet usually fits 3x3 grid (9 cards) on A4 Landscape.
+            // If cardHeight > cardWidth (Vertical Card):
+            //   - Width ~5.4cm. 3 cards fit in A4 Portrait width (21cm).
+            //   - Width ~5.4cm. 5 cards fit in A4 Landscape width (29.7cm).
+            //   Standard vertical layout usually fits 3x3 grid (9 cards) on A4 Portrait.
 
-        // Adjust based on total character length
-        if (totalLength > 80) {
-            fontSizePt = 8;
-        } else if (totalLength > 60) {
-            fontSizePt = 9;
-        } else if (totalLength > 40) {
-            fontSizePt = 10;
-        }
+            let sheetOrientation: 'portrait' | 'landscape' = 'portrait';
+            if (options.cardWidth > options.cardHeight) {
+                sheetOrientation = 'landscape';
+            } else {
+                sheetOrientation = 'portrait';
+            }
 
-        // Further adjust based on number of lines to prevent vertical overflow
-        if (lineCount >= 4) {
-            fontSizePt = Math.min(fontSizePt, 9);
-        }
-        if (lineCount >= 5) {
-             fontSizePt = Math.min(fontSizePt, 8);
-        }
-
-        return {
-            fontSize: `${fontSizePt}pt`,
-            lineHeight: '1.2',
-        };
-    };
-
-    return (
-        <div className="grid grid-cols-3 gap-2 p-2">
-            {santriList.map(santri => {
-                const dynamicStyles = getDynamicStyles(santri);
-                return (
-                    <div 
-                        key={santri.id} 
-                        className="border border-black border-dashed text-center flex flex-col justify-center p-1 font-sans" 
-                        style={{ width: `${labelWidth}cm`, height: `${labelHeight}cm`, breakInside: 'avoid', ...dynamicStyles }}
-                    >
-                        {labelFields.map((field: string) => (
-                            <p key={field} className="px-1" style={{ fontWeight: field === 'namaLengkap' ? 'bold' : 'normal', overflowWrap: 'break-word' }}>
-                                {getFieldData(santri, field)}
-                            </p>
+            const cardsPerPage = 9; // Grid 3x3 safe bet for most printers
+            for (let i = 0; i < data.length; i += cardsPerPage) {
+                const pageData = data.slice(i, i + cardsPerPage);
+                
+                // Render Page
+                const pageContent = (
+                    <div className="flex flex-wrap gap-4 justify-center items-start content-start h-full">
+                        {pageData.map((santri) => (
+                            <div key={santri.id} className="relative" style={{ breakInside: 'avoid' }}>
+                                <KartuSantriTemplate santri={santri} settings={settings} options={options} />
+                                {/* Cut marks optional */}
+                                <div className="absolute -top-1 -left-1 w-2 h-2 border-t border-l border-gray-300"></div>
+                                <div className="absolute -top-1 -right-1 w-2 h-2 border-t border-r border-gray-300"></div>
+                                <div className="absolute -bottom-1 -left-1 w-2 h-2 border-b border-l border-gray-300"></div>
+                                <div className="absolute -bottom-1 -right-1 w-2 h-2 border-b border-r border-gray-300"></div>
+                            </div>
                         ))}
                     </div>
                 );
-            })}
-        </div>
-    );
-};
 
-const DaftarRombelTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: { rombelId: number } }> = ({ santriList, settings, options }) => {
-    const rombel = settings.rombel.find(r => r.id === options.rombelId);
-    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
-    const waliKelas = settings.tenagaPengajar.find(tp => tp.id === rombel?.waliKelasId);
-    
-    const formatFullAlamat = (alamat: Alamat): string => {
-        return [
-            alamat.detail,
-            alamat.desaKelurahan,
-            alamat.kecamatan,
-            alamat.kabupatenKota,
-            alamat.provinsi
-        ].filter(Boolean).join(', ');
-    };
+                previews.push({
+                    content: pageContent,
+                    orientation: sheetOrientation
+                });
+            }
+        }
+        else if (reportType === ReportType.LabelSantri) {
+            const currentPaper = paperDimensions[options.paperSize as keyof typeof paperDimensions] || paperDimensions['A4'];
+            const currentMargin = marginValues[options.margin as keyof typeof marginValues] || 2.0;
 
-    return (
-        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt' }}>
-            <div>
-                <PrintHeader settings={settings} title={`DAFTAR SANTRI ${jenjang?.nama?.toUpperCase() || ''}`} />
-                <div className="text-sm font-semibold mb-4 grid grid-cols-2">
-                <span>Kelas / Rombel: {kelas?.nama || 'N/A'} / {rombel?.nama || 'N/A'}</span>
-                <span className="text-right">Wali Kelas: {waliKelas?.nama || '...................................'}</span>
-                </div>
-                <table className="w-full text-left border-collapse border border-black">
-                    <thead className="text-xs uppercase bg-gray-200 text-center">
-                        <tr>
-                            <th className="px-1 py-1 border border-black">No</th>
-                            <th className="px-1 py-1 border border-black">NIS</th>
-                            <th className="px-1 py-1 border border-black text-left">Nama Lengkap</th>
-                            <th className="px-1 py-1 border border-black text-left">Tempat, Tgl. Lahir</th>
-                            <th className="px-1 py-1 border border-black text-left">Wali / Ayah</th>
-                            <th className="px-1 py-1 border border-black text-left">Alamat</th>
-                            <th className="px-1 py-1 border border-black text-left">No. Telepon</th>
-                        </tr>
-                    </thead>
-                    <tbody style={{ fontSize: '8pt' }}>
-                        {santriList.map((s, i) => (
-                            <tr key={s.id}>
-                                <td className="px-1 py-1 border border-black text-center align-top">{i + 1}</td>
-                                <td className="px-1 py-1 border border-black align-top">{s.nis}</td>
-                                <td className="px-1 py-1 border border-black align-top">{s.namaLengkap}</td>
-                                <td className="px-1 py-1 border border-black align-top">{`${s.tempatLahir}, ${formatDate(s.tanggalLahir)}`}</td>
-                                <td className="px-1 py-1 border border-black align-top">{s.namaWali || s.namaAyah}</td>
-                                <td className="px-1 py-1 border border-black align-top">{formatFullAlamat(s.alamat)}</td>
-                                <td className="px-1 py-1 border border-black align-top">{s.teleponWali || s.teleponAyah || s.teleponIbu}</td>
-                            </tr>
-                        ))}
-                        {santriList.length === 0 && (
-                            <tr>
-                                <td colSpan={7} className="text-center py-4 border border-black">Tidak ada santri aktif di rombel ini.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-            <ReportFooter />
-        </div>
-    );
-};
+            // Calculate usable area in cm
+            const effectiveWidth = currentPaper.width - (currentMargin * 2);
+            const effectiveHeight = currentPaper.height - (currentMargin * 2);
 
-const LembarNilaiTable: React.FC<{
-    santriList: Santri[];
-    settings: PondokSettings;
-    options: any;
-    mapel: MataPelajaran;
-}> = ({ santriList, settings, options, mapel }) => {
-    const { rombelId, nilaiTpCount, nilaiSmCount, showNilaiTengahSemester, semester, tahunAjaran } = options;
-    const rombel = settings.rombel.find(r => r.id === rombelId);
-    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
-    const waliKelas = settings.tenagaPengajar.find(tp => tp.id === rombel?.waliKelasId);
-    
-    const totalCols = 7 + nilaiTpCount + nilaiSmCount + (showNilaiTengahSemester ? 1 : 0);
+            // Dynamic Calculation
+            const gap = 0.1; // 1mm gap for safety and tight packing
+            const cols = Math.floor((effectiveWidth + gap) / (options.labelWidth + gap));
+            const rows = Math.floor((effectiveHeight + gap) / (options.labelHeight + gap));
+            const itemsPerPage = Math.max(1, cols * rows);
 
-    return (
-        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt' }}>
-            <div>
-                <PrintHeader settings={settings} title="LEMBAR PENILAIAN" />
-                <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-x-4">
-                    <div>
-                        <p>Jenjang: {jenjang?.nama || 'N/A'}</p>
-                        <p>Kelas: {kelas?.nama || 'N/A'}</p>
-                        <p>Rombel: {rombel?.nama || 'N/A'}</p>
+            for (let i = 0; i < data.length; i += itemsPerPage) {
+                const pageData = data.slice(i, i + itemsPerPage);
+
+                const labelContent = (
+                    <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignContent: 'flex-start',
+                        gap: `${gap}cm`,
+                        width: '100%',
+                        height: '100%'
+                    }}>
+                        {pageData.map(s => {
+                            const rombel = settings.rombel.find(r => r.id === s.rombelId)?.nama;
+                            const jenjang = settings.jenjang.find(j => j.id === s.jenjangId)?.nama;
+                            
+                            // Font sizes
+                            const fontSizePt = options.labelFontSize || 10;
+                            const smallFontSizePt = Math.max(6, fontSizePt - 2);
+
+                            return (
+                                <div key={s.id} className="border border-gray-400 border-dashed flex flex-col justify-center items-center text-center overflow-hidden bg-white"
+                                     style={{
+                                         width: `${options.labelWidth}cm`,
+                                         height: `${options.labelHeight}cm`,
+                                         padding: '0.1cm',
+                                         boxSizing: 'border-box'
+                                     }}>
+                                    {options.labelFields.includes('namaLengkap') && (
+                                        <div className="font-bold leading-tight" style={{ fontSize: `${fontSizePt}pt` }}>
+                                            {s.namaLengkap}
+                                        </div>
+                                    )}
+                                    {options.labelFields.includes('namaHijrah') && s.namaHijrah && (
+                                        <div className="italic text-gray-600" style={{ fontSize: `${fontSizePt}pt` }}>
+                                            ({s.namaHijrah})
+                                        </div>
+                                    )}
+                                    {options.labelFields.includes('nis') && (
+                                        <div className="font-mono bg-gray-100 px-1 rounded mt-0.5" style={{ fontSize: `${fontSizePt}pt` }}>
+                                            {s.nis}
+                                        </div>
+                                    )}
+                                    <div className="text-gray-600 mt-0.5 leading-tight" style={{ fontSize: `${smallFontSizePt}pt` }}>
+                                        {options.labelFields.includes('jenjang') && <span>{jenjang}</span>}
+                                        {options.labelFields.includes('jenjang') && options.labelFields.includes('rombel') && <br/>}
+                                        {options.labelFields.includes('rombel') && <span>{rombel}</span>}
+                                    </div>
+                                    {options.labelFields.includes('ttl') && (
+                                        <div className="text-gray-500 mt-0.5" style={{ fontSize: `${smallFontSizePt}pt` }}>
+                                            {s.tempatLahir}, {formatDate(s.tanggalLahir)}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
-                    <div className="text-right">
-                        <p>Semester: {semester}</p>
-                        <p>Tahun Ajaran: {tahunAjaran || '...........................'}</p>
-                        <p>Wali Kelas: {waliKelas?.nama || '...........................'}</p>
-                    </div>
-                    <div className="col-span-2 font-bold mt-2">
-                        <p>Mata Pelajaran: {mapel.nama}</p>
-                    </div>
-                </div>
-                <table className="w-full text-left border-collapse border border-black" style={{ fontSize: '8pt' }}>
-                    <thead className="uppercase bg-gray-200 text-center align-middle">
-                        <tr>
-                            <th rowSpan={2} className="p-1 border border-black w-6">No</th>
-                            <th rowSpan={2} className="p-1 border border-black w-16">NIS</th>
-                            <th rowSpan={2} className="p-1 border border-black" style={{ minWidth: '150px' }}>Nama Lengkap</th>
-                            <th colSpan={nilaiTpCount + 1} className="p-1 border border-black">TP</th>
-                            <th colSpan={nilaiSmCount + 1} className="p-1 border border-black">SM</th>
-                            {showNilaiTengahSemester && <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>STS</th>}
-                            <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>SAS</th>
-                            <th rowSpan={2} className="p-1 border border-black" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>NA</th>
-                        </tr>
-                        <tr>
-                            {[...Array(nilaiTpCount)].map((_, i) => <th key={`tp-${i}`} className="p-0.5 border border-black font-medium w-6">{i + 1}</th>)}
-                            <th className="p-1 border border-black font-medium bg-gray-300 w-8" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', textAlign: 'center' }}>Rerata TP</th>
-                            {[...Array(nilaiSmCount)].map((_, i) => <th key={`sm-${i}`} className="p-0.5 border border-black font-medium w-6">{i + 1}</th>)}
-                            <th className="p-1 border border-black font-medium bg-gray-300 w-8" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', textAlign: 'center' }}>Rerata SM</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {santriList.map((s, i) => (
-                            <tr key={s.id}>
-                                <td className="p-1 border border-black text-center h-7">{i + 1}</td>
-                                <td className="p-1 border border-black">{s.nis}</td>
-                                <td className="p-1 border border-black">{s.namaLengkap}</td>
-                                {[...Array(nilaiTpCount)].map((_, j) => <td key={`tp-val-${j}`} className="p-1 border border-black"></td>)}
-                                <td className="p-1 border border-black bg-gray-100"></td>
-                                {[...Array(nilaiSmCount)].map((_, j) => <td key={`sm-val-${j}`} className="p-1 border border-black"></td>)}
-                                <td className="p-1 border border-black bg-gray-100"></td>
-                                {showNilaiTengahSemester && <td className="p-1 border border-black"></td>}
-                                <td className="p-1 border border-black"></td>
-                                <td className="p-1 border border-black bg-gray-100"></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colSpan={totalCols} className="p-2 text-xs border border-black">
-                                <strong>Keterangan:</strong> TP = Tujuan Pembelajaran, SM = Sumatif Lingkup Materi, STS = Sumatif Tengah Semester, SAS = Sumatif Akhir Semester, NA = Nilai Akhir
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-            <ReportFooter />
-        </div>
-    );
-};
+                );
 
-const LembarAbsensiTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: { rombelId: number; bulan: string; tahun: string; semester: string; tahunAjaran: string; } }> = ({ santriList, settings, options }) => {
-    const { rombelId, bulan, tahun, semester, tahunAjaran } = options;
-    const rombel = settings.rombel.find(r => r.id === rombelId);
-    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
-    const waliKelas = settings.tenagaPengajar.find(tp => tp.id === rombel?.waliKelasId);
-    
-    const jenjangNama = jenjang?.nama || 'N/A';
-    const kelasNama = kelas?.nama || 'N/A';
-    const rombelNama = rombel?.nama || 'N/A';
-    const waliKelasNama = waliKelas?.nama || '...........................';
-
-    return (
-        <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt' }}>
-            <div>
-                <PrintHeader settings={settings} title="LEMBAR ABSENSI" />
-                <div className="text-sm font-semibold mb-2 grid grid-cols-2 gap-x-4">
-                    <div>
-                        <p>Jenjang: {jenjangNama}</p>
-                        <p>Kelas: {kelasNama}</p>
-                        <p>Rombel: {rombelNama}</p>
-                    </div>
-                    <div className="text-right">
-                        <p>Bulan: {bulan} {tahun}</p>
-                        <p>Semester / Th. Ajaran: {semester} / {tahunAjaran || '...........................'}</p>
-                        <p>Wali Kelas: {waliKelasNama}</p>
-                    </div>
-                </div>
-                <table className="w-full text-left border-collapse border border-black">
-                    <thead className="text-[8pt] uppercase bg-gray-200 text-center">
-                        <tr>
-                            <th rowSpan={2} className="p-1 border border-black align-middle w-6">No</th>
-                            <th rowSpan={2} className="p-1 border border-black align-middle" style={{minWidth: '200px'}}>Nama Lengkap</th>
-                            <th colSpan={31} className="p-1 border border-black">Tanggal</th>
-                            <th colSpan={3} className="p-1 border border-black">Jumlah</th>
-                        </tr>
-                        <tr>
-                            {[...Array(31)].map((_, i) => <th key={i} className="p-1 border border-black font-medium w-6">{i + 1}</th>)}
-                            <th className="p-1 border border-black font-medium bg-blue-100">S</th>
-                            <th className="p-1 border border-black font-medium bg-yellow-100">I</th>
-                            <th className="p-1 border border-black font-medium bg-red-100">A</th>
-                        </tr>
-                    </thead>
-                    <tbody style={{ fontSize: '9pt' }}>
-                        {santriList.map((s, i) => (
-                            <tr key={s.id}>
-                                <td className="p-1 border border-black text-center h-7" style={{ fontSize: '9pt' }}>{i + 1}</td>
-                                <td className="p-1 border border-black" style={{ fontSize: '9pt' }}>{s.namaLengkap}</td>
-                                {[...Array(31)].map((_, i) => <td key={i} className="p-1 border border-black text-center"></td>)}
-                                <td className="p-1 border border-black bg-blue-50"></td>
-                                <td className="p-1 border border-black bg-yellow-50"></td>
-                                <td className="p-1 border border-black bg-red-50"></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                <div className="text-xs mt-2">Keterangan: S=Sakit, I=Izin, A=Alpa</div>
-            </div>
-            <ReportFooter />
-        </div>
-    );
-};
-
-
-export const useReportGenerator = (settings: PondokSettings) => {
-    let hasGeneratedGuidance = false;
-
-    const resetGuidanceFlag = () => {
-        hasGeneratedGuidance = false;
-    };
-
-    const paperDimensions = useMemo(() => ({
-        A4: { width: 21, height: 29.7 },
-        F4: { width: 21.5, height: 33 },
-        Legal: { width: 21.6, height: 35.6 },
-        Letter: { width: 21.6, height: 27.9 },
-    }), []);
-
-    const marginValues = useMemo(() => ({
-        narrow: 1.27,
-        normal: 2,
-        wide: 3,
-    }), []);
-    
-    const hijriMonths = useMemo(() => [
-        { value: 1, name: "Muharram" }, { value: 2, name: "Safar" }, { value: 3, name: "Rabi'ul Awwal" },
-        { value: 4, name: "Rabi'ul Akhir" }, { value: 5, name: "Jumadal Ula" }, { value: 6, name: "Jumadal Akhirah" },
-        { value: 7, name: "Rajab" }, { value: 8, name: "Sha'ban" }, { value: 9, name: "Ramadhan" },
-        { value: 10, name: "Shawwal" }, { value: 11, name: "Dhu al-Qi'dah" }, { value: 12, name: "Dhu al-Hijjah" }
-    ], []);
-
-    const generateReport = (reportType: ReportType, santriData: Santri[], options: any): { content: React.ReactNode; orientation: 'portrait' | 'landscape' }[] => {
-        switch (reportType) {
-            case ReportType.LaporanArusKas:
-                return [{
-                    content: <LaporanArusKasTemplate settings={settings} options={options} />,
-                    orientation: 'portrait'
-                }];
-            
-            case ReportType.RekeningKoranSantri:
-                return santriData.map(santri => ({
-                    content: <RekeningKoranSantriTemplate santri={santri} settings={settings} options={options} />,
-                    orientation: 'portrait'
-                }));
-
-            case ReportType.DashboardSummary:
-                return [{
-                    content: <DashboardSummaryTemplate santriList={santriData} settings={settings} />,
-                    orientation: 'portrait'
-                }];
-
-            case ReportType.FinanceSummary:
-                return [{
-                    content: <FinanceSummaryTemplate santriList={santriData} tagihanList={options.tagihanList} pembayaranList={options.pembayaranList} settings={settings} />,
-                    orientation: 'portrait'
-                }];
-
-            case ReportType.LaporanMutasi:
-                {
-                    const mutasiEvents: { santri: Santri; mutasi: RiwayatStatus }[] = [];
-                    santriData.forEach(santri => {
-                        (santri.riwayatStatus || []).forEach(mutasi => {
-                            const mutasiDate = new Date(mutasi.tanggal);
-                            if (mutasiDate >= new Date(options.mutasiStartDate) && mutasiDate <= new Date(options.mutasiEndDate)) {
-                                mutasiEvents.push({ santri, mutasi });
-                            }
-                        });
-                    });
-                    mutasiEvents.sort((a, b) => new Date(a.mutasi.tanggal).getTime() - new Date(b.mutasi.tanggal).getTime());
-                    return [{ 
-                        content: <LaporanMutasiTemplate mutasiEvents={mutasiEvents} settings={settings} startDate={options.mutasiStartDate} endDate={options.mutasiEndDate} />, 
-                        orientation: 'portrait' 
-                    }];
-                }
-            
-            case ReportType.LaporanAsrama:
-                return [{
-                    content: <LaporanAsramaTemplate
-                        settings={settings}
-                        santriList={santriData}
-                        gedungList={options.filteredGedung || settings.gedungAsrama}
-                    />,
-                    orientation: 'portrait'
-                }];
-
-            case ReportType.Biodata:
-                return santriData.map(santri => ({
+                previews.push({ content: labelContent, orientation: 'portrait' });
+            }
+        }
+        else if (reportType === ReportType.Biodata) {
+            data.forEach(santri => {
+                previews.push({
                     content: <BiodataTemplate santri={santri} settings={settings} useHijriDate={options.useHijriDate} hijriDateMode={options.hijriDateMode} manualHijriDate={options.manualHijriDate} />,
                     orientation: 'portrait'
-                }));
+                });
+            });
+        }
+        else if (reportType === ReportType.LembarKedatangan) {
+            previews.push({
+                content: <LembarKedatanganTemplate santriList={data} settings={settings} options={options} />,
+                orientation: 'portrait'
+            });
+        }
+        else if (reportType === ReportType.LembarRapor) {
+            previews.push({
+                content: <LembarRaporTemplate santriList={data} settings={settings} options={options} />,
+                orientation: 'portrait'
+            });
+        }
+        else if (reportType === ReportType.DashboardSummary) {
+            previews.push({
+                content: <DashboardSummaryTemplate santriList={data} settings={settings} />,
+                orientation: 'portrait'
+            });
+        }
+        else if (reportType === ReportType.FinanceSummary) {
+            previews.push({
+                content: <FinanceSummaryTemplate santriList={data} tagihanList={options.tagihanList} pembayaranList={options.pembayaranList} settings={settings} />,
+                orientation: 'portrait'
+            });
+        }
+        else if (reportType === ReportType.LaporanMutasi) {
+             // Mocking mutasi events for now since we passed raw santri list
+             // Ideally we should query actual history. For this scope, we filter history inside template or pre-calc
+             const events: { santri: Santri; mutasi: RiwayatStatus }[] = [];
+             const start = new Date(options.mutasiStartDate);
+             const end = new Date(options.mutasiEndDate + 'T23:59:59');
+             
+             data.forEach(s => {
+                 if (s.riwayatStatus) {
+                     s.riwayatStatus.forEach(r => {
+                         const rDate = new Date(r.tanggal);
+                         if (rDate >= start && rDate <= end) {
+                             events.push({ santri: s, mutasi: r });
+                         }
+                     });
+                 }
+             });
+             
+             events.sort((a,b) => new Date(a.mutasi.tanggal).getTime() - new Date(b.mutasi.tanggal).getTime());
+
+             previews.push({
+                content: <LaporanMutasiTemplate mutasiEvents={events} settings={settings} startDate={options.mutasiStartDate} endDate={options.mutasiEndDate} />,
+                orientation: 'landscape' // More columns, better landscape
+            });
+        }
+        else if (reportType === ReportType.LaporanArusKas) {
+            previews.push({
+                content: <LaporanArusKasTemplate settings={settings} options={options} />,
+                orientation: 'portrait'
+            });
+        }
+        else if (reportType === ReportType.RekeningKoranSantri) {
+            data.forEach(santri => {
+                previews.push({
+                    content: <RekeningKoranSantriTemplate santri={santri} settings={settings} options={options} />,
+                    orientation: 'portrait'
+                });
+            });
+        }
+        else if (reportType === ReportType.LaporanAsrama) {
+            previews.push({
+                content: <LaporanAsramaTemplate settings={settings} santriList={data} gedungList={options.filteredGedung} />,
+                orientation: 'portrait'
+            });
+        }
+        else if (reportType === ReportType.LembarNilai) {
+            // Logic for Lembar Nilai (Template Empty Score Sheet)
+            // Group by Rombel logic is handled in Reports.tsx, here data is specific to one rombel mostly
+            // But if multiple rombels selected, we might want page breaks.
+            // Assuming data passed here is for one batch (Reports.tsx loops per rombel).
             
-            case ReportType.LembarKedatangan:
-                {
-                    if (santriData.length === 0) return [];
-                    const firstSantri = santriData[0];
-                    const reportOptions = {
-                        rombelId: firstSantri.rombelId,
-                        agendaKedatangan: options.agendaKedatangan,
-                        semester: options.semester,
-                        tahunAjaran: options.tahunAjaran,
-                    };
-                    return [{ content: <LembarKedatanganTemplate santriList={santriData} settings={settings} options={reportOptions} />, orientation: 'portrait' }];
-                }
+            const rombelId = data[0]?.rombelId;
+            const rombel = settings.rombel.find(r => r.id === rombelId);
+            const mapelList = settings.mataPelajaran.filter(m => options.selectedMapelIds.includes(m.id));
             
-            case ReportType.LembarRapor:
-                 {
-                    if (santriData.length === 0) return [];
-                    const firstSantri = santriData[0];
-                    const reportOptions = {
-                        rombelId: firstSantri.rombelId,
-                        semester: options.semester,
-                        tahunAjaran: options.tahunAjaran,
-                    };
-                    return [{ content: <LembarRaporTemplate santriList={santriData} settings={settings} options={reportOptions} />, orientation: 'portrait' }];
-                }
-
-            case ReportType.DaftarRombel:
-                {
-                    if (santriData.length === 0) return [];
-                    const firstSantri = santriData[0];
-                    // Pass ID instead of Name to avoid ambiguity
-                    return [{ content: <DaftarRombelTemplate santriList={santriData} settings={settings} options={{ rombelId: firstSantri.rombelId }} />, orientation: 'landscape' }];
-                }
-            case ReportType.LembarNilai:
-                {
-                    if (santriData.length === 0) return [];
-                    const results: { content: React.ReactNode; orientation: 'portrait' | 'landscape' }[] = [];
-                    
-                    if (options.guidanceOption === 'show' && !hasGeneratedGuidance) {
-                        results.push({
-                            content: <PanduanPenilaianTemplate />,
-                            orientation: 'landscape'
-                        });
-                        hasGeneratedGuidance = true;
-                    }
-
-                    const firstSantri = santriData[0];
-                    const reportOptions = { rombelId: firstSantri.rombelId, ...options };
-                    const selectedMapels = settings.mataPelajaran.filter(m => options.selectedMapelIds.includes(m.id));
-
-                    selectedMapels.forEach(mapel => {
-                        results.push({
-                            content: <LembarNilaiTable santriList={santriData} settings={settings} options={reportOptions} mapel={mapel} />,
-                            orientation: 'landscape'
-                        });
-                    });
-
-                    return results;
-                }
-            case ReportType.LembarAbsensi:
-                {
-                    if (santriData.length === 0) return [];
-                    const firstSantri = santriData[0];
-                    const results: { content: React.ReactNode; orientation: 'portrait' | 'landscape' }[] = [];
-                    const reportOptionsBase = { rombelId: firstSantri.rombelId, semester: options.semester, tahunAjaran: options.tahunAjaran };
-
-                    if (options.attendanceCalendar === 'Masehi') {
-                        const start = new Date(options.startMonth);
-                        const end = new Date(options.endMonth);
-                        let current = start;
-                        while (current <= end) {
-                            results.push({
-                                content: <LembarAbsensiTemplate santriList={santriData} settings={settings} options={{ ...reportOptionsBase, bulan: current.toLocaleString('id-ID', { month: 'long' }), tahun: current.getFullYear().toString() }} />,
-                                orientation: 'landscape'
-                            });
-                            current.setMonth(current.getMonth() + 1);
-                        }
-                    } else {
-                        let currentYear = options.hijriStartYear;
-                        let currentMonth = options.hijriStartMonth;
-                        const endYear = options.hijriEndYear;
-                        const endMonth = options.hijriEndMonth;
-
-                        while (currentYear < endYear || (currentYear === endYear && currentMonth <= endMonth)) {
-                            const hijriMonthName = hijriMonths.find(m => m.value === currentMonth)?.name || `Bulan ${currentMonth}`;
-                            results.push({
-                                content: <LembarAbsensiTemplate santriList={santriData} settings={settings} options={{ ...reportOptionsBase, bulan: hijriMonthName, tahun: `${currentYear} H` }} />,
-                                orientation: 'landscape'
-                            });
-
-                            currentMonth++;
-                            if (currentMonth > 12) {
-                                currentMonth = 1;
-                                currentYear++;
-                            }
-                        }
-                    }
-                    return results;
-                }
-            case ReportType.LabelSantri:
-                // Footer for labels/cards is added to the container in the returned structure below
-                return [{ 
+            // Only 1 mapel per page usually for score entry
+            mapelList.forEach(mapel => {
+                previews.push({
                     content: (
-                        <div className="flex flex-col h-full justify-between">
-                            <div className="flex-grow">
-                                <LabelSantriTemplate santriList={santriData} settings={settings} options={options} />
+                        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+                            <div>
+                                <PrintHeader settings={settings} title={`LEMBAR NILAI ${mapel.nama.toUpperCase()}`} />
+                                <div className="text-sm font-semibold mb-4 grid grid-cols-2">
+                                    <span>Kelas/Rombel: {rombel?.nama}</span>
+                                    <span className="text-right">Semester: {options.semester}</span>
+                                    <span>Guru Pengampu: ...................................</span>
+                                    <span className="text-right">Tahun Ajaran: {options.tahunAjaran}</span>
+                                </div>
+                                <table className="w-full border-collapse border border-black text-center text-xs">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th rowSpan={3} className="border border-black p-1 w-8">No</th>
+                                            <th rowSpan={3} className="border border-black p-1 w-24">NIS</th>
+                                            <th rowSpan={3} className="border border-black p-1">Nama Santri</th>
+                                            <th colSpan={options.nilaiTpCount + 1} className="border border-black p-1">Nilai Sumatif Lingkup Materi</th>
+                                            <th colSpan={options.nilaiSmCount + 1} className="border border-black p-1">Nilai Sumatif Akhir</th>
+                                            {options.showNilaiTengahSemester && <th rowSpan={3} className="border border-black p-1 w-10">STS</th>}
+                                            <th rowSpan={3} className="border border-black p-1 w-10">SAS</th>
+                                            <th rowSpan={3} className="border border-black p-1 w-10">NA</th>
+                                        </tr>
+                                        <tr>
+                                            <th colSpan={options.nilaiTpCount} className="border border-black p-1">Tujuan Pembelajaran (TP)</th>
+                                            <th rowSpan={2} className="border border-black p-1 w-10 rotate-90 h-20"><div className="w-4">Rerata TP</div></th>
+                                            <th colSpan={options.nilaiSmCount} className="border border-black p-1">Sumatif Materi (SM)</th>
+                                            <th rowSpan={2} className="border border-black p-1 w-10 rotate-90"><div className="w-4">Rerata SM</div></th>
+                                        </tr>
+                                        <tr>
+                                            {[...Array(options.nilaiTpCount)].map((_, i) => <th key={i} className="border border-black p-1 w-8">{i + 1}</th>)}
+                                            {[...Array(options.nilaiSmCount)].map((_, i) => <th key={i} className="border border-black p-1 w-8">{i + 1}</th>)}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {data.map((s, i) => (
+                                            <tr key={s.id} className="h-6">
+                                                <td className="border border-black">{i + 1}</td>
+                                                <td className="border border-black">{s.nis}</td>
+                                                <td className="border border-black text-left pl-2">{s.namaLengkap}</td>
+                                                {[...Array(options.nilaiTpCount + 1)].map((_, idx) => <td key={idx} className="border border-black"></td>)}
+                                                {[...Array(options.nilaiSmCount + 1)].map((_, idx) => <td key={idx} className="border border-black"></td>)}
+                                                {options.showNilaiTengahSemester && <td className="border border-black"></td>}
+                                                <td className="border border-black"></td>
+                                                <td className="border border-black"></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="mt-4 flex justify-end">
+                                <div className="text-center w-64">
+                                    <p>Guru Mata Pelajaran,</p>
+                                    <div className="h-16"></div>
+                                    <p className="font-bold border-b border-black inline-block min-w-[150px]"></p>
+                                </div>
                             </div>
                             <ReportFooter />
                         </div>
-                    ), 
-                    orientation: 'portrait' 
-                }];
-            case ReportType.KartuSantri: {
-                const cards = santriData.map(santri => <KartuSantriTemplate key={santri.id} santri={santri} settings={settings} options={options} />);
-                const cardsPerPage = 8;
-                const pages: React.ReactNode[] = [];
-                for (let i = 0; i < cards.length; i += cardsPerPage) {
-                    pages.push(
-                        <div key={i} className="flex flex-col h-full justify-between">
-                            <div className="grid grid-cols-2 gap-2 p-2 flex-grow">{cards.slice(i, i + cardsPerPage)}</div>
+                    ),
+                    orientation: 'portrait'
+                });
+            });
+
+            // Add Guidance Page if enabled
+            if (options.guidanceOption === 'show' && mapelList.length > 0) {
+                previews.push({
+                    content: <PanduanPenilaianTemplate />,
+                    orientation: 'portrait'
+                });
+            }
+        }
+        else if (reportType === ReportType.FormulirIzin) {
+            // One page per santri
+            data.forEach(santri => {
+                const rombel = settings.rombel.find(r => r.id === santri.rombelId)?.nama;
+                const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(options.izinSignatoryId));
+                
+                previews.push({
+                    content: (
+                        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '11pt' }}>
+                            <div>
+                                <PrintHeader settings={settings} title="SURAT IZIN KELUAR PONDOK" />
+                                <div className="my-6">
+                                    <p>Yang bertanda tangan di bawah ini memberikan izin kepada:</p>
+                                    <table className="w-full my-4 ml-4">
+                                        <tbody>
+                                            <tr><td className="w-40 py-1">Nama</td><td>: <strong>{santri.namaLengkap}</strong></td></tr>
+                                            <tr><td className="w-40 py-1">NIS</td><td>: {santri.nis}</td></tr>
+                                            <tr><td className="w-40 py-1">Kamar / Rombel</td><td>: {santri.kamarId ? settings.kamar.find(k=>k.id===santri.kamarId)?.nama : '-'} / {rombel}</td></tr>
+                                        </tbody>
+                                    </table>
+                                    
+                                    <p>Untuk keluar lingkungan pondok pesantren dengan detail sebagai berikut:</p>
+                                    <table className="w-full my-4 ml-4">
+                                        <tbody>
+                                            <tr><td className="w-40 py-1">Tujuan</td><td>: {options.izinTujuan}</td></tr>
+                                            <tr><td className="w-40 py-1">Keperluan</td><td>: {options.izinKeperluan}</td></tr>
+                                            <tr><td className="w-40 py-1">Waktu Berangkat</td><td>: {formatDate(options.izinTanggalBerangkat)}</td></tr>
+                                            <tr><td className="w-40 py-1">Waktu Kembali</td><td>: {formatDate(options.izinTanggalKembali)}</td></tr>
+                                            <tr><td className="w-40 py-1">Penjemput</td><td>: {options.izinPenjemput || 'Sendiri'}</td></tr>
+                                        </tbody>
+                                    </table>
+
+                                    <div className="border-2 border-gray-800 p-4 rounded-md mt-6 bg-gray-50">
+                                        <h4 className="font-bold underline mb-2 text-sm">KETENTUAN IZIN:</h4>
+                                        <div className="text-sm space-y-1 whitespace-pre-wrap">{options.izinKetentuan}</div>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between items-end mt-16 px-8" style={{ breakInside: 'avoid' }}>
+                                    <div className="text-center w-48">
+                                        <p>Santri Ybs,</p>
+                                        <div className="h-20"></div>
+                                        <p className="font-bold underline">{santri.namaLengkap}</p>
+                                    </div>
+                                    <div className="text-center w-48">
+                                        <p>Sumpiuh, {formatDate(new Date().toISOString())}</p>
+                                        <p>{options.izinSignatoryTitle}</p>
+                                        <div className="h-20"></div>
+                                        <p className="font-bold underline">{signatory?.nama || '..........................'}</p>
+                                    </div>
+                                </div>
+                            </div>
                             <ReportFooter />
                         </div>
-                    );
-                }
-                return pages.map(page => ({ content: page, orientation: 'portrait' }));
-            }
-            case ReportType.LembarPembinaan:
-                return santriData.map(santri => ({
-                    content: <LembarPembinaanTemplate santri={santri} settings={settings} />,
+                    ),
                     orientation: 'portrait'
-                }));
-            case ReportType.FormulirIzin:
-                return santriData.map(santri => ({
-                    content: <FormulirIzinTemplate santri={santri} settings={settings} options={options} />,
-                    orientation: 'portrait'
-                }));
-
-            default:
-                return [];
+                });
+            });
         }
+        else if (reportType === ReportType.LembarPembinaan) {
+            data.forEach(santri => {
+               previews.push({
+                   content: (
+                        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+                            <div>
+                                <PrintHeader settings={settings} title="LEMBAR PEMBINAAN SANTRI" />
+                                <div className="mb-6 p-4 border rounded bg-gray-50">
+                                    <table className="w-full">
+                                        <tbody>
+                                            <tr><td className="font-semibold w-32">Nama</td><td>: {santri.namaLengkap}</td><td className="font-semibold w-32">NIS</td><td>: {santri.nis}</td></tr>
+                                            <tr><td className="font-semibold">Rombel</td><td>: {settings.rombel.find(r=>r.id===santri.rombelId)?.nama}</td><td className="font-semibold">Wali</td><td>: {santri.namaWali || santri.namaAyah}</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <h4 className="font-bold text-lg border-b border-black mb-2 mt-4">A. Catatan Prestasi</h4>
+                                <table className="w-full border-collapse border border-black text-sm mb-6">
+                                    <thead className="bg-gray-200">
+                                        <tr><th className="border p-2 w-10">No</th><th className="border p-2">Kegiatan/Lomba</th><th className="border p-2">Tingkat</th><th className="border p-2">Tahun</th><th className="border p-2">Ket.</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {(santri.prestasi && santri.prestasi.length > 0) ? santri.prestasi.map((p, i) => (
+                                            <tr key={i}><td className="border p-2 text-center">{i+1}</td><td className="border p-2">{p.nama}</td><td className="border p-2">{p.tingkat}</td><td className="border p-2 text-center">{p.tahun}</td><td className="border p-2">{p.jenis}</td></tr>
+                                        )) : <tr><td colSpan={5} className="border p-4 text-center italic text-gray-500">Belum ada data prestasi.</td></tr>}
+                                    </tbody>
+                                </table>
+
+                                <h4 className="font-bold text-lg border-b border-black mb-2">B. Catatan Pelanggaran & Pembinaan</h4>
+                                <table className="w-full border-collapse border border-black text-sm">
+                                    <thead className="bg-gray-200">
+                                        <tr><th className="border p-2 w-10">No</th><th className="border p-2 w-24">Tanggal</th><th className="border p-2">Jenis Pelanggaran</th><th className="border p-2">Tindak Lanjut / Sanksi</th><th className="border p-2 w-32">Paraf Pembina</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {(santri.pelanggaran && santri.pelanggaran.length > 0) ? santri.pelanggaran.map((p, i) => (
+                                            <tr key={i}><td className="border p-2 text-center">{i+1}</td><td className="border p-2">{formatDate(p.tanggal)}</td><td className="border p-2"><div>{p.deskripsi}</div><div className="text-xs text-gray-500 italic">({p.jenis})</div></td><td className="border p-2">{p.tindakLanjut}</td><td className="border p-2"></td></tr>
+                                        )) : (
+                                            <>
+                                                {[1,2,3,4,5].map(i => <tr key={i} className="h-10"><td className="border p-2 text-center">{i}</td><td className="border p-2"></td><td className="border p-2"></td><td className="border p-2"></td><td className="border p-2"></td></tr>)}
+                                            </>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <ReportFooter />
+                        </div>
+                   ),
+                   orientation: 'portrait'
+               }); 
+            });
+        }
+        else if (reportType === ReportType.DaftarRombel) {
+            const rombelId = data[0]?.rombelId;
+            const rombel = settings.rombel.find(r => r.id === rombelId);
+            const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+            const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+            const waliKelas = rombel?.waliKelasId ? settings.tenagaPengajar.find(p => p.id === rombel.waliKelasId) : null;
+
+            previews.push({
+                content: (
+                    <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+                        <div>
+                            <PrintHeader settings={settings} title="DAFTAR SANTRI PER ROMBEL" />
+                            <div className="flex justify-between mb-4 font-semibold text-sm">
+                                <div>
+                                    <p>Jenjang: {jenjang?.nama}</p>
+                                    <p>Kelas: {kelas?.nama}</p>
+                                    <p>Rombel: {rombel?.nama}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p>Tahun Ajaran: {new Date().getFullYear()}/{new Date().getFullYear()+1}</p>
+                                    <p>Wali Kelas: {waliKelas?.nama || '-'}</p>
+                                    <p>Jumlah Santri: {data.length}</p>
+                                </div>
+                            </div>
+                            <table className="w-full border-collapse border border-black text-sm">
+                                <thead className="bg-gray-200">
+                                    <tr>
+                                        <th className="border border-black p-2 w-8">No</th>
+                                        <th className="border border-black p-2 w-24">NIS</th>
+                                        <th className="border border-black p-2">Nama Lengkap</th>
+                                        <th className="border border-black p-2 w-10">L/P</th>
+                                        <th className="border border-black p-2 w-32">TTL</th>
+                                        <th className="border border-black p-2 w-32">Ayah / Wali</th>
+                                        <th className="border border-black p-2 w-28">No. Telepon</th>
+                                        <th className="border border-black p-2">Alamat</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.map((s, i) => {
+                                        const wali = s.namaAyah || s.namaWali || s.namaIbu || '-';
+                                        const telp = s.teleponWali || s.teleponAyah || s.teleponIbu || '-';
+                                        return (
+                                        <tr key={s.id}>
+                                            <td className="border border-black p-2 text-center">{i+1}</td>
+                                            <td className="border border-black p-2">{s.nis}</td>
+                                            <td className="border border-black p-2">{s.namaLengkap}</td>
+                                            <td className="border border-black p-2 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td>
+                                            <td className="border border-black p-2">{s.tempatLahir}, {formatDate(s.tanggalLahir)}</td>
+                                            <td className="border border-black p-2">{wali}</td>
+                                            <td className="border border-black p-2">{telp}</td>
+                                            <td className="border border-black p-2">{s.alamat.kecamatan}, {s.alamat.kabupatenKota}</td>
+                                        </tr>
+                                    )})}
+                                </tbody>
+                            </table>
+                        </div>
+                        <ReportFooter />
+                    </div>
+                ),
+                orientation: 'landscape'
+            });
+        }
+        else if (reportType === ReportType.LembarAbsensi) {
+            // Logic for Absensi (Similar to Daftar Rombel but grid for dates)
+            const rombelId = data[0]?.rombelId;
+            const rombel = settings.rombel.find(r => r.id === rombelId);
+            const title = `LEMBAR ABSENSI BULAN ${options.attendanceCalendar === 'Masehi' ? new Date(options.startMonth).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }).toUpperCase() : `HIJRIAH`}`; // Simplified
+
+            previews.push({
+                content: (
+                    <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+                        <div>
+                            <PrintHeader settings={settings} title={title} />
+                            <div className="flex justify-between mb-4 font-semibold text-sm">
+                                <span>Rombel: {rombel?.nama}</span>
+                                <span>Tahun Ajaran: {options.tahunAjaran || '-'}</span>
+                            </div>
+                            <table className="w-full border-collapse border border-black text-xs text-center">
+                                <thead>
+                                    <tr>
+                                        <th rowSpan={2} className="border border-black p-1 w-8">No</th>
+                                        <th rowSpan={2} className="border border-black p-1 w-48 text-left">Nama Santri</th>
+                                        <th colSpan={31} className="border border-black p-1">Tanggal</th>
+                                        <th colSpan={3} className="border border-black p-1">Rekap</th>
+                                    </tr>
+                                    <tr>
+                                        {[...Array(31)].map((_, i) => <th key={i} className="border border-black w-6 text-[8pt]">{i+1}</th>)}
+                                        <th className="border border-black w-8 bg-gray-100">S</th>
+                                        <th className="border border-black w-8 bg-gray-100">I</th>
+                                        <th className="border border-black w-8 bg-gray-100">A</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.map((s, i) => (
+                                        <tr key={s.id} className="h-6">
+                                            <td className="border border-black">{i+1}</td>
+                                            <td className="border border-black text-left px-2 truncate max-w-[150px]">{s.namaLengkap}</td>
+                                            {[...Array(31)].map((_, idx) => <td key={idx} className="border border-black"></td>)}
+                                            <td className="border border-black bg-gray-50"></td>
+                                            <td className="border border-black bg-gray-50"></td>
+                                            <td className="border border-black bg-gray-50"></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <ReportFooter />
+                    </div>
+                ),
+                orientation: 'landscape'
+            });
+        }
+
+        return previews;
     };
-    
+
     return { generateReport, paperDimensions, marginValues, resetGuidanceFlag };
 };

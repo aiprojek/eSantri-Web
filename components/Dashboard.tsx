@@ -159,6 +159,31 @@ const InfoPondokCard: React.FC<{ settings: PondokSettings }> = ({ settings }) =>
     );
 };
 
+// --- Avatar Component for Dashboard ---
+const DashboardAvatar: React.FC<{ santri: Santri }> = ({ santri }) => {
+    // Treat placeholder URL with text as no photo
+    const hasValidPhoto = santri.fotoUrl && !santri.fotoUrl.includes('text=Foto');
+
+    if (hasValidPhoto) {
+        return (
+            <img 
+                src={santri.fotoUrl}
+                alt={santri.namaLengkap}
+                className="w-12 h-12 rounded-full object-cover bg-gray-200 flex-shrink-0 border border-gray-200"
+            />
+        );
+    }
+    
+    // Abstract Neutral Avatar
+    return (
+        <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center flex-shrink-0 border border-teal-200 overflow-hidden">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-teal-600 mt-2">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            </svg>
+        </div>
+    );
+};
+
 
 const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
   const { santriList, settings } = useAppContext();
@@ -320,11 +345,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                 <ul className="space-y-4">
                     {recentSantri.map(santri => (
                         <li key={santri.id} className="flex items-center gap-4">
-                            <img 
-                                src={santri.fotoUrl || 'https://placehold.co/150x200/e2e8f0/334155?text=Foto'}
-                                alt={santri.namaLengkap}
-                                className="w-12 h-12 rounded-full object-cover bg-gray-200 flex-shrink-0"
-                            />
+                            <DashboardAvatar santri={santri} />
                             <div className="flex-grow">
                                 <p className="font-semibold text-sm text-gray-800">{santri.namaLengkap}</p>
                                 <p className="text-xs text-gray-500">{getRombelName(santri.rombelId)}</p>

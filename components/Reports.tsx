@@ -1,11 +1,11 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Santri, PondokSettings, ReportType, GedungAsrama, TransaksiKas } from '../types';
 import { useAppContext } from '../AppContext';
 import { useReportGenerator } from '../hooks/useReportGenerator';
 import { useReportConfig } from '../hooks/useReportConfig';
 import { ReportOptions } from './reports/ReportOptions';
-import { generatePdf } from '../utils/pdfGenerator';
+import { generatePdf, printToPdfNative } from '../utils/pdfGenerator';
+import { exportReportToSvg } from '../utils/svgExporter';
 
 const Reports: React.FC = () => {
   const { santriList, settings, tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList, showToast } = useAppContext();
@@ -19,6 +19,10 @@ const Reports: React.FC = () => {
   const [selectedKabupaten, setSelectedKabupaten] = useState<string>('');
   const [selectedKecamatan, setSelectedKecamatan] = useState<string>('');
   const [selectedGedungId, setSelectedGedungId] = useState<string>('');
+
+  // Sorting State
+  const [sortBy, setSortBy] = useState<'namaLengkap' | 'nis'>('namaLengkap');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const [previewContent, setPreviewContent] = useState<React.ReactNode | null>(null);
   const [pageCount, setPageCount] = useState<number>(0);
@@ -35,7 +39,7 @@ const Reports: React.FC = () => {
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
 
-  // Define report types early so handlers can use them
+  // ... (rest of the component logic remains the same until download handlers) ...
   const reportTypes = useMemo(() => [
     { id: ReportType.DashboardSummary, title: 'Laporan Ringkas Dashboard', description: "Cetak ringkasan statistik utama dari dashboard.", icon: 'bi-pie-chart-fill' },
     { id: ReportType.FinanceSummary, title: 'Laporan Ringkas Keuangan', description: "Cetak ringkasan statistik utama dari dashboard keuangan.", icon: 'bi-graph-up' },
@@ -66,7 +70,7 @@ const Reports: React.FC = () => {
   }, [selectedKelasId, settings.rombel, availableKelas]);
 
   const filteredSantri = useMemo(() => {
-    return santriList.filter(s => {
+    const filtered = santriList.filter(s => {
       const provinsiMatch = !selectedProvinsi || s.alamat.provinsi?.toLowerCase().includes(selectedProvinsi.toLowerCase());
       const kabupatenMatch = !selectedKabupaten || s.alamat.kabupatenKota?.toLowerCase().includes(selectedKabupaten.toLowerCase());
       const kecamatanMatch = !selectedKecamatan || s.alamat.kecamatan?.toLowerCase().includes(selectedKecamatan.toLowerCase());
@@ -82,7 +86,17 @@ const Reports: React.FC = () => {
         kecamatanMatch
       );
     });
-  }, [santriList, selectedJenjangId, selectedKelasId, selectedRombelId, selectedStatus, selectedGender, selectedProvinsi, selectedKabupaten, selectedKecamatan]);
+
+    // Apply Sorting
+    return filtered.sort((a, b) => {
+        const valA = (a[sortBy] || '').toString().toLowerCase();
+        const valB = (b[sortBy] || '').toString().toLowerCase();
+
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+    });
+  }, [santriList, selectedJenjangId, selectedKelasId, selectedRombelId, selectedStatus, selectedGender, selectedProvinsi, selectedKabupaten, selectedKecamatan, sortBy, sortOrder]);
   
   const filteredGedung = useMemo(() => {
     if (!selectedGedungId) return settings.gedungAsrama;
@@ -133,7 +147,6 @@ const Reports: React.FC = () => {
     }
   }, [paperSize, margin, paperDimensions, marginValues]);
 
-  // Click outside handler for download menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target as Node)) {
@@ -162,18 +175,27 @@ const Reports: React.FC = () => {
     setSelectedKabupaten('');
     setSelectedKecamatan('');
     setSelectedGedungId('');
+    // Reset Sort defaults
+    setSortBy('namaLengkap');
+    setSortOrder('asc');
     clearPreview();
     resetReportSpecificState();
   };
   
   const handlePrint = () => { window.print(); };
 
+  // New Function for High Quality Native PDF
+  const handleDownloadPdfNative = () => {
+      const fileName = `Laporan_${activeReport}_${new Date().toISOString().slice(0, 10)}`;
+      printToPdfNative('preview-area', fileName);
+      setIsDownloadMenuOpen(false);
+      showToast('Membuka dialog cetak... Pilih "Save as PDF".', 'info');
+  };
+
   const handleDownloadPdf = async () => {
       if (!previewContainerRef.current || !contentWrapperRef.current) return;
       
       setIsPdfGenerating(true);
-      
-      // Temporarily reset transform to ensure correct capture scale
       const originalTransform = contentWrapperRef.current.style.transform;
       contentWrapperRef.current.style.transform = 'none';
 
@@ -185,14 +207,30 @@ const Reports: React.FC = () => {
               fileName: fileName
           });
           
-          showToast('PDF berhasil diunduh', 'success');
+          showToast('PDF (Gambar) berhasil diunduh', 'success');
       } catch (error) {
           console.error('Failed to generate PDF:', error);
           showToast('Gagal membuat PDF', 'error');
       } finally {
-          // Restore transform
           contentWrapperRef.current.style.transform = originalTransform;
           setIsPdfGenerating(false);
+          setIsDownloadMenuOpen(false);
+      }
+  };
+
+  const handleDownloadSvg = async () => {
+      if (!contentWrapperRef.current) return;
+      setIsPdfGenerating(true);
+      try {
+          const fileName = `Kartu_Santri_${new Date().toISOString().slice(0, 10)}`;
+          await exportReportToSvg('preview-area', fileName);
+          showToast('File SVG berhasil diunduh', 'success');
+      } catch (error) {
+          console.error('Failed to export SVG:', error);
+          showToast('Gagal mengekspor SVG', 'error');
+      } finally {
+          setIsPdfGenerating(false);
+          setIsDownloadMenuOpen(false);
       }
   };
 
@@ -250,10 +288,12 @@ const Reports: React.FC = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    setIsDownloadMenuOpen(false);
 };
 
 
   const handleGeneratePreview = () => {
+    // ... (rest of the logic remains the same)
     if (!activeReport) return;
     setIsPreviewGenerating(true);
     setManualZoom(1);
@@ -291,6 +331,7 @@ const Reports: React.FC = () => {
         if (allSantriReports.includes(activeReport) || activeReport === ReportType.LaporanArusKas) {
             allPreviews = generateReport(activeReport, santriList, options);
         } else if (perRombelReports.includes(activeReport)) {
+            // Group filtered (and sorted) santri by rombel
             const santriByRombel = filteredSantri.reduce<Record<number, Santri[]>>((acc, santri) => {
                 const rombelId = santri.rombelId;
                 if (!acc[rombelId]) acc[rombelId] = [];
@@ -344,6 +385,7 @@ const Reports: React.FC = () => {
 
   return (
     <div>
+      {/* ... (Previous code) ... */}
       <h1 className="text-3xl font-bold text-gray-800 mb-6 no-print">Laporan & Cetak</h1>
       <div className="bg-white p-6 rounded-lg shadow-md no-print">
         <h2 className="text-xl font-bold text-gray-700 mb-4">1. Pilih Jenis Laporan</h2>
@@ -355,10 +397,12 @@ const Reports: React.FC = () => {
           ))}
         </div>
 
+        {/* ... (Options Rendering Logic) ... */}
         {activeReport && (
           <div className="mt-6 border-t pt-6">
             <h2 className="text-xl font-bold text-gray-700 mb-4">2. Atur Filter & Lihat Pratinjau</h2>
             <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+              {/* ... (Filter Components) ... */}
               {activeReport === ReportType.LaporanMutasi ? (
                 <div>
                   <h3 className="text-md font-semibold text-gray-700 mb-2">Filter Rentang Tanggal Mutasi</h3>
@@ -369,6 +413,7 @@ const Reports: React.FC = () => {
                 </div>
               ) : !isSummaryReport && !isFinancialReport ? (
                 <>
+                  {/* ... (Gedung/Santri Filters) ... */}
                   {activeReport === ReportType.LaporanAsrama ? (
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                         <div>
@@ -393,11 +438,31 @@ const Reports: React.FC = () => {
                           <div><label className="block mb-1 text-sm font-medium text-gray-700">Kabupaten/Kota</label><input type="text" placeholder="Filter Kabupaten/Kota..." value={selectedKabupaten} onChange={e => setSelectedKabupaten(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                           <div><label className="block mb-1 text-sm font-medium text-gray-700">Kecamatan</label><input type="text" placeholder="Filter Kecamatan..." value={selectedKecamatan} onChange={e => setSelectedKecamatan(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                       </div>
+                      
+                      {/* Sorting Options */}
+                      <div className="pt-4 border-t">
+                          <label className="block mb-1 text-sm font-medium text-gray-700">Pengaturan Urutan Data</label>
+                          <div className="flex gap-4">
+                              <div className="w-full md:w-1/3">
+                                  <select value={sortBy} onChange={(e) => { setSortBy(e.target.value as any); clearPreview(); }} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                      <option value="namaLengkap">Urut Berdasarkan: Nama Lengkap</option>
+                                      <option value="nis">Urut Berdasarkan: NIS</option>
+                                  </select>
+                              </div>
+                              <div className="w-full md:w-1/3">
+                                  <select value={sortOrder} onChange={(e) => { setSortOrder(e.target.value as any); clearPreview(); }} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                      <option value="asc">A - Z (Naik)</option>
+                                      <option value="desc">Z - A (Turun)</option>
+                                  </select>
+                              </div>
+                          </div>
+                      </div>
                     </>
                   )}
                 </>
               ) : null}
 
+              {/* ... (Paper Config) ... */}
               <div className="pt-4 border-t">
                   <h3 className="text-md font-semibold text-gray-700 mb-2">Pengaturan Kertas & Cetak</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -437,15 +502,34 @@ const Reports: React.FC = () => {
                             )}
                         </button>
                         {isDownloadMenuOpen && !isPdfGenerating && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
+                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
                                 <button
-                                    onClick={() => { handleDownloadPdf(); setIsDownloadMenuOpen(false); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                    onClick={handleDownloadPdfNative}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-b"
+                                    title="Disarankan untuk percetakan. Gunakan opsi 'Save as PDF' di dialog cetak."
                                 >
-                                    <i className="bi bi-file-pdf-fill text-red-600"></i> Format PDF
+                                    <i className="bi bi-file-earmark-pdf-fill text-red-600"></i> 
+                                    <div>
+                                        <div className="font-semibold">Cetak PDF (Vektor)</div>
+                                        <div className="text-[10px] text-gray-500">Kualitas Terbaik (Print Native)</div>
+                                    </div>
                                 </button>
                                 <button
-                                    onClick={() => { handleDownloadHtml(); setIsDownloadMenuOpen(false); }}
+                                    onClick={handleDownloadPdf}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                    <i className="bi bi-image text-gray-500"></i> Format PDF (Gambar)
+                                </button>
+                                {activeReport === ReportType.KartuSantri && (
+                                    <button
+                                        onClick={handleDownloadSvg}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                                    >
+                                        <i className="bi bi-vector-pen text-purple-600"></i> Format SVG (Vector)
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleDownloadHtml}
                                     className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                                 >
                                     <i className="bi bi-filetype-html text-green-600"></i> Format HTML

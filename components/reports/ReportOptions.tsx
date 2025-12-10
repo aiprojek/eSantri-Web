@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { Santri, PondokSettings, ReportType } from '../../types';
 import { useReportConfig } from '../../hooks/useReportConfig';
@@ -102,9 +103,22 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
     ], []);
 
     const availableCardFields = useMemo(() => [
-        { id: 'foto', label: 'Foto' }, { id: 'namaLengkap', label: 'Nama Lengkap' }, { id: 'nis', label: 'NIS' },
-        { id: 'jenjang', label: 'Jenjang' }, { id: 'rombel', label: 'Rombel' }, { id: 'ttl', label: 'TTL' },
-        { id: 'ayahWali', label: 'Ayah/Wali' },
+        { id: 'foto', label: 'Foto Santri (jika tidak dicentang akan pakai placeholder)' }, 
+        { id: 'namaLengkap', label: 'Nama Lengkap' }, 
+        { id: 'nis', label: 'NIS' },
+        { id: 'jenjang', label: 'Jenjang / Kelas' }, 
+        { id: 'rombel', label: 'Rombel' }, 
+        { id: 'ttl', label: 'TTL' },
+        { id: 'alamat', label: 'Alamat' },
+        { id: 'ayahWali', label: 'Orang Tua / Wali' },
+    ], []);
+
+    const cardDesigns = useMemo(() => [
+        { id: 'classic', label: 'Klasik Tradisional (Landscape)' },
+        { id: 'modern', label: 'Modern Tech (Landscape)' },
+        { id: 'vertical', label: 'Vertikal ID (Portrait)' },
+        { id: 'dark', label: 'Premium Dark (Landscape)' },
+        { id: 'ceria', label: 'Ceria / TPQ (Landscape)' },
     ], []);
 
     const handleMapelSelection = (mapelId: number) => {
@@ -129,6 +143,18 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
             ? prev.filter(id => id !== fieldId)
             : [...prev, fieldId]
         );
+    };
+
+    const handleCardDesignChange = (designId: string) => {
+        options.setCardDesign(designId);
+        // Automatically switch width/height based on design orientation
+        if (designId === 'vertical') {
+            options.setCardWidth(5.398);
+            options.setCardHeight(8.56);
+        } else {
+            options.setCardWidth(8.56);
+            options.setCardHeight(5.398);
+        }
     };
 
     if (activeReport === ReportType.DashboardSummary || activeReport === ReportType.FinanceSummary) {
@@ -247,12 +273,71 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
              return (
                 <div className="pt-4 border-t space-y-4">
                     <h3 className="text-md font-semibold text-gray-700">Kustomisasi Kartu Santri</h3>
+                    
+                    {/* Design Selection */}
+                    <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700">Pilih Desain Kartu</label>
+                        <select 
+                            value={options.cardDesign} 
+                            onChange={e => handleCardDesignChange(e.target.value)} 
+                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                        >
+                            {cardDesigns.map(design => (
+                                <option key={design.id} value={design.id}>{design.label}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Lebar (cm)</label>
+                            <input 
+                                type="number" 
+                                value={options.cardWidth} 
+                                onChange={e => options.setCardWidth(Number(e.target.value))} 
+                                step="0.01" 
+                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Tinggi (cm)</label>
+                            <input 
+                                type="number" 
+                                value={options.cardHeight} 
+                                onChange={e => options.setCardHeight(Number(e.target.value))} 
+                                step="0.01" 
+                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700">Data yang Ditampilkan</label>
+                        <div className="grid grid-cols-2 gap-2 border bg-white p-3 rounded-md">
+                            {availableCardFields.map(field => (
+                                <div key={field.id} className="flex items-center">
+                                    <input 
+                                        id={`card-field-${field.id}`} 
+                                        type="checkbox" 
+                                        checked={options.cardFields.includes(field.id)} 
+                                        onChange={() => handleCardFieldChange(field.id)} 
+                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" 
+                                    />
+                                    <label htmlFor={`card-field-${field.id}`} className="ml-2 text-sm text-gray-700">
+                                        {field.label}
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1 italic">
+                            Catatan: Opsi "Foto Santri" jika tidak dicentang akan menampilkan placeholder (gambar kartun).
+                        </p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className="block mb-1 text-sm font-medium text-gray-700">Tema Warna</label><div className="flex items-center gap-2">{Object.entries(options.predefinedCardThemes).map(([name, color]) => (<button key={name} type="button" title={name} onClick={() => options.setCardTheme(color)} className={`w-8 h-8 rounded-full border-2 ${options.cardTheme === color ? 'border-teal-500 ring-2 ring-teal-300' : 'border-white'}`} style={{ backgroundColor: color }}/>))}<div className="relative"><input type="color" value={options.cardTheme} onChange={e => options.setCardTheme(e.target.value)} className="w-8 h-8 p-0 border-0 rounded-full cursor-pointer appearance-none bg-transparent"/><i className="bi bi-eyedropper absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white pointer-events-none"></i></div></div></div>
                         <div><label className="block mb-1 text-sm font-medium text-gray-700">Berlaku Hingga</label><input type="date" value={options.cardValidUntil} onChange={e => options.setCardValidUntil(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                     </div>
-                    <div><label className="block mb-2 text-sm font-medium text-gray-700">Data yang Ditampilkan</label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border bg-white p-3 rounded-md">{availableCardFields.map(field => (<div key={field.id} className="flex items-center"><input id={`card-field-${field.id}`} type="checkbox" checked={options.cardFields.includes(field.id)} onChange={() => handleCardFieldChange(field.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" /><label htmlFor={`card-field-${field.id}`} className="ml-2 text-sm text-gray-700">{field.label}</label></div>))}</div></div>
-                    <div className="md:col-span-2 pt-4 border-t"><h4 className="text-md font-semibold text-gray-700 mb-2">Pengaturan Tanda Tangan</h4><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block mb-1 text-sm font-medium text-gray-700">Jabatan Penanda Tangan</label><input type="text" value={options.cardSignatoryTitle} onChange={e => options.setCardSignatoryTitle(e.target.value)} placeholder="Contoh: Kepala Sekolah" className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div><div><label className="block mb-1 text-sm font-medium text-gray-700">Penanda Tangan</label><select value={options.cardSignatoryId} onChange={e => options.setCardSignatoryId(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih Penanda Tangan --</option>{settings.tenagaPengajar.map(p => (<option key={p.id} value={p.id.toString()}>{p.nama}</option>))}</select></div></div></div>
+                    
                     <SantriSelector title="" printMode={options.cardPrintMode} setPrintMode={options.setCardPrintMode} selectedIds={options.selectedCardSantriIds} setSelectedIds={options.setSelectedCardSantriIds} radioGroupName="card" filteredSantri={filteredSantri} />
                 </div>
              );
@@ -260,9 +345,10 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
             return (
                 <div className="pt-4 border-t space-y-4">
                     <h3 className="text-md font-semibold text-gray-700">Kustomisasi Label</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <div><label className="block mb-1 text-sm font-medium text-gray-700">Lebar Label (cm)</label><input type="number" value={options.labelWidth} onChange={e => options.setLabelWidth(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
-                       <div><label className="block mb-1 text-sm font-medium text-gray-700">Tinggi Label (cm)</label><input type="number" value={options.labelHeight} onChange={e => options.setLabelHeight(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                       <div><label className="block mb-1 text-sm font-medium text-gray-700">Lebar Label (cm)</label><input type="number" value={options.labelWidth} onChange={e => options.setLabelWidth(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" step="0.1" /></div>
+                       <div><label className="block mb-1 text-sm font-medium text-gray-700">Tinggi Label (cm)</label><input type="number" value={options.labelHeight} onChange={e => options.setLabelHeight(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" step="0.1" /></div>
+                       <div><label className="block mb-1 text-sm font-medium text-gray-700">Ukuran Font (pt)</label><input type="number" value={options.labelFontSize} onChange={e => options.setLabelFontSize(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                     </div>
                      <div><label className="block mb-2 text-sm font-medium text-gray-700">Data yang Ditampilkan</label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border bg-white p-3 rounded-md">{availableLabelFields.map(field => (<div key={field.id} className="flex items-center"><input id={`field-${field.id}`} type="checkbox" checked={options.labelFields.includes(field.id)} onChange={() => handleLabelFieldChange(field.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" /><label htmlFor={`field-${field.id}`} className="ml-2 text-sm text-gray-700">{field.label}</label></div>))}</div></div>
                     <SantriSelector title="" printMode={options.labelPrintMode} setPrintMode={options.setLabelPrintMode} selectedIds={options.selectedLabelSantriIds} setSelectedIds={options.setSelectedLabelSantriIds} radioGroupName="label" filteredSantri={filteredSantri} />

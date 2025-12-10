@@ -355,21 +355,109 @@ const Tentang: React.FC = () => {
                                     </li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={6} title="Mencetak, Ekspor PDF, & HTML">
-                                <p>Semua kebutuhan administrasi cetak-mencetak terpusat di halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong>. Prosesnya sederhana:</p>
-                                <ol className="list-decimal pl-5 space-y-2">
-                                    <li>Pilih jenis laporan yang Anda butuhkan (misal: Biodata, Kartu Santri, Lembar Nilai, Rekening Koran, dll).</li>
-                                    <li>Gunakan filter untuk memilih data spesifik yang ingin dicetak (biasanya berdasarkan Rombel atau Individu).</li>
-                                    <li>Atur opsi tambahan yang tersedia untuk laporan tersebut (seperti format kertas, margin, atau opsi tanda tangan).</li>
-                                    <li>Klik <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">Tampilkan Pratinjau</span>.</li>
-                                    <li>Pilih aksi selanjutnya:
-                                        <ul className="list-disc pl-5 mt-1">
-                                            <li>Klik <span className="font-semibold text-white bg-blue-600 px-2 py-0.5 rounded-md text-xs">Cetak</span> untuk mencetak langsung ke printer.</li>
-                                            <li>Klik <span className="font-semibold text-white bg-red-600 px-2 py-0.5 rounded-md text-xs">Download PDF</span> untuk menyimpan sebagai file PDF dengan tampilan visual yang presisi sesuai pratinjau (teks mungkin tidak dapat diseleksi).</li>
-                                            <li>Klik <span className="font-semibold text-white bg-green-600 px-2 py-0.5 rounded-md text-xs">Download HTML</span> untuk menyimpan laporan sebagai halaman web. Berguna untuk arsip data mentah yang tampilannya sama persis dengan aplikasi.</li>
+                            <PanduanLangkah number={6} title="Referensi Lengkap Laporan & Cetak">
+                                <p>Halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong> menyediakan berbagai dokumen otomatis yang siap pakai. Berikut adalah panduan penggunaan untuk setiap jenis laporan:</p>
+                                
+                                <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                                    <h4 className="font-bold text-gray-800 text-sm mb-2 uppercase tracking-wide">Alur Kerja Umum</h4>
+                                    <ol className="list-decimal pl-5 space-y-1 text-sm text-gray-700">
+                                        <li>Pilih jenis laporan yang diinginkan.</li>
+                                        <li>Gunakan filter (Jenjang/Kelas/Rombel) untuk menentukan data siapa yang akan dicetak.</li>
+                                        <li>Sesuaikan opsi tambahan (Kertas, Margin, dll) jika tersedia.</li>
+                                        <li>Klik tombol <span className="font-semibold bg-teal-600 text-white px-2 py-0.5 rounded text-xs">Tampilkan Pratinjau</span>.</li>
+                                        <li>Pilih <strong>Cetak</strong> (ke Printer) atau <strong>Unduh PDF</strong> untuk menyimpan dokumen.</li>
+                                    </ol>
+                                </div>
+
+                                <div className="space-y-6 mt-6">
+                                    {/* Kategori Administrasi */}
+                                    <div>
+                                        <h4 className="flex items-center gap-2 font-bold text-blue-800 border-b border-blue-200 pb-1 mb-3">
+                                            <i className="bi bi-file-earmark-person-fill"></i> Administrasi & Identitas
+                                        </h4>
+                                        <ul className="space-y-3 pl-2">
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">1. Biodata Santri</strong>
+                                                <p className="text-sm text-gray-600">Mencetak profil lengkap santri termasuk data orang tua dan wali. Berguna untuk arsip fisik (hardcopy) di kantor.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">2. Kartu Tanda Santri</strong>
+                                                <p className="text-sm text-gray-600">Mencetak kartu identitas. Anda dapat memilih 5 desain berbeda, mengatur ukuran kartu (cm), dan memilih data apa saja yang ditampilkan di kartu.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">3. Cetak Label Santri</strong>
+                                                <p className="text-sm text-gray-600">Mencetak label stiker (nama, NIS, kelas) secara massal. Sangat berguna untuk ditempel di buku pelajaran, undangan wali santri, atau lemari asrama.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">4. Daftar Santri per Rombel</strong>
+                                                <p className="text-sm text-gray-600">Tabel sederhana berisi daftar nama santri dalam satu kelas. Berguna untuk absensi manual, checklist kegiatan, atau data pegangan wali kelas.</p>
+                                            </li>
                                         </ul>
-                                    </li>
-                                </ol>
+                                    </div>
+
+                                    {/* Kategori Akademik */}
+                                    <div>
+                                        <h4 className="flex items-center gap-2 font-bold text-green-800 border-b border-green-200 pb-1 mb-3">
+                                            <i className="bi bi-book-half"></i> Akademik & Kedisiplinan
+                                        </h4>
+                                        <ul className="space-y-3 pl-2">
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">5. Lembar Nilai</strong>
+                                                <p className="text-sm text-gray-600">Mencetak formulir nilai kosong dengan nama santri yang sudah terisi. Diserahkan kepada guru mata pelajaran untuk pengisian nilai manual sebelum diinput ke komputer.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">6. Lembar Absensi</strong>
+                                                <p className="text-sm text-gray-600">Format absensi bulanan (kalender tanggal 1-31). Dapat diatur menggunakan kalender Masehi atau Hijriah.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">7. Lembar Pembinaan</strong>
+                                                <p className="text-sm text-gray-600">Laporan rekam jejak santri yang berisi daftar prestasi yang diraih dan pelanggaran yang pernah dilakukan.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">8. Laporan Mutasi</strong>
+                                                <p className="text-sm text-gray-600">Rekapitulasi santri yang keluar, masuk, lulus, atau berhenti (hiatus) dalam rentang tanggal tertentu.</p>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    {/* Kategori Keuangan */}
+                                    <div>
+                                        <h4 className="flex items-center gap-2 font-bold text-yellow-700 border-b border-yellow-200 pb-1 mb-3">
+                                            <i className="bi bi-cash-stack"></i> Keuangan
+                                        </h4>
+                                        <ul className="space-y-3 pl-2">
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">9. Rekening Koran Santri</strong>
+                                                <p className="text-sm text-gray-600">Laporan detail seluruh transaksi keuangan satu santri (tagihan, pembayaran, uang saku masuk/keluar). Transparansi penuh untuk wali santri.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">10. Laporan Arus Kas Umum</strong>
+                                                <p className="text-sm text-gray-600">Laporan pertanggungjawaban bendahara yang berisi semua pemasukan dan pengeluaran pondok (buku kas umum) dalam periode tertentu.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">11. Laporan Ringkas Keuangan & Dashboard</strong>
+                                                <p className="text-sm text-gray-600">Mencetak tampilan statistik yang ada di dashboard utama dan dashboard keuangan untuk laporan kepada pimpinan pondok.</p>
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    {/* Kategori Lainnya */}
+                                    <div>
+                                        <h4 className="flex items-center gap-2 font-bold text-purple-800 border-b border-purple-200 pb-1 mb-3">
+                                            <i className="bi bi-building"></i> Asrama & Perizinan
+                                        </h4>
+                                        <ul className="space-y-3 pl-2">
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">12. Formulir Izin Santri</strong>
+                                                <p className="text-sm text-gray-600">Surat jalan resmi untuk santri yang izin pulang/keluar. Berisi data penjemput, tujuan, dan tanggal kembali.</p>
+                                            </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">13. Laporan Keasramaan</strong>
+                                                <p className="text-sm text-gray-600">Rekapitulasi data gedung, kamar, kapasitas, nama musyrif, dan daftar penghuni setiap kamar.</p>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </PanduanLangkah>
                              <PanduanLangkah number={7} title="Efisiensi Input Data: Editor Massal & Impor CSV">
                                 <p>Untuk mempercepat proses input data, eSantri Web menyediakan dua fitur canggih di halaman <strong className="font-semibold text-teal-700">Data Santri</strong>:</p>

@@ -156,6 +156,8 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
                 return true;
             case ReportType.LaporanAsrama:
                 return true;
+            case ReportType.LaporanKontak:
+                return true;
             default:
                 return true;
         }

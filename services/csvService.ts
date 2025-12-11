@@ -1,5 +1,5 @@
 
-import { Santri } from '../types';
+import { Santri, PondokSettings } from '../types';
 
 // This is an internal helper and doesn't need to be exported.
 const parseCsvRow = (row: string): string[] => {
@@ -82,6 +82,68 @@ export const generateSantriCsvForUpdate = (santriList: Santri[]): string => {
 export const generateSantriCsvTemplate = (): string => {
     let csvContent = "data:text/csv;charset=utf-8,";
     csvContent += CSV_HEADERS_ADD.join(",") + "\r\n";
+    return csvContent;
+};
+
+// New function to generate Contact CSV (Google Contact Format compatible)
+export const generateContactCsv = (santriList: Santri[], settings: PondokSettings): string => {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    // Standard Google CSV Headers subset that is widely compatible
+    const headers = ['Name', 'Given Name', 'Phone 1 - Type', 'Phone 1 - Value', 'Organization 1 - Name', 'Organization 1 - Title', 'Notes'];
+    csvContent += headers.join(",") + "\r\n";
+
+    santriList.forEach(santri => {
+        // Determine Priority Phone Number & Name
+        let phone = santri.teleponWali;
+        let parentName = santri.namaWali;
+        let relation = "Wali";
+
+        if (!phone) {
+            phone = santri.teleponAyah;
+            parentName = santri.namaAyah;
+            relation = "Ayah";
+        }
+        if (!phone) {
+            phone = santri.teleponIbu;
+            parentName = santri.namaIbu;
+            relation = "Ibu";
+        }
+
+        // Clean up phone number
+        phone = phone ? phone.replace(/[^0-9+]/g, '') : '';
+
+        // If no phone number, skip or include? Let's include with empty phone for now, but usually contacts need a value.
+        // If phone is empty, this entry is less useful as a contact, but might still be wanted.
+        
+        // Format Name: "Nama Wali (Wali Nama Santri)" to make it searchable
+        const displayName = parentName 
+            ? `${parentName} (${relation} ${santri.namaLengkap})`
+            : `${relation} ${santri.namaLengkap}`; // Fallback if parent name missing
+
+        const rombelName = settings.rombel.find(r => r.id === santri.rombelId)?.nama || '';
+        
+        const rowData = [
+            displayName, // Name (Full)
+            parentName || relation, // Given Name
+            'Mobile', // Phone Type
+            phone, // Phone Value
+            settings.namaPonpes, // Organization
+            'Wali Santri', // Title
+            `NIS: ${santri.nis} | Kelas: ${rombelName}` // Notes
+        ];
+
+        const processedRow = rowData.map(val => {
+            if (val === undefined || val === null) return "";
+            const stringValue = String(val);
+            if (stringValue.includes(',') || stringValue.includes('"')) {
+                return `"${stringValue.replace(/"/g, '""')}"`;
+            }
+            return stringValue;
+        });
+
+        csvContent += processedRow.join(",") + "\r\n";
+    });
+
     return csvContent;
 };
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Santri, PondokSettings, ReportType, GedungAsrama, TransaksiKas } from '../types';
 import { useAppContext } from '../AppContext';
@@ -6,6 +7,7 @@ import { useReportConfig } from '../hooks/useReportConfig';
 import { ReportOptions } from './reports/ReportOptions';
 import { generatePdf, printToPdfNative } from '../utils/pdfGenerator';
 import { exportReportToSvg } from '../utils/svgExporter';
+import { generateContactCsv } from '../services/csvService';
 
 const Reports: React.FC = () => {
   const { santriList, settings, tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList, showToast } = useAppContext();
@@ -57,6 +59,7 @@ const Reports: React.FC = () => {
     { id: ReportType.LembarRapor, title: 'Pengambilan & Pengumpulan Rapor', description: "Cetak lembar rekapitulasi pengambilan dan pengumpulan rapor.", icon: 'bi-file-earmark-check-fill' },
     { id: ReportType.LembarNilai, title: 'Lembar Nilai', description: "Cetak lembar nilai kosong untuk satu rombel.", icon: 'bi-card-checklist' },
     { id: ReportType.LembarAbsensi, title: 'Lembar Absensi', description: "Cetak lembar absensi bulanan untuk satu rombel.", icon: 'bi-calendar-check' },
+    { id: ReportType.LaporanKontak, title: 'Laporan Kontak Wali Santri', description: "Ekspor daftar kontak wali santri ke format CSV (untuk Google Contacts/HP).", icon: 'bi-person-lines-fill' },
   ], []);
 
   const availableKelas = useMemo(() => {
@@ -291,6 +294,19 @@ const Reports: React.FC = () => {
     setIsDownloadMenuOpen(false);
 };
 
+  const handleDownloadCsvContacts = () => {
+      const csvContent = generateContactCsv(filteredSantri, settings);
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Kontak_Wali_Santri_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setIsDownloadMenuOpen(false);
+      showToast('File CSV Kontak berhasil diunduh. Silakan impor ke Google Contacts/HP.', 'success');
+  };
+
 
   const handleGeneratePreview = () => {
     // ... (rest of the logic remains the same)
@@ -303,7 +319,7 @@ const Reports: React.FC = () => {
         let options: any = { ...reportConfig.options, paperSize, margin, filteredGedung };
         let allPreviews: { content: React.ReactNode; orientation: 'portrait' | 'landscape' }[] = [];
         const perRombelReports = [ReportType.DaftarRombel, ReportType.LembarKedatangan, ReportType.LembarNilai, ReportType.LembarAbsensi, ReportType.LembarRapor];
-        const allSantriReports = [ReportType.LaporanMutasi, ReportType.DashboardSummary, ReportType.FinanceSummary, ReportType.LaporanAsrama];
+        const allSantriReports = [ReportType.LaporanMutasi, ReportType.DashboardSummary, ReportType.FinanceSummary, ReportType.LaporanAsrama, ReportType.LaporanKontak];
 
         // --- Data preparation for financial reports ---
         if (activeReport === ReportType.FinanceSummary) {
@@ -329,7 +345,7 @@ const Reports: React.FC = () => {
         // --- End data preparation ---
 
         if (allSantriReports.includes(activeReport) || activeReport === ReportType.LaporanArusKas) {
-            allPreviews = generateReport(activeReport, santriList, options);
+            allPreviews = generateReport(activeReport, filteredSantri, options);
         } else if (perRombelReports.includes(activeReport)) {
             // Group filtered (and sorted) santri by rombel
             const santriByRombel = filteredSantri.reduce<Record<number, Santri[]>>((acc, santri) => {
@@ -503,6 +519,18 @@ const Reports: React.FC = () => {
                         </button>
                         {isDownloadMenuOpen && !isPdfGenerating && (
                             <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
+                                {activeReport === ReportType.LaporanKontak && (
+                                    <button
+                                        onClick={handleDownloadCsvContacts}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-b"
+                                    >
+                                        <i className="bi bi-file-earmark-spreadsheet-fill text-green-700"></i>
+                                        <div>
+                                            <div className="font-semibold">Unduh CSV (Format Kontak)</div>
+                                            <div className="text-[10px] text-gray-500">Kompatibel Google Contacts / HP</div>
+                                        </div>
+                                    </button>
+                                )}
                                 <button
                                     onClick={handleDownloadPdfNative}
                                     className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-b"

@@ -192,6 +192,50 @@ const PanduanPenilaianTemplate: React.FC = () => {
     );
 };
 
+const LaporanKontakTemplate: React.FC<{ santriList: Santri[], settings: PondokSettings }> = ({ santriList, settings }) => {
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="LAPORAN KONTAK WALI SANTRI" />
+                <div className="mb-4 text-sm text-gray-700">
+                    <p>Laporan ini berisi daftar kontak wali santri yang siap untuk diekspor. Gunakan tombol <strong>"Unduh CSV (Format Kontak)"</strong> pada menu unduhan untuk mendapatkan file yang kompatibel dengan Google Contacts / Android / iOS.</p>
+                </div>
+                <table className="w-full text-left border-collapse border border-black text-sm">
+                    <thead className="bg-gray-200 uppercase">
+                        <tr>
+                            <th className="p-2 border border-black w-8 text-center">No</th>
+                            <th className="p-2 border border-black w-24 text-center">NIS</th>
+                            <th className="p-2 border border-black">Nama Santri</th>
+                            <th className="p-2 border border-black">Rombel</th>
+                            <th className="p-2 border border-black">Nama Wali / Orang Tua</th>
+                            <th className="p-2 border border-black text-center">Nomor Telepon (HP)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {santriList.map((s, i) => {
+                            let phone = s.teleponWali || s.teleponAyah || s.teleponIbu || '-';
+                            let parent = s.namaWali || s.namaAyah || s.namaIbu || '-';
+                            const rombel = settings.rombel.find(r => r.id === s.rombelId)?.nama || '-';
+                            
+                            return (
+                                <tr key={s.id}>
+                                    <td className="p-2 border border-black text-center">{i + 1}</td>
+                                    <td className="p-2 border border-black text-center">{s.nis}</td>
+                                    <td className="p-2 border border-black">{s.namaLengkap}</td>
+                                    <td className="p-2 border border-black">{rombel}</td>
+                                    <td className="p-2 border border-black">{parent}</td>
+                                    <td className="p-2 border border-black text-center font-mono">{phone}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
 const LaporanArusKasTemplate: React.FC<{
     settings: PondokSettings;
     options: {
@@ -1386,6 +1430,19 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 content: <LaporanAsramaTemplate settings={settings} santriList={data} gedungList={options.filteredGedung} />,
                 orientation: 'portrait'
             });
+        }
+        else if (reportType === ReportType.LaporanKontak) {
+            // Since contact report is primarily for CSV export, we just show a simple list preview
+            // Or grouping by rombel makes sense for printing too.
+            // Let's assume it can be paginated simply.
+            const rowsPerPage = 25;
+            for (let i = 0; i < data.length; i += rowsPerPage) {
+                const pageData = data.slice(i, i + rowsPerPage);
+                previews.push({
+                    content: <LaporanKontakTemplate santriList={pageData} settings={settings} />,
+                    orientation: 'portrait'
+                });
+            }
         }
         else if (reportType === ReportType.LembarNilai) {
             // Logic for Lembar Nilai (Template Empty Score Sheet)

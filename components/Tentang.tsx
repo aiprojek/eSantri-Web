@@ -172,6 +172,9 @@ const Tentang: React.FC = () => {
                                     <FeatureItem icon="bi-filetype-html" title="Ekspor Laporan HTML">
                                         Unduh laporan dalam format HTML untuk arsip digital yang ringan atau untuk dibuka kembali di browser tanpa koneksi internet.
                                     </FeatureItem>
+                                    <FeatureItem icon="bi-person-lines-fill" title="Ekspor Kontak HP">
+                                        Unduh data kontak wali santri dalam format CSV yang kompatibel dengan Google Contacts / HP.
+                                    </FeatureItem>
                                     <FeatureItem icon="bi-wifi-off" title="Fungsi Offline">
                                         Aplikasi tetap berjalan lancar dan semua data aman meski tanpa koneksi internet.
                                     </FeatureItem>
@@ -392,6 +395,10 @@ const Tentang: React.FC = () => {
                                                 <strong className="text-gray-800 block text-sm">4. Daftar Santri per Rombel</strong>
                                                 <p className="text-sm text-gray-600">Tabel sederhana berisi daftar nama santri dalam satu kelas. Berguna untuk absensi manual, checklist kegiatan, atau data pegangan wali kelas.</p>
                                             </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">5. Laporan Kontak Wali Santri (Ekspor ke HP)</strong>
+                                                <p className="text-sm text-gray-600">Fitur khusus untuk mengunduh daftar kontak wali santri (Nama dan Nomor HP) dalam format CSV yang kompatibel dengan Google Contacts. File ini bisa diimpor ke HP agar kontak tersimpan otomatis dengan nama yang rapi.</p>
+                                            </li>
                                         </ul>
                                     </div>
 
@@ -402,19 +409,19 @@ const Tentang: React.FC = () => {
                                         </h4>
                                         <ul className="space-y-3 pl-2">
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">5. Lembar Nilai</strong>
+                                                <strong className="text-gray-800 block text-sm">6. Lembar Nilai</strong>
                                                 <p className="text-sm text-gray-600">Mencetak formulir nilai kosong dengan nama santri yang sudah terisi. Diserahkan kepada guru mata pelajaran untuk pengisian nilai manual sebelum diinput ke komputer.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">6. Lembar Absensi</strong>
+                                                <strong className="text-gray-800 block text-sm">7. Lembar Absensi</strong>
                                                 <p className="text-sm text-gray-600">Format absensi bulanan (kalender tanggal 1-31). Dapat diatur menggunakan kalender Masehi atau Hijriah.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">7. Lembar Pembinaan</strong>
+                                                <strong className="text-gray-800 block text-sm">8. Lembar Pembinaan</strong>
                                                 <p className="text-sm text-gray-600">Laporan rekam jejak santri yang berisi daftar prestasi yang diraih dan pelanggaran yang pernah dilakukan.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">8. Laporan Mutasi</strong>
+                                                <strong className="text-gray-800 block text-sm">9. Laporan Mutasi</strong>
                                                 <p className="text-sm text-gray-600">Rekapitulasi santri yang keluar, masuk, lulus, atau berhenti (hiatus) dalam rentang tanggal tertentu.</p>
                                             </li>
                                         </ul>
@@ -427,15 +434,15 @@ const Tentang: React.FC = () => {
                                         </h4>
                                         <ul className="space-y-3 pl-2">
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">9. Rekening Koran Santri</strong>
+                                                <strong className="text-gray-800 block text-sm">10. Rekening Koran Santri</strong>
                                                 <p className="text-sm text-gray-600">Laporan detail seluruh transaksi keuangan satu santri (tagihan, pembayaran, uang saku masuk/keluar). Transparansi penuh untuk wali santri.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">10. Laporan Arus Kas Umum</strong>
+                                                <strong className="text-gray-800 block text-sm">11. Laporan Arus Kas Umum</strong>
                                                 <p className="text-sm text-gray-600">Laporan pertanggungjawaban bendahara yang berisi semua pemasukan dan pengeluaran pondok (buku kas umum) dalam periode tertentu.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">11. Laporan Ringkas Keuangan & Dashboard</strong>
+                                                <strong className="text-gray-800 block text-sm">12. Laporan Ringkas Keuangan & Dashboard</strong>
                                                 <p className="text-sm text-gray-600">Mencetak tampilan statistik yang ada di dashboard utama dan dashboard keuangan untuk laporan kepada pimpinan pondok.</p>
                                             </li>
                                         </ul>
@@ -448,11 +455,11 @@ const Tentang: React.FC = () => {
                                         </h4>
                                         <ul className="space-y-3 pl-2">
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">12. Formulir Izin Santri</strong>
+                                                <strong className="text-gray-800 block text-sm">13. Formulir Izin Santri</strong>
                                                 <p className="text-sm text-gray-600">Surat jalan resmi untuk santri yang izin pulang/keluar. Berisi data penjemput, tujuan, dan tanggal kembali.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">13. Laporan Keasramaan</strong>
+                                                <strong className="text-gray-800 block text-sm">14. Laporan Keasramaan</strong>
                                                 <p className="text-sm text-gray-600">Rekapitulasi data gedung, kamar, kapasitas, nama musyrif, dan daftar penghuni setiap kamar.</p>
                                             </li>
                                         </ul>

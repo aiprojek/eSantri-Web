@@ -1,3 +1,4 @@
+
 // FIX: Switched from a class-based Dexie definition to a direct instance with type casting.
 // This resolves typing errors where methods like `version()` and `transaction()` were not found on the `db` instance,
 // which can occur in certain TypeScript build environments. This direct approach ensures `db` is
@@ -19,6 +20,44 @@ export const db = new Dexie('eSantriDB') as Dexie & {
     suratTemplates: Table<SuratTemplate, number>;
     arsipSurat: Table<ArsipSurat, number>;
 };
+
+db.version(15).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+}).upgrade(async tx => {
+    // 15: Add cloudSyncConfig to settings if not exists
+    await tx.table('settings').toCollection().modify(s => {
+        if (!s.cloudSyncConfig) {
+            s.cloudSyncConfig = { provider: 'none', lastSync: null };
+        }
+    });
+});
+
+db.version(14).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+}).upgrade(async tx => {
+    // 14: Add backupConfig to settings if not exists
+    await tx.table('settings').toCollection().modify(s => {
+        if (!s.backupConfig) {
+            s.backupConfig = { frequency: 'weekly', lastBackup: null };
+        }
+    });
+});
 
 db.version(13).stores({
   santri: '++id, nis, namaLengkap, kamarId',

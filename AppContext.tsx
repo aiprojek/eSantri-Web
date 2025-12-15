@@ -39,6 +39,11 @@ interface SantriFilters {
   kecamatan: string;
 }
 
+interface BackupModalState {
+    isOpen: boolean;
+    reason: 'periodic' | 'action';
+}
+
 interface AppContextType {
   isLoading: boolean;
   settings: PondokSettingsWithId; // Will not be null after loading
@@ -55,6 +60,7 @@ interface AppContextType {
   toasts: ToastData[];
   confirmation: ConfirmationState;
   alertModal: AlertState;
+  backupModal: BackupModalState;
   onSaveSettings: (newSettings: PondokSettings) => Promise<void>;
   onAddSantri: (santriData: Omit<Santri, 'id'>) => Promise<void>;
   onBulkAddSantri: (newSantriData: Omit<Santri, 'id'>[]) => Promise<void>;
@@ -72,6 +78,9 @@ interface AppContextType {
   onDeleteSuratTemplate: (id: number) => Promise<void>;
   onSaveArsipSurat: (surat: Omit<ArsipSurat, 'id'>) => Promise<void>;
   onDeleteArsipSurat: (id: number) => Promise<void>;
+  downloadBackup: () => Promise<void>;
+  triggerBackupCheck: (forceAction?: boolean) => void;
+  closeBackupModal: () => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   removeToast: (id: number) => void;
   showAlert: (title: string, message: string) => void;
@@ -107,6 +116,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isOpen: false, title: '', message: '', onConfirm: () => {},
     });
     const [alertModal, setAlertModal] = useState<AlertState>({ isOpen: false, title: '', message: '' });
+    const [backupModal, setBackupModal] = useState<BackupModalState>({ isOpen: false, reason: 'periodic' });
 
     useEffect(() => {
         const loadData = async () => {
@@ -153,8 +163,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     alamatWali: migrateAddress(s.alamatWali),
                 }));
 
+                // Ensure backup config exists (migration fallback for runtime)
+                const safeSettings = currentSettings || initialSettings;
+                if (!safeSettings.backupConfig) {
+                    safeSettings.backupConfig = { frequency: 'weekly', lastBackup: null };
+                }
 
-                setSettings(currentSettings || initialSettings);
+                setSettings(safeSettings);
                 setSantriList(migratedSantri);
                 setTagihanList(currentTagihan);
                 setPembayaranList(currentPembayaran);
@@ -214,6 +229,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
     }, [hideConfirmation]);
 
+    // --- Backup Logic ---
+    const downloadBackup = useCallback(async () => {
+        try {
+            const settingsData = await db.settings.toArray();
+            const santriData = await db.santri.toArray();
+            const tagihanData = await db.tagihan.toArray();
+            const pembayaranData = await db.pembayaran.toArray();
+            const saldoSantriData = await db.saldoSantri.toArray();
+            const transaksiSaldoData = await db.transaksiSaldo.toArray();
+            const transaksiKasData = await db.transaksiKas.toArray();
+            const suratTemplatesData = await db.suratTemplates.toArray();
+            const arsipSuratData = await db.arsipSurat.toArray();
+            
+            const backupData = {
+                settings: settingsData,
+                santri: santriData,
+                tagihan: tagihanData,
+                pembayaran: pembayaranData,
+                saldoSantri: saldoSantriData,
+                transaksiSaldo: transaksiSaldoData,
+                transaksiKas: transaksiKasData,
+                suratTemplates: suratTemplatesData,
+                arsipSurat: arsipSuratData,
+                backupVersion: '1.2',
+                createdAt: new Date().toISOString(),
+            };
+
+            const jsonString = JSON.stringify(backupData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[-T:]/g, '');
+            link.download = `eSantri_backup_${timestamp}.json`;
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            URL.revokeObjectURL(url);
+            
+            // Update last backup time
+            const now = new Date().toISOString();
+            const updatedSettings = { ...settings, backupConfig: { ...settings.backupConfig, lastBackup: now } };
+            await db.settings.put(updatedSettings);
+            setSettings(updatedSettings);
+
+            showToast('Backup data berhasil diunduh!', 'success');
+        } catch (error) {
+            console.error('Failed to create backup:', error);
+            showToast('Gagal membuat backup. Lihat konsol untuk detail.', 'error');
+        }
+    }, [settings, showToast]);
+
+    const triggerBackupCheck = useCallback((forceAction: boolean = false) => {
+        if (forceAction) {
+            setBackupModal({ isOpen: true, reason: 'action' });
+            return;
+        }
+
+        const { frequency, lastBackup } = settings.backupConfig;
+        if (frequency === 'never') return;
+
+        const now = new Date();
+        const last = lastBackup ? new Date(lastBackup) : new Date(0);
+        const diffDays = (now.getTime() - last.getTime()) / (1000 * 3600 * 24);
+
+        let shouldPrompt = false;
+        if (frequency === 'daily' && diffDays >= 1) shouldPrompt = true;
+        if (frequency === 'weekly' && diffDays >= 7) shouldPrompt = true;
+
+        if (shouldPrompt) {
+            setBackupModal({ isOpen: true, reason: 'periodic' });
+        }
+    }, [settings.backupConfig]);
+
+    const closeBackupModal = useCallback(() => {
+        setBackupModal(prev => ({ ...prev, isOpen: false }));
+    }, []);
+
     const onSaveSettings = useCallback(async (newSettings: PondokSettings) => {
         if (!settings?.id) {
             const error = new Error("Settings ID not found, cannot update.");
@@ -248,11 +345,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 id: newIds[index] as number,
             }));
             setSantriList(prev => [...prev, ...addedSantriWithIds]);
+            triggerBackupCheck(true);
         } catch (error) {
             console.error("Failed to bulk add santri to DB", error);
             throw error;
         }
-    }, []);
+    }, [triggerBackupCheck]);
 
     const onUpdateSantri = useCallback(async (santri: Santri) => {
         try {
@@ -273,11 +371,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setSantriList(prevList => 
                 prevList.map(s => updatedIds.has(s.id) ? updatedMap.get(s.id)! : s)
             );
+            triggerBackupCheck(true);
         } catch (error) {
             console.error("Failed to bulk update santri in DB", error);
             throw error;
         }
-    }, []);
+    }, [triggerBackupCheck]);
 
     const onDeleteSantri = useCallback(async (id: number) => {
         try {
@@ -320,17 +419,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { result, newTagihan } = await generateTagihanBulanan(db, settings, santriList, tahun, bulan);
         if (newTagihan.length > 0) {
             setTagihanList(prev => [...prev, ...newTagihan]);
+            triggerBackupCheck(true);
         }
         return result;
-    }, [settings, santriList]);
+    }, [settings, santriList, triggerBackupCheck]);
 
     const onGenerateTagihanAwal = useCallback(async () => {
         const { result, newTagihan } = await generateTagihanAwal(db, settings, santriList);
         if (newTagihan.length > 0) {
             setTagihanList(prev => [...prev, ...newTagihan]);
+            triggerBackupCheck(true);
         }
         return result;
-    }, [settings, santriList]);
+    }, [settings, santriList, triggerBackupCheck]);
 
     const onAddPembayaran = useCallback(async (pembayaranData: Omit<Pembayaran, 'id'>) => {
         let paymentId: number;
@@ -544,6 +645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toasts,
         confirmation,
         alertModal,
+        backupModal,
         onSaveSettings,
         onAddSantri,
         onBulkAddSantri,
@@ -561,6 +663,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         onDeleteSuratTemplate,
         onSaveArsipSurat,
         onDeleteArsipSurat,
+        downloadBackup,
+        triggerBackupCheck,
+        closeBackupModal,
         showToast,
         removeToast,
         showAlert,
@@ -582,6 +687,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toasts,
         confirmation,
         alertModal,
+        backupModal,
         onSaveSettings,
         onAddSantri,
         onBulkAddSantri,
@@ -599,6 +705,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         onDeleteSuratTemplate,
         onSaveArsipSurat,
         onDeleteArsipSurat,
+        downloadBackup,
+        triggerBackupCheck,
+        closeBackupModal,
         showToast,
         removeToast,
         showAlert,

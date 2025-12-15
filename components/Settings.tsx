@@ -1,44 +1,26 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { PondokSettings, Jenjang, Kelas, Rombel, TenagaPengajar, RiwayatJabatan, NisJenjangConfig, NisSettings, MataPelajaran, Santri } from '../types';
+import { PondokSettings, NisJenjangConfig, NisSettings, BackupFrequency, SyncProvider } from '../types';
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
-import { StructureModal } from './settings/modals/StructureModal';
-import { TeacherModal } from './settings/modals/TeacherModal';
-import { MapelModal } from './settings/modals/MapelModal';
+import { performSync } from '../services/syncService';
+import { getSupabaseClient } from '../services/supabaseClient';
 
 interface SettingsProps {}
 
-type StructureItem = Jenjang | Kelas | Rombel;
-
 const Settings: React.FC<SettingsProps> = () => {
-    const { settings, santriList, onSaveSettings, showConfirmation, showToast, showAlert } = useAppContext();
+    const { settings, onSaveSettings, showConfirmation, showToast, downloadBackup } = useAppContext();
     const [localSettings, setLocalSettings] = useState<PondokSettings>(settings);
-    
-    const [structureModalData, setStructureModalData] = useState<{
-        mode: 'add' | 'edit';
-        listName: 'jenjang' | 'kelas' | 'rombel';
-        item?: StructureItem;
-    } | null>(null);
-
-    const [teacherModalData, setTeacherModalData] = useState<{
-        mode: 'add' | 'edit';
-        item?: TenagaPengajar;
-    } | null>(null);
-
-    const [mapelModalData, setMapelModalData] = useState<{
-        mode: 'add' | 'edit';
-        jenjangId: number;
-        item?: MataPelajaran;
-    } | null>(null);
     
     const restoreInputRef = useRef<HTMLInputElement>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
 
      useEffect(() => {
-        // Sync local state when the prop changes
         setLocalSettings(settings);
      }, [settings]);
 
+     // Init NIS config for new jenjang if any
      useEffect(() => {
         const jenjangIdsInConfig = new Set(localSettings.nisSettings.jenjangConfig.map(jc => jc.jenjangId));
         const newConfigs: NisJenjangConfig[] = [];
@@ -60,39 +42,100 @@ const Settings: React.FC<SettingsProps> = () => {
         }
     }, [localSettings.jenjang, localSettings.nisSettings.jenjangConfig]);
 
-    const getTeacherStatus = (teacher: TenagaPengajar) => {
-        if (!teacher.riwayatJabatan || teacher.riwayatJabatan.length === 0) {
-            return { isActive: false, jabatan: 'N/A', text: 'Tidak ada riwayat jabatan', color: 'gray' };
-        }
-
-        const latestRiwayat = [...teacher.riwayatJabatan].sort((a, b) => new Date(b.tanggalMulai).getTime() - new Date(a.tanggalMulai).getTime())[0];
-        
-        const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-
-        if (latestRiwayat.tanggalSelesai) {
-            return {
-                isActive: false,
-                jabatan: latestRiwayat.jabatan,
-                text: `Berakhir pada ${formatDate(latestRiwayat.tanggalSelesai)}`,
-                color: 'red'
-            };
-        } else {
-            return {
-                isActive: true,
-                jabatan: latestRiwayat.jabatan,
-                text: `Aktif sejak ${formatDate(latestRiwayat.tanggalMulai)}`,
-                color: 'teal'
-            };
-        }
-    };
-
     const activeTeachers = useMemo(() => 
-        localSettings.tenagaPengajar.filter(t => getTeacherStatus(t).isActive),
+        localSettings.tenagaPengajar.filter(t => !t.riwayatJabatan.some(r => r.tanggalSelesai)),
         [localSettings.tenagaPengajar]
     );
     
     const handleInputChange = <K extends keyof PondokSettings>(key: K, value: PondokSettings[K]) => {
         setLocalSettings(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleBackupConfigChange = (frequency: BackupFrequency) => {
+        setLocalSettings(prev => ({
+            ...prev,
+            backupConfig: {
+                ...prev.backupConfig,
+                frequency
+            }
+        }));
+    };
+
+    // --- Sync Config Handlers ---
+    const handleSyncProviderChange = (provider: SyncProvider) => {
+        setLocalSettings(prev => ({
+            ...prev,
+            cloudSyncConfig: { ...prev.cloudSyncConfig, provider }
+        }));
+    };
+
+    const handleSyncConfigChange = (field: string, value: string) => {
+        setLocalSettings(prev => ({
+            ...prev,
+            cloudSyncConfig: { ...prev.cloudSyncConfig, [field]: value }
+        }));
+    };
+
+    const handleTestSupabase = async () => {
+        const { supabaseUrl, supabaseKey } = localSettings.cloudSyncConfig;
+        if (!supabaseUrl || !supabaseKey) {
+            showToast('URL dan Key wajib diisi', 'error');
+            return;
+        }
+        
+        // Re-init client with new credentials for testing
+        const client = getSupabaseClient({ ...localSettings.cloudSyncConfig, provider: 'supabase' });
+        if(!client) return;
+
+        try {
+            const { error } = await client.from('audit_logs').select('count', { count: 'exact', head: true });
+            if (error) throw error;
+            showToast('Koneksi ke Supabase BERHASIL!', 'success');
+        } catch (e: any) {
+            showToast(`Koneksi Gagal: ${e.message}`, 'error');
+        }
+    };
+
+    const handleManualSync = async (direction: 'up' | 'down') => {
+        if (JSON.stringify(localSettings.cloudSyncConfig) !== JSON.stringify(settings.cloudSyncConfig)) {
+            showToast('Simpan pengaturan terlebih dahulu sebelum melakukan sinkronisasi.', 'info');
+            return;
+        }
+
+        const actionText = direction === 'up' ? 'Upload ke Cloud' : 'Download dari Cloud';
+        const warningText = direction === 'down' 
+            ? 'PERHATIAN: Tindakan ini akan MENGGANTI semua data lokal dengan data dari cloud. Pastikan Anda sudah membackup data lokal jika perlu.' 
+            : 'Tindakan ini akan menimpa data backup di cloud dengan data lokal saat ini.';
+
+        showConfirmation(
+            `Konfirmasi ${actionText}`,
+            warningText,
+            async () => {
+                setIsSyncing(true);
+                try {
+                    const timestamp = await performSync(localSettings.cloudSyncConfig, direction);
+                    
+                    const updatedSettings = {
+                        ...localSettings,
+                        cloudSyncConfig: { ...localSettings.cloudSyncConfig, lastSync: timestamp }
+                    };
+                    await onSaveSettings(updatedSettings);
+                    
+                    if (direction === 'down') {
+                        showToast('Sinkronisasi berhasil! Aplikasi akan dimuat ulang.', 'success');
+                        setTimeout(() => window.location.reload(), 2000);
+                    } else {
+                        showToast('Data berhasil diupload ke cloud.', 'success');
+                    }
+                } catch (error) {
+                    console.error("Sync error:", error);
+                    showToast(`Gagal sinkronisasi: ${(error as Error).message}`, 'error');
+                } finally {
+                    setIsSyncing(false);
+                }
+            },
+            { confirmText: `Ya, ${actionText}`, confirmColor: direction === 'down' ? 'red' : 'blue' }
+        );
     };
 
     const handleNisSettingChange = <K extends keyof NisSettings>(key: K, value: NisSettings[K]) => {
@@ -120,13 +163,16 @@ const Settings: React.FC<SettingsProps> = () => {
         }));
     };
     
-    const handleSaveSettings = () => {
+    const handleSaveSettingsHandler = () => {
         showConfirmation(
             'Simpan Pengaturan',
             'Apakah Anda yakin ingin menyimpan semua perubahan yang dibuat?',
             async () => {
                 setIsSaving(true);
                 try {
+                    if (localSettings.cloudSyncConfig.provider === 'supabase') {
+                        getSupabaseClient(localSettings.cloudSyncConfig);
+                    }
                     await onSaveSettings(localSettings);
                     showToast('Pengaturan berhasil disimpan!', 'success');
                 } catch (error) {
@@ -140,41 +186,7 @@ const Settings: React.FC<SettingsProps> = () => {
         );
     };
 
-    const handleBackup = async () => {
-        try {
-            const settingsData = await db.settings.toArray();
-            const santriData = await db.santri.toArray();
-            
-            const backupData = {
-                settings: settingsData,
-                santri: santriData,
-                backupVersion: '1.0',
-                createdAt: new Date().toISOString(),
-            };
-
-            const jsonString = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            link.href = url;
-            
-            const timestamp = new Date().toISOString().slice(0, 19).replace(/[-T:]/g, '');
-            link.download = `eSantri_backup_${timestamp}.json`;
-
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            URL.revokeObjectURL(url);
-            showToast('Backup data berhasil diunduh!', 'success');
-        } catch (error) {
-            console.error('Failed to create backup:', error);
-            showToast('Gagal membuat backup. Lihat konsol untuk detail.', 'error');
-        }
-    };
-
-    const handleRestore = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleRestoreHandler = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
@@ -220,174 +232,6 @@ const Settings: React.FC<SettingsProps> = () => {
         };
 
         reader.readAsText(file);
-    };
-
-    const handleRemoveTeacher = (id: number) => {
-        const teacher = localSettings.tenagaPengajar.find(t => t.id === id);
-        if (!teacher) return;
-
-        const isMudirAam = localSettings.mudirAamId === id;
-        const assignedJenjang = localSettings.jenjang.find(j => j.mudirId === id);
-        const assignedRombel = localSettings.rombel.find(r => r.waliKelasId === id);
-
-        if (isMudirAam) {
-            showAlert('Penghapusan Gagal', `Tidak dapat menghapus ${teacher.nama} karena masih ditugaskan sebagai Mudir Aam.`);
-            return;
-        }
-        if (assignedJenjang) {
-            showAlert('Penghapusan Gagal', `Tidak dapat menghapus ${teacher.nama} karena masih ditugaskan sebagai Mudir Marhalah untuk jenjang ${assignedJenjang.nama}.`);
-            return;
-        }
-        if (assignedRombel) {
-            showAlert('Penghapusan Gagal', `Tidak dapat menghapus ${teacher.nama} karena masih ditugaskan sebagai Wali Kelas untuk rombel ${assignedRombel.nama}.`);
-            return;
-        }
-
-        showConfirmation(
-            `Hapus ${teacher.nama}`,
-            'Apakah Anda yakin ingin menghapus data tenaga pendidik ini?',
-            () => handleInputChange('tenagaPengajar', localSettings.tenagaPengajar.filter(t => t.id !== id)),
-            { confirmText: 'Ya, Hapus', confirmColor: 'red' }
-        );
-    };
-
-    const handleSaveStructureItem = (item: StructureItem) => {
-        if (!structureModalData) return;
-        const { listName, mode } = structureModalData;
-        
-        const list = localSettings[listName];
-        if (mode === 'add') {
-             const newItem = { ...item, id: list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1 };
-             handleInputChange(listName, [...list, newItem] as any);
-        } else {
-             handleInputChange(listName, list.map(i => i.id === item.id ? item : i) as any);
-        }
-        setStructureModalData(null);
-    };
-
-    const handleSaveTeacher = (teacher: TenagaPengajar) => {
-        if (!teacherModalData) return;
-        const { mode } = teacherModalData;
-
-        const list = localSettings.tenagaPengajar;
-        if (mode === 'add') {
-            const newItem = { ...teacher, id: list.length > 0 ? Math.max(...list.map(t => t.id)) + 1 : 1 };
-            handleInputChange('tenagaPengajar', [...list, newItem]);
-        } else {
-            handleInputChange('tenagaPengajar', list.map(t => t.id === teacher.id ? teacher : t));
-        }
-        setTeacherModalData(null);
-    };
-
-    const handleSaveMapel = (mapel: MataPelajaran) => {
-        if (!mapelModalData) return;
-        const { mode } = mapelModalData;
-
-        const list = localSettings.mataPelajaran;
-        if (mode === 'add') {
-            const newItem = { ...mapel, id: list.length > 0 ? Math.max(...list.map(m => m.id)) + 1 : 1 };
-            handleInputChange('mataPelajaran', [...list, newItem]);
-        } else {
-            handleInputChange('mataPelajaran', list.map(m => m.id === mapel.id ? mapel : m));
-        }
-        setMapelModalData(null);
-    };
-    
-    const renderListManager = (
-        listName: 'jenjang' | 'kelas' | 'rombel',
-        itemName: string,
-        parentList?: 'jenjang' | 'kelas'
-    ) => {
-        const list = localSettings[listName];
-        
-        const handleRemoveItem = (id: number) => {
-            const itemToDelete = list.find(item => item.id === id);
-            if (!itemToDelete) return;
-
-            // Integrity checks before showing confirmation
-            if (listName === 'jenjang') {
-                const santriInJenjang = santriList.filter(s => s.jenjangId === id);
-                if (santriInJenjang.length > 0) {
-                    showAlert('Penghapusan Dicegah', `Tidak dapat menghapus jenjang "${itemToDelete.nama}" karena masih terdaftar ${santriInJenjang.length} santri di dalamnya.`);
-                    return;
-                }
-                showConfirmation(`Hapus ${itemName}`,`Apakah Anda yakin ingin menghapus ${itemName} "${itemToDelete.nama}"? Semua data kelas, rombel, dan mata pelajaran yang terkait akan ikut terhapus.`,
-                    () => {
-                        const kelasIdsToDelete = localSettings.kelas.filter(k => k.jenjangId === id).map(k => k.id);
-                        handleInputChange('jenjang', localSettings.jenjang.filter(item => item.id !== id));
-                        handleInputChange('kelas', localSettings.kelas.filter(item => item.jenjangId !== id));
-                        handleInputChange('rombel', localSettings.rombel.filter(item => !kelasIdsToDelete.includes(item.kelasId)));
-                        handleInputChange('mataPelajaran', localSettings.mataPelajaran.filter(item => item.jenjangId !== id));
-                    },
-                    { confirmText: 'Ya, Hapus', confirmColor: 'red' }
-                );
-                return;
-            }
-
-            if (listName === 'kelas') {
-                const santriInKelas = santriList.filter(s => s.kelasId === id);
-                if (santriInKelas.length > 0) {
-                    showAlert('Penghapusan Dicegah', `Tidak dapat menghapus kelas "${itemToDelete.nama}" karena masih terdaftar ${santriInKelas.length} santri di dalamnya.`);
-                    return;
-                }
-                if (localSettings.rombel.some(r => r.kelasId === id)) {
-                    showAlert('Penghapusan Dicegah', `Tidak dapat menghapus kelas "${itemToDelete.nama}" karena masih digunakan oleh data rombel.`);
-                    return;
-                }
-            }
-            
-            if (listName === 'rombel') {
-                 const santriInRombel = santriList.filter(s => s.rombelId === id);
-                 if (santriInRombel.length > 0) {
-                     showAlert('Penghapusan Dicegah', `Tidak dapat menghapus rombel "${itemToDelete.nama}" karena masih terdaftar ${santriInRombel.length} santri di dalamnya.`);
-                     return;
-                 }
-            }
-
-            // Default confirmation for Kelas and Rombel if checks pass
-            showConfirmation(`Hapus ${itemName}`,`Apakah Anda yakin ingin menghapus ${itemName} "${itemToDelete.nama}"?`,
-                () => handleInputChange(listName, list.filter(item => item.id !== id) as any),
-                { confirmText: 'Ya, Hapus', confirmColor: 'red' }
-            );
-        };
-
-        const getAssignmentName = (item: StructureItem) => {
-            let teacherId: number | undefined;
-            if (listName === 'jenjang') teacherId = (item as Jenjang).mudirId;
-            if (listName === 'rombel') teacherId = (item as Rombel).waliKelasId;
-            if (!teacherId) return null;
-
-            const teacher = localSettings.tenagaPengajar.find(t => t.id === teacherId);
-            return teacher ? teacher.nama : 'Pengajar tidak ditemukan';
-        };
-
-        return (
-            <div className="mb-4">
-                <h3 className="text-lg font-semibold text-gray-700 mb-2 capitalize">{itemName}</h3>
-                <div className="border rounded-lg max-h-60 overflow-y-auto">
-                    {list.length > 0 ? (
-                        <ul className="divide-y">
-                            {list.map(item => (
-                                <li key={item.id} className="flex justify-between items-center p-2 hover:bg-gray-50 group">
-                                    <div className="text-sm">
-                                        <p className="font-medium">{item.nama} {(item as Jenjang).kode && <span className="font-normal text-gray-500">({(item as Jenjang).kode})</span>}</p>
-                                        <div className="text-xs text-gray-500 space-x-2">
-                                            {parentList && <span>Induk: {localSettings[parentList].find(p => p.id === (item as any)[`${parentList}Id`])?.nama || 'N/A'}</span>}
-                                            {getAssignmentName(item) && <span className="text-blue-600">{getAssignmentName(item)}</span>}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                         <button onClick={() => setStructureModalData({ mode: 'edit', listName, item })} className="text-blue-500 hover:text-blue-700 text-xs" aria-label={`Edit ${itemName} ${item.nama}`}><i className="bi bi-pencil-square"></i></button>
-                                         <button onClick={() => handleRemoveItem(item.id)} className="text-red-500 hover:text-red-700 text-xs" aria-label={`Hapus ${itemName} ${item.nama}`}><i className="bi bi-trash"></i></button>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : <p className="text-sm text-gray-400 p-3 text-center">Data kosong.</p>}
-                </div>
-                <button onClick={() => setStructureModalData({ mode: 'add', listName })} className="mt-2 text-sm text-teal-600 hover:text-teal-800 font-medium">+ Tambah {itemName}</button>
-            </div>
-        )
     };
 
     const LogoUploader: React.FC<{
@@ -461,7 +305,7 @@ const Settings: React.FC<SettingsProps> = () => {
     
     return (
         <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Pengaturan Pondok Pesantren</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Pengaturan Sistem</h1>
             
             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Informasi Umum</h2>
@@ -538,9 +382,9 @@ const Settings: React.FC<SettingsProps> = () => {
                                         className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 focus:ring-teal-500"
                                     />
                                     <label htmlFor={`method-${method}`} className="ml-2 text-sm text-gray-800">
-                                        {method === 'custom' && 'Metode Kustom'}
-                                        {method === 'global' && 'Metode Global'}
-                                        {method === 'dob' && 'Metode Tgl. Lahir'}
+                                        {method === 'custom' && 'Metode Kustom (Format: TM-TH-KODE-NO)'}
+                                        {method === 'global' && 'Metode Global (Urut Pondok)'}
+                                        {method === 'dob' && 'Metode Tgl. Lahir (YYYYMMDD...)'}
                                     </label>
                                 </div>
                             ))}
@@ -548,145 +392,206 @@ const Settings: React.FC<SettingsProps> = () => {
                     </div>
 
                     {localSettings.nisSettings.generationMethod === 'custom' && (
-                        <div className="p-4 border rounded-lg bg-gray-50/50 space-y-6">
-                            <p className="text-sm text-gray-600">Metode ini memungkinkan pembuatan NIS dengan format yang bisa diatur sendiri menggunakan placeholder.</p>
+                        <div className="p-4 bg-gray-50 border rounded-lg space-y-4">
+                            <p className="text-sm text-gray-600">Format NIS: <strong>{localSettings.nisSettings.format}</strong> (Ganti bagian di textbox bawah untuk kustomisasi)</p>
                             <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Format Urutan NIS</label>
-                                <input type="text" value={localSettings.nisSettings.format} onChange={(e) => handleNisSettingChange('format', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" />
-                                <p className="text-xs text-gray-500 mt-1">Gunakan placeholder: <code className="bg-gray-200 text-red-600 px-1 rounded">{'{TM}'}</code> (Tahun Masehi), <code className="bg-gray-200 text-red-600 px-1 rounded">{'{TH}'}</code> (Tahun Hijriah), <code className="bg-gray-200 text-red-600 px-1 rounded">{'{KODE}'}</code> (Kode Jenjang), <code className="bg-gray-200 text-red-600 px-1 rounded">{'{NO_URUT}'}</code> (Nomor Urut).</p>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Format String</label>
+                                <input
+                                    type="text"
+                                    value={localSettings.nisSettings.format}
+                                    onChange={(e) => handleNisSettingChange('format', e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Placeholder: {'{TM}'}: Tahun Masehi (2 digit), {'{TH}'}: Tahun Hijriah (2 digit), {'{KODE}'}: Kode Jenjang, {'{NO_URUT}'}: Nomor Urut</p>
                             </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block mb-2 text-sm font-medium text-gray-700">Sumber Tahun Masehi ({'{TM}'})</label>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center">
-                                            <input type="radio" id="masehi-auto" name="masehi-source" value="auto" checked={localSettings.nisSettings.masehiYearSource === 'auto'} onChange={(e) => handleNisSettingChange('masehiYearSource', e.target.value as 'auto' | 'manual')} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 focus:ring-teal-500" />
-                                            <label htmlFor="masehi-auto" className="ml-2 text-sm text-gray-800">Otomatis (dari tanggal masuk)</label>
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center">
-                                                <input type="radio" id="masehi-manual" name="masehi-source" value="manual" checked={localSettings.nisSettings.masehiYearSource === 'manual'} onChange={(e) => handleNisSettingChange('masehiYearSource', e.target.value as 'auto' | 'manual')} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 focus:ring-teal-500" />
-                                                <label htmlFor="masehi-manual" className="ml-2 text-sm text-gray-800">Manual</label>
-                                            </div>
-                                            {localSettings.nisSettings.masehiYearSource === 'manual' && (
-                                                <div className="mt-2 ml-6">
-                                                    <input type="number" value={localSettings.nisSettings.manualMasehiYear} onChange={(e) => handleNisSettingChange('manualMasehiYear', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full sm:w-48 p-2" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Sumber Tahun Masehi</label>
+                                    <select
+                                        value={localSettings.nisSettings.masehiYearSource}
+                                        onChange={(e) => handleNisSettingChange('masehiYearSource', e.target.value as any)}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                    >
+                                        <option value="auto">Otomatis (Tahun Masuk)</option>
+                                        <option value="manual">Manual (Setiap Tahun Ajaran)</option>
+                                    </select>
                                 </div>
-
+                                {localSettings.nisSettings.masehiYearSource === 'manual' && (
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Masehi Manual</label>
+                                        <input
+                                            type="number"
+                                            value={localSettings.nisSettings.manualMasehiYear}
+                                            onChange={(e) => handleNisSettingChange('manualMasehiYear', parseInt(e.target.value))}
+                                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                        />
+                                    </div>
+                                )}
                                 <div>
-                                    <label className="block mb-2 text-sm font-medium text-gray-700">Sumber Tahun Hijriah ({'{TH}'})</label>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center">
-                                            <input type="radio" id="hijriah-auto" name="hijriah-source" value="auto" checked={localSettings.nisSettings.hijriahYearSource === 'auto'} onChange={(e) => handleNisSettingChange('hijriahYearSource', e.target.value as 'auto' | 'manual')} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 focus:ring-teal-500" />
-                                            <label htmlFor="hijriah-auto" className="ml-2 text-sm text-gray-800">Otomatis (estimasi)</label>
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center">
-                                                <input type="radio" id="hijriah-manual" name="hijriah-source" value="manual" checked={localSettings.nisSettings.hijriahYearSource === 'manual'} onChange={(e) => handleNisSettingChange('hijriahYearSource', e.target.value as 'auto' | 'manual')} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 focus:ring-teal-500" />
-                                                <label htmlFor="hijriah-manual" className="ml-2 text-sm text-gray-800">Manual</label>
-                                            </div>
-                                            {localSettings.nisSettings.hijriahYearSource === 'manual' && (
-                                                <div className="mt-2 ml-6">
-                                                    <input type="number" value={localSettings.nisSettings.manualHijriahYear} onChange={(e) => handleNisSettingChange('manualHijriahYear', e.target.value === '' ? 0 : parseInt(e.target.value, 10))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full sm:w-48 p-2" />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Sumber Tahun Hijriah</label>
+                                    <select
+                                        value={localSettings.nisSettings.hijriahYearSource}
+                                        onChange={(e) => handleNisSettingChange('hijriahYearSource', e.target.value as any)}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                    >
+                                        <option value="auto">Otomatis (Konversi dari Masehi)</option>
+                                        <option value="manual">Manual (Setiap Tahun Ajaran)</option>
+                                    </select>
                                 </div>
+                                {localSettings.nisSettings.hijriahYearSource === 'manual' && (
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Hijriah Manual</label>
+                                        <input
+                                            type="number"
+                                            value={localSettings.nisSettings.manualHijriahYear}
+                                            onChange={(e) => handleNisSettingChange('manualHijriahYear', parseInt(e.target.value))}
+                                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                        />
+                                    </div>
+                                )}
                             </div>
-                            <div className="mt-6 pt-4 border-t">
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Pengaturan Nomor Urut per Jenjang</label>
-                                <div className="border rounded-lg overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm text-left text-gray-600">
-                                            <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                                <tr>
-                                                    <th className="px-4 py-2 sticky left-0 bg-gray-50 z-10">Jenjang Pendidikan</th>
-                                                    <th className="px-4 py-2">Nomor Urut Mulai</th>
-                                                    <th className="px-4 py-2">Jumlah Digit No. Urut</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {localSettings.jenjang.map(jenjang => {
-                                                    const config = localSettings.nisSettings.jenjangConfig.find(c => c.jenjangId === jenjang.id);
-                                                    if (!config) return null;
-                                                    return (
-                                                        <tr key={jenjang.id} className="bg-white border-b hover:bg-gray-50 group">
-                                                            <td className="px-4 py-2 font-medium sticky left-0 bg-white group-hover:bg-gray-50">{jenjang.nama}</td>
-                                                            <td className="px-4 py-2">
-                                                                <input type="number" value={config.startNumber} onChange={e => handleNisJenjangConfigChange(jenjang.id, 'startNumber', e.target.value)} className="bg-gray-50 border border-gray-300 text-sm rounded-md focus:ring-teal-500 w-24 p-1.5" />
-                                                            </td>
-                                                            <td className="px-4 py-2">
-                                                                <input type="number" value={config.padding} onChange={e => handleNisJenjangConfigChange(jenjang.id, 'padding', e.target.value)} className="bg-gray-50 border border-gray-300 text-sm rounded-md focus:ring-teal-500 w-24 p-1.5" />
-                                                            </td>
-                                                        </tr>
-                                                    )
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                            <div>
+                                <h4 className="font-semibold text-gray-700 mb-2">Konfigurasi Nomor Urut per Jenjang</h4>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left text-gray-500">
+                                        <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                            <tr>
+                                                <th className="px-4 py-2">Jenjang</th>
+                                                <th className="px-4 py-2">Mulai Dari</th>
+                                                <th className="px-4 py-2">Padding (Digit)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {localSettings.jenjang.map(j => {
+                                                const config = localSettings.nisSettings.jenjangConfig.find(c => c.jenjangId === j.id) || { startNumber: 1, padding: 3 };
+                                                return (
+                                                    <tr key={j.id} className="bg-white border-b">
+                                                        <td className="px-4 py-2 font-medium text-gray-900">{j.nama}</td>
+                                                        <td className="px-4 py-2">
+                                                            <input
+                                                                type="number"
+                                                                value={config.startNumber}
+                                                                onChange={(e) => handleNisJenjangConfigChange(j.id, 'startNumber', e.target.value)}
+                                                                className="w-20 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-1"
+                                                            />
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <input
+                                                                type="number"
+                                                                value={config.padding}
+                                                                onChange={(e) => handleNisJenjangConfigChange(j.id, 'padding', e.target.value)}
+                                                                className="w-20 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-1"
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
                     )}
 
                     {localSettings.nisSettings.generationMethod === 'global' && (
-                        <div className="p-4 border rounded-lg bg-gray-50/50 space-y-4">
-                             <p className="text-sm text-gray-600">Membuat NIS berurutan secara global untuk semua santri. Contoh: <code className="bg-gray-200 px-1 rounded">20240001</code> atau <code className="bg-gray-200 px-1 rounded">2024SW001</code></p>
-                            <div className="flex items-center">
-                                <input type="checkbox" id="global-use-year" checked={localSettings.nisSettings.globalUseYearPrefix} onChange={(e) => handleNisSettingChange('globalUseYearPrefix', e.target.checked)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
-                                <label htmlFor="global-use-year" className="ml-2 text-sm text-gray-800">Sertakan Tahun Masuk sebagai Awalan</label>
-                            </div>
-                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="p-4 bg-gray-50 border rounded-lg space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block mb-1 text-sm font-medium text-gray-700">Awalan Tambahan (Opsional)</label>
-                                    <input type="text" value={localSettings.nisSettings.globalPrefix} onChange={(e) => handleNisSettingChange('globalPrefix', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" />
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Prefix Global</label>
+                                    <input
+                                        type="text"
+                                        value={localSettings.nisSettings.globalPrefix}
+                                        onChange={(e) => handleNisSettingChange('globalPrefix', e.target.value)}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                        placeholder="Contoh: PP"
+                                    />
+                                </div>
+                                <div className="flex items-center mt-6">
+                                    <input
+                                        type="checkbox"
+                                        id="globalUseYearPrefix"
+                                        checked={localSettings.nisSettings.globalUseYearPrefix}
+                                        onChange={(e) => handleNisSettingChange('globalUseYearPrefix', e.target.checked)}
+                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500"
+                                    />
+                                    <label htmlFor="globalUseYearPrefix" className="ml-2 text-sm font-medium text-gray-900">Gunakan Tahun Masuk sebagai Prefix</label>
+                                </div>
+                                <div className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        id="globalUseJenjangCode"
+                                        checked={localSettings.nisSettings.globalUseJenjangCode}
+                                        onChange={(e) => handleNisSettingChange('globalUseJenjangCode', e.target.checked)}
+                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500"
+                                    />
+                                    <label htmlFor="globalUseJenjangCode" className="ml-2 text-sm font-medium text-gray-900">Sisipkan Kode Jenjang</label>
                                 </div>
                                 <div>
-                                    <label className="block mb-1 text-sm font-medium text-gray-700">Nomor Urut Mulai</label>
-                                    <input type="number" value={localSettings.nisSettings.globalStartNumber} onChange={(e) => handleNisSettingChange('globalStartNumber', parseInt(e.target.value) || 1)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" />
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Mulai Dari Angka</label>
+                                    <input
+                                        type="number"
+                                        value={localSettings.nisSettings.globalStartNumber}
+                                        onChange={(e) => handleNisSettingChange('globalStartNumber', parseInt(e.target.value))}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block mb-1 text-sm font-medium text-gray-700">Jumlah Digit No. Urut</label>
-                                    <input type="number" value={localSettings.nisSettings.globalPadding} onChange={(e) => handleNisSettingChange('globalPadding', parseInt(e.target.value) || 4)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" />
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Padding Digit</label>
+                                    <input
+                                        type="number"
+                                        value={localSettings.nisSettings.globalPadding}
+                                        onChange={(e) => handleNisSettingChange('globalPadding', parseInt(e.target.value))}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                    />
                                 </div>
-                            </div>
-                             <div className="flex items-center pt-4 border-t mt-4">
-                                <input type="checkbox" id="global-use-jenjang" checked={localSettings.nisSettings.globalUseJenjangCode} onChange={(e) => handleNisSettingChange('globalUseJenjangCode', e.target.checked)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
-                                <label htmlFor="global-use-jenjang" className="ml-2 text-sm text-gray-800">Sertakan Kode Jenjang (membuat urutan per jenjang)</label>
                             </div>
                         </div>
                     )}
-                    
+
                     {localSettings.nisSettings.generationMethod === 'dob' && (
-                         <div className="p-4 border rounded-lg bg-gray-50/50 space-y-4">
-                            <p className="text-sm text-gray-600">Membuat NIS dari tanggal lahir santri dan nomor urut harian. Contoh: <code className="bg-gray-200 px-1 rounded">120318001</code> atau <code className="bg-gray-200 px-1 rounded">120318SW001</code></p>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="p-4 bg-gray-50 border rounded-lg space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Format Tanggal Lahir</label>
-                                    <select value={localSettings.nisSettings.dobFormat} onChange={(e) => handleNisSettingChange('dobFormat', e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2">
-                                        <option value="DDMMYY">DDMMYY (120318)</option>
-                                        <option value="YYMMDD">YYMMDD (180312)</option>
-                                        <option value="YYYYMMDD">YYYYMMDD (20180312)</option>
+                                    <select
+                                        value={localSettings.nisSettings.dobFormat}
+                                        onChange={(e) => handleNisSettingChange('dobFormat', e.target.value as any)}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                    >
+                                        <option value="DDMMYY">DDMMYY (Hari Bulan Tahun-2-digit)</option>
+                                        <option value="YYYYMMDD">YYYYMMDD (Tahun-4-digit Bulan Hari)</option>
+                                        <option value="YYMMDD">YYMMDD (Tahun-2-digit Bulan Hari)</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block mb-1 text-sm font-medium text-gray-700">Pemisah (Opsional)</label>
-                                    <input type="text" value={localSettings.nisSettings.dobSeparator} onChange={(e) => handleNisSettingChange('dobSeparator', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" />
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Pemisah (Separator)</label>
+                                    <input
+                                        type="text"
+                                        value={localSettings.nisSettings.dobSeparator}
+                                        onChange={(e) => handleNisSettingChange('dobSeparator', e.target.value)}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                        placeholder="Kosongkan jika tidak ada, atau gunakan . - /"
+                                    />
+                                </div>
+                                <div className="flex items-center mt-6">
+                                    <input
+                                        type="checkbox"
+                                        id="dobUseJenjangCode"
+                                        checked={localSettings.nisSettings.dobUseJenjangCode}
+                                        onChange={(e) => handleNisSettingChange('dobUseJenjangCode', e.target.checked)}
+                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500"
+                                    />
+                                    <label htmlFor="dobUseJenjangCode" className="ml-2 text-sm font-medium text-gray-900">Sisipkan Kode Jenjang</label>
                                 </div>
                                 <div>
-                                    <label className="block mb-1 text-sm font-medium text-gray-700">Jumlah Digit No. Urut</label>
-                                    <input type="number" value={localSettings.nisSettings.dobPadding} onChange={(e) => handleNisSettingChange('dobPadding', parseInt(e.target.value) || 3)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" />
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Padding Nomor Urut (jika Tgl Lahir sama)</label>
+                                    <input
+                                        type="number"
+                                        value={localSettings.nisSettings.dobPadding}
+                                        onChange={(e) => handleNisSettingChange('dobPadding', parseInt(e.target.value))}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                    />
                                 </div>
-                            </div>
-                            <div className="flex items-center pt-4 border-t mt-4">
-                                <input type="checkbox" id="dob-use-jenjang" checked={localSettings.nisSettings.dobUseJenjangCode} onChange={(e) => handleNisSettingChange('dobUseJenjangCode', e.target.checked)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
-                                <label htmlFor="dob-use-jenjang" className="ml-2 text-sm text-gray-800">Sertakan Kode Jenjang (membuat urutan per jenjang)</label>
                             </div>
                         </div>
                     )}
@@ -694,106 +599,197 @@ const Settings: React.FC<SettingsProps> = () => {
             </div>
 
             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Struktur Pendidikan</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {renderListManager('jenjang', 'Jenjang Pendidikan')}
-                    {renderListManager('kelas', 'Kelas', 'jenjang')}
-                    {renderListManager('rombel', 'Rombel (Rombongan Belajar) Tersedia', 'kelas')}
-                </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Mata Pelajaran per Jenjang</h2>
-                <div className="space-y-6">
-                    {localSettings.jenjang.map(jenjang => {
-                        const mapelList = localSettings.mataPelajaran.filter(m => m.jenjangId === jenjang.id);
-                        return (
-                        <div key={jenjang.id}>
-                            <h3 className="text-md font-semibold text-gray-800 mb-2">{jenjang.nama}</h3>
-                            <div className="border rounded-lg max-h-60 overflow-y-auto">
-                                {mapelList.length > 0 ? (
-                                    <ul className="divide-y">
-                                        {mapelList.map(mapel => (
-                                            <li key={mapel.id} className="flex justify-between items-center p-2 hover:bg-gray-50 group">
-                                                <p className="text-sm">{mapel.nama}</p>
-                                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => setMapelModalData({ mode: 'edit', jenjangId: jenjang.id, item: mapel })} className="text-blue-500 hover:text-blue-700 text-xs" aria-label={`Edit mata pelajaran ${mapel.nama}`}><i className="bi bi-pencil-square"></i></button>
-                                                    <button onClick={() => showConfirmation('Hapus Mata Pelajaran', `Yakin ingin menghapus ${mapel.nama}?`, () => handleInputChange('mataPelajaran', localSettings.mataPelajaran.filter(m => m.id !== mapel.id)), {confirmColor:'red'})} className="text-red-500 hover:text-red-700 text-xs" aria-label={`Hapus mata pelajaran ${mapel.nama}`}><i className="bi bi-trash"></i></button>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : <p className="text-sm text-gray-400 p-3 text-center">Belum ada mata pelajaran.</p>}
-                            </div>
-                             <button onClick={() => setMapelModalData({ mode: 'add', jenjangId: jenjang.id })} className="mt-2 text-sm text-teal-600 hover:text-teal-800 font-medium">+ Tambah Mata Pelajaran</button>
-                        </div>
-                        )
-                    })}
-                     {localSettings.jenjang.length === 0 && <p className="text-center text-gray-500 py-4">Silakan tambah Jenjang Pendidikan terlebih dahulu di bagian Struktur Pendidikan.</p>}
-                </div>
-            </div>
-
-             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Tenaga Pendidik & Kependidikan</h2>
-                <div className="border rounded-lg max-h-72 overflow-y-auto mb-2">
-                    {localSettings.tenagaPengajar.length > 0 ? (
-                        <ul className="divide-y">
-                            {localSettings.tenagaPengajar.map(t => {
-                                const status = getTeacherStatus(t);
-                                return (
-                                <li key={t.id} className="flex justify-between items-center p-3 hover:bg-gray-50 group">
-                                    <div>
-                                        <p className="font-medium text-sm">{t.nama}</p>
-                                        <p className="text-xs text-gray-600">{status.jabatan} 
-                                            <span className={`ml-2 font-semibold text-${status.color}-600`}>({status.text})</span>
-                                        </p>
-                                    </div>
-                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                         <button onClick={() => setTeacherModalData({ mode: 'edit', item: t })} className="text-blue-500 hover:text-blue-700 text-xs" aria-label={`Edit data ${t.nama}`}><i className="bi bi-pencil-square"></i></button>
-                                         <button onClick={() => handleRemoveTeacher(t.id)} className="text-red-500 hover:text-red-700 text-xs" aria-label={`Hapus data ${t.nama}`}><i className="bi bi-trash"></i></button>
-                                    </div>
-                                </li>
-                                )
-                            })}
-                        </ul>
-                    ) : <p className="text-sm text-gray-400 p-3 text-center">Data kosong.</p>}
-                </div>
-                <button onClick={() => setTeacherModalData({mode: 'add'})} className="text-sm text-teal-600 hover:text-teal-800 font-medium">+ Tambah Tenaga Pendidik</button>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Cadangkan & Pulihkan Data</h2>
+                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Sinkronisasi & Database (Supabase)</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                    Hubungkan aplikasi ke Supabase untuk fitur <strong>Multi-Admin</strong> dan <strong>Audit Log Realtime</strong>.
+                </p>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h3 className="text-lg font-semibold text-gray-800">Cadangkan Data</h3>
-                        <p className="text-sm text-gray-600 mt-1 mb-4">Simpan salinan semua data santri dan pengaturan ke dalam satu file JSON. Simpan file ini di tempat yang aman.</p>
+                        <label className="block mb-2 text-sm font-medium text-gray-700">Penyedia Layanan</label>
+                        <select 
+                            value={localSettings.cloudSyncConfig?.provider || 'none'} 
+                            onChange={(e) => handleSyncProviderChange(e.target.value as SyncProvider)}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                        >
+                            <option value="none">Tidak Aktif</option>
+                            <option value="supabase">Supabase (PostgreSQL)</option>
+                            <option value="dropbox">Dropbox (Legacy Backup)</option>
+                            <option value="webdav">Nextcloud / WebDAV (Legacy Backup)</option>
+                        </select>
+                    </div>
+
+                    {localSettings.cloudSyncConfig?.provider === 'supabase' && (
+                        <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 border p-4 rounded-lg bg-emerald-50">
+                            <div className="md:col-span-2 mb-2 p-3 bg-yellow-100 border border-yellow-300 rounded text-xs text-yellow-800">
+                                <strong>Catatan Penggunaan:</strong> Jika Anda menggunakan Supabase Free Tier, proyek akan di-pause otomatis jika tidak aktif selama 1 minggu. Anda perlu mengaktifkannya kembali secara manual di dashboard Supabase.
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Supabase Project URL</label>
+                                <input 
+                                    type="text" 
+                                    value={localSettings.cloudSyncConfig.supabaseUrl || ''}
+                                    onChange={(e) => handleSyncConfigChange('supabaseUrl', e.target.value)}
+                                    placeholder="https://xyz.supabase.co"
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Supabase Anon Key</label>
+                                <input 
+                                    type="password" 
+                                    value={localSettings.cloudSyncConfig.supabaseKey || ''}
+                                    onChange={(e) => handleSyncConfigChange('supabaseKey', e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                                />
+                            </div>
+                            <div>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">ID Admin / Username</label>
+                                <input 
+                                    type="text" 
+                                    value={localSettings.cloudSyncConfig.adminIdentity || ''}
+                                    onChange={(e) => handleSyncConfigChange('adminIdentity', e.target.value)}
+                                    placeholder="Contoh: Admin-01"
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Nama ini akan tercatat dalam Audit Log.</p>
+                            </div>
+                            <div className="md:col-span-2 flex justify-end">
+                                <button onClick={handleTestSupabase} className="text-emerald-700 bg-emerald-200 hover:bg-emerald-300 px-4 py-2 rounded text-sm font-medium">
+                                    Uji Koneksi
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {localSettings.cloudSyncConfig?.provider === 'dropbox' && (
+                        <div>
+                            <label className="block mb-2 text-sm font-medium text-gray-700">Dropbox Access Token</label>
+                            <input 
+                                type="password" 
+                                value={localSettings.cloudSyncConfig.dropboxToken || ''}
+                                onChange={(e) => handleSyncConfigChange('dropboxToken', e.target.value)}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                            />
+                        </div>
+                    )}
+                    
+                    {localSettings.cloudSyncConfig?.provider === 'webdav' && (
+                        <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 border p-4 rounded-lg bg-gray-50">
+                            <div className="md:col-span-2">
+                                <label className="block mb-2 text-sm font-medium text-gray-700">URL WebDAV</label>
+                                <input 
+                                    type="text" 
+                                    value={localSettings.cloudSyncConfig.webdavUrl || ''}
+                                    onChange={(e) => handleSyncConfigChange('webdavUrl', e.target.value)}
+                                    placeholder="https://cloud.example.com/remote.php/dav/files/user/"
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                                />
+                            </div>
+                            <div>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Username</label>
+                                <input 
+                                    type="text" 
+                                    value={localSettings.cloudSyncConfig.webdavUsername || ''}
+                                    onChange={(e) => handleSyncConfigChange('webdavUsername', e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                                />
+                            </div>
+                            <div>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">Password</label>
+                                <input 
+                                    type="password" 
+                                    value={localSettings.cloudSyncConfig.webdavPassword || ''}
+                                    onChange={(e) => handleSyncConfigChange('webdavPassword', e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {localSettings.cloudSyncConfig?.provider !== 'none' && localSettings.cloudSyncConfig?.provider !== 'supabase' && (
+                    <div className="mt-6 flex flex-wrap gap-4 items-center border-t pt-4">
+                        <div className="text-sm text-gray-600">
+                            Terakhir sinkronisasi: <strong>{localSettings.cloudSyncConfig?.lastSync ? new Date(localSettings.cloudSyncConfig.lastSync).toLocaleString('id-ID') : 'Belum pernah'}</strong>
+                        </div>
+                        <div className="flex gap-2 ml-auto">
+                            <button 
+                                onClick={() => handleManualSync('up')} 
+                                disabled={isSyncing}
+                                className="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-4 py-2 flex items-center gap-2 disabled:bg-blue-300"
+                            >
+                                {isSyncing ? <span className="animate-spin h-4 w-4 border-2 border-t-transparent rounded-full"></span> : <i className="bi bi-cloud-upload"></i>}
+                                Upload ke Cloud
+                            </button>
+                            <button 
+                                onClick={() => handleManualSync('down')} 
+                                disabled={isSyncing}
+                                className="text-gray-700 bg-gray-200 hover:bg-gray-300 focus:ring-4 focus:ring-gray-100 font-medium rounded-lg text-sm px-4 py-2 flex items-center gap-2 disabled:bg-gray-100"
+                            >
+                                {isSyncing ? <span className="animate-spin h-4 w-4 border-2 border-t-transparent border-gray-600 rounded-full"></span> : <i className="bi bi-cloud-download"></i>}
+                                Download dari Cloud
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Cadangkan & Pulihkan Data Lokal</h2>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-800">Cadangkan Data (Manual)</h3>
+                        <p className="text-sm text-gray-600 mt-1 mb-4">Simpan salinan semua data santri dan pengaturan ke dalam satu file JSON di komputer Anda.</p>
+                        
+                        <div className="bg-yellow-50 p-3 rounded-md border border-yellow-200 mb-4">
+                            <h4 className="text-sm font-semibold text-yellow-800 mb-2">Pengingat Backup Otomatis</h4>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { value: 'daily', label: 'Setiap Hari' },
+                                    { value: 'weekly', label: 'Setiap Minggu' },
+                                    { value: 'never', label: 'Matikan' }
+                                ].map(opt => (
+                                    <label key={opt.value} className="flex items-center gap-2 bg-white px-3 py-1.5 rounded border cursor-pointer hover:bg-gray-50">
+                                        <input 
+                                            type="radio" 
+                                            name="backupFreq" 
+                                            value={opt.value} 
+                                            checked={localSettings.backupConfig?.frequency === opt.value} 
+                                            onChange={() => handleBackupConfigChange(opt.value as any)}
+                                            className="text-teal-600 focus:ring-teal-500"
+                                        />
+                                        <span className="text-sm text-gray-700">{opt.label}</span>
+                                    </label>
+                                ))}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                                Terakhir dicadangkan: {settings.backupConfig?.lastBackup ? new Date(settings.backupConfig.lastBackup).toLocaleString('id-ID') : 'Belum pernah'}
+                            </p>
+                        </div>
+
                         <button 
-                            onClick={handleBackup}
+                            onClick={downloadBackup}
                             className="w-full sm:w-auto text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 flex items-center justify-center gap-2">
                             <i className="bi bi-download"></i>
                             <span>Unduh Cadangan Data</span>
                         </button>
                     </div>
                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800">Pulihkan Data</h3>
-                        <p className="text-sm text-gray-600 mt-1 mb-4">Pulihkan data dari file cadangan. Tindakan ini tidak dapat dibatalkan.</p>
-                        <input type="file" accept=".json" onChange={handleRestore} ref={restoreInputRef} id="restore-input" className="hidden" />
+                        <h3 className="text-lg font-semibold text-gray-800">Pulihkan Data (Manual)</h3>
+                        <p className="text-sm text-gray-600 mt-1 mb-4">Pulihkan data dari file cadangan JSON. Tindakan ini tidak dapat dibatalkan.</p>
+                        <input type="file" accept=".json" onChange={handleRestoreHandler} ref={restoreInputRef} id="restore-input" className="hidden" />
                         <label 
                             htmlFor="restore-input"
                             className="w-full sm:w-auto cursor-pointer text-white bg-green-600 hover:bg-green-700 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 flex items-center justify-center gap-2">
                             <i className="bi bi-upload"></i>
                             <span>Pilih File Cadangan</span>
                         </label>
-                        <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-sm">
-                            <i className="bi bi-exclamation-triangle-fill mr-2"></i>
-                            <strong>PERHATIAN:</strong> Memulihkan data akan menghapus semua data yang ada saat ini.
-                        </div>
                     </div>
                 </div>
             </div>
             
              <div className="mt-6 flex justify-end">
-                <button onClick={handleSaveSettings} disabled={isSaving} className="text-white bg-teal-700 hover:bg-teal-800 focus:ring-4 focus:ring-teal-300 font-medium rounded-lg text-sm px-8 py-2.5 flex items-center justify-center min-w-[190px] disabled:bg-teal-400 disabled:cursor-not-allowed">
+                <button onClick={handleSaveSettingsHandler} disabled={isSaving} className="text-white bg-teal-700 hover:bg-teal-800 focus:ring-4 focus:ring-teal-300 font-medium rounded-lg text-sm px-8 py-2.5 flex items-center justify-center min-w-[190px] disabled:bg-teal-400 disabled:cursor-not-allowed">
                     {isSaving ? (
                         <>
                             <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -807,9 +803,6 @@ const Settings: React.FC<SettingsProps> = () => {
                     )}
                 </button>
             </div>
-            {structureModalData && <StructureModal isOpen={!!structureModalData} onClose={() => setStructureModalData(null)} onSave={handleSaveStructureItem} modalData={structureModalData} activeTeachers={activeTeachers} />}
-            {teacherModalData && <TeacherModal isOpen={!!teacherModalData} onClose={() => setTeacherModalData(null)} onSave={handleSaveTeacher} modalData={teacherModalData} />}
-            {mapelModalData && <MapelModal isOpen={!!mapelModalData} onClose={() => setMapelModalData(null)} onSave={handleSaveMapel} modalData={mapelModalData} />}
         </div>
     );
 };

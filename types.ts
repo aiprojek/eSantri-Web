@@ -21,6 +21,41 @@ export interface StampConfig {
   placementSignatoryId?: string; // ID of the signatory where the stamp is placed
 }
 
+// Add Backup Configuration
+export type BackupFrequency = 'daily' | 'weekly' | 'never';
+
+export interface BackupConfig {
+    frequency: BackupFrequency;
+    lastBackup: string | null; // ISO Date String
+}
+
+// Cloud Sync Configuration
+export type SyncProvider = 'none' | 'dropbox' | 'webdav' | 'supabase';
+
+export interface CloudSyncConfig {
+    provider: SyncProvider;
+    lastSync: string | null; // ISO Date String
+    dropboxToken?: string;
+    webdavUrl?: string;
+    webdavUsername?: string;
+    webdavPassword?: string; 
+    supabaseUrl?: string; 
+    supabaseKey?: string; 
+    adminIdentity?: string; // ID Unik Admin untuk Audit Log
+}
+
+// --- Audit Log Type ---
+export interface AuditLog {
+    id: string;
+    table_name: string;
+    record_id: string;
+    operation: 'INSERT' | 'UPDATE' | 'DELETE';
+    old_data: any;
+    new_data: any;
+    changed_by: string; // UUID from Supabase Auth
+    username?: string; // Optional display name
+    created_at: string;
+}
 
 // Update SuratTemplate to include new configurations
 export interface SuratTemplate {
@@ -361,11 +396,14 @@ export interface PondokSettings {
   suratTagihanPenutup: string;
   suratTagihanCatatan?: string;
   pesanWaTunggakan: string;
+  backupConfig: BackupConfig;
+  cloudSyncConfig: CloudSyncConfig;
 }
 
 export enum Page {
   Dashboard = 'Dashboard',
   Santri = 'Data Santri',
+  DataMaster = 'Data Akademik', // New Page
   Keuangan = 'Keuangan',
   Keasramaan = 'Keasramaan',
   BukuKas = 'Buku Kas',
@@ -373,6 +411,7 @@ export enum Page {
   Pengaturan = 'Pengaturan',
   Laporan = 'Laporan & Cetak',
   Tentang = 'Tentang',
+  AuditLog = 'Log Aktivitas', // New Page
 }
 
 export enum ReportType {
@@ -392,5 +431,5 @@ export enum ReportType {
   LaporanAsrama = 'laporanAsrama',
   RekeningKoranSantri = 'rekeningKoranSantri',
   LaporanArusKas = 'laporanArusKas',
-  LaporanKontak = 'laporanKontak', // New Report Type
+  LaporanKontak = 'laporanKontak', 
 }

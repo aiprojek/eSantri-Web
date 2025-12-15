@@ -31,9 +31,84 @@ const PanduanLangkah: React.FC<{ number: number; title: string; children: React.
     </div>
 );
 
+interface ReleaseNote {
+    version: string;
+    date: string;
+    description?: string;
+    changes: {
+        type: 'new' | 'fix' | 'update';
+        text: string;
+    }[];
+}
+
+const changelogData: ReleaseNote[] = [
+    {
+        version: 'v15122025',
+        date: '15 Desember 2025',
+        description: 'Perbaikan dokumentasi, transparansi cloud, dan penyempurnaan UI.',
+        changes: [
+            { type: 'new', text: 'Menambahkan tab "Catatan Rilis" untuk melihat riwayat perubahan aplikasi.' },
+            { type: 'fix', text: 'Mengembalikan panduan pengguna (Langkah 2-8) yang sempat hilang.' },
+            { type: 'fix', text: 'Memperbaiki tampilan formulir Pengaturan (Generator NIS & Info Umum) yang tersembunyi.' },
+            { type: 'update', text: 'Menambahkan informasi detail mengenai skema harga & hosting Supabase (Cloud Sync).' },
+            { type: 'new', text: 'Menambahkan kolom identitas "ID Admin / Username" pada konfigurasi Supabase.' }
+        ]
+    },
+    {
+        version: 'v12122025',
+        date: '12 Desember 2025',
+        description: 'Update besar pada sistem database cloud dan keamanan.',
+        changes: [
+            { type: 'new', text: 'Integrasi Supabase: Mendukung Multi-Admin dan Database Terpusat (PostgreSQL).' },
+            { type: 'new', text: 'Fitur Audit Log Realtime: Memantau siapa yang mengubah data dan kapan.' },
+            { type: 'new', text: 'Halaman "Log Aktivitas" untuk melihat riwayat perubahan data.' },
+            { type: 'update', text: 'Pemisahan opsi Sinkronisasi Cloud (Legacy Backup vs Realtime Database).' }
+        ]
+    },
+    {
+        version: 'v05122025',
+        date: '05 Desember 2025',
+        description: 'Peningkatan fitur surat menyurat dan ekspor dokumen.',
+        changes: [
+            { type: 'new', text: 'Fitur "Magic Draft" (AI): Membuat isi surat otomatis dengan bantuan AI.' },
+            { type: 'new', text: 'Ekspor PDF Native (Vektor): Hasil cetak dokumen yang jauh lebih tajam.' },
+            { type: 'new', text: 'Ekspor Kartu Santri ke format SVG (Vector) untuk kebutuhan percetakan profesional.' },
+            { type: 'fix', text: 'Perbaikan layout cetak pada browser Firefox.' }
+        ]
+    },
+    {
+        version: 'v25112025',
+        date: '25 November 2025',
+        description: 'Rilis fitur manajemen utama (Keuangan & Asrama).',
+        changes: [
+            { type: 'new', text: 'Modul Keuangan: Tagihan Massal, Pembayaran, Laporan Arus Kas, dan Uang Saku.' },
+            { type: 'new', text: 'Modul Keasramaan: Manajemen Gedung, Kamar, dan Penempatan Santri.' },
+            { type: 'new', text: 'Editor Massal (Bulk Editor) & Impor CSV untuk percepatan input data.' },
+            { type: 'new', text: 'Generator NIS Otomatis dengan 3 metode (Kustom, Global, Tgl Lahir).' }
+        ]
+    }
+];
+
+const ChangeBadge: React.FC<{ type: 'new' | 'fix' | 'update' }> = ({ type }) => {
+    const styles = {
+        new: 'bg-green-100 text-green-800 border-green-200',
+        fix: 'bg-red-100 text-red-800 border-red-200',
+        update: 'bg-blue-100 text-blue-800 border-blue-200'
+    };
+    const labels = {
+        new: 'Baru',
+        fix: 'Perbaikan',
+        update: 'Update'
+    };
+    return (
+        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${styles[type]} mr-2`}>
+            {labels[type]}
+        </span>
+    );
+};
 
 const Tentang: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'kontak'>('tentang');
+    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'rilis' | 'kontak'>('tentang');
     const { showConfirmation, onDeleteSampleData, showToast } = useAppContext();
     
     const [contactName, setContactName] = useState('');
@@ -45,6 +120,8 @@ const Tentang: React.FC = () => {
     const [resetInput, setResetInput] = useState('');
     const CONFIRM_RESET_TEXT = 'HAPUS SEMUA DATA';
 
+    const latestVersion = changelogData[0].version;
+
     useEffect(() => {
         const deleted = localStorage.getItem('eSantriSampleDataDeleted') === 'true';
         setSampleDataDeleted(deleted);
@@ -54,7 +131,7 @@ const Tentang: React.FC = () => {
 
 
     const TabButton: React.FC<{
-        tabId: 'tentang' | 'panduan' | 'kontak';
+        tabId: 'tentang' | 'panduan' | 'rilis' | 'kontak';
         label: string;
         icon: string;
     }> = ({ tabId, label, icon }) => (
@@ -103,15 +180,72 @@ const Tentang: React.FC = () => {
         )
     }
 
+    const sqlCode = `-- 1. Buat Tabel Audit Logs
+create table public.audit_logs (
+  id uuid default gen_random_uuid() primary key,
+  table_name text not null,
+  record_id text,
+  operation text not null, -- 'INSERT', 'UPDATE', 'DELETE'
+  old_data jsonb,
+  new_data jsonb,
+  changed_by uuid references auth.users(id) default auth.uid(),
+  username text, -- Opsional
+  created_at timestamptz default now()
+);
+
+-- 2. Aktifkan Realtime untuk tabel ini
+alter publication supabase_realtime add table public.audit_logs;
+
+-- 3. Fungsi Otomatis (Trigger)
+create or replace function public.handle_audit_log()
+returns trigger as $$
+declare
+  old_row jsonb := null;
+  new_row jsonb := null;
+begin
+  if (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') then
+    old_row := to_jsonb(OLD);
+  end if;
+  if (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') then
+    new_row := to_jsonb(NEW);
+  end if;
+
+  insert into public.audit_logs (table_name, record_id, operation, old_data, new_data, changed_by)
+  values (
+    TG_TABLE_NAME,
+    coalesce(new_row->>'id', old_row->>'id'),
+    TG_OP,
+    old_row,
+    new_row,
+    auth.uid()
+  );
+  return null;
+end;
+$$ language plpgsql security definer;
+
+-- 4. CONTOH: Terapkan Trigger ke Tabel (Ulangi untuk setiap tabel yang ingin dipantau)
+-- create trigger audit_santri_changes
+-- after insert or update or delete on public.santri
+-- for each row execute function public.handle_audit_log();`;
+
     return (
         <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Tentang Aplikasi eSantri Web</h1>
+            <div className="mb-6">
+                <h1 className="text-3xl font-bold text-gray-800">Tentang Aplikasi eSantri Web</h1>
+                <div className="mt-2 flex items-center gap-2">
+                    <span className="bg-teal-100 text-teal-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-teal-200">
+                        <i className="bi bi-rocket-takeoff mr-1"></i> Versi Terbaru: {latestVersion}
+                    </span>
+                    <span className="text-sm text-gray-500">Terakhir diperbarui: {changelogData[0].date}</span>
+                </div>
+            </div>
 
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="border-b border-gray-200">
                     <nav className="flex -mb-px overflow-x-auto">
                         <TabButton tabId="tentang" label="Tentang Aplikasi" icon="bi-info-circle" />
                         <TabButton tabId="panduan" label="Panduan Pengguna" icon="bi-question-circle" />
+                        <TabButton tabId="rilis" label="Catatan Rilis" icon="bi-clock-history" />
                         <TabButton tabId="kontak" label="Kontak" icon="bi-envelope" />
                     </nav>
                 </div>
@@ -120,9 +254,10 @@ const Tentang: React.FC = () => {
                     {activeTab === 'tentang' && (
                         <div className="space-y-8">
                             <div className="p-6 bg-teal-50 border border-teal-200 rounded-lg text-center">
+                                {/* ... Logo SVG ... */}
                                 <svg className="w-16 h-16 mb-3 mx-auto" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
                                   <rect width="64" height="64" rx="12" fill="#0f766e"/>
-                                  <path style={{fill: '#ffffff', strokeWidth: '0.132335'}} d="m 26.304352,41.152506 c 1.307859,-0.12717 3.241691,-0.626444 3.685692,-0.951566 0.177834,-0.130221 0.280781,-0.550095 0.430086,-1.754181 0.280533,-2.262324 0.318787,-2.155054 -0.541805,-1.519296 -1.483007,1.095563 -3.264503,1.690917 -4.539903,1.517186 -0.4996,-0.06805 -0.78621,-0.01075 -1.57337,0.314614 -0.52937,0.218803 -1.60128,0.556625 -2.38202,0.750715 -0.78074,0.194089 -1.43375,0.364958 -1.45113,0.379707 -0.0174,0.01475 0.21492,0.165374 0.51624,0.334722 1.20403,0.510842 2.20341,0.830915 2.95606,0.979692 0.489,0.09629 1.57855,0.07691 2.90015,-0.05159 z m 12.38447,-0.336369 c 1.055266,-0.319093 1.594897,-0.625065 2.399755,-1.360661 1.613411,-1.474567 1.995601,-3.726883 0.97899,-5.769426 -0.183416,-0.368517 -0.741626,-1.114753 -1.240467,-1.658302 l -0.906985,-0.98827 -1.508905,0.703734 c -0.829893,0.387055 -1.561038,0.752903 -1.624762,0.812997 -0.06395,0.06031 0.39373,0.62462 1.021492,1.259487 1.31295,1.327811 1.807226,2.185704 1.807226,3.136742 0,1.449522 -1.080984,2.352339 -2.83266,2.365783 -1.692966,0.013 -2.898289,-0.700527 -3.613504,-2.139108 -0.233721,-0.470103 -0.448882,-0.914285 -0.478136,-0.987069 -0.116891,-0.290814 -0.200722,0.06466 -0.343292,1.455679 -0.08206,0.800623 -0.183673,1.704103 -0.225804,2.007735 -0.07177,0.517174 -0.05031,0.565658 0.339658,0.767317 0.228951,0.118395 0.934732,0.331191 1.568401,0.472882 1.371797,0.306736 3.501849,0.270382 4.658993,-0.07952 z m -25.45487,-1.364466 c 0.93301,-0.457248 1.87821,-0.760644 2.72644,-0.875142 l 0.62858,-0.08485 v -1.37202 -1.372019 l -0.76092,-0.150409 c -1.1567,-0.228639 -1.61383,-0.386514 -2.49361,-0.86118 l -0.80636,-0.435051 -1.0876,0.707478 c -1.7125205,1.113979 -4.4737803,2.082778 -5.0529103,1.772836 -0.37206,-0.199121 -0.71946,0.108306 -0.58853,0.520817 0.115,0.362332 0.72882,0.388328 0.82127,0.03479 0.0568,-0.217219 0.26544,-0.254305 1.8612198,-0.330836 0.98848,-0.04741 2.1954505,-0.08619 2.6821505,-0.08619 0.72383,0 0.92956,-0.04935 1.13024,-0.27109 0.5934,-0.655698 1.68599,0.120869 1.20432,0.855981 -0.30385,0.46374 -0.71833,0.514445 -1.0984,0.134374 -0.32073,-0.320731 -0.33497,-0.322227 -2.9960205,-0.314975 l -2.6737598,0.0073 0.9462,0.248046 c 1.3576098,0.355898 2.7727603,0.97431 3.7575203,1.642008 0.46988,0.318591 0.89288,0.586114 0.94,0.594493 0.0471,0.0084 0.43419,-0.155572 0.86017,-0.364335 z m 4.68467,-0.249019 c 0.003,-0.05459 0.0184,-1.022283 0.0331,-2.150434 l 0.0268,-2.051184 h -0.33083 -0.33084 l -0.0368,1.979203 c -0.0202,1.08856 -0.007,2.056256 0.0289,2.150434 0.0691,0.180159 0.59882,0.242698 0.60965,0.07198 z m 3.65835,-0.574409 c 3.0847,-0.784059 4.3689,-1.36122 14.597498,-6.560614 4.28789,-2.179617 6.635935,-3.051997 10.086804,-3.7476 3.636686,-0.733057 7.837085,-0.596342 10.867503,0.353716 0.570889,0.178977 1.064204,0.299191 1.096252,0.267139 0.130911,-0.130911 -2.904302,-1.024182 -4.383914,-1.290194 -1.996054,-0.358861 -5.21532,-0.480661 -7.088973,-0.268211 -4.215428,0.477982 -7.569808,1.515628 -13.092024,4.0499 -3.489827,1.60156 -6.879436,2.837056 -9.395746,3.424707 -1.69284,0.39534 -3.96393,0.739453 -4.88027,0.739453 h -0.67778 v 1.791074 1.791073 l 0.69476,-0.08699 c 0.38212,-0.04784 1.36127,-0.256397 2.17589,-0.463455 z m -0.10861,-4.029945 c 4.34182,-0.630466 7.276739,-1.83952 9.019947,-3.715798 0.769184,-0.827904 1.110178,-1.396927 1.372676,-2.29062 0.620767,-2.113468 -0.266098,-4.009021 -2.237069,-4.781421 -0.663099,-0.25986 -1.034005,-0.311072 -2.249684,-0.310618 -2.56763,9.39e-4 -4.16567,0.70118 -6.15355,2.696349 -1.32346,1.328311 -2.06801,2.436512 -2.69958,4.018119 -0.3897,0.975922 -0.74112,2.585487 -0.74112,3.394509 0,0.426759 0.0504,0.516006 0.33138,0.586519 0.18225,0.04574 0.40501,0.201076 0.495,0.345183 0.20571,0.329396 0.89555,0.343323 2.862,0.05778 z m 0.11816,-1.45905 c -0.11099,-0.110993 0.16145,-1.565003 0.5066,-2.703751 0.89895,-2.965867 2.8918,-5.028708 4.85807,-5.028708 1.488576,0 2.128809,1.136692 1.614909,2.867184 -0.413016,1.390771 -1.806659,2.666315 -4.103229,3.755501 -1.46343,0.694058 -2.78296,1.203168 -2.87635,1.109774 z m 14.804219,-3.661671 1.341112,-0.577624 -0.441486,-0.596022 c -0.242813,-0.327813 -0.5141,-0.867521 -0.602851,-1.199355 -0.147845,-0.552783 -0.13452,-0.656915 0.159047,-1.242882 0.783436,-1.563747 3.160654,-1.663469 4.629901,-0.194221 0.353158,0.353155 0.680797,0.796275 0.728092,0.984714 0.105859,0.421779 0.294357,0.44384 0.3833,0.04486 0.06507,-0.291898 0.468002,-3.036365 0.468002,-3.187693 0,-0.145749 -1.728025,-0.610339 -2.603914,-0.700076 -1.491442,-0.0773 -2.024052,-0.16772 -3.267158,0.150242 -1.61687,0.421141 -2.840775,1.370544 -3.410741,2.645767 -0.532611,1.191638 -0.357352,3.003822 0.412542,4.265726 0.223681,0.366631 0.304308,0.410539 0.562091,0.306105 0.165522,-0.06706 0.904448,-0.381852 1.642063,-0.699544 z"/>
+                                  <path style={{fill: '#ffffff', strokeWidth: '0.132335'}} d="m 26.304352,41.152506 c 1.307859,-0.12717 3.241691,-0.626444 3.685692,-0.951566 0.177834,-0.130221 0.280781,-0.550095 0.430086,-1.754181 0.280533,-2.262324 0.318787,-2.155054 -0.541805,-1.519296 -1.483007,1.095563 -3.264503,1.690917 -4.539903,1.517186 -0.4996,-0.06805 -0.78621,-0.01075 -1.57337,0.314614 -0.52937,0.218803 -1.60128,0.556625 -2.38202,0.750715 -0.78074,0.194089 -1.43375,0.364958 -1.45113,0.379707 -0.0174,0.01475 0.21492,0.165374 0.51624,0.334722 1.20403,0.510842 2.20341,0.830915 2.95606,0.979692 0.489,0.09629 1.57855,0.07691 2.90015,-0.05159 z m 12.38447,-0.336369 c 1.055266,-0.319093 1.594897,-0.625065 2.399755,-1.360661 1.613411,-1.474567 1.995601,-3.726883 0.97899,-5.769426 -0.183416,-0.368517 -0.741626,-1.114753 -1.240467,-1.658302 l -0.906985,-0.98827 -1.508905,0.703734 c -0.829893,0.387055 -1.561038,0.752903 -1.624762,0.812997 -0.06395,0.06031 0.39373,0.62462 1.021492,1.259487 1.31295,1.327811 1.807226,2.185704 1.807226,3.136742 0,1.449522 -1.080984,2.352339 -2.83266,2.365783 -1.692966,0.013 -2.898289,-0.700527 -3.613504,-2.139108 -0.233721,-0.470103 -0.448882,-0.914285 -0.478136,-0.987069 -0.116891,-0.290814 -0.200722,0.06466 -0.343292,1.455679 -0.08206,0.800623 -0.183673,1.704103 -0.225804,2.007735 -0.07177,0.517174 -0.05031,0.565658 0.339658,0.767317 0.228951,0.118395 0.934732,0.331191 1.568401,0.472882 1.371797,0.306736 3.501849,0.270382 4.658993,-0.07952 z m -25.45487,-1.364466 c 0.93301,-0.457248 1.87821,-0.760644 2.72644,-0.875142 l 0.62858,-0.08485 v -1.37202 -1.372019 l -0.76092,-0.150409 c -1.1567,-0.228639 -1.61383,-0.386514 -2.49361,-0.86118 l -0.80636,-0.435051 -1.0876,0.707478 c -1.7125205,1.113979 -4.4737803,2.082778 -5.0529103,1.772836 -0.37206,-0.199121 -0.71946,0.108306 -0.58853,0.520817 0.115,0.362332 0.72882,0.388328 0.82127,0.03479 0.0568,-0.217219 0.26544,-0.254305 1.8612198,-0.330836 0.98848,-0.04741 2.1954505,-0.08619 2.6821505,-0.08619 0.72383,0 0.92956,-0.04935 1.13024,-0.27109 0.5934,-0.655698 1.68599,0.120869 1.20432,0.855981 -0.30385,0.46374 -0.71833,0.514445 -1.0984,0.134374 -0.32073,-0.320731 -0.33497,-0.322227 -2.9960205,-0.314975 l -2.6737598,0.0073 0.9462,0.248046 c 1.3576098,0.355898 2.7727603,0.97431 3.7575203,1.642008 0.46988,0.318591 0.89288,0.586114 0.94,0.594493 0.0471,0.0084 0.43419,-0.155572 0.86017,-0.364335 z m 4.68467,-0.249019 c 0.003,-0.05459 0.0184,-1.022283 0.0331,-2.150434 l 0.0268,-2.051184 h -0.33083 -0.33084 l -0.0368,1.979203 c -0.0202,1.08856 -0.007,2.056256 0.0289,2.150434 0.0691,0.180159 0.59882,0.242698 0.60965,0.07198 z m 3.65835,-0.574409 c 3.0847,-0.784059 4.3689,-1.36122 14.597498,-6.560614 4.28789,-2.179617 6.635935,-3.051997 10.086804,-3.7476 3.636686,-0.733057 7.837085,-0.596342 10.867503,0.353716 0.570889,0.178977 1.064204,0.299191 1.096252,0.267139 0.130911,-0.130911 -2.904302,-1.024182 -4.383914,-1.290194 -1.996054,-0.358861 -5.21532,-0.480661 -7.088973,-0.268211 -4.215428,0.477982 -7.569808,1.515628 -13.092024,4.0499 -3.489827,1.60156 -6.879436,2.837056 -9.395746,3.424707 -1.69284,0.39534 -3.96393,0.739453 -4.88027,0.739453 h -0.67778 v 1.791074 1.791073 l 0.69476,-0.08699 c 0.38212,-0.04784 1.36127,-0.256397 2.17589,-0.463455 z m -0.10861,-4.029945 c 4.34182,-0.630466 7.276739,-1.83952 9.019947,-3.715798 0.769184,-0.827904 1.110178,-1.396927 1.372676,-2.29062 0.620767,-2.113468 -0.266098,-4.009021 -2.237069,-4.781421 -0.663099,-0.25986 -1.034005,-0.311072 -2.249684,-0.310618 -2.56763,9.39e-4 -4.16567,0.70118 -6.15355,2.696349 -1.32346,1.328311 -2.06801,2.436512 -2.69958,4.018119 -0.3897,0.975922 -0.74112,2.585487 -0.74112,3.394509 0,0.426759 0.0504,0.516006 0.33138,0.586519 0.18225,0.04574 0.40501,0.201076 0.495,0.345183 0.20571,0.329396 0.89555,0.343323 2.862,0.05778 z m 0.129247,-1.595953 c -0.121405,-0.121408 0.176599,-1.71185 0.554135,-2.957448 0.9833,-3.244156 3.16314,-5.500556 5.313908,-5.500556 1.62825,0 2.328557,1.243349 1.766437,3.136215 -0.451769,1.521269 -1.976179,2.916498 -4.488239,4.107883 -1.600745,0.759182 -3.044088,1.316063 -3.146241,1.213906 z m 16.193314,-4.00525 1.466951,-0.631823 -0.482912,-0.651947 c -0.265596,-0.358572 -0.562338,-0.948922 -0.659417,-1.311892 -0.161717,-0.604651 -0.147142,-0.718554 0.17397,-1.359502 0.856947,-1.710476 3.457222,-1.819555 5.06433,-0.212446 0.386295,0.386292 0.744677,0.87099 0.79641,1.077111 0.115791,0.461354 0.321976,0.485485 0.419264,0.04907 0.07118,-0.319288 0.511916,-3.32127 0.511916,-3.486797 0,-0.159425 -1.890167,-0.667608 -2.848242,-0.765765 -1.631386,-0.08456 -2.213971,-0.183458 -3.573718,0.164339 -1.768583,0.460657 -3.107329,1.499143 -3.730775,2.894023 -0.582587,1.30345 -0.390883,3.285673 0.451251,4.665983 0.244669,0.401032 0.332862,0.44906 0.614833,0.334826 0.181053,-0.07335 0.989313,-0.417681 1.796139,-0.765182 z" fill="white" />
                                 </svg>
                                 <h2 className="text-2xl font-bold text-teal-800">eSantri Web: Membantu Manajemen Data Santri</h2>
                                 <p className="mt-2 text-base text-teal-700 max-w-3xl mx-auto">
@@ -136,6 +271,7 @@ const Tentang: React.FC = () => {
                                     <span>Fitur Unggulan</span>
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* ... Feature Items ... */}
                                     <FeatureItem icon="bi-grid-1x2-fill" title="Dashboard Interaktif">
                                         Ringkasan visual data santri dan keuangan secara cepat dan mudah dipahami.
                                     </FeatureItem>
@@ -175,6 +311,12 @@ const Tentang: React.FC = () => {
                                     <FeatureItem icon="bi-person-lines-fill" title="Ekspor Kontak HP">
                                         Unduh data kontak wali santri dalam format CSV yang kompatibel dengan Google Contacts / HP.
                                     </FeatureItem>
+                                    <FeatureItem icon="bi-cloud-arrow-up-fill" title="Sinkronisasi Cloud">
+                                        Simpan dan sinkronkan database ke layanan cloud pribadi (Dropbox/Nextcloud) agar data aman.
+                                    </FeatureItem>
+                                    <FeatureItem icon="bi-activity" title="Multi-Admin & Realtime Audit">
+                                        Gunakan Supabase untuk dukungan multi-admin, database terpusat, dan log aktivitas real-time.
+                                    </FeatureItem>
                                     <FeatureItem icon="bi-wifi-off" title="Fungsi Offline">
                                         Aplikasi tetap berjalan lancar dan semua data aman meski tanpa koneksi internet.
                                     </FeatureItem>
@@ -182,6 +324,7 @@ const Tentang: React.FC = () => {
                             </div>
                             
                             <div className="p-6 bg-gray-50 border border-gray-200 rounded-lg">
+                                {/* ... Contact Links ... */}
                                 <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
                                     <a href="https://lynk.id/aiprojek/s/bvBJvdA" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                                         <i className="bi bi-cup-hot-fill"></i>
@@ -207,10 +350,11 @@ const Tentang: React.FC = () => {
 
                     {activeTab === 'panduan' && (
                         <div>
+                            {/* ... Existing Warnings and Dev Info ... */}
                             <div className="p-4 mb-6 rounded-md border-l-4 border-yellow-500 bg-yellow-50 text-yellow-800">
                                 <h4 className="font-bold flex items-center gap-2"><i className="bi bi-exclamation-diamond-fill"></i>Penting: Skenario Penggunaan Aplikasi</h4>
                                 <p className="mt-1 text-sm">Aplikasi ini dirancang untuk penggunaan <strong>terpusat oleh satu orang di satu komputer/laptop</strong>. Semua data disimpan secara lokal di browser Anda dan <strong>tidak dapat diakses</strong> dari komputer lain atau oleh pengguna lain.</p>
-                                <p className="mt-2 text-sm">Skenario ini sempurna untuk administrator tunggal, tetapi <strong>tidak cocok untuk tim</strong> yang membutuhkan kolaborasi atau akses data bersamaan.</p>
+                                <p className="mt-2 text-sm">Skenario ini sempurna untuk administrator tunggal, tetapi <strong>tidak cocok untuk tim</strong> yang membutuhkan kolaborasi atau akses data bersamaan, kecuali jika Anda mengaktifkan fitur Sinkronisasi Cloud (Supabase).</p>
                             </div>
 
                             {!sampleDataDeleted ? (
@@ -259,27 +403,17 @@ const Tentang: React.FC = () => {
                                 </div>
                             )}
 
-                            <div className="p-4 mb-6 rounded-md border-l-4 border-blue-500 bg-blue-50 text-blue-800">
-                                <h4 className="font-bold flex items-center gap-2"><i className="bi bi-code-slash"></i>Untuk Pengembang (Developers)</h4>
-                                <p className="mt-1 text-sm">
-                                    Bagi yang ingin mengembangkan aplikasi ini lebih lanjut agar dapat digunakan oleh banyak admin (multi-user) dengan sistem penyimpanan data yang lebih terpusat dan aman, disarankan untuk mengintegrasikannya dengan backend (server-side).
-                                </p>
-                                <p className="mt-2 text-sm">
-                                    Kode sumber lengkap aplikasi ini bersifat open-source dan dapat diakses di GitHub untuk dikembangkan lebih lanjut.
-                                </p>
-                            </div>
                             <PanduanLangkah number={1} title="Langkah Krusial: Pengaturan Fundamental">
-                                <p>Ini adalah langkah <strong>paling fundamental</strong> yang menentukan bagaimana seluruh aplikasi akan bekerja. Kesalahan pada tahap ini dapat memengaruhi keakuratan data. Buka halaman <strong className="font-semibold text-teal-700">Pengaturan</strong> dan halaman <strong className="font-semibold text-teal-700">Keuangan</strong>, lalu pastikan Anda melengkapi bagian-bagian berikut secara saksama:</p>
+                                <p>Ini adalah langkah <strong>paling fundamental</strong> yang menentukan bagaimana seluruh aplikasi akan bekerja. Buka halaman <strong className="font-semibold text-teal-700">Pengaturan</strong> dan halaman <strong className="font-semibold text-teal-700">Keuangan</strong>, lalu pastikan Anda melengkapi bagian-bagian berikut:</p>
                                 <ul className="list-disc pl-5 space-y-2">
-                                    <li><strong>Struktur Pendidikan (di Pengaturan):</strong> Definisikan semua <span className="font-semibold">Jenjang</span> (misal: Salafiyah Wustho), <span className="font-semibold">Kelas</span> di dalam setiap jenjang, dan <span className="font-semibold">Rombel</span> di dalam setiap kelas.</li>
-                                    <li><strong>Tenaga Pendidik (di Pengaturan):</strong> Masukkan data Mudir dan para Wali Kelas. Data ini akan digunakan untuk penugasan dan penanda tangan pada dokumen.</li>
-                                    <li><strong>Mata Pelajaran (di Pengaturan):</strong> Atur daftar mata pelajaran yang ada untuk setiap jenjang. Ini akan digunakan pada laporan <span className="italic">Lembar Nilai</span>.</li>
-                                    <li><strong>Pengaturan Biaya (di Keuangan):</strong> Ini sangat penting. Definisikan semua komponen biaya seperti SPP (Bulanan), Uang Pangkal (Cicilan), atau Seragam (Sekali Bayar) di tab <span className="font-semibold">Pengaturan Biaya</span>.</li>
-                                    <li><strong>Generator NIS (di Pengaturan):</strong> Pilih dan atur metode pembuatan Nomor Induk Santri.</li>
-                                    <li><strong>Pengaturan Redaksi (di Keuangan):</strong> Kustomisasi template kalimat untuk Surat Tagihan dan Notifikasi WhatsApp di tab <span className="font-semibold">Pengaturan Redaksi</span>.</li>
-                                    <li><strong>Informasi Umum (di Pengaturan):</strong> Lengkapi detail nama pondok, alamat, dan logo untuk kop surat di semua laporan.</li>
+                                    <li><strong>Struktur Pendidikan:</strong> Definisikan Jenjang, Kelas, dan Rombel.</li>
+                                    <li><strong>Tenaga Pendidik:</strong> Masukkan data Mudir dan Wali Kelas.</li>
+                                    <li><strong>Pengaturan Biaya:</strong> Definisikan komponen biaya (SPP, Uang Pangkal, dll).</li>
+                                    <li><strong>Generator NIS:</strong> Atur metode pembuatan Nomor Induk Santri.</li>
+                                    <li><strong>Informasi Umum:</strong> Lengkapi detail pondok dan logo untuk kop surat.</li>
                                 </ul>
                             </PanduanLangkah>
+
                             <PanduanLangkah number={2} title="Manajemen Data Santri">
                                 <p>Setelah pengaturan selesai, kelola data santri di halaman <strong className="font-semibold text-teal-700">Data Santri</strong>.</p>
                                 <ul className="list-disc pl-5 space-y-2">
@@ -517,7 +651,7 @@ const Tentang: React.FC = () => {
                                     </li>
                                 </ol>
                                 <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-md">
-                                    <h5 className="font-bold text-purple-800 text-sm mb-1"><i className="bi bi-stars"></i> Fitur Baru: Magic Draft (AI)</h5>
+                                    <h5 className="font-bold text-purple-800 text-sm mb-1"><i className="bi bi-stars"></i> Magic Draft (AI)</h5>
                                     <p className="text-sm text-purple-900">
                                         Anda dapat meminta bantuan AI untuk menyusun kata-kata surat. Klik tombol <strong>"Magic Draft"</strong> saat membuat template.
                                     </p>
@@ -527,21 +661,121 @@ const Tentang: React.FC = () => {
                                     </p>
                                 </div>
                             </PanduanLangkah>
-                            <PanduanLangkah number={9} title="Peringatan Kritis: Keamanan Data Anda" isLast={true}>
-                                <div className="p-4 rounded-md border-l-4 border-yellow-500 bg-yellow-50 text-yellow-800">
-                                    <h4 className="font-bold flex items-center gap-2"><i className="bi bi-wifi-off"></i>Aplikasi Dapat Bekerja Offline</h4>
-                                    <p className="mt-1">Penting untuk dipahami bahwa semua data yang Anda masukkan disimpan <strong>secara eksklusif di dalam browser pada komputer/laptop yang Anda gunakan saat ini</strong>. Tidak ada data yang dikirim atau disimpan di internet.</p>
+                            
+                            <PanduanLangkah number={9} title="Sinkronisasi Data Antar Perangkat (Cloud Sync)">
+                                <p>Fitur <strong className="font-semibold text-teal-700">Sinkronisasi Cloud</strong> memungkinkan Anda menyimpan data di penyimpanan awan (Dropbox/Nextcloud) untuk backup.</p>
+                                <div className="p-3 bg-blue-50 border border-blue-200 rounded-md my-2 text-sm">
+                                    <strong className="text-blue-800">Catatan tentang Kuota:</strong>
+                                    <p className="mt-1 text-gray-700">Aplikasi ini menumpang pada penyimpanan pribadi Anda. Pastikan akun cloud Anda memiliki ruang kosong yang cukup.
+                                    <ul className="list-disc pl-5 mt-1">
+                                        <li><strong>Dropbox:</strong> Gratis 2GB.</li>
+                                        <li><strong>WebDAV/Nextcloud:</strong> Tergantung penyedia hosting Anda.</li>
+                                    </ul>
+                                    </p>
+                                </div>
+                                <ul className="list-disc pl-5 space-y-2 mt-2">
+                                    <li>Pilih penyedia di menu <strong>Pengaturan</strong> dan masukkan kredensial.</li>
+                                    <li>Gunakan tombol <strong>"Upload ke Cloud"</strong> untuk backup dan <strong>"Download dari Cloud"</strong> untuk restore.</li>
+                                </ul>
+                            </PanduanLangkah>
+
+                            <PanduanLangkah number={10} title="Konfigurasi Database Cloud (Supabase)">
+                                <p>Supabase adalah layanan backend open-source yang digunakan untuk fitur <strong>Multi-Admin</strong> dan <strong>Audit Log Realtime</strong>. Layanan ini menawarkan opsi gratis (Freemium) dan berbayar.</p>
+                                
+                                <div className="my-4 p-4 border rounded-lg bg-gray-50">
+                                    <h4 className="font-bold text-gray-800 mb-2 flex items-center gap-2"><i className="bi bi-info-circle-fill text-teal-600"></i> Informasi Penting: Skema Harga & Hosting</h4>
+                                    <div className="space-y-4 text-sm text-gray-700">
+                                        <div>
+                                            <strong className="block text-teal-700 mb-1">1. Free Tier (Gratis Terbatas)</strong>
+                                            <p>Cocok untuk percobaan atau proyek skala kecil. Batasan utamanya adalah proyek akan <strong>di-pause (jeda otomatis)</strong> jika tidak ada aktivitas selama 1 minggu. Anda harus mengaktifkannya kembali secara manual di dashboard Supabase. Database dibatasi hingga 500MB.</p>
+                                        </div>
+                                        <div>
+                                            <strong className="block text-blue-700 mb-1">2. Pro Tier (Berbayar)</strong>
+                                            <p>Disarankan untuk penggunaan produksi (sehari-hari). Tidak ada jeda proyek, backup otomatis lebih lama, dan batas database lebih besar (mulai dari $25/bulan).</p>
+                                        </div>
+                                        <div>
+                                            <strong className="block text-gray-800 mb-1">3. Self-Hosted (Mandiri)</strong>
+                                            <p>Supabase adalah software open-source. Anda bisa menginstalnya di server sendiri (VPS) menggunakan Docker. Gratis lisensi softwarenya, tapi Anda harus membayar biaya sewa server dan mengelolanya sendiri (teknis tingkat lanjut).</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p className="text-sm mt-2 font-medium">Langkah Setup di Supabase Dashboard:</p>
+                                <ol className="list-decimal pl-5 space-y-2 mt-1 text-sm">
+                                    <li>Buat Project Baru di <a href="https://supabase.com" target="_blank" className="text-teal-600 underline">Supabase.com</a>.</li>
+                                    <li>Masuk ke <strong>SQL Editor</strong> dan jalankan kode di bawah ini untuk membuat tabel log aktivitas:</li>
+                                </ol>
+                                <div className="mt-3 bg-gray-800 text-gray-100 p-4 rounded-md overflow-x-auto text-xs font-mono border border-gray-700 shadow-inner">
+                                    <pre><code>{sqlCode}</code></pre>
+                                </div>
+                                <p className="text-sm mt-3">
+                                    Setelah selesai, salin <strong>Project URL</strong> dan <strong>Anon Key</strong> ke menu <strong>Pengaturan</strong>. Jangan lupa isi kolom <strong>ID Admin / Username</strong> agar aktivitas Anda tercatat dengan nama yang jelas.
+                                </p>
+                            </PanduanLangkah>
+
+                            <PanduanLangkah number={11} title="Informasi Pengembang & Database Mandiri" isLast={true}>
+                                <div className="p-4 rounded-md border-l-4 border-blue-500 bg-blue-50 text-blue-800">
+                                    <h4 className="font-bold flex items-center gap-2"><i className="bi bi-database-fill-gear"></i>Untuk Pengembang Lanjutan</h4>
+                                    <p className="mt-2 text-sm leading-relaxed">
+                                        Aplikasi ini secara default menggunakan <strong>IndexedDB (Browser Local Storage)</strong> untuk kemudahan penggunaan tanpa server (Serverless/Offline-first).
+                                    </p>
+                                    <p className="mt-2 text-sm leading-relaxed">
+                                        Namun, arsitektur aplikasi ini sangat mendukung penggunaan <strong>Database Mandiri (SQL)</strong> seperti PostgreSQL atau MariaDB.
+                                        Jika Anda ingin mengembangkan sistem ini untuk skala yang lebih besar (ribuan santri dengan banyak admin bersamaan), disarankan untuk memigrasikan penyimpanan utama dari Dexie.js ke adapter backend yang terhubung langsung ke database SQL Anda (bisa melalui Supabase, Firebase, atau REST API sendiri).
+                                    </p>
+                                    <p className="mt-2 text-sm font-semibold">
+                                        Kode sumber aplikasi ini terbuka (Open Source) dan modular, sehingga memudahkan integrasi dengan backend pilihan Anda.
+                                    </p>
                                 </div>
                                  <div className="p-4 rounded-md border-l-4 border-red-500 bg-red-50 text-red-800 mt-4">
-                                     <h4 className="font-bold flex items-center gap-2"><i className="bi bi-shield-lock-fill"></i>Lakukan Backup Data Secara Berkala!</h4>
-                                    <p className="mt-1">Karena data tersimpan lokal, risiko kehilangan data ada jika terjadi kerusakan pada perangkat atau cache browser dibersihkan. Untuk mencegah hal ini, <strong>sangat disarankan</strong> untuk melakukan backup data secara rutin melalui menu <strong className="font-semibold">Pengaturan &rarr; Cadangkan & Pulihkan Data &rarr; Unduh Cadangan Data</strong>. Simpan file backup di tempat yang aman.</p>
+                                     <h4 className="font-bold flex items-center gap-2"><i className="bi bi-shield-lock-fill"></i>Keamanan Data (Mode Offline)</h4>
+                                    <p className="mt-1 text-sm">Jika Anda menggunakan mode default (Offline), data tersimpan di browser. Risiko kehilangan data ada jika cache dibersihkan atau perangkat rusak. <strong>Lakukan backup rutin!</strong></p>
                                 </div>
                             </PanduanLangkah>
                         </div>
                     )}
 
+                    {activeTab === 'rilis' && (
+                        <div className="space-y-6">
+                            {changelogData.map((note, index) => (
+                                <div key={index} className="relative flex gap-4">
+                                    {/* Timeline Line */}
+                                    {index !== changelogData.length - 1 && (
+                                        <div className="absolute top-10 left-[18px] w-0.5 h-full bg-gray-200"></div>
+                                    )}
+                                    
+                                    {/* Version Circle */}
+                                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-teal-50 border-2 border-teal-200 flex items-center justify-center z-10">
+                                        <i className="bi bi-git text-teal-600 text-lg"></i>
+                                    </div>
+
+                                    {/* Content Card */}
+                                    <div className="flex-grow bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h3 className="font-bold text-gray-800 text-lg">{note.version}</h3>
+                                                <p className="text-xs text-gray-500">{note.date}</p>
+                                            </div>
+                                            {index === 0 && <span className="bg-teal-600 text-white text-[10px] font-bold px-2 py-1 rounded">TERBARU</span>}
+                                        </div>
+                                        {note.description && <p className="text-sm text-gray-600 mb-3 italic">{note.description}</p>}
+                                        <ul className="space-y-2">
+                                            {note.changes.map((change, idx) => (
+                                                <li key={idx} className="flex items-start text-sm text-gray-700">
+                                                    <ChangeBadge type={change.type} />
+                                                    <span>{change.text}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {activeTab === 'kontak' && (
                         <div className="mt-8">
+                            {/* ... (Existing Contact Form) ... */}
                             <div className="mb-8">
                                 <h3 className="text-xl font-semibold text-gray-800">Hubungi Kami</h3>
                                 <p className="text-gray-600 mt-2">

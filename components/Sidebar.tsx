@@ -1,6 +1,8 @@
 
 import React from 'react';
 import { Page } from '../types';
+import { useAppContext } from '../AppContext';
+import { performSync } from '../services/syncService';
 
 interface SidebarProps {
   currentPage: Page;
@@ -9,21 +11,59 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }) => {
+  const { settings, onSaveSettings, showToast, showConfirmation } = useAppContext();
+  const [isSyncing, setIsSyncing] = React.useState(false);
+
   const navItems = [
     { page: Page.Dashboard, icon: 'bi-grid-1x2-fill' },
     { page: Page.Santri, icon: 'bi-people-fill' },
+    { page: Page.DataMaster, icon: 'bi-database-fill' }, 
     { page: Page.Keuangan, icon: 'bi-cash-coin' },
     { page: Page.Keasramaan, icon: 'bi-building-fill' },
     { page: Page.BukuKas, icon: 'bi-journal-album' },
     { page: Page.Surat, icon: 'bi-envelope-paper-fill' },
     { page: Page.Laporan, icon: 'bi-printer-fill' },
+    { page: Page.AuditLog, icon: 'bi-activity' }, // New Item
     { page: Page.Pengaturan, icon: 'bi-gear-fill' },
     { page: Page.Tentang, icon: 'bi-info-circle-fill' },
   ];
 
+  const handleQuickSync = async () => {
+      const config = settings.cloudSyncConfig;
+      if (!config || config.provider === 'none') {
+          showToast('Sinkronisasi belum dikonfigurasi. Silakan atur di menu Pengaturan.', 'info');
+          setPage(Page.Pengaturan);
+          return;
+      }
+
+      // If Supabase, Sync concept is different (it's realtime), but we can use this for legacy backup upload
+      if (config.provider === 'supabase') {
+          showToast('Supabase menggunakan sinkronisasi Realtime otomatis.', 'info');
+          return;
+      }
+
+      const confirmUpload = window.confirm("Upload data lokal ke Cloud?");
+      if(confirmUpload) {
+          setIsSyncing(true);
+          try {
+              const timestamp = await performSync(config, 'up');
+              const updatedSettings = {
+                  ...settings,
+                  cloudSyncConfig: { ...config, lastSync: timestamp }
+              };
+              await onSaveSettings(updatedSettings);
+              showToast('Sinkronisasi (Upload) Berhasil!', 'success');
+          } catch (error) {
+              showToast(`Gagal Sync: ${(error as Error).message}`, 'error');
+          } finally {
+              setIsSyncing(false);
+          }
+      }
+  };
+
   return (
-    <aside className={`fixed top-0 left-0 z-40 w-64 h-screen transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 bg-teal-800 text-white no-print`}>
-      <div className="h-full px-3 py-4 overflow-y-auto">
+    <aside className={`fixed top-0 left-0 z-40 w-64 h-screen transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 bg-teal-800 text-white no-print flex flex-col`}>
+      <div className="h-full px-3 py-4 overflow-y-auto flex-grow">
         <a href="#" className="flex items-center ps-2.5 mb-5">
           <svg className="h-8 w-8 mr-2 border border-white/30 rounded-md p-1" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img">
             <title>eSantri Web Logo</title>
@@ -48,6 +88,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
             </li>
           ))}
         </ul>
+      </div>
+      <div className="p-4 border-t border-teal-700">
+          <button 
+            onClick={handleQuickSync} 
+            disabled={isSyncing}
+            className="flex items-center justify-center w-full p-2 bg-teal-700 hover:bg-teal-600 rounded-lg text-sm transition-colors group"
+            title="Upload data ke cloud"
+          >
+              {isSyncing ? (
+                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+              ) : (
+                  <i className="bi bi-cloud-upload mr-2 group-hover:text-white text-teal-200"></i>
+              )}
+              <span>Sync Cloud</span>
+          </button>
       </div>
     </aside>
   );

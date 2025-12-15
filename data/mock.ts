@@ -1,3 +1,4 @@
+
 import { PondokSettings, Santri, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar } from '../types';
 
 export const initialJenjang = [
@@ -159,6 +160,14 @@ export const initialSettings: PondokSettings = {
   suratTagihanPenutup: `Kami memohon kepada Bapak/Ibu untuk dapat segera menyelesaikan administrasi tersebut. Untuk pembayaran dapat dilakukan secara langsung di kantor administrasi pondok.\n\nDemikian surat pemberitahuan ini kami sampaikan. Atas perhatian dan kerjasamanya, kami ucapkan Jazakumullahu khairan.\n\nWassalamu'alaikum Warahmatullahi Wabarakatuh.`,
   suratTagihanCatatan: `Pembayaran dapat dilakukan melalui transfer ke rekening Bank Syariah Indonesia (BSI) No. Rek: 123456789 a.n. Bendahara Pondok Pesantren.`,
   pesanWaTunggakan: `Yth. Bapak/Ibu Wali dari ananda {NAMA_SANTRI},\n\nKami informasikan dari {NAMA_PONPES} bahwa terdapat tagihan yang belum diselesaikan sebesar {JUMLAH_TUNGGAKAN}.\n\nMohon untuk dapat segera melakukan pembayaran. Abaikan pesan ini jika sudah membayar.\n\nTerima kasih.\n- Bendahara {NAMA_PONPES}`,
+  backupConfig: {
+    frequency: 'weekly',
+    lastBackup: null,
+  },
+  cloudSyncConfig: {
+    provider: 'none',
+    lastSync: null
+  }
 };
 
 const commonSantriData = (id: number) => ({

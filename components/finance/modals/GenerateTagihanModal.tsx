@@ -8,7 +8,7 @@ interface GenerateTagihanModalProps {
 }
 
 export const GenerateTagihanModal: React.FC<GenerateTagihanModalProps> = ({ isOpen, onClose }) => {
-    const { onGenerateTagihanBulanan, onGenerateTagihanAwal, showAlert, showToast } = useAppContext();
+    const { onGenerateTagihanBulanan, onGenerateTagihanAwal, showAlert, showToast, triggerBackupCheck } = useAppContext();
     const [isLoading, setIsLoading] = useState(false);
     const [bulan, setBulan] = useState(new Date().getMonth() + 1);
     const [tahun, setTahun] = useState(new Date().getFullYear());
@@ -28,6 +28,10 @@ export const GenerateTagihanModal: React.FC<GenerateTagihanModalProps> = ({ isOp
             const { generated, skipped } = await onGenerateTagihanBulanan(tahun, bulan);
             showToast(`Berhasil: ${generated} tagihan dibuat, ${skipped} dilewati karena sudah ada.`, 'success');
             onClose();
+            // Trigger backup check for large action
+            if (generated > 0) {
+                setTimeout(() => triggerBackupCheck(true), 1500); 
+            }
         } catch (e) {
             showAlert('Error', (e as Error).message);
         } finally {
@@ -41,6 +45,10 @@ export const GenerateTagihanModal: React.FC<GenerateTagihanModalProps> = ({ isOp
             const { generated, skipped } = await onGenerateTagihanAwal();
             showToast(`Berhasil: ${generated} tagihan dibuat, ${skipped} dilewati karena sudah ada.`, 'success');
             onClose();
+            // Trigger backup check for large action
+            if (generated > 0) {
+                setTimeout(() => triggerBackupCheck(true), 1500); 
+            }
         } catch (e) {
             showAlert('Error', (e as Error).message);
         } finally {

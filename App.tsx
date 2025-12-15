@@ -4,6 +4,7 @@ import { AppProvider, useAppContext, ToastData } from './AppContext';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import SantriList from './components/SantriList';
+import DataMaster from './components/DataMaster';
 import Settings from './components/Settings';
 import Reports from './components/Reports';
 import Finance from './components/Finance';
@@ -13,8 +14,10 @@ import SuratMenyurat from './components/SuratMenyurat';
 import ConfirmModal from './components/ConfirmModal';
 import Tentang from './components/Tentang';
 import WelcomeModal from './components/WelcomeModal';
+import { AuditLogView } from './components/AuditLogView';
 import { Page } from './types';
 import UpdateNotification from './components/UpdateNotification';
+import { BackupReminderModal } from './components/BackupReminderModal';
 
 
 // --- Alert Modal Component ---
@@ -140,7 +143,11 @@ const AppContent: React.FC = () => {
         hideAlert,
         confirmation,
         hideConfirmation,
-        setSantriFilters
+        setSantriFilters,
+        backupModal,
+        closeBackupModal,
+        downloadBackup,
+        triggerBackupCheck
     } = useAppContext();
 
     const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
@@ -154,6 +161,13 @@ const AppContent: React.FC = () => {
             setShowWelcomeModal(true);
         }
     }, []);
+
+    // Check backup status on load (once isLoading is false)
+    useEffect(() => {
+        if (!isLoading) {
+            triggerBackupCheck();
+        }
+    }, [isLoading, triggerBackupCheck]);
 
     useEffect(() => {
         if ('serviceWorker' in navigator) {
@@ -222,6 +236,8 @@ const AppContent: React.FC = () => {
                 return <Dashboard navigateTo={handleNavigate} />;
             case Page.Santri:
                 return <SantriList />;
+            case Page.DataMaster:
+                return <DataMaster />;
             case Page.Keuangan:
                 return <Finance />;
             case Page.Keasramaan:
@@ -234,6 +250,8 @@ const AppContent: React.FC = () => {
                 return <Settings />;
             case Page.Laporan:
                 return <Reports />;
+            case Page.AuditLog: // New Route
+                return <AuditLogView />;
             case Page.Tentang:
                 return <Tentang />;
             default:
@@ -266,6 +284,12 @@ const AppContent: React.FC = () => {
                 title={alertModal.title}
                 message={alertModal.message}
                 onClose={hideAlert}
+            />
+            <BackupReminderModal 
+                isOpen={backupModal.isOpen} 
+                onClose={closeBackupModal} 
+                onBackup={downloadBackup}
+                reason={backupModal.reason}
             />
             <Sidebar currentPage={currentPage} setPage={handleSetPage} isSidebarOpen={isSidebarOpen} />
             

@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Santri, PondokSettings, Page } from '../types';
 import { useAppContext } from '../AppContext';
@@ -95,37 +96,6 @@ const StatusSantriChart: React.FC<{ statusData: StatusData[]; total: number }> =
                         <div className="font-semibold text-gray-800">
                             {status.count} <span className="text-xs text-gray-500">({status.percentage.toFixed(1)}%)</span>
                         </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const TrendPendaftaranChart: React.FC<{ data: { year: string; count: number }[] }> = ({ data }) => {
-    if (data.length === 0) {
-        return <p className="text-center text-gray-500 py-10">Data pendaftaran tidak cukup untuk menampilkan tren.</p>;
-    }
-
-    const maxCount = Math.max(...data.map(d => d.count), 1); // Avoid division by zero
-
-    return (
-        <div className="h-full flex flex-col justify-end">
-            <div className="flex items-end justify-around gap-4 h-64">
-                {data.map(({ year, count }) => (
-                    <div key={year} className="flex flex-col items-center flex-grow text-center group w-full">
-                        <div className="relative w-full flex items-end justify-center h-full">
-                             <div
-                                className="w-3/4 max-w-12 bg-teal-200 rounded-t-lg group-hover:bg-teal-400 transition-all duration-300 relative"
-                                style={{ height: `${(count / maxCount) * 100}%` }}
-                                title={`${count} santri baru di tahun ${year}`}
-                            >
-                                <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-bold text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {count}
-                                </span>
-                            </div>
-                        </div>
-                        <span className="mt-2 text-xs font-medium text-gray-500">{year}</span>
                     </div>
                 ))}
             </div>
@@ -279,27 +249,6 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
     return settings.rombel.find(r => r.id === rombelId)?.nama || 'N/A';
   }
 
-  const registrationTrend = useMemo(() => {
-    const trendData: { [year: string]: number } = {};
-    const currentYear = new Date().getFullYear();
-    const startYear = currentYear - 5; // Last 6 years including current
-
-    santriList.forEach(santri => {
-        if (santri.tanggalMasuk) {
-            const year = new Date(santri.tanggalMasuk).getFullYear();
-            if (year >= startYear) {
-                trendData[year] = (trendData[year] || 0) + 1;
-            }
-        }
-    });
-
-    const result = [];
-    for (let year = startYear; year <= currentYear; year++) {
-        result.push({ year: year.toString(), count: trendData[year] || 0 });
-    }
-    return result;
-  }, [santriList]);
-
   const GenderIcon = <i className="bi bi-person text-2xl text-white"></i>;
 
   return (
@@ -316,23 +265,15 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
             <StatCard title="Rombel" value={settings.rombel.length} icon={<i className="bi-building text-2xl text-white"></i>} color="bg-purple-500" />
         </div>
         
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            {/* Tren Pendaftaran Santri */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
-                <h2 className="text-xl font-bold text-gray-700 mb-4">Tren Pendaftaran Santri (6 Tahun Terakhir)</h2>
-                <TrendPendaftaranChart data={registrationTrend} />
-            </div>
-
+        {/* Main Content Grid - 2 Columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            
             {/* Komposisi Status Santri */}
             <div className="bg-white p-6 rounded-xl shadow-md">
                 <h2 className="text-xl font-bold text-gray-700 mb-4">Komposisi Status Santri</h2>
                 <StatusSantriChart statusData={statusData} total={totalSantri} />
             </div>
-        </div>
-        
-        {/* Second Row Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+
             {/* Informasi Pondok */}
             <InfoPondokCard settings={settings} />
 

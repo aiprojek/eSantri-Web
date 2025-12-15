@@ -45,11 +45,11 @@ const changelogData: ReleaseNote[] = [
     {
         version: 'v15122025',
         date: '15 Desember 2025',
-        description: 'Perbaikan dokumentasi, transparansi cloud, dan penyempurnaan UI.',
+        description: 'Update legalitas, pembersihan UI Dashboard, dan perbaikan teknis.',
         changes: [
-            { type: 'new', text: 'Menambahkan tab "Lisensi" (GNU GPL v3) dan ringkasan legalitas.' },
-            { type: 'update', text: 'Penyederhanaan Dashboard: Menghapus grafik tren pendaftaran.' },
-            { type: 'fix', text: 'Memperbaiki error build (TS2322) pada modul layanan CSV.' },
+            { type: 'new', text: 'Menambahkan tab "Lisensi" yang berisi ringkasan Bahasa Indonesia dan naskah lengkap GNU GPL v3.' },
+            { type: 'update', text: 'Dashboard: Menghapus grafik "Tren Pendaftaran Santri" 6 tahun terakhir agar tampilan lebih relevan dan bersih.' },
+            { type: 'fix', text: 'Memperbaiki error build (TypeScript) pada layanan CSV.' },
             { type: 'new', text: 'Menambahkan tab "Catatan Rilis" untuk melihat riwayat perubahan aplikasi.' },
             { type: 'fix', text: 'Mengembalikan panduan pengguna (Langkah 2-8) yang sempat hilang.' },
             { type: 'fix', text: 'Memperbaiki tampilan formulir Pengaturan (Generator NIS & Info Umum) yang tersembunyi.' },

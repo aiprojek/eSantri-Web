@@ -94,8 +94,8 @@ export const generateContactCsv = (santriList: Santri[], settings: PondokSetting
 
     santriList.forEach(santri => {
         // Determine Priority Phone Number & Name
-        let phone = santri.teleponWali;
-        let parentName = santri.namaWali;
+        let phone: string | undefined = santri.teleponWali;
+        let parentName: string | undefined = santri.namaWali;
         let relation = "Wali";
 
         if (!phone) {

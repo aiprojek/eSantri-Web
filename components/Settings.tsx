@@ -69,7 +69,7 @@ const Settings: React.FC<SettingsProps> = () => {
         }));
     };
 
-    const handleSyncConfigChange = (field: string, value: string) => {
+    const handleSyncConfigChange = (field: string, value: any) => {
         setLocalSettings(prev => ({
             ...prev,
             cloudSyncConfig: { ...prev.cloudSyncConfig, [field]: value }
@@ -310,6 +310,7 @@ const Settings: React.FC<SettingsProps> = () => {
             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Informasi Umum</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* ... (Fields Informasi Umum) ... */}
                     <div>
                         <label className="block mb-1 text-sm font-medium text-gray-700">Nama Yayasan</label>
                         <input type="text" value={localSettings.namaYayasan} onChange={(e) => handleInputChange('namaYayasan', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" />
@@ -366,6 +367,7 @@ const Settings: React.FC<SettingsProps> = () => {
 
             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
                 <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Pengaturan Generator NIS</h2>
+                {/* ... (Existing NIS Settings) ... */}
                 <div className="space-y-6">
                     <div>
                         <label className="block mb-2 text-sm font-medium text-gray-700">Metode Pembuatan NIS</label>
@@ -599,9 +601,9 @@ const Settings: React.FC<SettingsProps> = () => {
             </div>
 
             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Sinkronisasi & Database (Supabase)</h2>
+                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Sinkronisasi & Database (Cloud)</h2>
                 <p className="text-sm text-gray-600 mb-4">
-                    Hubungkan aplikasi ke Supabase untuk fitur <strong>Multi-Admin</strong> dan <strong>Audit Log Realtime</strong>.
+                    Hubungkan aplikasi ke Supabase (Realtime) atau Cloud Storage pribadi (Legacy Backup).
                 </p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -618,6 +620,29 @@ const Settings: React.FC<SettingsProps> = () => {
                             <option value="webdav">Nextcloud / WebDAV (Legacy Backup)</option>
                         </select>
                     </div>
+
+                    {localSettings.cloudSyncConfig?.provider !== 'none' && localSettings.cloudSyncConfig?.provider !== 'supabase' && (
+                        <div className="flex items-center mt-7">
+                            <label className="inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={localSettings.cloudSyncConfig?.autoSync || false} 
+                                    onChange={(e) => handleSyncConfigChange('autoSync', e.target.checked)}
+                                    className="sr-only peer"
+                                />
+                                <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                                <span className="ms-3 text-sm font-medium text-gray-900">
+                                    Sinkronisasi Otomatis
+                                </span>
+                            </label>
+                            <div className="ml-2 group relative">
+                                <i className="bi bi-question-circle text-gray-400 hover:text-gray-600 cursor-help"></i>
+                                <div className="hidden group-hover:block absolute z-10 w-64 p-2 bg-black text-white text-xs rounded shadow-lg -top-2 left-6">
+                                    Jika aktif, aplikasi akan otomatis mengunggah data ke cloud setiap kali ada perubahan data (jeda 5 detik). Data cloud akan ditimpa dengan data lokal terbaru.
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {localSettings.cloudSyncConfig?.provider === 'supabase' && (
                         <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 border p-4 rounded-lg bg-emerald-50">

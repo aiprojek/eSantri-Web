@@ -35,6 +35,7 @@ export type SyncProvider = 'none' | 'dropbox' | 'webdav' | 'supabase';
 export interface CloudSyncConfig {
     provider: SyncProvider;
     lastSync: string | null; // ISO Date String
+    autoSync: boolean; // New Field: Enable automatic background sync
     dropboxToken?: string;
     webdavUrl?: string;
     webdavUsername?: string;

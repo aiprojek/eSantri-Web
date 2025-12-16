@@ -21,6 +21,28 @@ export const db = new Dexie('eSantriDB') as Dexie & {
     arsipSurat: Table<ArsipSurat, number>;
 };
 
+db.version(16).stores({
+  santri: '++id, nis, namaLengkap, kamarId',
+  settings: '++id',
+  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+  pembayaran: '++id, santriId, tanggal, disetorKeKas',
+  saldoSantri: 'santriId',
+  transaksiSaldo: '++id, santriId, tanggal',
+  transaksiKas: '++id, tanggal, jenis, kategori',
+  suratTemplates: '++id, nama, kategori',
+  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+}).upgrade(async tx => {
+    // 16: Initialize autoSync config
+    await tx.table('settings').toCollection().modify(s => {
+        if (s.cloudSyncConfig) {
+            s.cloudSyncConfig.autoSync = false;
+        } else {
+            // Should be covered by v15 but just in case
+            s.cloudSyncConfig = { provider: 'none', lastSync: null, autoSync: false };
+        }
+    });
+});
+
 db.version(15).stores({
   santri: '++id, nis, namaLengkap, kamarId',
   settings: '++id',
@@ -35,7 +57,7 @@ db.version(15).stores({
     // 15: Add cloudSyncConfig to settings if not exists
     await tx.table('settings').toCollection().modify(s => {
         if (!s.cloudSyncConfig) {
-            s.cloudSyncConfig = { provider: 'none', lastSync: null };
+            s.cloudSyncConfig = { provider: 'none', lastSync: null, autoSync: false };
         }
     });
 });
@@ -112,18 +134,6 @@ db.version(10).stores({
 });
 
 db.version(9).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-});
-
-db.version(8).stores({
   santri: '++id, nis, namaLengkap, kamarId',
   settings: '++id',
   tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',

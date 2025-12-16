@@ -1,9 +1,10 @@
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { PondokSettings, Santri, Tagihan, Pembayaran, Alamat, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat } from './types';
 import { db, PondokSettingsWithId } from './db';
 import { initialSantri, initialSettings } from './data/mock';
 import { generateTagihanBulanan, generateTagihanAwal } from './services/financeService';
+import { performSync } from './services/syncService';
 
 // --- Types ---
 export interface ToastData {
@@ -118,6 +119,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [alertModal, setAlertModal] = useState<AlertState>({ isOpen: false, title: '', message: '' });
     const [backupModal, setBackupModal] = useState<BackupModalState>({ isOpen: false, reason: 'periodic' });
 
+    // Ref for Debouncing AutoSync
+    const autoSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     useEffect(() => {
         const loadData = async () => {
             try {
@@ -168,6 +172,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (!safeSettings.backupConfig) {
                     safeSettings.backupConfig = { frequency: 'weekly', lastBackup: null };
                 }
+                if (!safeSettings.cloudSyncConfig) {
+                    safeSettings.cloudSyncConfig = { provider: 'none', lastSync: null, autoSync: false };
+                }
 
                 setSettings(safeSettings);
                 setSantriList(migratedSantri);
@@ -198,6 +205,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const removeToast = useCallback((id: number) => {
         setToasts(prev => prev.filter(toast => toast.id !== id));
     }, []);
+
+    // --- Auto Sync Logic ---
+    const triggerAutoSync = useCallback(() => {
+        if (!settings.cloudSyncConfig?.autoSync || settings.cloudSyncConfig.provider === 'none') {
+            return;
+        }
+        
+        // Don't auto-sync Supabase here (it uses its own realtime mechanism in AuditLogs)
+        if (settings.cloudSyncConfig.provider === 'supabase') return;
+
+        if (autoSyncTimeoutRef.current) {
+            clearTimeout(autoSyncTimeoutRef.current);
+        }
+
+        autoSyncTimeoutRef.current = setTimeout(async () => {
+            try {
+                showToast('Sinkronisasi otomatis berjalan...', 'info');
+                const timestamp = await performSync(settings.cloudSyncConfig, 'up');
+                
+                // Update local settings with new timestamp WITHOUT triggering another saveSettings cycle that causes loop
+                const updatedSettings = {
+                    ...settings,
+                    cloudSyncConfig: { ...settings.cloudSyncConfig, lastSync: timestamp }
+                };
+                
+                // Direct update to Dexie
+                await db.settings.put(updatedSettings);
+                
+                // Update State silently to reflect UI change
+                setSettings(updatedSettings);
+                
+                showToast('Sinkronisasi otomatis selesai.', 'success');
+            } catch (error) {
+                console.error("Auto Sync Failed:", error);
+                showToast('Gagal sinkronisasi otomatis.', 'error');
+            }
+        }, 5000); // 5 seconds debounce
+    }, [settings, showToast]);
+
 
     const showAlert = useCallback((title: string, message: string) => {
         setAlertModal({ isOpen: true, title, message });
@@ -321,6 +367,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const settingsToSave: PondokSettingsWithId = { ...newSettings, id: settings.id };
             await db.settings.put(settingsToSave);
             setSettings(settingsToSave);
+            // We do NOT trigger auto sync here because updating settings usually includes updating sync config itself.
+            // Also prevents loops.
         } catch (error) {
             console.error("Failed to save settings to DB", error);
             throw error;
@@ -331,11 +379,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
             const newId = await db.santri.add(santriData as Santri);
             setSantriList(prev => [...prev, { ...santriData, id: newId as number }]);
+            triggerAutoSync();
         } catch (error) {
             console.error("Failed to add santri to DB", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onBulkAddSantri = useCallback(async (newSantriData: Omit<Santri, 'id'>[]) => {
         try {
@@ -346,21 +395,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }));
             setSantriList(prev => [...prev, ...addedSantriWithIds]);
             triggerBackupCheck(true);
+            triggerAutoSync();
         } catch (error) {
             console.error("Failed to bulk add santri to DB", error);
             throw error;
         }
-    }, [triggerBackupCheck]);
+    }, [triggerBackupCheck, triggerAutoSync]);
 
     const onUpdateSantri = useCallback(async (santri: Santri) => {
         try {
             await db.santri.put(santri);
             setSantriList(prev => prev.map(s => s.id === santri.id ? santri : s));
+            triggerAutoSync();
         } catch (error) {
             console.error("Failed to update santri in DB", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onBulkUpdateSantri = useCallback(async (updatedSantriList: Santri[]) => {
         try {
@@ -372,21 +423,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 prevList.map(s => updatedIds.has(s.id) ? updatedMap.get(s.id)! : s)
             );
             triggerBackupCheck(true);
+            triggerAutoSync();
         } catch (error) {
             console.error("Failed to bulk update santri in DB", error);
             throw error;
         }
-    }, [triggerBackupCheck]);
+    }, [triggerBackupCheck, triggerAutoSync]);
 
     const onDeleteSantri = useCallback(async (id: number) => {
         try {
             await db.santri.delete(id);
             setSantriList(prev => prev.filter(s => s.id !== id));
+            triggerAutoSync();
         } catch (error) {
             console.error("Failed to delete santri from DB", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onDeleteSampleData = useCallback(async () => {
         try {
@@ -409,29 +462,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setTransaksiKasList([]);
             setSuratTemplates([]);
             setArsipSuratList([]);
+            triggerAutoSync();
         } catch (error) {
             console.error("Failed to delete sample data", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onGenerateTagihanBulanan = useCallback(async (tahun: number, bulan: number) => {
         const { result, newTagihan } = await generateTagihanBulanan(db, settings, santriList, tahun, bulan);
         if (newTagihan.length > 0) {
             setTagihanList(prev => [...prev, ...newTagihan]);
             triggerBackupCheck(true);
+            triggerAutoSync();
         }
         return result;
-    }, [settings, santriList, triggerBackupCheck]);
+    }, [settings, santriList, triggerBackupCheck, triggerAutoSync]);
 
     const onGenerateTagihanAwal = useCallback(async () => {
         const { result, newTagihan } = await generateTagihanAwal(db, settings, santriList);
         if (newTagihan.length > 0) {
             setTagihanList(prev => [...prev, ...newTagihan]);
             triggerBackupCheck(true);
+            triggerAutoSync();
         }
         return result;
-    }, [settings, santriList, triggerBackupCheck]);
+    }, [settings, santriList, triggerBackupCheck, triggerAutoSync]);
 
     const onAddPembayaran = useCallback(async (pembayaranData: Omit<Pembayaran, 'id'>) => {
         let paymentId: number;
@@ -452,7 +508,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const updatedIds = new Set(updatedTagihan.map(t => t.id));
             setTagihanList(prev => prev.map(t => updatedIds.has(t.id) ? updatedTagihan.find(ut => ut.id === t.id)! : t));
         });
-    }, []);
+        triggerAutoSync();
+    }, [triggerAutoSync]);
 
     const onAddTransaksiSaldo = useCallback(async (data: Omit<TransaksiSaldo, 'id' | 'saldoSetelah' | 'tanggal'>) => {
         const { santriId, jenis, jumlah, keterangan } = data;
@@ -505,12 +562,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     }
                 });
             });
+            triggerAutoSync();
         } catch (error) {
             console.error("Gagal menambah transaksi saldo:", error);
             // Re-throw the error to be caught by the calling component
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onAddTransaksiKas = useCallback(async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => {
         const { jenis, jumlah } = data;
@@ -536,11 +594,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 setTransaksiKasList(prev => [...prev, { ...newTransaksi, id: newTransaksiId as number }]);
             });
+            triggerAutoSync();
         } catch (error) {
             console.error("Gagal menambah transaksi kas:", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onSetorKeKas = useCallback(async (pembayaranIds: number[], totalSetoran: number, tanggalSetor: string, penanggungJawab: string, catatan: string) => {
         if (pembayaranIds.length === 0 || totalSetoran <= 0) {
@@ -576,11 +635,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const updatedIds = new Set(updatedPayments.map(p => p.id));
                 setPembayaranList(prev => prev.map(p => updatedIds.has(p.id) ? updatedPayments.find(up => up.id === p.id)! : p));
             });
+            triggerAutoSync();
         } catch (error) {
             console.error("Gagal melakukan setoran ke kas:", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     // --- Surat Menyurat Logic ---
     const onSaveSuratTemplate = useCallback(async (template: SuratTemplate) => {
@@ -593,41 +653,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 return [...prev, { ...template, id: id as number }];
             });
+            triggerAutoSync();
         } catch (error) {
             console.error("Gagal menyimpan template surat:", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onDeleteSuratTemplate = useCallback(async (id: number) => {
         try {
             await db.suratTemplates.delete(id);
             setSuratTemplates(prev => prev.filter(t => t.id !== id));
+            triggerAutoSync();
         } catch (error) {
             console.error("Gagal menghapus template surat:", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onSaveArsipSurat = useCallback(async (surat: Omit<ArsipSurat, 'id'>) => {
         try {
             const id = await db.arsipSurat.add(surat as ArsipSurat);
             setArsipSuratList(prev => [...prev, { ...surat, id: id as number }]);
+            triggerAutoSync();
         } catch (error) {
             console.error("Gagal menyimpan arsip surat:", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const onDeleteArsipSurat = useCallback(async (id: number) => {
         try {
             await db.arsipSurat.delete(id);
             setArsipSuratList(prev => prev.filter(s => s.id !== id));
+            triggerAutoSync();
         } catch (error) {
             console.error("Gagal menghapus arsip surat:", error);
             throw error;
         }
-    }, []);
+    }, [triggerAutoSync]);
 
     const value: AppContextType = useMemo(() => ({
         isLoading,

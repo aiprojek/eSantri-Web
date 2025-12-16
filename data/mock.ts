@@ -1,4 +1,3 @@
-
 import { PondokSettings, Santri, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar } from '../types';
 
 export const initialJenjang = [
@@ -166,7 +165,8 @@ export const initialSettings: PondokSettings = {
   },
   cloudSyncConfig: {
     provider: 'none',
-    lastSync: null
+    lastSync: null,
+    autoSync: false,
   }
 };
 

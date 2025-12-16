@@ -135,6 +135,74 @@ const SmartAvatar: React.FC<{ santri: Santri, variant: 'classic' | 'modern' | 'v
 
 // --- Template Components ---
 
+const DaftarWaliKelasTemplate: React.FC<{ settings: PondokSettings }> = ({ settings }) => {
+    // Group Data: Jenjang -> Kelas -> Rombel -> Teacher Name
+    const dataByJenjang = useMemo(() => {
+        return settings.jenjang.map(jenjang => {
+            const kelasInJenjang = settings.kelas.filter(k => k.jenjangId === jenjang.id);
+            const rombelData = [];
+            
+            for (const kelas of kelasInJenjang) {
+                const rombelInKelas = settings.rombel.filter(r => r.kelasId === kelas.id);
+                for (const rombel of rombelInKelas) {
+                    const wali = settings.tenagaPengajar.find(t => t.id === rombel.waliKelasId);
+                    rombelData.push({
+                        kelas: kelas.nama,
+                        rombel: rombel.nama,
+                        wali: wali ? wali.nama : '-'
+                    });
+                }
+            }
+            return {
+                jenjang: jenjang.nama,
+                rombels: rombelData
+            };
+        });
+    }, [settings]);
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="DAFTAR WALI KELAS PER ROMBEL" />
+                <p className="text-center text-sm mb-6">Tahun Ajaran: {new Date().getFullYear()}/{new Date().getFullYear()+1}</p>
+
+                <div className="space-y-6">
+                    {dataByJenjang.map((group, idx) => (
+                        <div key={idx} style={{ breakInside: 'avoid' }}>
+                            <h4 className="font-bold text-lg mb-2 text-gray-800 border-b border-gray-400 pb-1">{group.jenjang}</h4>
+                            {group.rombels.length > 0 ? (
+                                <table className="w-full text-left border-collapse border border-black text-sm">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="p-2 border border-black w-10 text-center">No</th>
+                                            <th className="p-2 border border-black w-32">Kelas</th>
+                                            <th className="p-2 border border-black w-48">Rombel</th>
+                                            <th className="p-2 border border-black">Nama Wali Kelas</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {group.rombels.map((row, rIdx) => (
+                                            <tr key={rIdx}>
+                                                <td className="p-2 border border-black text-center">{rIdx + 1}</td>
+                                                <td className="p-2 border border-black">{row.kelas}</td>
+                                                <td className="p-2 border border-black">{row.rombel}</td>
+                                                <td className="p-2 border border-black font-semibold">{row.wali}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <p className="text-sm italic text-gray-500 pl-2">Belum ada data rombel untuk jenjang ini.</p>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
 const PanduanPenilaianTemplate: React.FC = () => {
     return (
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
@@ -1443,6 +1511,13 @@ export const useReportGenerator = (settings: PondokSettings) => {
                     orientation: 'portrait'
                 });
             }
+        }
+        else if (reportType === ReportType.DaftarWaliKelas) {
+            // No santri data needed for this report, it uses settings
+            previews.push({
+                content: <DaftarWaliKelasTemplate settings={settings} />,
+                orientation: 'portrait'
+            });
         }
         else if (reportType === ReportType.LembarNilai) {
             // Logic for Lembar Nilai (Template Empty Score Sheet)

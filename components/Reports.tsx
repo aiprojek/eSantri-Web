@@ -55,6 +55,7 @@ const Reports: React.FC = () => {
     { id: ReportType.FormulirIzin, title: 'Formulir Izin Santri', description: "Cetak surat izin keluar/pulang resmi untuk santri.", icon: 'bi-box-arrow-right' },
     { id: ReportType.LabelSantri, title: 'Cetak Label Santri', description: "Cetak label nama, NIS, dan rombel untuk satu rombel.", icon: 'bi-tags-fill' },
     { id: ReportType.DaftarRombel, title: 'Daftar Santri per Rombel', description: "Cetak daftar nama santri dalam satu rombel.", icon: 'bi-people' },
+    { id: ReportType.DaftarWaliKelas, title: 'Daftar Wali Kelas', description: "Cetak rekapitulasi daftar wali kelas per rombel.", icon: 'bi-person-lines-fill' },
     { id: ReportType.LembarKedatangan, title: 'Lembar Kedatangan Santri', description: "Rekapitulasi kedatangan santri setelah liburan.", icon: 'bi-calendar2-check-fill' },
     { id: ReportType.LembarRapor, title: 'Pengambilan & Pengumpulan Rapor', description: "Cetak lembar rekapitulasi pengambilan dan pengumpulan rapor.", icon: 'bi-file-earmark-check-fill' },
     { id: ReportType.LembarNilai, title: 'Lembar Nilai', description: "Cetak lembar nilai kosong untuk satu rombel.", icon: 'bi-card-checklist' },
@@ -319,7 +320,7 @@ const Reports: React.FC = () => {
         let options: any = { ...reportConfig.options, paperSize, margin, filteredGedung };
         let allPreviews: { content: React.ReactNode; orientation: 'portrait' | 'landscape' }[] = [];
         const perRombelReports = [ReportType.DaftarRombel, ReportType.LembarKedatangan, ReportType.LembarNilai, ReportType.LembarAbsensi, ReportType.LembarRapor];
-        const allSantriReports = [ReportType.LaporanMutasi, ReportType.DashboardSummary, ReportType.FinanceSummary, ReportType.LaporanAsrama, ReportType.LaporanKontak];
+        const allSantriReports = [ReportType.LaporanMutasi, ReportType.DashboardSummary, ReportType.FinanceSummary, ReportType.LaporanAsrama, ReportType.LaporanKontak, ReportType.DaftarWaliKelas];
 
         // --- Data preparation for financial reports ---
         if (activeReport === ReportType.FinanceSummary) {
@@ -396,7 +397,7 @@ const Reports: React.FC = () => {
     }, 50);
   };
 
-  const isSummaryReport = activeReport === ReportType.DashboardSummary || activeReport === ReportType.FinanceSummary;
+  const isSummaryReport = activeReport === ReportType.DashboardSummary || activeReport === ReportType.FinanceSummary || activeReport === ReportType.DaftarWaliKelas;
   const isFinancialReport = activeReport === ReportType.LaporanArusKas || activeReport === ReportType.RekeningKoranSantri;
 
   return (

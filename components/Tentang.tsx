@@ -45,8 +45,9 @@ const changelogData: ReleaseNote[] = [
     {
         version: 'v16122025',
         date: '16 Desember 2025',
-        description: 'Peningkatan keamanan data dengan sinkronisasi otomatis.',
+        description: 'Peningkatan keamanan data dengan sinkronisasi otomatis, dan Penambahan laporan manajerial baru.',
         changes: [
+            { type: 'new', text: 'Laporan Baru: "Daftar Wali Kelas" untuk rekapitulasi tugas wali kelas per jenjang dan rombel.' },
             { type: 'new', text: 'Fitur "Sinkronisasi Otomatis" (Auto-Sync) untuk pengguna Dropbox & WebDAV.' },
             { type: 'update', text: 'Mekanisme Smart-Save: Aplikasi otomatis mencadangkan data ke cloud 5 detik setelah Anda selesai mengetik/mengedit data.' },
             { type: 'new', text: 'Opsi Pengaturan: Tombol on/off untuk Auto-Sync di menu Pengaturan.' },
@@ -360,10 +361,10 @@ $$ language plpgsql security definer;
                                     <FeatureItem icon="bi-journal-album" title="Buku Kas Umum">
                                         Catat semua pemasukan dan pengeluaran umum pondok untuk laporan arus kas yang transparan.
                                     </FeatureItem>
-                                    <FeatureItem icon="bi-sliders" title="Pengaturan Sangat Fleksibel">
+                                    <FeatureItem icon="bi-sliders" title="Pengaturan Fleksibel">
                                         Sesuaikan struktur pendidikan, biaya, format NIS, hingga redaksi surat dan pesan WhatsApp.
                                     </FeatureItem>
-                                    <FeatureItem icon="bi-envelope-paper-fill" title="Surat Menyurat (Baru)">
+                                    <FeatureItem icon="bi-envelope-paper-fill" title="Surat Menyurat">
                                         Buat, kelola template, dan arsipkan surat resmi pondok dengan mudah. Dilengkapi editor teks kaya dan mail merge.
                                     </FeatureItem>
                                     <FeatureItem icon="bi-person-badge-fill" title="Generator NIS Otomatis">
@@ -606,6 +607,10 @@ $$ language plpgsql security definer;
                                                 <strong className="text-gray-800 block text-sm">5. Laporan Kontak Wali Santri (Ekspor ke HP)</strong>
                                                 <p className="text-sm text-gray-600">Fitur khusus untuk mengunduh daftar kontak wali santri (Nama dan Nomor HP) dalam format CSV yang kompatibel dengan Google Contacts. File ini bisa diimpor ke HP agar kontak tersimpan otomatis dengan nama yang rapi.</p>
                                             </li>
+                                            <li>
+                                                <strong className="text-gray-800 block text-sm">6. Daftar Wali Kelas</strong>
+                                                <p className="text-sm text-gray-600">Mencetak rekapitulasi nama wali kelas untuk setiap rombel di semua jenjang. Berguna untuk data administrasi tahunan.</p>
+                                            </li>
                                         </ul>
                                     </div>
 
@@ -616,19 +621,19 @@ $$ language plpgsql security definer;
                                         </h4>
                                         <ul className="space-y-3 pl-2">
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">6. Lembar Nilai</strong>
+                                                <strong className="text-gray-800 block text-sm">7. Lembar Nilai</strong>
                                                 <p className="text-sm text-gray-600">Mencetak formulir nilai kosong dengan nama santri yang sudah terisi. Diserahkan kepada guru mata pelajaran untuk pengisian nilai manual sebelum diinput ke komputer.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">7. Lembar Absensi</strong>
+                                                <strong className="text-gray-800 block text-sm">8. Lembar Absensi</strong>
                                                 <p className="text-sm text-gray-600">Format absensi bulanan (kalender tanggal 1-31). Dapat diatur menggunakan kalender Masehi atau Hijriah.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">8. Lembar Pembinaan</strong>
+                                                <strong className="text-gray-800 block text-sm">9. Lembar Pembinaan</strong>
                                                 <p className="text-sm text-gray-600">Laporan rekam jejak santri yang berisi daftar prestasi yang diraih dan pelanggaran yang pernah dilakukan.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">9. Laporan Mutasi</strong>
+                                                <strong className="text-gray-800 block text-sm">10. Laporan Mutasi</strong>
                                                 <p className="text-sm text-gray-600">Rekapitulasi santri yang keluar, masuk, lulus, atau berhenti (hiatus) dalam rentang tanggal tertentu.</p>
                                             </li>
                                         </ul>
@@ -641,15 +646,15 @@ $$ language plpgsql security definer;
                                         </h4>
                                         <ul className="space-y-3 pl-2">
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">10. Rekening Koran Santri</strong>
+                                                <strong className="text-gray-800 block text-sm">11. Rekening Koran Santri</strong>
                                                 <p className="text-sm text-gray-600">Laporan detail seluruh transaksi keuangan satu santri (tagihan, pembayaran, uang saku masuk/keluar). Transparansi penuh untuk wali santri.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">11. Laporan Arus Kas Umum</strong>
+                                                <strong className="text-gray-800 block text-sm">12. Laporan Arus Kas Umum</strong>
                                                 <p className="text-sm text-gray-600">Laporan pertanggungjawaban bendahara yang berisi semua pemasukan dan pengeluaran pondok (buku kas umum) dalam periode tertentu.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">12. Laporan Ringkas Keuangan & Dashboard</strong>
+                                                <strong className="text-gray-800 block text-sm">13. Laporan Ringkas Keuangan & Dashboard</strong>
                                                 <p className="text-sm text-gray-600">Mencetak tampilan statistik yang ada di dashboard utama dan dashboard keuangan untuk laporan kepada pimpinan pondok.</p>
                                             </li>
                                         </ul>
@@ -662,11 +667,11 @@ $$ language plpgsql security definer;
                                         </h4>
                                         <ul className="space-y-3 pl-2">
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">13. Formulir Izin Santri</strong>
+                                                <strong className="text-gray-800 block text-sm">14. Formulir Izin Santri</strong>
                                                 <p className="text-sm text-gray-600">Surat jalan resmi untuk santri yang izin pulang/keluar. Berisi data penjemput, tujuan, dan tanggal kembali.</p>
                                             </li>
                                             <li>
-                                                <strong className="text-gray-800 block text-sm">14. Laporan Keasramaan</strong>
+                                                <strong className="text-gray-800 block text-sm">15. Laporan Keasramaan</strong>
                                                 <p className="text-sm text-gray-600">Rekapitulasi data gedung, kamar, kapasitas, nama musyrif, dan daftar penghuni setiap kamar.</p>
                                             </li>
                                         </ul>
@@ -861,8 +866,8 @@ $$ language plpgsql security definer;
                             </div>
 
                             <div>
-                                <h3 className="font-bold text-gray-800 mb-2">Naskah Lisensi Resmi (English)</h3>
-                                <div className="bg-gray-100 p-4 rounded-lg border border-gray-300 h-96 overflow-y-auto font-mono text-xs text-gray-700 whitespace-pre-wrap">
+                                <h3 className="font-bold text-gray-800 mb-2">Naskah Lengkap (Bahasa Inggris)</h3>
+                                <div className="h-96 overflow-y-auto p-4 bg-gray-100 border border-gray-300 rounded text-xs font-mono whitespace-pre-wrap">
                                     {GPL_TEXT}
                                 </div>
                             </div>
@@ -870,41 +875,53 @@ $$ language plpgsql security definer;
                     )}
 
                     {activeTab === 'kontak' && (
-                        <div className="mt-8">
-                            {/* ... (Existing Contact Form) ... */}
-                            <div className="mb-8">
-                                <h3 className="text-xl font-semibold text-gray-800">Hubungi Kami</h3>
-                                <p className="text-gray-600 mt-2">
-                                    Punya pertanyaan, masukan, atau laporan bug? Jangan ragu untuk menghubungi kami melalui formulir di bawah atau langsung ke email kami.
-                                </p>
-                            </div>
-                            <div className="bg-gradient-to-br from-teal-50 to-cyan-100 p-6 sm:p-8 rounded-lg shadow-inner border border-teal-100">
-                                <form className="space-y-5">
-                                    <div className="relative">
-                                        <label htmlFor="contact-name" className="block text-sm font-medium text-gray-700 mb-1">Nama Anda</label>
-                                        <div className="absolute inset-y-0 top-7 left-0 flex items-center pl-3 pointer-events-none">
-                                            <i className="bi bi-person text-gray-400"></i>
-                                        </div>
-                                        <input type="text" id="contact-name" value={contactName} onChange={e => setContactName(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 p-2.5" placeholder="Nama Lengkap" />
-                                    </div>
-                                    <div className="relative">
-                                        <label htmlFor="contact-subject" className="block text-sm font-medium text-gray-700 mb-1">Subjek</label>
-                                        <div className="absolute inset-y-0 top-7 left-0 flex items-center pl-3 pointer-events-none">
-                                            <i className="bi bi-chat-left-dots text-gray-400"></i>
-                                        </div>
-                                        <input type="text" id="contact-subject" value={contactSubject} onChange={e => setContactSubject(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 p-2.5" placeholder="Contoh: Laporan Bug" />
-                                    </div>
-                                    <div className="relative">
-                                        <label htmlFor="contact-message" className="block text-sm font-medium text-gray-700 mb-1">Pesan Anda</label>
-                                        <textarea id="contact-message" rows={5} value={contactMessage} onChange={e => setContactMessage(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Tuliskan pesan Anda di sini..."></textarea>
-                                    </div>
-                                    <div>
-                                        <a href={mailtoLink} className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-transform hover:scale-[1.02] shadow-md">
-                                            <i className="bi bi-send-fill"></i>
-                                            <span>Kirim via Aplikasi Email</span>
-                                        </a>
-                                    </div>
-                                </form>
+                        <div className="max-w-2xl mx-auto">
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">Hubungi Pengembang</h3>
+                            <p className="text-gray-600 mb-6 text-center">
+                                Punya pertanyaan, saran fitur, atau ingin melaporkan bug? Silakan kirim pesan kepada kami.
+                            </p>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Nama Anda</label>
+                                    <input 
+                                        type="text" 
+                                        value={contactName}
+                                        onChange={(e) => setContactName(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-teal-500 focus:border-teal-500"
+                                        placeholder="Nama Lengkap"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Subjek</label>
+                                    <input 
+                                        type="text" 
+                                        value={contactSubject}
+                                        onChange={(e) => setContactSubject(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-teal-500 focus:border-teal-500"
+                                        placeholder="Topik pesan"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Pesan</label>
+                                    <textarea 
+                                        rows={5}
+                                        value={contactMessage}
+                                        onChange={(e) => setContactMessage(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-teal-500 focus:border-teal-500"
+                                        placeholder="Tulis pesan Anda di sini..."
+                                    ></textarea>
+                                </div>
+                                <div className="text-center pt-2">
+                                    <a 
+                                        href={mailtoLink}
+                                        className={`inline-flex items-center justify-center gap-2 px-6 py-3 text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors font-medium ${(!contactName || !contactSubject || !contactMessage) ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                                    >
+                                        <i className="bi bi-send-fill"></i>
+                                        Kirim Email
+                                    </a>
+                                    <p className="text-xs text-gray-500 mt-2">Akan membuka aplikasi email default Anda.</p>
+                                </div>
                             </div>
                         </div>
                     )}

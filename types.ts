@@ -432,5 +432,6 @@ export enum ReportType {
   LaporanAsrama = 'laporanAsrama',
   RekeningKoranSantri = 'rekeningKoranSantri',
   LaporanArusKas = 'laporanArusKas',
-  LaporanKontak = 'laporanKontak', 
+  LaporanKontak = 'laporanKontak',
+  DaftarWaliKelas = 'daftarWaliKelas', // New Type
 }

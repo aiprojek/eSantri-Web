@@ -1,211 +1,94 @@
 
-// FIX: Switched from a class-based Dexie definition to a direct instance with type casting.
-// This resolves typing errors where methods like `version()` and `transaction()` were not found on the `db` instance,
-// which can occur in certain TypeScript build environments. This direct approach ensures `db` is
-// correctly recognized as a full Dexie instance with all its methods.
-import Dexie, { type Table } from 'dexie';
-import { type PondokSettings, type Santri, type Tagihan, type Pembayaran, type SaldoSantri, type TransaksiSaldo, type TransaksiKas, type SuratTemplate, type ArsipSurat } from './types';
+import Dexie, { Table } from 'dexie';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar } from './types';
 
-// Define a type for settings that includes the internal ID from Dexie
-export type PondokSettingsWithId = PondokSettings & { id?: number };
+// PondokSettings needs an ID for Dexie to handle it as a collection of 1 (or more)
+export interface PondokSettingsWithId extends PondokSettings {
+  id?: number;
+}
 
-export const db = new Dexie('eSantriDB') as Dexie & {
-    santri: Table<Santri, number>;
-    settings: Table<PondokSettingsWithId, number>;
-    tagihan: Table<Tagihan, number>;
-    pembayaran: Table<Pembayaran, number>;
-    saldoSantri: Table<SaldoSantri, number>; // santriId is the key
-    transaksiSaldo: Table<TransaksiSaldo, number>;
-    transaksiKas: Table<TransaksiKas, number>;
-    suratTemplates: Table<SuratTemplate, number>;
-    arsipSurat: Table<ArsipSurat, number>;
-};
+export class ESantriDatabase extends Dexie {
+  santri!: Table<Santri, number>;
+  settings!: Table<PondokSettingsWithId, number>;
+  tagihan!: Table<Tagihan, number>;
+  pembayaran!: Table<Pembayaran, number>;
+  saldoSantri!: Table<SaldoSantri, number>;
+  transaksiSaldo!: Table<TransaksiSaldo, number>;
+  transaksiKas!: Table<TransaksiKas, number>;
+  suratTemplates!: Table<SuratTemplate, number>;
+  arsipSurat!: Table<ArsipSurat, number>;
+  pendaftar!: Table<Pendaftar, number>;
 
-db.version(16).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-}).upgrade(async tx => {
-    // 16: Initialize autoSync config
-    await tx.table('settings').toCollection().modify(s => {
-        if (s.cloudSyncConfig) {
-            s.cloudSyncConfig.autoSync = false;
-        } else {
-            // Should be covered by v15 but just in case
-            s.cloudSyncConfig = { provider: 'none', lastSync: null, autoSync: false };
-        }
+  constructor() {
+    super('eSantriDB');
+    (this as any).version(19).stores({
+      santri: '++id, nis, namaLengkap, kamarId',
+      settings: '++id',
+      tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
+      pembayaran: '++id, santriId, tanggal, disetorKeKas',
+      saldoSantri: 'santriId',
+      transaksiSaldo: '++id, santriId, tanggal',
+      transaksiKas: '++id, tanggal, jenis, kategori',
+      suratTemplates: '++id, nama, kategori',
+      arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
+      pendaftar: '++id, namaLengkap, jenjangId, tanggalDaftar, status',
+    }).upgrade(async (tx: any) => {
+       // Migration: Update settings to include customFields if missing
+       await tx.table('settings').toCollection().modify((s: any) => {
+            if (s.psbConfig) {
+                if (!s.psbConfig.customFields) {
+                    // Migration from old suratPernyataan to customFields
+                    const fields = [];
+                    if (s.psbConfig.suratPernyataan && s.psbConfig.suratPernyataan.aktif) {
+                        fields.push({
+                            id: 'section_' + Date.now(),
+                            type: 'section',
+                            label: s.psbConfig.suratPernyataan.judul || 'SURAT PERNYATAAN',
+                            required: false
+                        });
+                        fields.push({
+                            id: 'statement_' + Date.now(),
+                            type: 'statement',
+                            label: s.psbConfig.suratPernyataan.isi || '',
+                            required: false
+                        });
+                        fields.push({
+                            id: 'checkbox_' + Date.now(),
+                            type: 'checkbox',
+                            label: 'Saya menyatakan bahwa data yang saya isikan adalah benar dan saya menyetujui pernyataan di atas.',
+                            options: ['Setuju'],
+                            required: true
+                        });
+                    }
+                    s.psbConfig.customFields = fields;
+                }
+            } else {
+                 // Default if psbConfig missing completely
+                 s.psbConfig = {
+                    tahunAjaranAktif: new Date().getFullYear() + '/' + (new Date().getFullYear() + 1),
+                    targetKuota: 100,
+                    nomorHpAdmin: '',
+                    telegramUsername: '',
+                    pesanSukses: 'Terima kasih telah mendaftar. Silakan hubungi admin untuk konfirmasi.',
+                    activeGelombang: 1,
+                    biayaPendaftaran: 0,
+                    infoRekening: '',
+                    activeFields: ['namaLengkap', 'nisn', 'jenisKelamin', 'tempatLahir', 'tanggalLahir', 'alamat', 'namaWali', 'nomorHpWali', 'asalSekolah'],
+                    requiredDocuments: ['Kartu Keluarga (KK)', 'Akte Kelahiran', 'Pas Foto 3x4'],
+                    designStyle: 'classic',
+                    posterTitle: 'Penerimaan Santri Baru',
+                    posterSubtitle: 'Tahun Ajaran 2025/2026',
+                    posterInfo: 'Segera Daftarkan Putra/Putri Anda!',
+                    customFields: [
+                        { id: 'sec_1', type: 'section', label: 'SURAT PERNYATAAN', required: false },
+                        { id: 'stmt_1', type: 'statement', label: 'Dengan ini saya menyatakan sanggup menaati segala peraturan pondok.', required: false },
+                        { id: 'chk_1', type: 'checkbox', label: 'Persetujuan', options: ['Saya Setuju'], required: true }
+                    ]
+                };
+            }
+        });
     });
-});
+  }
+}
 
-db.version(15).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-}).upgrade(async tx => {
-    // 15: Add cloudSyncConfig to settings if not exists
-    await tx.table('settings').toCollection().modify(s => {
-        if (!s.cloudSyncConfig) {
-            s.cloudSyncConfig = { provider: 'none', lastSync: null, autoSync: false };
-        }
-    });
-});
-
-db.version(14).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-}).upgrade(async tx => {
-    // 14: Add backupConfig to settings if not exists
-    await tx.table('settings').toCollection().modify(s => {
-        if (!s.backupConfig) {
-            s.backupConfig = { frequency: 'weekly', lastBackup: null };
-        }
-    });
-});
-
-db.version(13).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-}).upgrade(tx => {
-    // 13: Add stampConfig and signatureUrl to surat module
-});
-
-db.version(12).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-}).upgrade(tx => {
-    // 12: Add tempatTanggalConfig to templates and archives
-});
-
-db.version(11).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-});
-
-db.version(10).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-});
-
-db.version(9).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-}).upgrade(tx => {
-    // Upgrade to ensure existing templates have valid structure if needed
-});
-
-db.version(7).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-  suratTemplates: '++id, nama, kategori',
-  arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
-});
-
-db.version(6).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal, disetorKeKas',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-});
-
-db.version(5).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal',
-  saldoSantri: 'santriId',
-  transaksiSaldo: '++id, santriId, tanggal',
-  transaksiKas: '++id, tanggal, jenis, kategori',
-});
-
-db.version(4).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id',
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal',
-  saldoSantri: 'santriId', // Primary key is santriId
-  transaksiSaldo: '++id, santriId, tanggal',
-});
-
-db.version(3).stores({
-  santri: '++id, nis, namaLengkap, kamarId',
-  settings: '++id', // Will only store one object, auto-incrementing key
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal',
-}).upgrade(tx => {
-  // Upgrade logic from version 2 to 3. If version 2 is already there, this will run.
-  // The 'kamarId' index is new in version 3. No data migration needed, just schema update.
-  return tx.table('santri').toCollection().modify(santri => {
-    if (santri.kamarId === undefined) {
-      // you can set a default value if needed, but for now undefined is fine
-    }
-  });
-});
-
-db.version(2).stores({
-  santri: '++id, nis, namaLengkap',
-  settings: '++id', // Will only store one object, auto-incrementing key
-  tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
-  pembayaran: '++id, santriId, tanggal',
-});
+export const db = new ESantriDatabase();

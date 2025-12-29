@@ -191,6 +191,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
             jenisKelamin: 'Laki-laki',
             tempatLahir: '',
             tanggalLahir: '',
+            kewarganegaraan: 'WNI',
             tanggalMasuk: new Date().toISOString().split('T')[0],
             alamat: { detail: '' },
             namaAyah: '',

@@ -17,13 +17,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
   const navItems = [
     { page: Page.Dashboard, icon: 'bi-grid-1x2-fill' },
     { page: Page.Santri, icon: 'bi-people-fill' },
+    { page: Page.PSB, icon: 'bi-person-plus-fill' }, // New Item
     { page: Page.DataMaster, icon: 'bi-database-fill' }, 
     { page: Page.Keuangan, icon: 'bi-cash-coin' },
     { page: Page.Keasramaan, icon: 'bi-building-fill' },
     { page: Page.BukuKas, icon: 'bi-journal-album' },
     { page: Page.Surat, icon: 'bi-envelope-paper-fill' },
     { page: Page.Laporan, icon: 'bi-printer-fill' },
-    { page: Page.AuditLog, icon: 'bi-activity' }, // New Item
+    { page: Page.AuditLog, icon: 'bi-activity' }, 
     { page: Page.Pengaturan, icon: 'bi-gear-fill' },
     { page: Page.Tentang, icon: 'bi-info-circle-fill' },
   ];

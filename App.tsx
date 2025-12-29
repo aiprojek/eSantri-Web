@@ -11,6 +11,7 @@ import Finance from './components/Finance';
 import Asrama from './components/Asrama';
 import BukuKas from './components/BukuKas';
 import SuratMenyurat from './components/SuratMenyurat';
+import PSB from './components/PSB';
 import ConfirmModal from './components/ConfirmModal';
 import Tentang from './components/Tentang';
 import WelcomeModal from './components/WelcomeModal';
@@ -246,11 +247,13 @@ const AppContent: React.FC = () => {
                 return <BukuKas />;
             case Page.Surat:
                 return <SuratMenyurat />;
+            case Page.PSB:
+                return <PSB />;
             case Page.Pengaturan:
                 return <Settings />;
             case Page.Laporan:
                 return <Reports />;
-            case Page.AuditLog: // New Route
+            case Page.AuditLog:
                 return <AuditLogView />;
             case Page.Tentang:
                 return <Tentang />;

@@ -31,6 +31,23 @@ const PanduanLangkah: React.FC<{ number: number; title: string; children: React.
     </div>
 );
 
+// Fixed: Defined outside component to prevent re-mounting issues
+const TabButton: React.FC<{
+    tabId: 'tentang' | 'panduan' | 'rilis' | 'kontak' | 'lisensi';
+    label: string;
+    icon: string;
+    isActive: boolean;
+    onClick: (id: 'tentang' | 'panduan' | 'rilis' | 'kontak' | 'lisensi') => void;
+}> = ({ tabId, label, icon, isActive, onClick }) => (
+    <button
+        onClick={() => onClick(tabId)}
+        className={`flex items-center gap-2 py-3 px-4 text-center font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 ${isActive ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+    >
+        <i className={`bi ${icon}`}></i>
+        <span>{label}</span>
+    </button>
+);
+
 interface ReleaseNote {
     version: string;
     date: string;
@@ -42,6 +59,17 @@ interface ReleaseNote {
 }
 
 const changelogData: ReleaseNote[] = [
+    {
+        version: 'v29122025',
+        date: '29 Desember 2025',
+        description: 'Peluncuran Modul Penerimaan Santri Baru (PSB) dan Integrasi AI Poster.',
+        changes: [
+            { type: 'new', text: 'Modul PSB Lengkap: Dashboard pendaftar, formulir online kustom, dan manajemen seleksi.' },
+            { type: 'new', text: 'Fitur "Poster Prompt Maker": Membuat deskripsi visual poster PPDB otomatis menggunakan AI untuk digenerate di Midjourney/DALL-E.' },
+            { type: 'new', text: 'Impor Data Pendaftar: Mendukung format pesan WhatsApp (auto-parse) dan sinkronisasi cloud.' },
+            { type: 'update', text: 'Integrasi Data: Pendaftar yang diterima otomatis masuk ke Database Santri aktif dengan foto default.' }
+        ]
+    },
     {
         version: 'v16122025',
         date: '16 Desember 2025',
@@ -126,59 +154,8 @@ const GPL_TEXT = `GNU GENERAL PUBLIC LICENSE
 Version 3, 29 June 2007
 
 Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
-Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed.
-
-Preamble
-
-The GNU General Public License is a free, copyleft license for software and other kinds of works.
-
-The licenses for most software and other practical works are designed to take away your freedom to share and change the works. By contrast, the GNU General Public License is intended to guarantee your freedom to share and change all versions of a program--to make sure it remains free software for all its users. We, the Free Software Foundation, use the GNU General Public License for most of our software; it applies also to any other work released this way by its authors. You can apply it to your programs, too.
-
-When we speak of free software, we are referring to freedom, not price. Our General Public Licenses are designed to make sure that you have the freedom to distribute copies of free software (and charge for them if you wish), that you receive source code or can get it if you want it, that you can change the software or use pieces of it in new free programs, and that you know you can do these things.
-
-To protect your rights, we need to prevent others from denying you these rights or asking you to surrender the rights. Therefore, you have certain responsibilities if you distribute copies of the software, or if you modify it: responsibilities to respect the freedom of others.
-
-For example, if you distribute copies of such a program, whether gratis or for a fee, you must pass on to the recipients the same freedoms that you received. You must make sure that they, too, receive or can get the source code. And you must show them these terms so they know their rights.
-
-Developers that use the GNU GPL protect your rights with two steps: (1) assert copyright on the software, and (2) offer you this License giving you legal permission to copy, distribute and/or modify it.
-
-For the developers' and authors' protection, the GPL clearly explains that there is no warranty for this free software. For both users' and authors' sake, the GPL requires that modified versions be marked as changed, so that their problems will not be attributed erroneously to authors of previous versions.
-
-Some devices are designed to deny users access to install or run modified versions of the software inside them, although the manufacturer can do so. This is fundamentally incompatible with the aim of protecting users' freedom to change the software. The systematic pattern of such abuse occurs in the area of products for individuals to use, which is precisely where it is most unacceptable. Therefore, we have designed this version of the GPL to prohibit the practice for those products. If such problems arise substantially in other domains, we stand ready to extend this provision to those domains in future versions of the GPL, as needed to protect the freedom of users.
-
-Finally, every program is threatened constantly by software patents. States should not allow patents to restrict development and use of software on general-purpose computers, but in those that do, we wish to avoid the special danger that patents applied to a free program could make it effectively proprietary. To prevent this, the GPL assures that patents cannot be used to render the program non-free.
-
-The precise terms and conditions for copying, distribution and modification follow.
-
-TERMS AND CONDITIONS
-
-0. Definitions.
-
-"This License" refers to version 3 of the GNU General Public License.
-
-"Copyright" also means copyright-like laws that apply to other kinds of works, such as semiconductor masks.
-
-"The Program" refers to any copyrightable work licensed under this License. Each licensee is addressed as "you". "Licensees" and "recipients" may be individuals or organizations.
-
-To "modify" a work means to copy from or adapt all or part of the work in a fashion requiring copyright permission, other than the making of an exact copy. The resulting work is called a "modified version" of the earlier work or a work "based on" the earlier work.
-
-A "covered work" means either the unmodified Program or a work based on the Program.
-
-To "propagate" a work means to do anything with it that, without permission, would make you directly or secondarily liable for infringement under applicable copyright law, except executing it on a computer or modifying a private copy. Propagation includes copying, distribution (with or without modification), making available to the public, and in some countries other activities as well.
-
-To "convey" a work means any kind of propagation that enables other parties to make or receive copies. Mere interaction with a user through a computer network, with no transfer of a copy, is not conveying.
-
 ... (For full text, please visit https://www.gnu.org/licenses/gpl-3.0.html) ...
-
-NO WARRANTY
-
-15. Disclaimer of Warranty.
-
-THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU. SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
-
-16. Limitation of Liability.
-
-IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MODIFIES AND/OR CONVEYS THE PROGRAM AS PERMITTED ABOVE, BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE PROGRAM (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A FAILURE OF THE PROGRAM TO OPERATE WITH ANY OTHER PROGRAMS), EVEN IF SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.`;
+`;
 
 const Tentang: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'rilis' | 'kontak' | 'lisensi'>('tentang');
@@ -201,21 +178,6 @@ const Tentang: React.FC = () => {
     }, []);
 
     const mailtoLink = `mailto:aiprojek01@gmail.com?subject=${encodeURIComponent(contactSubject)}&body=${encodeURIComponent(`Halo,\n\nNama saya ${contactName}.\n\n${contactMessage}`)}`;
-
-
-    const TabButton: React.FC<{
-        tabId: 'tentang' | 'panduan' | 'rilis' | 'kontak' | 'lisensi';
-        label: string;
-        icon: string;
-    }> = ({ tabId, label, icon }) => (
-        <button
-            onClick={() => setActiveTab(tabId)}
-            className={`flex items-center gap-2 py-3 px-4 text-center font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 ${activeTab === tabId ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-        >
-            <i className={`bi ${icon}`}></i>
-            <span>{label}</span>
-        </button>
-    );
     
     const handleDeleteSampleData = () => {
         showConfirmation(
@@ -267,39 +229,7 @@ create table public.audit_logs (
 );
 
 -- 2. Aktifkan Realtime untuk tabel ini
-alter publication supabase_realtime add table public.audit_logs;
-
--- 3. Fungsi Otomatis (Trigger)
-create or replace function public.handle_audit_log()
-returns trigger as $$
-declare
-  old_row jsonb := null;
-  new_row jsonb := null;
-begin
-  if (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') then
-    old_row := to_jsonb(OLD);
-  end if;
-  if (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') then
-    new_row := to_jsonb(NEW);
-  end if;
-
-  insert into public.audit_logs (table_name, record_id, operation, old_data, new_data, changed_by)
-  values (
-    TG_TABLE_NAME,
-    coalesce(new_row->>'id', old_row->>'id'),
-    TG_OP,
-    old_row,
-    new_row,
-    auth.uid()
-  );
-  return null;
-end;
-$$ language plpgsql security definer;
-
--- 4. CONTOH: Terapkan Trigger ke Tabel (Ulangi untuk setiap tabel yang ingin dipantau)
--- create trigger audit_santri_changes
--- after insert or update or delete on public.santri
--- for each row execute function public.handle_audit_log();`;
+alter publication supabase_realtime add table public.audit_logs;`;
 
     return (
         <div>
@@ -316,11 +246,11 @@ $$ language plpgsql security definer;
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="border-b border-gray-200">
                     <nav className="flex -mb-px overflow-x-auto">
-                        <TabButton tabId="tentang" label="Tentang Aplikasi" icon="bi-info-circle" />
-                        <TabButton tabId="panduan" label="Panduan Pengguna" icon="bi-question-circle" />
-                        <TabButton tabId="rilis" label="Catatan Rilis" icon="bi-clock-history" />
-                        <TabButton tabId="lisensi" label="Lisensi" icon="bi-file-earmark-text" />
-                        <TabButton tabId="kontak" label="Kontak" icon="bi-envelope" />
+                        <TabButton tabId="tentang" label="Tentang Aplikasi" icon="bi-info-circle" isActive={activeTab === 'tentang'} onClick={setActiveTab} />
+                        <TabButton tabId="panduan" label="Panduan Pengguna" icon="bi-question-circle" isActive={activeTab === 'panduan'} onClick={setActiveTab} />
+                        <TabButton tabId="rilis" label="Catatan Rilis" icon="bi-clock-history" isActive={activeTab === 'rilis'} onClick={setActiveTab} />
+                        <TabButton tabId="lisensi" label="Lisensi" icon="bi-file-earmark-text" isActive={activeTab === 'lisensi'} onClick={setActiveTab} />
+                        <TabButton tabId="kontak" label="Kontak" icon="bi-envelope" isActive={activeTab === 'kontak'} onClick={setActiveTab} />
                     </nav>
                 </div>
 
@@ -328,10 +258,10 @@ $$ language plpgsql security definer;
                     {activeTab === 'tentang' && (
                         <div className="space-y-8">
                             <div className="p-6 bg-teal-50 border border-teal-200 rounded-lg text-center">
-                                {/* ... Logo SVG ... */}
+                                {/* Logo SVG */}
                                 <svg className="w-16 h-16 mb-3 mx-auto" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
                                   <rect width="64" height="64" rx="12" fill="#0f766e"/>
-                                  <path style={{fill: '#ffffff', strokeWidth: '0.132335'}} d="m 26.304352,41.152506 c 1.307859,-0.12717 3.241691,-0.626444 3.685692,-0.951566 0.177834,-0.130221 0.280781,-0.550095 0.430086,-1.754181 0.280533,-2.262324 0.318787,-2.155054 -0.541805,-1.519296 -1.483007,1.095563 -3.264503,1.690917 -4.539903,1.517186 -0.4996,-0.06805 -0.78621,-0.01075 -1.57337,0.314614 -0.52937,0.218803 -1.60128,0.556625 -2.38202,0.750715 -0.78074,0.194089 -1.43375,0.364958 -1.45113,0.379707 -0.0174,0.01475 0.21492,0.165374 0.51624,0.334722 1.20403,0.510842 2.20341,0.830915 2.95606,0.979692 0.489,0.09629 1.57855,0.07691 2.90015,-0.05159 z m 12.38447,-0.336369 c 1.055266,-0.319093 1.594897,-0.625065 2.399755,-1.360661 1.613411,-1.474567 1.995601,-3.726883 0.97899,-5.769426 -0.183416,-0.368517 -0.741626,-1.114753 -1.240467,-1.658302 l -0.906985,-0.98827 -1.508905,0.703734 c -0.829893,0.387055 -1.561038,0.752903 -1.624762,0.812997 -0.06395,0.06031 0.39373,0.62462 1.021492,1.259487 1.31295,1.327811 1.807226,2.185704 1.807226,3.136742 0,1.449522 -1.080984,2.352339 -2.83266,2.365783 -1.692966,0.013 -2.898289,-0.700527 -3.613504,-2.139108 -0.233721,-0.470103 -0.448882,-0.914285 -0.478136,-0.987069 -0.116891,-0.290814 -0.200722,0.06466 -0.343292,1.455679 -0.08206,0.800623 -0.183673,1.704103 -0.225804,2.196123 -0.07851,0.5657 -0.05503,0.618734 0.371528,0.839314 0.250433,0.129504 1.022439,0.362267 1.715565,0.517254 1.500515,0.335516 3.830431,0.295752 5.096151,-0.08698 z M 11.866048,40.626469 c 1.020556,-0.500151 2.054444,-0.832015 2.982265,-0.957257 l 0.68756,-0.09281 V 38.075643 36.574885 L 14.703555,36.410364 C 13.438321,36.160271 12.938298,35.987582 11.975968,35.468378 L 11.093945,34.992506 9.9042954,35.766367 C 8.031086,36.984872 5.0107355,38.044574 4.3772651,37.70555 3.9702944,37.487745 3.5902974,37.824019 3.7335127,38.275236 c 0.1257906,0.39633 0.797206,0.424765 0.8983306,0.03805 0.06213,-0.2376 0.2903465,-0.278167 2.0358602,-0.361878 1.0812301,-0.05186 2.4014512,-0.09428 2.933819,-0.09428 0.7917475,0 1.0167815,-0.05398 1.2362915,-0.296526 0.64908,-0.717223 1.844188,0.13221 1.317323,0.936298 -0.332361,0.507253 -0.785732,0.562716 -1.201464,0.146983 -0.350824,-0.350826 -0.366401,-0.352462 -3.2771401,-0.344529 l -2.9246417,0.008 1.034983,0.271321 c 1.4849959,0.389292 3.0329312,1.06573 4.1100921,1.79608 0.5139687,0.348484 0.9766597,0.641108 1.0282017,0.650274 0.05152,0.0092 0.47493,-0.17017 0.94088,-0.398521 z m 5.124237,-0.272385 c 0.0033,-0.05972 0.02012,-1.118204 0.03621,-2.35221 l 0.02932,-2.243649 H 16.693943 16.33206 l -0.04025,2.164913 c -0.02209,1.190702 -0.0077,2.249197 0.03161,2.352212 0.07558,0.197064 0.655007,0.26547 0.666853,0.07874 z m 4.001617,-0.628305 c 3.374141,-0.857628 4.778839,-1.488945 15.967196,-7.176203 4.690228,-2.384133 7.258592,-3.33837 11.033259,-4.099241 3.97792,-0.801842 8.572447,-0.652298 11.887212,0.386905 0.624457,0.19577 1.16406,0.327264 1.199115,0.292205 0.143194,-0.143195 -3.176816,-1.120282 -4.795262,-1.411255 -2.183345,-0.392533 -5.704678,-0.525761 -7.754138,-0.293377 -4.610966,0.522832 -8.280091,1.657841 -14.320462,4.429906 -3.817281,1.751836 -7.52494,3.103261 -10.277358,3.746051 -1.851681,0.432435 -4.33587,0.808837 -5.338191,0.808837 h -0.741377 v 1.791074 1.791073 l 0.69476,-0.08699 c 0.38212,-0.04784 1.36127,-0.256397 2.17589,-0.463455 z m -0.118801,-4.40808 c 4.749218,-0.689623 7.959523,-2.012124 9.866298,-4.064455 0.841357,-0.905587 1.214347,-1.528001 1.501476,-2.505551 0.679014,-2.311777 -0.291066,-4.385192 -2.446976,-5.230066 -0.725318,-0.284243 -1.131027,-0.34026 -2.460774,-0.339764 -2.808553,0.001 -4.556539,0.766973 -6.730944,2.94935 -1.447641,1.452948 -2.262053,2.665132 -2.952885,4.395143 -0.426266,1.067494 -0.81066,2.828086 -0.81066,3.71302 0,0.466802 0.05513,0.564423 0.362475,0.641552 0.19935,0.05003 0.443012,0.219943 0.541446,0.377572 0.225012,0.360303 0.97958,0.375537 3.130544,0.0632 z m 0.129247,-1.595953 c -0.121405,-0.121408 0.176599,-1.71185 0.554135,-2.957448 0.9833,-3.244156 3.16314,-5.500556 5.313908,-5.500556 1.62825,0 2.328557,1.243349 1.766437,3.136215 -0.451769,1.521269 -1.976179,2.916498 -4.488239,4.107883 -1.600745,0.759182 -3.044088,1.316063 -3.146241,1.213906 z m 16.193314,-4.00525 1.466951,-0.631823 -0.482912,-0.651947 c -0.265596,-0.358572 -0.562338,-0.948922 -0.659417,-1.311892 -0.161717,-0.604651 -0.147142,-0.718554 0.17397,-1.359502 0.856947,-1.710476 3.457222,-1.819555 5.06433,-0.212446 0.386295,0.386292 0.744677,0.87099 0.79641,1.077111 0.115791,0.461354 0.321976,0.485485 0.419264,0.04907 0.07118,-0.319288 0.511916,-3.32127 0.511916,-3.486797 0,-0.159425 -1.890167,-0.667608 -2.848242,-0.765765 -1.631386,-0.08456 -2.213971,-0.183458 -3.573718,0.164339 -1.768583,0.460657 -3.107329,1.499143 -3.730775,2.894023 -0.582587,1.30345 -0.390883,3.285673 0.451251,4.665983 0.244669,0.401032 0.332862,0.44906 0.614833,0.334826 0.181053,-0.07335 0.989313,-0.417681 1.796139,-0.765182 z" fill="white" />
+                                  <path style={{fill: '#ffffff', strokeWidth: '0.132335'}} d="m 26.304352,41.152506 c 1.307859,-0.12717 3.241691,-0.626444 3.685692,-0.951566 0.177834,-0.130221 0.280781,-0.550095 0.430086,-1.754181 0.280533,-2.262324 0.318787,-2.155054 -0.541805,-1.519296 -1.483007,1.095563 -3.264503,1.690917 -4.539903,1.517186 -0.4996,-0.06805 -0.78621,-0.01075 -1.57337,0.314614 -0.52937,0.218803 -1.60128,0.556625 -2.38202,0.750715 -0.78074,0.194089 -1.43375,0.364958 -1.45113,0.379707 -0.0174,0.01475 0.21492,0.165374 0.51624,0.334722 1.20403,0.510842 2.20341,0.830915 2.95606,0.979692 0.489,0.09629 1.57855,0.07691 2.90015,-0.05159 z m 12.38447,-0.336369 c 1.055266,-0.319093 1.594897,-0.625065 2.399755,-1.360661 1.613411,-1.474567 1.995601,-3.726883 0.97899,-5.769426 -0.183416,-0.368517 -0.741626,-1.114753 -1.240467,-1.658302 l -0.906985,-0.98827 -1.508905,0.703734 c -0.829893,0.387055 -1.561038,0.752903 -1.624762,0.812997 -0.06395,0.06031 0.39373,0.62462 1.021492,1.259487 1.31295,1.327811 1.807226,2.185704 1.807226,3.136742 0,1.449522 -1.080984,2.352339 -2.83266,2.365783 -1.692966,0.013 -2.898289,-0.700527 -3.613504,-2.139108 -0.233721,-0.470103 -0.448882,-0.914285 -0.478136,-0.987069 -0.116891,-0.290814 -0.200722,0.06466 -0.343292,1.455679 -0.08206,0.800623 -0.183673,1.704103 -0.225804,2.196123 -0.07851,0.5657 -0.05503,0.618734 0.371528,0.839314 0.250433,0.129504 1.022439,0.362267 1.715565,0.517254 1.500515,0.335516 3.830431,0.295752 5.096151,-0.08698 z M 11.866048,40.626469 c 1.020556,-0.500151 2.054444,-0.832015 2.982265,-0.957257 l 0.68756,-0.09281 V 38.075643 36.574885 L 14.703555,36.410364 C 13.438321,36.160271 12.938298,35.987582 11.975968,35.468378 L 11.093945,34.992506 9.9042954,35.766367 C 8.031086,36.984872 5.0107355,38.044574 4.3772651,37.70555 3.9702944,37.487745 3.5902974,37.824019 3.7335127,38.275236 c 0.1257906,0.39633 0.797206,0.424765 0.8983306,0.03805 0.06213,-0.2376 0.2903465,-0.278167 2.0358602,-0.361878 1.0812301,-0.05186 2.4014512,-0.09428 2.933819,-0.09428 0.7917475,0 1.0167815,-0.05398 1.2362915,-0.296526 0.64908,-0.717223 1.844188,0.13221 1.317323,0.936298 -0.332361,0.507253 -0.785732,0.562716 -1.201464,0.146983 -0.350824,-0.350826 -0.366401,-0.352462 -3.2771401,-0.344529 l -2.9246417,0.008 1.034983,0.271321 c 1.4849959,0.389292 3.0329312,1.06573 4.1100921,1.79608 0.5139687,0.348484 0.9766597,0.641108 1.0282017,0.650274 0.05152,0.0092 0.47493,-0.17017 0.94088,-0.398521 z m 5.124237,-0.272385 c 0.0033,-0.05972 0.02012,-1.118204 0.03621,-2.35221 l 0.02932,-2.243649 H 16.693943 16.33206 l -0.04025,2.164913 c -0.02209,1.190702 -0.0077,2.249197 0.03161,2.352212 0.07558,0.197064 0.655007,0.26547 0.666853,0.07874 z m 4.001617,-0.628305 c 3.374141,-0.857628 4.778839,-1.488945 15.967196,-7.176203 4.690228,-2.384133 7.258592,-3.33837 11.033259,-4.099241 3.97792,-0.801842 8.572447,-0.652298 11.887212,0.386905 0.624457,0.19577 1.16406,0.327264 1.199115,0.292205 0.143194,-0.143195 -3.176816,-1.120282 -4.795262,-1.411255 -2.183345,-0.392533 -5.704678,-0.525761 -7.754138,-0.293377 -4.610966,0.522832 -8.280091,1.657841 -14.320462,4.429906 -3.817281,1.751836 -7.52494,3.103261 -10.277358,3.746051 -1.851681,0.432435 -4.33587,0.808837 -5.338191,0.808837 h -0.741377 v 1.959132 1.959131 l 0.759951,-0.09515 c 0.417973,-0.05232 1.488998,-0.280454 2.380055,-0.506941 z m -0.118801,-4.40808 c 4.749218,-0.689623 7.959523,-2.012124 9.866298,-4.064455 0.841357,-0.905587 1.214347,-1.528001 1.501476,-2.505551 0.679014,-2.311777 -0.291066,-4.385192 -2.446976,-5.230066 -0.725318,-0.284243 -1.131027,-0.34026 -2.460774,-0.339764 -2.808553,0.001 -4.556539,0.766973 -6.730944,2.94935 -1.447641,1.452948 -2.262053,2.665132 -2.952885,4.395143 -0.426266,1.067494 -0.81066,2.828086 -0.81066,3.71302 0,0.466802 0.05513,0.564423 0.362475,0.641552 0.19935,0.05003 0.443012,0.219943 0.541446,0.377572 0.225012,0.360303 0.97958,0.375537 3.130544,0.0632 z m 0.129247,-1.595953 c -0.121405,-0.121408 0.176599,-1.71185 0.554135,-2.957448 0.9833,-3.244156 3.16314,-5.500556 5.313908,-5.500556 1.62825,0 2.328557,1.243349 1.766437,3.136215 -0.451769,1.521269 -1.976179,2.916498 -4.488239,4.107883 -1.600745,0.759182 -3.044088,1.316063 -3.146241,1.213906 z m 16.193314,-4.00525 1.466951,-0.631823 -0.482912,-0.651947 c -0.265596,-0.358572 -0.562338,-0.948922 -0.659417,-1.311892 -0.161717,-0.604651 -0.147142,-0.718554 0.17397,-1.359502 0.856947,-1.710476 3.457222,-1.819555 5.06433,-0.212446 0.386295,0.386292 0.744677,0.87099 0.79641,1.077111 0.115791,0.461354 0.321976,0.485485 0.419264,0.04907 0.07118,-0.319288 0.511916,-3.32127 0.511916,-3.486797 0,-0.159425 -1.890167,-0.667608 -2.848242,-0.765765 -1.631386,-0.08456 -2.213971,-0.183458 -3.573718,0.164339 -1.768583,0.460657 -3.107329,1.499143 -3.730775,2.894023 -0.582587,1.30345 -0.390883,3.285673 0.451251,4.665983 0.244669,0.401032 0.332862,0.44906 0.614833,0.334826 0.181053,-0.07335 0.989313,-0.417681 1.796139,-0.765182 z" fill="white" />
                                 </svg>
                                 <h2 className="text-2xl font-bold text-teal-800">eSantri Web: Membantu Manajemen Data Santri</h2>
                                 <p className="mt-2 text-base text-teal-700 max-w-3xl mx-auto">
@@ -348,6 +278,12 @@ $$ language plpgsql security definer;
                                     {/* ... Feature Items ... */}
                                     <FeatureItem icon="bi-grid-1x2-fill" title="Dashboard Interaktif">
                                         Ringkasan visual data santri dan keuangan secara cepat dan mudah dipahami.
+                                    </FeatureItem>
+                                    <FeatureItem icon="bi-journal-text" title="Penerimaan Santri Baru (PSB)">
+                                        Sistem lengkap mulai dari desain formulir online, manajemen pendaftar, seleksi, hingga integrasi data ke database utama.
+                                    </FeatureItem>
+                                    <FeatureItem icon="bi-magic" title="Poster & Surat AI">
+                                        Buat draf surat dan prompt poster promosi secara instan menggunakan kecerdasan buatan (AI).
                                     </FeatureItem>
                                     <FeatureItem icon="bi-database-fill" title="Database Santri Terpusat">
                                         Kelola data lengkap santri, orang tua/wali, prestasi, hingga pelanggaran di satu tempat.
@@ -488,10 +424,49 @@ $$ language plpgsql security definer;
                                 </ul>
                             </PanduanLangkah>
 
-                            <PanduanLangkah number={2} title="Manajemen Data Santri">
-                                <p>Setelah pengaturan selesai, kelola data santri di halaman <strong className="font-semibold text-teal-700">Data Santri</strong>.</p>
+                            <PanduanLangkah number={2} title="Sistem PSB Online & Integrasi Cloud (Penting)">
+                                <p>Fitur PSB di eSantri Web menggunakan sistem <strong>Hybrid</strong>. Aplikasi Admin ini bersifat offline, tetapi dapat "berbicara" dengan dunia luar melalui dua metode:</p>
+                                
+                                <div className="my-4 space-y-4">
+                                    <div className="border border-blue-200 bg-blue-50 p-4 rounded-lg">
+                                        <h4 className="font-bold text-blue-800 mb-2">Metode A: WhatsApp (Sederhana & Tanpa Server)</h4>
+                                        <p className="text-sm text-blue-900 mb-2">Cocok untuk skala kecil. Pendaftar mengisi formulir -> Data dikirim sebagai pesan WA ke Admin -> Admin menyalin pesan ke aplikasi.</p>
+                                        <ul className="list-disc list-inside text-sm text-blue-900">
+                                            <li>Admin membuat formulir di menu <strong>PSB &rarr; Desain Formulir</strong>.</li>
+                                            <li>File HTML didownload dan dibagikan ke calon wali santri (bisa via WA atau upload di website sekolah).</li>
+                                            <li>Saat wali santri klik "Kirim", akan otomatis membuka WhatsApp dengan format pesan khusus.</li>
+                                            <li>Admin menyalin pesan tersebut, lalu buka menu <strong>PSB &rarr; Rekap Pendaftar &rarr; Impor WA</strong>.</li>
+                                        </ul>
+                                    </div>
+
+                                    <div className="border border-purple-200 bg-purple-50 p-4 rounded-lg">
+                                        <h4 className="font-bold text-purple-800 mb-2">Metode B: Cloud Database (Otomatis & Profesional)</h4>
+                                        <p className="text-sm text-purple-900 mb-2">Cocok untuk skala menengah/besar. Data langsung tersimpan di cloud (Dropbox/Supabase) dan ditarik oleh Admin.</p>
+                                        <ul className="list-disc list-inside text-sm text-purple-900">
+                                            <li><strong>Langkah 1 (Setup):</strong> Buka menu <strong>Pengaturan &rarr; Sinkronisasi Cloud</strong>. Pilih <em>Dropbox</em> atau <em>Supabase</em> dan masukkan Token/API Key Anda.</li>
+                                            <li><strong>Langkah 2 (Formulir):</strong> Di menu <strong>PSB &rarr; Desain Formulir</strong>, centang opsi <strong>"Aktifkan Sinkronisasi Cloud"</strong>. Download ulang file HTML formulir Anda.</li>
+                                            <li><strong>Langkah 3 (Pendaftaran):</strong> Saat wali santri mengisi formulir tersebut, data akan otomatis terkirim ke akun Dropbox/Supabase Anda.</li>
+                                            <li><strong>Langkah 4 (Tarik Data):</strong> Admin cukup klik tombol <strong>"Tarik Data Cloud"</strong> di menu <strong>PSB &rarr; Rekap Pendaftar</strong>. Data akan muncul tanpa perlu copy-paste manual.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </PanduanLangkah>
+
+                            <PanduanLangkah number={3} title="Manajemen Seleksi & Penerimaan Santri">
+                                <p>Setelah data pendaftar masuk (baik via WA atau Cloud), lakukan langkah berikut:</p>
+                                <ol className="list-decimal pl-5 space-y-2 mt-2">
+                                    <li>Buka menu <strong>PSB &rarr; Rekap Pendaftar</strong>. Anda akan melihat daftar calon santri.</li>
+                                    <li>Lakukan seleksi administrasi atau tes. Anda bisa mengubah status pendaftar menjadi <em>Diterima</em>, <em>Cadangan</em>, atau <em>Ditolak</em>.</li>
+                                    <li>Untuk pendaftar yang <strong>Lolos Seleksi</strong>, klik tombol <strong>Centang Hijau (Terima)</strong> di kolom aksi.</li>
+                                    <li>Sistem akan meminta konfirmasi. Jika "Ya", data pendaftar tersebut akan <strong>dipindahkan secara otomatis</strong> ke menu <strong>Data Santri</strong> sebagai siswa aktif.</li>
+                                    <li>Foto pendaftar (jika ada) akan ikut terbawa. Jika tidak, akan diberi foto default.</li>
+                                </ol>
+                            </PanduanLangkah>
+
+                            <PanduanLangkah number={4} title="Manajemen Data Santri Aktif">
+                                <p>Setelah santri diterima atau diinput, kelola data mereka di halaman <strong className="font-semibold text-teal-700">Data Santri</strong>.</p>
                                 <ul className="list-disc pl-5 space-y-2">
-                                    <li><strong>Menambah Santri:</strong> Klik tombol <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">+ Tambah</span>. Manfaatkan tombol <i className="bi bi-arrow-clockwise bg-teal-600 text-white p-1 rounded-sm"></i> di sebelah kolom NIS untuk membuat NIS otomatis.</li>
+                                    <li><strong>Menambah Santri Manual:</strong> Klik tombol <span className="font-semibold text-white bg-teal-600 px-2 py-0.5 rounded-md text-xs">+ Tambah</span>. Manfaatkan tombol <i className="bi bi-arrow-clockwise bg-teal-600 text-white p-1 rounded-sm"></i> di sebelah kolom NIS untuk membuat NIS otomatis.</li>
                                      <li><strong>Mengedit & Melengkapi Data:</strong> Klik ikon pensil <i className="bi bi-pencil-square text-blue-600"></i>. Di dalam formulir edit, Anda bisa melengkapi data yang lebih detail melalui tab-tab yang tersedia:
                                         <ul className="list-['-_'] pl-5 mt-1">
                                             <li><strong className="font-semibold">Data Lain-lain:</strong> Catat <span className="italic">Prestasi</span>, <span className="italic">Pelanggaran</span>, dan <span className="italic">Hobi</span> santri.</li>
@@ -500,7 +475,7 @@ $$ language plpgsql security definer;
                                     </li>
                                 </ul>
                             </PanduanLangkah>
-                            <PanduanLangkah number={3} title="Menangani Proses Akhir Tahun Ajaran (Kenaikan Kelas & Kelulusan)">
+                            <PanduanLangkah number={5} title="Menangani Proses Akhir Tahun Ajaran">
                                 <p>Setiap akhir tahun ajaran, proses seperti kenaikan kelas, kelulusan, atau santri yang tinggal kelas perlu dikelola. Aplikasi ini memfasilitasi proses ini melalui fitur <strong className="font-semibold">Aksi Massal</strong> di halaman <strong className="font-semibold text-teal-700">Data Santri</strong>.</p>
                                 
                                 <h4 className="font-semibold text-base mt-4 mb-2">Skenario 1: Meluluskan Santri Kelas Akhir</h4>
@@ -521,7 +496,7 @@ $$ language plpgsql security definer;
                                     <li>Klik "Pindahkan". Data akademik santri akan diperbarui secara otomatis.</li>
                                 </ol>
                             </PanduanLangkah>
-                             <PanduanLangkah number={4} title="Alur Kerja Modul Keuangan">
+                             <PanduanLangkah number={6} title="Alur Kerja Modul Keuangan">
                                 <p>Modul <strong className="font-semibold text-teal-700">Keuangan</strong> dirancang untuk menyederhanakan administrasi pembayaran. Alur kerjanya sebagai berikut:</p>
                                 <ol className="list-decimal pl-5 space-y-3 mt-2">
                                     <li>
@@ -547,7 +522,7 @@ $$ language plpgsql security definer;
                                     </li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={5} title="Manajemen Keasramaan">
+                            <PanduanLangkah number={7} title="Manajemen Keasramaan">
                                 <p>Modul <strong className="font-semibold text-teal-700">Keasramaan</strong> membantu Anda memetakan lokasi tempat tinggal santri.</p>
                                 <ol className="list-decimal pl-5 space-y-2 mt-2">
                                     <li>
@@ -566,7 +541,7 @@ $$ language plpgsql security definer;
                                     </li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={6} title="Referensi Lengkap Laporan & Cetak">
+                            <PanduanLangkah number={8} title="Referensi Lengkap Laporan & Cetak">
                                 <p>Halaman <strong className="font-semibold text-teal-700">Laporan & Cetak</strong> menyediakan berbagai dokumen otomatis yang siap pakai. Berikut adalah panduan penggunaan untuk setiap jenis laporan:</p>
                                 
                                 <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
@@ -678,7 +653,7 @@ $$ language plpgsql security definer;
                                     </div>
                                 </div>
                             </PanduanLangkah>
-                             <PanduanLangkah number={7} title="Efisiensi Input Data: Editor Massal & Impor CSV">
+                             <PanduanLangkah number={9} title="Efisiensi Input Data: Editor Massal & Impor CSV">
                                 <p>Untuk mempercepat proses input data, eSantri Web menyediakan dua fitur canggih di halaman <strong className="font-semibold text-teal-700">Data Santri</strong>:</p>
                                 
                                 <h4 className="font-semibold text-base mt-4 mb-2">A. Editor Massal (Bulk Editor)</h4>
@@ -698,7 +673,7 @@ $$ language plpgsql security definer;
                                     <li>Klik tombol <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Impor</span> dan unggah file Anda.</li>
                                 </ol>
                             </PanduanLangkah>
-                            <PanduanLangkah number={8} title="Membuat & Mengelola Surat Menyurat">
+                            <PanduanLangkah number={10} title="Membuat & Mengelola Surat Menyurat">
                                 <p>Modul <strong className="font-semibold text-teal-700">Surat Menyurat</strong> memudahkan Anda membuat surat resmi, pemberitahuan, atau izin dengan cepat menggunakan template.</p>
                                 <ol className="list-decimal pl-5 space-y-2 mt-2">
                                     <li>
@@ -740,7 +715,7 @@ $$ language plpgsql security definer;
                                 </div>
                             </PanduanLangkah>
                             
-                            <PanduanLangkah number={9} title="Sinkronisasi Data Antar Perangkat (Cloud Sync)">
+                            <PanduanLangkah number={11} title="Sinkronisasi Data Antar Perangkat (Cloud Sync)">
                                 <p>Fitur <strong className="font-semibold text-teal-700">Sinkronisasi Cloud</strong> memungkinkan Anda menyimpan data di penyimpanan awan (Dropbox/Nextcloud) untuk backup.</p>
                                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-md my-2 text-sm">
                                     <strong className="text-blue-800">Catatan tentang Kuota:</strong>
@@ -757,7 +732,7 @@ $$ language plpgsql security definer;
                                 </ul>
                             </PanduanLangkah>
 
-                            <PanduanLangkah number={10} title="Konfigurasi Database Cloud (Supabase)">
+                            <PanduanLangkah number={12} title="Konfigurasi Database Cloud (Supabase)">
                                 <p>Supabase adalah layanan backend open-source yang digunakan untuk fitur <strong>Multi-Admin</strong> dan <strong>Audit Log Realtime</strong>. Layanan ini menawarkan opsi gratis (Freemium) dan berbayar.</p>
                                 
                                 <div className="my-4 p-4 border rounded-lg bg-gray-50">
@@ -791,7 +766,7 @@ $$ language plpgsql security definer;
                                 </p>
                             </PanduanLangkah>
 
-                            <PanduanLangkah number={11} title="Informasi Pengembang & Database Mandiri" isLast={true}>
+                            <PanduanLangkah number={13} title="Informasi Pengembang & Database Mandiri" isLast={true}>
                                 <div className="p-4 rounded-md border-l-4 border-blue-500 bg-blue-50 text-blue-800">
                                     <h4 className="font-bold flex items-center gap-2"><i className="bi bi-database-fill-gear"></i>Untuk Pengembang Lanjutan</h4>
                                     <p className="mt-2 text-sm leading-relaxed">

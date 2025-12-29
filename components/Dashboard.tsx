@@ -305,7 +305,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                 <h2 className="text-xl font-bold text-gray-700 mb-4">Aksi Cepat</h2>
                 <div className="grid grid-cols-2 gap-4 my-auto">
                     <QuickActionButton icon="bi-person-plus-fill" label="Tambah Santri" onClick={() => navigateTo(Page.Santri)} />
-                    <QuickActionButton icon="bi-people-fill" label="Lihat Data" onClick={() => navigateTo(Page.Santri)} />
+                    <QuickActionButton icon="bi-person-lines-fill" label="Pendaftaran (PSB)" onClick={() => navigateTo(Page.PSB)} />
                     <QuickActionButton icon="bi-printer-fill" label="Cetak" onClick={() => navigateTo(Page.Laporan)} />
                     <QuickActionButton icon="bi-gear-fill" label="Pengaturan" onClick={() => navigateTo(Page.Pengaturan)} />
                 </div>

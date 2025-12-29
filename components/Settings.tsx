@@ -205,7 +205,7 @@ const Settings: React.FC<SettingsProps> = () => {
                     'PERHATIAN: Tindakan ini akan MENGHAPUS SEMUA DATA saat ini dan menggantinya dengan data dari file cadangan. Apakah Anda yakin ingin melanjutkan?',
                     async () => {
                         try {
-                           await db.transaction('rw', db.settings, db.santri, async () => {
+                           await (db as any).transaction('rw', db.settings, db.santri, async () => {
                                 await db.settings.clear();
                                 await db.santri.clear();
                                 await db.settings.bulkPut(backupData.settings);

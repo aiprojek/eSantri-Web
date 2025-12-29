@@ -1,3 +1,4 @@
+
 import { PondokSettings, Santri, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar } from '../types';
 
 export const initialJenjang = [
@@ -167,6 +168,28 @@ export const initialSettings: PondokSettings = {
     provider: 'none',
     lastSync: null,
     autoSync: false,
+  },
+  psbConfig: {
+        tahunAjaranAktif: new Date().getFullYear() + '/' + (new Date().getFullYear() + 1),
+        targetKuota: 100,
+        nomorHpAdmin: '',
+        pesanSukses: 'Terima kasih telah mendaftar. Silakan hubungi admin untuk konfirmasi.',
+        activeGelombang: 1,
+        biayaPendaftaran: 0,
+        infoRekening: '',
+        targetJenjangId: 1, // Default Target Jenjang
+        activeFields: ['namaLengkap', 'nisn', 'jenisKelamin', 'tempatLahir', 'tanggalLahir', 'alamat', 'namaWali', 'nomorHpWali', 'asalSekolah'],
+        requiredDocuments: ['Kartu Keluarga (KK)', 'Akte Kelahiran', 'Pas Foto 3x4'],
+        designStyle: 'classic',
+        posterTitle: 'Penerimaan Santri Baru',
+        posterSubtitle: 'Tahun Ajaran 2025/2026',
+        posterInfo: 'Segera Daftarkan Putra/Putri Anda!',
+        customFields: [
+            { id: 'sec_1', type: 'section', label: 'SURAT PERNYATAAN', required: false },
+            { id: 'stmt_1', type: 'statement', label: 'Dengan ini saya menyatakan sanggup menaati segala peraturan pondok.', required: false },
+            { id: 'chk_1', type: 'checkbox', label: 'Persetujuan', options: ['Saya Setuju'], required: true }
+        ],
+        templates: []
   }
 };
 

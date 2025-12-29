@@ -20,7 +20,7 @@ export const BackupReminderModal: React.FC<BackupReminderModalProps> = ({ isOpen
         : 'Sudah waktunya untuk melakukan backup rutin data Anda untuk keamanan.';
 
     return (
-        <div className="fixed bottom-5 right-5 z-[200] max-w-sm w-full bg-white rounded-lg shadow-2xl border-l-4 border-yellow-500 animate-slide-in-right p-4" role="dialog">
+        <div className="fixed top-24 right-5 z-[100] max-w-sm w-full bg-white rounded-lg shadow-2xl border-l-4 border-yellow-500 animate-slide-in-right p-4" role="dialog">
             <div className="flex justify-between items-start">
                 <div className="flex items-start gap-3">
                     <div className="bg-yellow-100 text-yellow-600 rounded-full p-2 mt-1">

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../../AppContext';
 import { Santri, Tagihan } from '../../../types';
@@ -54,6 +55,7 @@ export const PembayaranModal: React.FC<PembayaranModalProps> = ({ isOpen, onClos
                 tanggal,
                 metode,
                 catatan,
+                disetorKeKas: false,
             });
             showToast('Pembayaran berhasil dicatat.', 'success');
             onClose();

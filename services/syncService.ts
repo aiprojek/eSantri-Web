@@ -1,7 +1,7 @@
 
 import { createClient, WebDAVClient } from "webdav";
 import { db } from '../db';
-import { CloudSyncConfig } from '../types';
+import { CloudSyncConfig, Pendaftar } from '../types';
 
 // Helper to get full backup data object
 const getBackupData = async () => {
@@ -15,10 +15,6 @@ const getBackupData = async () => {
     const suratTemplatesData = await db.suratTemplates.toArray();
     const arsipSuratData = await db.arsipSurat.toArray();
 
-    // Sanitize settings to remove sensitive auth data before upload (optional, but good practice if sharing backups)
-    // However, for sync, we might WANT to keep config.
-    // For now, let's keep everything but maybe encrypt later.
-    
     return {
         settings: settingsData,
         santri: santriData,
@@ -37,7 +33,7 @@ const getBackupData = async () => {
 const restoreBackupData = async (data: any) => {
     if (!data.settings || !data.santri) throw new Error("Format data tidak valid");
     
-    await db.transaction('rw', [db.santri, db.settings, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat], async () => {
+    await (db as any).transaction('rw', [db.santri, db.settings, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat], async () => {
         await db.santri.clear();
         await db.settings.clear();
         await db.tagihan.clear();
@@ -59,6 +55,69 @@ const restoreBackupData = async (data: any) => {
         if(data.arsipSurat) await db.arsipSurat.bulkAdd(data.arsipSurat);
     });
 };
+
+// --- Dropbox PSB Implementation ---
+export const fetchPsbFromDropbox = async (token: string) => {
+    const folderPath = '/esantri_psb';
+    
+    // 1. List files in the folder
+    const listResponse = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ path: folderPath, recursive: false })
+    });
+
+    if (!listResponse.ok) {
+        if(listResponse.status === 409) return []; // Folder might not exist yet
+        throw new Error("Gagal membaca folder PSB di Dropbox");
+    }
+
+    const listData = await listResponse.json();
+    const entries = listData.entries.filter((e: any) => e['.tag'] === 'file' && e.name.endsWith('.json'));
+    
+    const newPendaftar: Omit<Pendaftar, 'id'>[] = [];
+    const filesToDelete: string[] = [];
+
+    // 2. Download each file
+    for (const file of entries) {
+        const downloadResponse = await fetch('https://content.dropboxapi.com/2/files/download', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Dropbox-API-Arg': JSON.stringify({ path: file.path_lower })
+            }
+        });
+
+        if (downloadResponse.ok) {
+            const data = await downloadResponse.json();
+            // Basic mapping check
+            if (data.namaLengkap) {
+                newPendaftar.push(data);
+                filesToDelete.push(file.path_lower);
+            }
+        }
+    }
+
+    // 3. Delete processed files from Dropbox to avoid duplicates
+    for (const path of filesToDelete) {
+        await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ path })
+        });
+    }
+
+    return newPendaftar;
+};
+
+// --- Supabase Implementation ---
+// Handled via standard supabase-js client in components if needed
 
 // --- Dropbox Implementation ---
 const uploadToDropbox = async (token: string, data: any, filename: string) => {
@@ -116,7 +175,6 @@ const getWebDAVClient = (config: CloudSyncConfig): WebDAVClient => {
 const uploadToWebDAV = async (config: CloudSyncConfig, data: any, filename: string) => {
     const client = getWebDAVClient(config);
     const fileContent = JSON.stringify(data);
-    // Ensure directory exists or root
     await client.putFileContents(`/${filename}`, fileContent, { overwrite: true });
 };
 

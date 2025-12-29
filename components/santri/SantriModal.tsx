@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Santri, RiwayatStatus, Prestasi, Pelanggaran } from '../../types';
@@ -49,11 +50,20 @@ export const SantriModal: React.FC<SantriModalProps> = ({
   }, [isOpen, santriData, reset]);
 
   const onFormSubmit = async (data: Santri) => {
-    const statusChanged = originalStatusRef.current !== data.status;
+    // Inject default photo if missing to maintain consistency
+    const processedData = {
+        ...data,
+        fotoUrl: data.fotoUrl || 'https://placehold.co/150x200/e2e8f0/334155?text=Foto'
+    };
+
+    const statusChanged = originalStatusRef.current !== processedData.status;
     if (statusChanged) {
+      // Need to re-set the processed data into the form context for the mutation modal to pick it up if needed
+      // but strictly we pass data to onSave.
+      // For mutation modal flow, we just trigger the modal, and saving happens in handleSaveMutasi using getValues
       setIsMutasiModalOpen(true);
     } else {
-      await onSave(data);
+      await onSave(processedData);
     }
   };
   
@@ -68,7 +78,13 @@ export const SantriModal: React.FC<SantriModalProps> = ({
     const updatedRiwayatStatus = [...(currentValues.riwayatStatus || []), newRiwayat];
     setValue('riwayatStatus', updatedRiwayatStatus, { shouldDirty: true });
     setIsMutasiModalOpen(false);
-    await onSave(getValues());
+    
+    // Process default photo for mutation save path as well
+    const finalData = {
+        ...getValues(),
+        fotoUrl: getValues('fotoUrl') || 'https://placehold.co/150x200/e2e8f0/334155?text=Foto'
+    };
+    await onSave(finalData);
   };
 
   const handleCloseMutasiModal = () => {

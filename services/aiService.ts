@@ -1,47 +1,71 @@
 
+// Menggunakan layanan Text Generation gratis dari Pollinations.ai
+// Tidak memerlukan API Key.
+
 export const generateLetterDraft = async (instruction: string): Promise<string> => {
   try {
-    const systemPrompt = `
-Anda adalah sekretaris profesional di Pondok Pesantren. 
-Tugas anda adalah membuat draf isi surat resmi berdasarkan instruksi pengguna.
-
-Aturan Penting:
-1. Gunakan Bahasa Indonesia yang baku, sopan, formal, dan islami.
-2. Format output WAJIB HTML sederhana (gunakan tag <p>, <br>, <b>, <i>, <ul>, <li> saja). Jangan gunakan Markdown.
-3. JANGAN sertakan Kop Surat, Tempat/Tanggal, atau Tanda Tangan (bagian ini sudah diatur otomatis oleh sistem lain).
-4. Fokus hanya pada: Salam Pembuka, Isi Surat, dan Salam Penutup.
-5. Gunakan placeholder berikut jika relevan: {NAMA_SANTRI}, {NIS}, {KELAS}, {ROMBEL}, {NAMA_WALI}.
-
-Contoh Output yang diharapkan:
-<p><b>Assalamu'alaikum Warahmatullahi Wabarakatuh,</b></p><p>Dengan hormat, kami sampaikan...</p><ul><li>Poin 1</li><li>Poin 2</li></ul><p>Demikian...</p><p><b>Wassalamu'alaikum Warahmatullahi Wabarakatuh.</b></p>
+    const prompt = `
+      Anda adalah sekretaris profesional di Pondok Pesantren.
+      Buatkan draf isi surat resmi (HTML format, tanpa kop/tanda tangan) berdasarkan instruksi: "${instruction}".
+      
+      Aturan:
+      1. Gunakan Bahasa Indonesia formal dan sopan.
+      2. Format output WAJIB HTML tag standar (<p>, <b>, <ul>, <li>, <br>).
+      3. JANGAN gunakan Markdown (NO \`\`\`html). Langsung return string HTML.
+      4. Fokus hanya pada: Salam Pembuka, Isi Surat, dan Salam Penutup.
+      5. Gunakan placeholder: {NAMA_SANTRI}, {NIS}, {KELAS} jika perlu.
     `;
-    
-    // Combine system prompt and instruction
-    const fullPrompt = `${systemPrompt}\n\nInstruksi Pengguna: ${instruction}`;
-    
-    // Use Pollinations.ai Text API
-    // Using GET request with encoded prompt
-    const url = `https://text.pollinations.ai/${encodeURIComponent(fullPrompt)}`;
-    
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'Cache-Control': 'no-cache'
-        }
-    });
 
+    const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
+    
     if (!response.ok) {
-        throw new Error(`Pollinations AI Error: ${response.statusText}`);
+        throw new Error("Layanan AI sedang sibuk, coba lagi nanti.");
     }
-    
+
     let text = await response.text();
-    
-    // Clean up if AI returns markdown code blocks despite instructions
+    // Bersihkan markdown jika AI bandel
     text = text.replace(/```html/g, '').replace(/```/g, '').trim();
     
     return text;
   } catch (error) {
     console.error("AI Service Error:", error);
+    throw error;
+  }
+};
+
+export const generatePosterPrompt = async (
+    style: string, 
+    ratio: string, 
+    details: string,
+    info: string
+): Promise<string> => {
+  try {
+    const prompt = `
+      Act as an expert Prompt Engineer for Midjourney v6 or DALL-E 3.
+      Create a detailed image prompt for a "New Student Admission" (Penerimaan Santri Baru) poster for an Islamic Boarding School.
+      
+      Parameters:
+      - Design Style: ${style}
+      - Target Dimension/Ratio: ${ratio}
+      - Key Text/Layout Context: "${info}" (Design the negative space to accommodate this text).
+      - Specific Visual Details: "${details}"
+      
+      Output Rules:
+      1. Provide ONLY the prompt text in English.
+      2. No introductions, no explanations.
+      3. Describe lighting, color palette, composition, and mood based on the style.
+      4. If the ratio is standard (1:1, 16:9, 9:16), append --ar [ratio]. If it is a paper size (A4, F4, A3), append --ar 210:297 or similar appropriate aspect ratio.
+    `;
+
+    const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
+
+    if (!response.ok) {
+        throw new Error("Layanan AI sedang sibuk.");
+    }
+
+    return await response.text();
+  } catch (error) {
+    console.error("AI Poster Prompt Error:", error);
     throw error;
   }
 };

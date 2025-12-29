@@ -1,3 +1,4 @@
+
 # eSantri Web - Manajemen Data Santri
 
 ![eSantri Web Logo](public/icon.svg)
@@ -26,6 +27,8 @@ Kerja sama ini memungkinkan eSantri Web dikembangkan dengan cepat dan efisien, m
 ## ✨ Fitur Unggulan
 
 -   **Dashboard Interaktif**: Ringkasan visual data santri, keuangan, dan keasramaan secara cepat dan mudah dipahami.
+-   **Penerimaan Santri Baru (PSB)**: Modul lengkap untuk pendaftaran online, seleksi, hingga input data otomatis. Dilengkapi fitur *Impor WA* dan *Cloud Sync*.
+-   **AI Poster Maker**: Buat prompt visual yang menarik secara instan untuk kebutuhan poster promosi PPDB menggunakan teknologi AI.
 -   **Database Santri Terpusat**: Kelola data lengkap santri, orang tua/wali, riwayat status, prestasi, hingga pelanggaran di satu tempat.
 -   **Surat Menyurat Otomatis**: Buat surat resmi, izin, atau pemberitahuan dengan sistem template dan *mail merge*. Surat otomatis terisi data santri, siap cetak, dan tersimpan dalam arsip digital.
 -   **Magic Draft (AI)**: Fitur cerdas untuk membuat draf isi surat secara instan hanya dengan instruksi singkat. Menggunakan teknologi **Pollinations.ai** (gratis & open-source).
@@ -47,19 +50,46 @@ Kerja sama ini memungkinkan eSantri Web dikembangkan dengan cepat dan efisien, m
     -   Komponen Biaya (SPP, Uang Pangkal, dll.)
     -   Generator NIS
 
-2.  **Kelola Data Santri**: Masuk ke halaman `Data Santri` untuk menambah, mengedit, atau menghapus data santri. Manfaatkan fitur **Impor CSV** untuk menambah data dalam jumlah besar.
+2.  **Penerimaan Santri (PSB)**: Buka menu `PSB`. Gunakan tab **Formulir** untuk mengatur pendaftaran, dan tab **Poster AI** untuk membuat bahan promosi. Terima pendaftar untuk memindahkan mereka ke database utama.
 
-3.  **Kelola Keuangan**: Gunakan menu `Keuangan` untuk:
+3.  **Kelola Data Santri**: Masuk ke halaman `Data Santri` untuk menambah, mengedit, atau menghapus data santri. Manfaatkan fitur **Impor CSV** untuk menambah data dalam jumlah besar.
+
+4.  **Kelola Keuangan**: Gunakan menu `Keuangan` untuk:
     -   **Generate Tagihan** bulanan atau tagihan awal.
     -   **Catat Pembayaran** santri.
     -   Kirim **Surat Tagihan** atau notifikasi **WhatsApp** untuk tunggakan.
     -   Kelola **Uang Saku** (saldo titipan).
 
-4.  **Surat Menyurat**: Gunakan menu `Surat Menyurat` untuk membuat template surat dan mencetak surat massal atau perorangan dengan mudah. Gunakan tombol **Magic Draft** untuk bantuan AI.
+5.  **Surat Menyurat**: Gunakan menu `Surat Menyurat` untuk membuat template surat dan mencetak surat massal atau perorangan dengan mudah. Gunakan tombol **Magic Draft** untuk bantuan AI.
 
-5.  **Cetak Laporan**: Kunjungi halaman `Laporan & Cetak` untuk mencetak berbagai dokumen administratif yang dibutuhkan.
+6.  **Cetak Laporan**: Kunjungi halaman `Laporan & Cetak` untuk mencetak berbagai dokumen administratif yang dibutuhkan.
 
-6.  **Backup Data (Sangat Penting!)**: Secara berkala, buka halaman `Pengaturan` -> `Cadangkan & Pulihkan Data`, lalu klik **Unduh Cadangan Data**. Simpan file backup di tempat yang aman.
+7.  **Backup Data (Sangat Penting!)**: Secara berkala, buka halaman `Pengaturan` -> `Cadangkan & Pulihkan Data`, lalu klik **Unduh Cadangan Data**. Simpan file backup di tempat yang aman.
+
+## 📝 Alur Kerja Modul PSB (Penerimaan Santri Baru)
+
+Fitur PSB di eSantri Web menggunakan pendekatan **Hybrid**. Aplikasi Admin bersifat offline, namun formulir pendaftaran bisa diakses secara online oleh publik.
+
+### 1. Metode WhatsApp (Tanpa Server)
+*Cocok untuk skala kecil/menengah.*
+1.  Admin mendesain formulir di menu **PSB > Desain Formulir**.
+2.  Admin mengunduh file HTML (klik "Download HTML") dan membagikannya ke calon wali (atau upload ke website sekolah).
+3.  Calon wali mengisi formulir -> Klik "Kirim" -> Terbuka WhatsApp Admin dengan pesan terformat otomatis.
+4.  Admin menyalin seluruh pesan tersebut.
+5.  Di aplikasi eSantri Web, Admin masuk ke **PSB > Rekap Pendaftar > Impor WA** dan menempelkan pesan tersebut.
+
+### 2. Metode Cloud Database (Semi-Otomatis)
+*Cocok untuk skala menengah/besar.*
+1.  Admin mengatur koneksi Cloud di **Pengaturan > Sinkronisasi Cloud** (pilih Dropbox atau Supabase).
+2.  Di menu **PSB > Desain Formulir**, aktifkan opsi **"Aktifkan Sinkronisasi Cloud"**.
+3.  Download file HTML formulir dan sebarkan.
+4.  Saat calon wali mengisi formulir, data otomatis terkirim ke akun Cloud Anda.
+5.  Admin cukup klik **"Tarik Data Cloud"** di menu **PSB > Rekap Pendaftar** untuk mengunduh semua data pendaftar baru sekaligus.
+
+### 3. Seleksi & Penerimaan
+1.  Setelah data pendaftar masuk ke tabel Rekapitulasi, Admin melakukan seleksi.
+2.  Klik tombol **Centang Hijau (Terima)** pada pendaftar yang lolos.
+3.  Data pendaftar tersebut akan **dipindahkan** secara permanen ke database **Data Santri** aktif.
 
 ## 🛡️ Keamanan Data & Backup
 
@@ -79,7 +109,7 @@ Kode sumber lengkap dapat diakses di repositori GitHub kami.
 -   **Styling**: Tailwind CSS, Bootstrap Icons
 -   **Local Storage**: Dexie.js (IndexedDB Wrapper)
 -   **Form Management**: React Hook Form
--   **Editor**: React Quill (Rich Text Editor)
+-   **Editor**: SimpleEditor (Rich Text Editor)
 -   **Export**: jsPDF, html2canvas
 -   **AI Integration**: Pollinations.ai (Text Generation API)
 
@@ -95,48 +125,12 @@ Pastikan Anda memiliki [Node.js](https://nodejs.org/) (yang sudah termasuk `npm`
 Buka terminal atau command prompt di direktori root proyek (folder tempat file `index.html` berada) dan jalankan perintah berikut untuk mengunduh semua pustaka yang diperlukan ke dalam folder `node_modules`:
 
 ```bash
-npm install react react-dom dexie react-hook-form react-quill jspdf html2canvas
+npm install react react-dom dexie react-hook-form jspdf html2canvas
 ```
 
 **Langkah 2: Perbarui `index.html`**
 
 Buka file `index.html` dan modifikasi bagian `<script type="importmap">`. Ganti URL CDN dengan path lokal ke file di dalam folder `node_modules` yang baru saja Anda buat.
-
-**Ganti ini:**
-```html
-<script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "dexie": "https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs",
-    "react-hook-form": "https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs",
-    "jspdf": "https://esm.sh/jspdf@2.5.1",
-    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
-    "react-quill": "https://aistudiocdn.com/react-quill@^2.0.0"
-  }
-}
-</script>
-```
-
-**Menjadi ini:**
-```html
-<script type="importmap">
-{
-  "imports": {
-    "react-dom/": "/node_modules/react-dom/",
-    "react": "/node_modules/react/index.js",
-    "react/": "/node_modules/react/",
-    "dexie": "/node_modules/dexie/dist/dexie.mjs",
-    "react-hook-form": "/node_modules/react-hook-form/dist/index.esm.mjs",
-    "jspdf": "/node_modules/jspdf/dist/jspdf.es.min.js",
-    "html2canvas": "/node_modules/html2canvas/dist/html2canvas.esm.js",
-    "react-quill": "/node_modules/react-quill/lib/index.js"
-  }
-}
-</script>
-```
 
 **Langkah 3: Jalankan Server Lokal**
 

@@ -430,7 +430,7 @@ alter publication supabase_realtime add table public.audit_logs;`;
                                 <div className="my-4 space-y-4">
                                     <div className="border border-blue-200 bg-blue-50 p-4 rounded-lg">
                                         <h4 className="font-bold text-blue-800 mb-2">Metode A: WhatsApp (Sederhana & Tanpa Server)</h4>
-                                        <p className="text-sm text-blue-900 mb-2">Cocok untuk skala kecil. Pendaftar mengisi formulir -> Data dikirim sebagai pesan WA ke Admin -> Admin menyalin pesan ke aplikasi.</p>
+                                        <p className="text-sm text-blue-900 mb-2">Cocok untuk skala kecil. Pendaftar mengisi formulir &rarr; Data dikirim sebagai pesan WA ke Admin &rarr; Admin menyalin pesan ke aplikasi.</p>
                                         <ul className="list-disc list-inside text-sm text-blue-900">
                                             <li>Admin membuat formulir di menu <strong>PSB &rarr; Desain Formulir</strong>.</li>
                                             <li>File HTML didownload dan dibagikan ke calon wali santri (bisa via WA atau upload di website sekolah).</li>

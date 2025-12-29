@@ -749,7 +749,7 @@ const PsbRekap: React.FC<{
     );
 };
 
-const PsbFormBuilder: React.FC<{ config: PsbConfig, settings: any, onSave: (c: PsbConfig) => void }> = ({ config, settings, onSave }) => {
+const PsbFormBuilder: React.FC<{ config: PsbConfig, settings: PondokSettings, onSave: (c: PsbConfig) => void }> = ({ config, settings, onSave }) => {
     const { showToast, showConfirmation } = useAppContext();
     const [localConfig, setLocalConfig] = useState<PsbConfig>(config);
     const [templateName, setTemplateName] = useState('');
@@ -928,7 +928,7 @@ const PsbFormBuilder: React.FC<{ config: PsbConfig, settings: any, onSave: (c: P
 
     const generateHtml = () => {
         const style = localConfig.designStyle || 'classic';
-        const targetJenjang = settings.jenjang.find((j:any) => j.id === localConfig.targetJenjangId);
+        const targetJenjang = settings.jenjang.find((j) => j.id === localConfig.targetJenjangId);
         const jenjangName = targetJenjang ? targetJenjang.nama : 'Umum / Belum Dipilih';
         
         const cloudProvider = settings.cloudSyncConfig.provider;

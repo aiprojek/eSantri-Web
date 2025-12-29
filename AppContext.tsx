@@ -304,7 +304,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const id = await db.pembayaran.add(pembayaranData as Pembayaran);
         const newPembayaran = { ...pembayaranData, id } as Pembayaran;
         setPembayaranList(prev => [...prev, newPembayaran]);
-        const updatedTagihanList = [];
+        // Fix TS7034: Explicitly type this array
+        const updatedTagihanList: Tagihan[] = [];
         for (const tagihanId of pembayaranData.tagihanIds) {
             const tagihan = tagihanList.find(t => t.id === tagihanId);
             if (tagihan) {
@@ -349,7 +350,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const onSetorKeKas = async (pembayaranIds: number[], totalSetoran: number, tanggalSetor: string, penanggungJawab: string, catatan: string) => {
         await onAddTransaksiKas({ jenis: 'Pemasukan', kategori: 'Setoran Pembayaran Santri', deskripsi: catatan || `Setoran ${pembayaranIds.length} transaksi pembayaran`, jumlah: totalSetoran, penanggungJawab });
-        const updatedPembayaran = [];
+        // Fix TS7034: Explicitly type this array
+        const updatedPembayaran: Pembayaran[] = [];
         for (const pid of pembayaranIds) {
             const p = pembayaranList.find(item => item.id === pid);
             if (p) { const updated = { ...p, disetorKeKas: true }; await db.pembayaran.put(updated); updatedPembayaran.push(updated); }

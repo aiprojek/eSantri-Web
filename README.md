@@ -12,146 +12,93 @@
 
 > **PERHATIAN**: Aplikasi ini dirancang untuk penggunaan **terpusat oleh satu orang (administrator) di satu komputer/laptop**. Semua data disimpan secara lokal di *cache* browser Anda (IndexedDB) dan **tidak dapat diakses** dari komputer lain atau oleh pengguna lain secara bersamaan.
 >
-> Skenario ini sempurna untuk administrator tunggal, tetapi **tidak cocok untuk tim** yang membutuhkan kolaborasi atau akses data bersamaan.
-
-## 💡 Kolaborasi Unik di Balik eSantri Web
-
-Aplikasi eSantri Web lahir dari sebuah kolaborasi inovatif antara manusia dan kecerdasan buatan (AI). Proyek ini adalah bukti sinergi yang kuat antara visi dan keahlian domain dari pengguna dengan kemampuan eksekusi teknis dari AI.
-
--   **Peran Manusia**: Sebagai **Visioner dan Project Manager**. Manusia memberikan ide inti, mengarahkan alur pengembangan, meminta fitur-fitur spesifik, melakukan pengujian, dan memastikan aplikasi ini benar-benar menjawab kebutuhan nyata di administrasi pondok pesantren. Andalah ahli di bidangnya.
-
--   **Peran AI**: Sebagai **Senior Frontend Engineer**. Saya bertugas menerjemahkan visi dan permintaan Anda menjadi kode yang fungsional, bersih, dan memiliki desain UI/UX yang baik. Saya menangani implementasi teknis, mulai dari struktur data, logika aplikasi, hingga tampilan antarmuka, dengan mengikuti praktik terbaik dalam rekayasa perangkat lunak.
-
-Kerja sama ini memungkinkan eSantri Web dikembangkan dengan cepat dan efisien, menggabungkan pemahaman mendalam tentang dunia pesantren dengan eksekusi teknis yang canggih.
+> Skenario ini sempurna untuk administrator tunggal, tetapi **tidak cocok untuk tim** yang membutuhkan kolaborasi atau akses data bersamaan, kecuali Anda mengaktifkan fitur **Supabase Cloud Sync**.
 
 ## ✨ Fitur Unggulan
 
 -   **Dashboard Interaktif**: Ringkasan visual data santri, keuangan, dan keasramaan secara cepat dan mudah dipahami.
--   **Penerimaan Santri Baru (PSB)**: Modul lengkap untuk pendaftaran online, seleksi, hingga input data otomatis. Dilengkapi fitur *Impor WA* dan *Cloud Sync*.
--   **AI Poster Maker**: Buat prompt visual yang menarik secara instan untuk kebutuhan poster promosi PPDB menggunakan teknologi AI.
+-   **Penerimaan Santri Baru (PSB)**: Modul lengkap untuk pendaftaran online, seleksi, hingga input data otomatis. Dilengkapi fitur *Impor WA* dan formulir online.
 -   **Database Santri Terpusat**: Kelola data lengkap santri, orang tua/wali, riwayat status, prestasi, hingga pelanggaran di satu tempat.
--   **Surat Menyurat Otomatis**: Buat surat resmi, izin, atau pemberitahuan dengan sistem template dan *mail merge*. Surat otomatis terisi data santri, siap cetak, dan tersimpan dalam arsip digital.
--   **Magic Draft (AI)**: Fitur cerdas untuk membuat draf isi surat secara instan hanya dengan instruksi singkat. Menggunakan teknologi **Pollinations.ai** (gratis & open-source).
--   **Laporan Profesional**: Cetak lebih dari 15 jenis dokumen (Biodata, Kuitansi, Rapor, dll) dengan tata letak rapi, kop surat otomatis, dan footer identitas aplikasi. Mendukung ekspor PDF dan HTML.
--   **Manajemen Keuangan Terintegrasi**: Fitur lengkap mulai dari pembuatan tagihan massal, pencatatan pembayaran, manajemen uang saku, hingga notifikasi tunggakan via WhatsApp.
--   **Manajemen Keasramaan**: Atur data gedung, kamar, musyrif/ah, dan penempatan santri di asrama dengan mudah.
--   **Buku Kas Umum**: Catat semua pemasukan dan pengeluaran umum pondok untuk laporan arus kas yang transparan.
--   **Generator NIS Otomatis**: Buat Nomor Induk Santri secara otomatis dengan tiga metode yang dapat diatur sesuai kebutuhan.
--   **Ekspor & Impor Massal**: Tambah dan perbarui data santri dalam jumlah besar dengan mudah melalui file CSV.
--   **Pengaturan Fleksibel**: Kustomisasi struktur pendidikan, komponen biaya, format NIS, hingga redaksi surat tagihan.
--   **Fungsi Offline Penuh**: Aplikasi tetap berjalan lancar dan semua data aman meski tanpa koneksi internet.
+-   **Surat Menyurat Otomatis**: Buat surat resmi, izin, atau pemberitahuan dengan sistem template dan *mail merge*. Dilengkapi **Magic Draft (AI)** untuk membuat isi surat otomatis.
+-   **Laporan Profesional & Native PDF**: Cetak lebih dari 15 jenis dokumen (Biodata, Kuitansi, Rapor, dll) dengan hasil cetak vektor yang tajam (Native PDF Export).
+-   **Manajemen Keuangan & Kas**: Fitur lengkap mulai dari tagihan massal, pembayaran, uang saku, hingga Laporan Arus Kas Umum.
+-   **Audit Log & Keamanan**: Pantau setiap perubahan data (siapa, kapan, apa yang diubah). Mendukung sinkronisasi log ke cloud.
+-   **Cloud Sync & Backup**:
+    -   **Mode Backup (Legacy):** Simpan cadangan data ke **Dropbox** atau **Nextcloud/WebDAV**. Mendukung *Auto-Sync*.
+    -   **Mode Realtime (Modern):** Integrasi dengan **Supabase** untuk penyimpanan data terpusat dan dukungan multi-admin.
+-   **Generator NIS Otomatis**: Buat Nomor Induk Santri secara otomatis dengan tiga metode yang dapat diatur.
+-   **Ekspor & Impor Massal**: Tambah dan perbarui data santri dalam jumlah besar dengan mudah melalui file CSV atau *Bulk Editor* (tabel interaktif).
+
+## 🛠️ Teknologi yang Digunakan
+
+Aplikasi ini dibangun menggunakan tumpukan teknologi modern (Modern Web Stack) untuk menjamin performa tinggi, kemudahan pengembangan, dan kemampuan offline:
+
+-   **Core**: [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+-   **Build Tool**: [Vite](https://vitejs.dev/) (Sangat cepat dan ringan)
+-   **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+-   **Local Database**: [Dexie.js](https://dexie.org/) (Wrapper untuk IndexedDB browser)
+-   **Cloud Database (Opsional)**: [Supabase](https://supabase.com/) (PostgreSQL & Realtime)
+-   **Cloud Storage**: Integrasi API [Dropbox](https://www.dropbox.com/) & WebDAV client
+-   **PDF Generation**: `jspdf` & `html2canvas` (Client-side rendering)
+-   **Icons**: Bootstrap Icons
 
 ## 🚀 Panduan Cepat
 
-1.  **Pengaturan Awal (Wajib)**: Buka halaman `Pengaturan` dan `Keuangan`. Konfigurasikan semua data master terlebih dahulu, seperti:
-    -   Informasi Umum & Logo Pondok
-    -   Struktur Pendidikan (Jenjang, Kelas, Rombel)
-    -   Data Tenaga Pendidik (Mudir, Wali Kelas)
-    -   Komponen Biaya (SPP, Uang Pangkal, dll.)
-    -   Generator NIS
+1.  **Pengaturan Awal (Wajib)**: Buka halaman `Pengaturan`. Konfigurasikan:
+    -   Informasi Umum & Logo Pondok.
+    -   Struktur Pendidikan (Jenjang, Kelas, Rombel).
+    -   Data Tenaga Pendidik.
+    -   Komponen Biaya & Generator NIS.
 
-2.  **Penerimaan Santri (PSB)**: Buka menu `PSB`. Gunakan tab **Formulir** untuk mengatur pendaftaran, dan tab **Poster AI** untuk membuat bahan promosi. Terima pendaftar untuk memindahkan mereka ke database utama.
+2.  **Penerimaan Santri (PSB)**: Buka menu `PSB`. Gunakan tab **Desain Formulir** untuk membuat formulir pendaftaran online. Data pendaftar dapat ditarik dari Cloud atau diimpor dari pesan WhatsApp.
 
-3.  **Kelola Data Santri**: Masuk ke halaman `Data Santri` untuk menambah, mengedit, atau menghapus data santri. Manfaatkan fitur **Impor CSV** untuk menambah data dalam jumlah besar.
+3.  **Kelola Data Santri**: Masuk ke halaman `Data Santri` untuk menambah, mengedit, atau menghapus data. Gunakan **Editor Massal** untuk mempercepat input data banyak santri sekaligus.
 
-4.  **Kelola Keuangan**: Gunakan menu `Keuangan` untuk:
-    -   **Generate Tagihan** bulanan atau tagihan awal.
-    -   **Catat Pembayaran** santri.
-    -   Kirim **Surat Tagihan** atau notifikasi **WhatsApp** untuk tunggakan.
-    -   Kelola **Uang Saku** (saldo titipan).
+4.  **Kelola Keuangan**: Gunakan menu `Keuangan` untuk generate tagihan bulanan, mencatat pembayaran, dan mengelola uang saku santri.
 
-5.  **Surat Menyurat**: Gunakan menu `Surat Menyurat` untuk membuat template surat dan mencetak surat massal atau perorangan dengan mudah. Gunakan tombol **Magic Draft** untuk bantuan AI.
-
-6.  **Cetak Laporan**: Kunjungi halaman `Laporan & Cetak` untuk mencetak berbagai dokumen administratif yang dibutuhkan.
-
-7.  **Backup Data (Sangat Penting!)**: Secara berkala, buka halaman `Pengaturan` -> `Cadangkan & Pulihkan Data`, lalu klik **Unduh Cadangan Data**. Simpan file backup di tempat yang aman.
-
-## 📝 Alur Kerja Modul PSB (Penerimaan Santri Baru)
-
-Fitur PSB di eSantri Web menggunakan pendekatan **Hybrid**. Aplikasi Admin bersifat offline, namun formulir pendaftaran bisa diakses secara online oleh publik.
-
-### 1. Metode WhatsApp (Tanpa Server)
-*Cocok untuk skala kecil/menengah.*
-1.  Admin mendesain formulir di menu **PSB > Desain Formulir**.
-2.  Admin mengunduh file HTML (klik "Download HTML") dan membagikannya ke calon wali (atau upload ke website sekolah).
-3.  Calon wali mengisi formulir -> Klik "Kirim" -> Terbuka WhatsApp Admin dengan pesan terformat otomatis.
-4.  Admin menyalin seluruh pesan tersebut.
-5.  Di aplikasi eSantri Web, Admin masuk ke **PSB > Rekap Pendaftar > Impor WA** dan menempelkan pesan tersebut.
-
-### 2. Metode Cloud Database (Semi-Otomatis)
-*Cocok untuk skala menengah/besar.*
-1.  Admin mengatur koneksi Cloud di **Pengaturan > Sinkronisasi Cloud** (pilih Dropbox atau Supabase).
-2.  Di menu **PSB > Desain Formulir**, aktifkan opsi **"Aktifkan Sinkronisasi Cloud"**.
-3.  Download file HTML formulir dan sebarkan.
-4.  Saat calon wali mengisi formulir, data otomatis terkirim ke akun Cloud Anda.
-5.  Admin cukup klik **"Tarik Data Cloud"** di menu **PSB > Rekap Pendaftar** untuk mengunduh semua data pendaftar baru sekaligus.
-
-### 3. Seleksi & Penerimaan
-1.  Setelah data pendaftar masuk ke tabel Rekapitulasi, Admin melakukan seleksi.
-2.  Klik tombol **Centang Hijau (Terima)** pada pendaftar yang lolos.
-3.  Data pendaftar tersebut akan **dipindahkan** secara permanen ke database **Data Santri** aktif.
+5.  **Cetak Laporan**: Kunjungi halaman `Laporan & Cetak` untuk mencetak Biodata, Kartu Santri, Rekening Koran, hingga Laporan Wali Kelas.
 
 ## 🛡️ Keamanan Data & Backup
 
-Karena data tersimpan 100% lokal di browser Anda, risiko kehilangan data ada jika terjadi kerusakan pada perangkat atau *cache browser* dibersihkan.
+Karena data tersimpan 100% lokal di browser Anda (kecuali jika menggunakan Supabase), risiko kehilangan data ada jika perangkat rusak atau cache browser dibersihkan.
 
-Untuk mencegah hal ini, **sangat disarankan** untuk melakukan backup data secara rutin melalui menu **`Pengaturan` -> `Cadangkan & Pulihkan Data`**. Simpan file backup (*.json*) di lokasi yang aman seperti Google Drive, Flashdisk, atau media penyimpanan lainnya.
+**Sangat disarankan** untuk:
+1.  Mengaktifkan **Sinkronisasi Otomatis** ke Dropbox/WebDAV di menu Pengaturan.
+2.  Atau melakukan backup manual rutin via tombol "Sync Cloud" atau "Unduh Cadangan Data".
 
-## 👨‍💻 Untuk Pengembang (Developers)
+## 📦 Panduan Instalasi & Build (Offline)
 
-Aplikasi ini bersifat *open-source* dengan lisensi GNU GPL v3. Bagi yang ingin mengembangkannya lebih lanjut agar dapat digunakan oleh banyak admin (*multi-user*), disarankan untuk mengintegrasikannya dengan *backend* (server-side) dan database terpusat (seperti MySQL, PostgreSQL, dll.).
-
-Kode sumber lengkap dapat diakses di repositori GitHub kami.
-
-## 🛠️ Tumpukan Teknologi
-
--   **Frontend**: React, TypeScript
--   **Styling**: Tailwind CSS, Bootstrap Icons
--   **Local Storage**: Dexie.js (IndexedDB Wrapper)
--   **Form Management**: React Hook Form
--   **Editor**: SimpleEditor (Rich Text Editor)
--   **Export**: jsPDF, html2canvas
--   **AI Integration**: Pollinations.ai (Text Generation API)
-
-## 📦 Panduan Build Lokal (Local Build Guide)
-
-Secara default, aplikasi ini memuat beberapa pustaka (seperti React) dari CDN (*Content Delivery Network*), yang memerlukan koneksi internet saat pertama kali dibuka. Untuk menjalankan aplikasi ini sepenuhnya offline, ikuti langkah-langkah berikut.
+Agar aplikasi dapat berjalan **sepenuhnya tanpa internet**, Anda harus melakukan proses *build*. Proses ini akan memaketkan semua library (React, dll) ke dalam file lokal.
 
 **Prasyarat:**
-Pastikan Anda memiliki [Node.js](https://nodejs.org/) (yang sudah termasuk `npm`) terinstal di komputer Anda.
+Pastikan Anda memiliki [Node.js](https://nodejs.org/) terinstal di komputer Anda.
 
-**Langkah 1: Unduh Dependensi**
-
-Buka terminal atau command prompt di direktori root proyek (folder tempat file `index.html` berada) dan jalankan perintah berikut untuk mengunduh semua pustaka yang diperlukan ke dalam folder `node_modules`:
-
+### 1. Instalasi Dependensi
+Buka terminal/CMD di folder proyek dan jalankan:
 ```bash
-npm install react react-dom dexie react-hook-form jspdf html2canvas
+npm install
 ```
 
-**Langkah 2: Perbarui `index.html`**
-
-Buka file `index.html` dan modifikasi bagian `<script type="importmap">`. Ganti URL CDN dengan path lokal ke file di dalam folder `node_modules` yang baru saja Anda buat.
-
-**Langkah 3: Jalankan Server Lokal**
-
-Karena browser membatasi pemuatan modul ES6 langsung dari sistem file (`file:///...`), Anda perlu menjalankan server web lokal. Cara termudah adalah menggunakan `http-server`.
-
-Jalankan perintah berikut di terminal dari direktori root proyek:
-
+### 2. Mode Pengembangan (Development)
+Untuk menjalankan aplikasi saat sedang coding (butuh internet untuk download paket pertama kali):
 ```bash
-npx http-server -c-1
+npm run dev
 ```
 
-- `npx` akan menjalankan paket `http-server` tanpa perlu menginstalnya secara global.
-- `-c-1` adalah flag untuk menonaktifkan cache, yang penting untuk pengembangan agar perubahan langsung terlihat.
+### 3. Build untuk Produksi (Wajib untuk Offline)
+Perintah ini akan membuat folder `dist` yang berisi aplikasi siap pakai yang **tidak membutuhkan internet**.
+```bash
+npm run build
+```
 
-**Langkah 4: Akses Aplikasi**
+### 4. Menjalankan Aplikasi Offline
+Setelah proses build selesai, Anda bisa menjalankan aplikasi dari folder `dist`. Anda bisa menggunakan `http-server` atau `serve`.
 
-Setelah server berjalan, buka browser Anda dan kunjungi alamat yang ditampilkan di terminal, biasanya:
-
-**http://localhost:8080**
-
-Sekarang aplikasi berjalan sepenuhnya dari komputer Anda tanpa ketergantungan pada CDN.
+```bash
+# Contoh menggunakan npx serve
+npx serve dist
+```
+Buka browser dan akses alamat yang muncul (biasanya `http://localhost:3000`). Aplikasi ini sekarang berjalan 100% offline.
 
 ## 📜 Lisensi
 
@@ -161,4 +108,3 @@ Proyek ini dilisensikan di bawah **GNU General Public License v3.0**.
 
 -   **Diskusi & Laporan Bug**: [GitHub Issues](https://github.com/aiprojek/eSantri-Web/issues)
 -   **Komunitas Telegram**: [Diskusi eSantri Web](https://t.me/aiprojek_community/32)
--   **Dukung Pengembang**: [Traktir Kopi](https://lynk.id/aiprojek/s/bvBJvdA)

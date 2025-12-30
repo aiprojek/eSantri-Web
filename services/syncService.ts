@@ -207,28 +207,52 @@ export const performSync = async (
             suratTemplates: await db.suratTemplates.toArray(),
             arsipSurat: await db.arsipSurat.toArray(),
             pendaftar: await db.pendaftar.toArray(),
-            auditLogs: await db.auditLogs.toArray(), // Added auditLogs
+            auditLogs: await db.auditLogs.toArray(),
             version: '1.2',
             timestamp: new Date().toISOString(),
         };
     };
 
-    // Helper to restore DB data
+    // Helper to restore DB data and return stats
     const restoreDbData = async (data: any) => {
         const { db } = await import('../db');
+        let stats = { santri: 0, tagihan: 0, pembayaran: 0, arsip: 0 };
+        
         await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, async () => {
-            await db.settings.clear(); if(data.settings) await db.settings.bulkPut(data.settings);
-            await db.santri.clear(); if(data.santri) await db.santri.bulkPut(data.santri);
-            await db.tagihan.clear(); if(data.tagihan) await db.tagihan.bulkPut(data.tagihan);
-            await db.pembayaran.clear(); if(data.pembayaran) await db.pembayaran.bulkPut(data.pembayaran);
-            await db.saldoSantri.clear(); if(data.saldoSantri) await db.saldoSantri.bulkPut(data.saldoSantri);
-            await db.transaksiSaldo.clear(); if(data.transaksiSaldo) await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
-            await db.transaksiKas.clear(); if(data.transaksiKas) await db.transaksiKas.bulkPut(data.transaksiKas);
-            await db.suratTemplates.clear(); if(data.suratTemplates) await db.suratTemplates.bulkPut(data.suratTemplates);
-            await db.arsipSurat.clear(); if(data.arsipSurat) await db.arsipSurat.bulkPut(data.arsipSurat);
-            await db.pendaftar.clear(); if(data.pendaftar) await db.pendaftar.bulkPut(data.pendaftar);
-            await db.auditLogs.clear(); if(data.auditLogs) await db.auditLogs.bulkPut(data.auditLogs); // Restore Logs
+            await db.settings.clear(); 
+            if(data.settings) await db.settings.bulkPut(data.settings);
+            
+            await db.santri.clear(); 
+            if(data.santri) { await db.santri.bulkPut(data.santri); stats.santri = data.santri.length; }
+            
+            await db.tagihan.clear(); 
+            if(data.tagihan) { await db.tagihan.bulkPut(data.tagihan); stats.tagihan = data.tagihan.length; }
+            
+            await db.pembayaran.clear(); 
+            if(data.pembayaran) { await db.pembayaran.bulkPut(data.pembayaran); stats.pembayaran = data.pembayaran.length; }
+            
+            await db.saldoSantri.clear(); 
+            if(data.saldoSantri) await db.saldoSantri.bulkPut(data.saldoSantri);
+            
+            await db.transaksiSaldo.clear(); 
+            if(data.transaksiSaldo) await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
+            
+            await db.transaksiKas.clear(); 
+            if(data.transaksiKas) await db.transaksiKas.bulkPut(data.transaksiKas);
+            
+            await db.suratTemplates.clear(); 
+            if(data.suratTemplates) await db.suratTemplates.bulkPut(data.suratTemplates);
+            
+            await db.arsipSurat.clear(); 
+            if(data.arsipSurat) { await db.arsipSurat.bulkPut(data.arsipSurat); stats.arsip = data.arsipSurat.length; }
+            
+            await db.pendaftar.clear(); 
+            if(data.pendaftar) await db.pendaftar.bulkPut(data.pendaftar);
+            
+            await db.auditLogs.clear(); 
+            if(data.auditLogs) await db.auditLogs.bulkPut(data.auditLogs);
         });
+        return stats;
     };
 
     if (config.provider === 'dropbox') {
@@ -253,7 +277,7 @@ export const performSync = async (
             });
 
             if (!response.ok) throw new Error('Gagal upload ke Dropbox');
-            return new Date().toISOString();
+            return { timestamp: new Date().toISOString() };
 
         } else {
             const response = await fetch('https://content.dropboxapi.com/2/files/download', {
@@ -267,19 +291,19 @@ export const performSync = async (
             if (!response.ok) throw new Error('Gagal download dari Dropbox');
             
             const data = await response.json();
-            await restoreDbData(data);
-            return data.timestamp;
+            const stats = await restoreDbData(data);
+            return { timestamp: data.timestamp, stats };
         }
 
     } else if (config.provider === 'webdav') {
         if (direction === 'up') {
             const data = await getFullDbData();
             await uploadToWebDAV(config, data, filename);
-            return new Date().toISOString();
+            return { timestamp: new Date().toISOString() };
         } else {
             const data = await downloadFromWebDAV(config, filename);
-            await restoreDbData(data);
-            return data.timestamp;
+            const stats = await restoreDbData(data);
+            return { timestamp: data.timestamp, stats };
         }
     } else if (config.provider === 'supabase') {
         const client = getSupabaseClient(config);
@@ -298,9 +322,9 @@ export const performSync = async (
                     contentType: 'application/json'
                 });
                 
-            if (error) throw new Error(`Gagal upload ke Supabase Storage (Bucket '${bucketName}'): ${error.message}. Pastikan bucket sudah dibuat.`);
+            if (error) throw new Error(`Gagal upload ke Supabase Storage: ${error.message}`);
             
-            return new Date().toISOString();
+            return { timestamp: new Date().toISOString() };
         } else {
             const { data, error } = await client.storage
                 .from(bucketName)
@@ -310,8 +334,8 @@ export const performSync = async (
             
             const text = await data.text();
             const jsonData = JSON.parse(text);
-            await restoreDbData(jsonData);
-            return jsonData.timestamp;
+            const stats = await restoreDbData(jsonData);
+            return { timestamp: jsonData.timestamp, stats };
         }
     }
     

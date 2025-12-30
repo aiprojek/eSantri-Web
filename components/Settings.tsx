@@ -335,7 +335,8 @@ const Settings: React.FC<SettingsProps> = () => {
             async () => {
                 setIsSyncing(true);
                 try {
-                    const timestamp = await performSync(localSettings.cloudSyncConfig, direction);
+                    const result = await performSync(localSettings.cloudSyncConfig, direction);
+                    const timestamp = result.timestamp;
                     
                     if (direction === 'up') {
                         // Jika Upload: Update state lokal dengan timestamp baru dan simpan
@@ -351,8 +352,6 @@ const Settings: React.FC<SettingsProps> = () => {
                         setStorageStats(stats);
                     } else {
                         // Jika Download: JANGAN gunakan 'localSettings' karena itu data lama!
-                        // Data baru sudah ada di IndexedDB berkat performSync('down').
-                        // Kita harus update timestamp di DB langsung pada record yang baru di-restore.
                         const { db } = await import('../db');
                         const restoredSettings = await db.settings.toCollection().first();
                         
@@ -365,7 +364,13 @@ const Settings: React.FC<SettingsProps> = () => {
                              await db.settings.update(restoredSettings.id, { cloudSyncConfig: updatedConfig });
                         }
 
-                        showToast('Sinkronisasi berhasil! Aplikasi akan dimuat ulang.', 'success');
+                        let details = "Sinkronisasi berhasil! ";
+                        if (result.stats) {
+                            details += `(${result.stats.santri} Santri, ${result.stats.tagihan} Tagihan, dll). `;
+                        }
+                        details += "Aplikasi akan dimuat ulang.";
+
+                        showToast(details, 'success');
                         setTimeout(() => window.location.reload(), 2000);
                     }
                 } catch (error) {

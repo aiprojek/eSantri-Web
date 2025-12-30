@@ -220,7 +220,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         autoSyncTimeoutRef.current = setTimeout(async () => {
             try {
-                const timestamp = await performSync(settings.cloudSyncConfig, 'up');
+                const result = await performSync(settings.cloudSyncConfig, 'up');
+                const timestamp = result.timestamp;
+                
                 setSettings(prev => ({
                     ...prev,
                     cloudSyncConfig: { ...prev.cloudSyncConfig, lastSync: timestamp }
@@ -424,7 +426,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const downloadBackup = async () => {
         const data = {
-            settings: await db.settings.toArray(), santri: await db.santri.toArray(), tagihan: await db.tagihan.toArray(), pembayaran: await db.pembayaran.toArray(), saldoSantri: await db.saldoSantri.toArray(), transaksiSaldo: await db.transaksiSaldo.toArray(), transaksiKas: await db.transaksiKas.toArray(), suratTemplates: await db.suratTemplates.toArray(), arsipSurat: await db.arsipSurat.toArray(), pendaftar: await db.pendaftar.toArray(), auditLogs: await db.auditLogs.toArray(), version: '1.2', timestamp: new Date().toISOString(),
+            settings: await db.settings.toArray(), 
+            santri: await db.santri.toArray(), 
+            tagihan: await db.tagihan.toArray(), 
+            pembayaran: await db.pembayaran.toArray(), 
+            saldoSantri: await db.saldoSantri.toArray(), 
+            transaksiSaldo: await db.transaksiSaldo.toArray(), 
+            transaksiKas: await db.transaksiKas.toArray(), 
+            suratTemplates: await db.suratTemplates.toArray(), 
+            arsipSurat: await db.arsipSurat.toArray(), 
+            pendaftar: await db.pendaftar.toArray(), 
+            auditLogs: await db.auditLogs.toArray(), 
+            version: '1.2', 
+            timestamp: new Date().toISOString(),
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

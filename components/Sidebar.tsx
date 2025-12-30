@@ -67,7 +67,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           async () => {
               setIsSyncing(true);
               try {
-                  const timestamp = await performSync(config, direction);
+                  const result = await performSync(config, direction);
+                  const timestamp = result.timestamp;
                   
                   if (direction === 'up') {
                       // Jika Upload: Update state lokal dengan timestamp baru dan simpan
@@ -92,7 +93,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
                            await db.settings.update(restoredSettings.id, { cloudSyncConfig: updatedConfig });
                       }
 
-                      showToast('Restore Berhasil! Aplikasi akan dimuat ulang...', 'success');
+                      // Provide Detailed Feedback
+                      let details = "Restore Berhasil! ";
+                      if (result.stats) {
+                          details += `Dipulihkan: ${result.stats.santri} Santri, ${result.stats.tagihan + result.stats.pembayaran} Data Keuangan, ${result.stats.arsip} Surat.`;
+                      }
+                      
+                      showToast(details, 'success');
                       // Reload wajib dilakukan untuk merefresh state aplikasi dari DB
                       setTimeout(() => window.location.reload(), 2000);
                   }

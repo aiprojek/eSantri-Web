@@ -448,7 +448,10 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                         });
                         return response.ok;
                     }
-                } catch (e) { console.error(e); return false; }
+                } catch (e) { 
+                    console.error(e); 
+                    return false; 
+                }
                 return false;
             }
 
@@ -477,9 +480,14 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                     btn.disabled = true;
                     btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Menyimpan ke Database...';
                     
-                    const success = await uploadToCloud(data, '${cloudProvider}');
-                    if(!success) {
-                        alert("Gagal terhubung ke database Cloud. Pendaftaran akan tetap dilanjutkan melalui WhatsApp.");
+                    try {
+                        const success = await uploadToCloud(data, '${cloudProvider}');
+                        if(!success) {
+                            alert("Gagal upload ke Cloud (karena CORS atau jaringan). Mengalihkan ke WhatsApp...");
+                            // Fallback to WA logic below
+                        }
+                    } catch (err) {
+                         alert("Terjadi kesalahan jaringan saat upload ke Cloud. Mengalihkan ke WhatsApp...");
                     }
                 }
 
@@ -580,14 +588,15 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                         <div className="flex items-start">
                             <div className="flex-shrink-0"><i className="bi bi-exclamation-triangle-fill text-orange-500"></i></div>
                             <div className="ml-3">
-                                <h3 className="text-sm font-bold text-orange-800">Peringatan Keamanan (Dropbox)</h3>
+                                <h3 className="text-sm font-bold text-orange-800">Peringatan Keamanan & CORS (Dropbox)</h3>
                                 <div className="mt-1 text-xs text-orange-700">
                                     <p className="mb-1">
-                                        Untuk mendukung fitur upload, file HTML yang diekspor akan berisi <strong>App Key</strong> dan <strong>Refresh Token</strong> Dropbox Anda secara terbuka (embedded).
+                                        Fitur upload ke Dropbox mungkin <strong>gagal</strong> jika file HTML dibuka secara lokal (file://) karena kebijakan keamanan browser (CORS).
                                     </p>
                                     <ul className="list-disc pl-4 space-y-1">
-                                        <li>Pastikan Anda menggunakan <strong>Scoped App Folder</strong> (bukan Full Dropbox).</li>
-                                        <li>Jangan bagikan file HTML ini di tempat umum yang tidak terpercaya jika folder tersebut berisi data sensitif lainnya.</li>
+                                        <li>Disarankan untuk menghosting file ini (GitHub Pages/Hosting).</li>
+                                        <li>Jika upload gagal, formulir akan otomatis beralih ke mode WhatsApp agar data tidak hilang.</li>
+                                        <li>Gunakan <strong>Scoped App Folder</strong> untuk keamanan token.</li>
                                     </ul>
                                 </div>
                             </div>

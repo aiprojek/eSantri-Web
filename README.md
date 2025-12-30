@@ -107,4 +107,4 @@ Proyek ini dilisensikan di bawah **GNU General Public License v3.0**.
 ## 📞 Kontak & Dukungan
 
 -   **Diskusi & Laporan Bug**: [GitHub Issues](https://github.com/aiprojek/eSantri-Web/issues)
--   **Komunitas Telegram**: [Diskusi eSantri Web](https://t.me/aiprojek_community/32)
+-   **Telegram**: [Diskusi eSantri Web](https://t.me/aiprojek_community/32)

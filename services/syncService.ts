@@ -1,3 +1,4 @@
+
 import { createClient, WebDAVClient } from 'webdav';
 import { CloudSyncConfig } from '../types';
 
@@ -106,7 +107,7 @@ export const getCloudStorageStats = async (config: CloudSyncConfig) => {
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         try {
-            const quota = await client.getQuota();
+            const quota = await client.getQuota() as any;
             if (quota) {
                 const used = parseInt(String(quota.used), 10) || 0;
                 const available = parseInt(String(quota.available), 10) || 0;
@@ -195,14 +196,6 @@ export const performSync = async (
         const token = await getValidDropboxToken(config);
         
         if (direction === 'up') {
-            const dataToSync = {
-                // Fetch data dynamically? Or assume caller handles data gathering?
-                // The current architecture assumes performSync gathers data from DB if passed a callback or data object.
-                // However, based on AppContext usage, it expects performSync to do the work. 
-                // But performSync cannot access DB directly here without import.
-                // Let's assume for this snippet we need to fetch from DB.
-                // Since this file is a service, we'll import db.
-            };
             
             // To properly implement this, we need db import.
             const { db } = await import('../db');

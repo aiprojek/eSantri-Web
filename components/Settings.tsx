@@ -72,6 +72,34 @@ const StorageIndicator: React.FC<{ stats: StorageStats | null, isLoading: boolea
     );
 };
 
+// Helper Component for Sensitive Inputs (Masked by default)
+const SensitiveInput: React.FC<{
+    value: string;
+    onChange: (val: string) => void;
+    placeholder?: string;
+}> = ({ value, onChange, placeholder }) => {
+    const [show, setShow] = useState(false);
+    return (
+        <div className="relative">
+            <input
+                type={show ? "text" : "password"}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 pr-10"
+            />
+            <button
+                type="button"
+                onClick={() => setShow(!show)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 focus:outline-none"
+                title={show ? "Sembunyikan" : "Tampilkan"}
+            >
+                <i className={`bi ${show ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+            </button>
+        </div>
+    );
+};
+
 interface SettingsProps {}
 
 const Settings: React.FC<SettingsProps> = () => {
@@ -562,14 +590,10 @@ const Settings: React.FC<SettingsProps> = () => {
                 </div>
             </div>
 
-            {/* ... NIS Settings ... */}
+            {/* NIS Settings */}
             <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                 {/* ... NIS Content Omitted for Brevity (Same as before) ... */}
-                 <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Pengaturan Generator NIS</h2>
-                 {/* This section is identical to the previous version, just placeholder to keep file complete if requested, but for diff brevity assuming no change here unless user requested specifically. 
-                    However, to be safe and satisfy "Full content", I will leave the previous NIS logic structure intact in the real implementation below. 
-                 */}
-                  <div className="space-y-6">
+                <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Pengaturan Generator NIS</h2>
+                <div className="space-y-6">
                     <div>
                         <label className="block mb-2 text-sm font-medium text-gray-700">Metode Pembuatan NIS</label>
                         <div className="flex flex-wrap gap-4">
@@ -580,8 +604,118 @@ const Settings: React.FC<SettingsProps> = () => {
                                 </div>
                             ))}
                         </div>
+                        <p className="mt-2 text-xs text-gray-500">
+                            {localSettings.nisSettings.generationMethod === 'custom' && 'Format bebas menggunakan variabel tahun, kode jenjang, dan nomor urut. Nomor urut direset per jenjang & tahun.'}
+                            {localSettings.nisSettings.generationMethod === 'global' && 'Format standar (Tahun + Prefix + Kode Jenjang + No Urut). Nomor urut continue untuk seluruh santri.'}
+                            {localSettings.nisSettings.generationMethod === 'dob' && 'Format berbasis Tanggal Lahir + Kode Jenjang + No Urut.'}
+                        </p>
                     </div>
-                     {/* ... The rest of NIS inputs ... */}
+
+                    {localSettings.nisSettings.generationMethod === 'custom' && (
+                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Format NIS</label>
+                                <input type="text" value={localSettings.nisSettings.format} onChange={(e) => handleNisSettingChange('format', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" />
+                                <p className="mt-1 text-xs text-gray-500">Gunakan placeholder: <code>{'{TM}'}</code> (Tahun Masehi 2 digit), <code>{'{TH}'}</code> (Tahun Hijriah 2 digit), <code>{'{KODE}'}</code> (Kode Jenjang), <code>{'{NO_URUT}'}</code> (Nomor Urut).</p>
+                            </div>
+                            
+                            <h4 className="text-sm font-semibold text-gray-700">Konfigurasi Nomor Urut per Jenjang</h4>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left text-gray-500">
+                                    <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                                        <tr><th className="px-4 py-2">Jenjang</th><th className="px-4 py-2">Mulai Dari</th><th className="px-4 py-2">Digit Padding</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {localSettings.nisSettings.jenjangConfig.map(jc => {
+                                            const jenjangName = localSettings.jenjang.find(j => j.id === jc.jenjangId)?.nama || 'Unknown';
+                                            return (
+                                                <tr key={jc.jenjangId} className="bg-white border-b">
+                                                    <td className="px-4 py-2 font-medium text-gray-900">{jenjangName}</td>
+                                                    <td className="px-4 py-2"><input type="number" value={jc.startNumber} onChange={(e) => handleNisJenjangConfigChange(jc.jenjangId, 'startNumber', e.target.value)} className="w-20 p-1 border rounded text-center"/></td>
+                                                    <td className="px-4 py-2"><input type="number" value={jc.padding} onChange={(e) => handleNisJenjangConfigChange(jc.jenjangId, 'padding', e.target.value)} className="w-20 p-1 border rounded text-center"/></td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Sumber Tahun Masehi</label>
+                                    <div className="flex items-center gap-4">
+                                        <label className="flex items-center"><input type="radio" name="masehiSource" value="auto" checked={localSettings.nisSettings.masehiYearSource === 'auto'} onChange={() => handleNisSettingChange('masehiYearSource', 'auto')} className="mr-2"/>Otomatis (Tgl Masuk)</label>
+                                        <label className="flex items-center"><input type="radio" name="masehiSource" value="manual" checked={localSettings.nisSettings.masehiYearSource === 'manual'} onChange={() => handleNisSettingChange('masehiYearSource', 'manual')} className="mr-2"/>Manual</label>
+                                    </div>
+                                    {localSettings.nisSettings.masehiYearSource === 'manual' && <input type="number" value={localSettings.nisSettings.manualMasehiYear} onChange={(e) => handleNisSettingChange('manualMasehiYear', parseInt(e.target.value) || new Date().getFullYear())} className="mt-2 w-full border p-2 rounded"/>}
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Sumber Tahun Hijriah</label>
+                                    <div className="flex items-center gap-4">
+                                        <label className="flex items-center"><input type="radio" name="hijriSource" value="auto" checked={localSettings.nisSettings.hijriahYearSource === 'auto'} onChange={() => handleNisSettingChange('hijriahYearSource', 'auto')} className="mr-2"/>Otomatis (Estimasi)</label>
+                                        <label className="flex items-center"><input type="radio" name="hijriSource" value="manual" checked={localSettings.nisSettings.hijriahYearSource === 'manual'} onChange={() => handleNisSettingChange('hijriahYearSource', 'manual')} className="mr-2"/>Manual</label>
+                                    </div>
+                                    {localSettings.nisSettings.hijriahYearSource === 'manual' && <input type="number" value={localSettings.nisSettings.manualHijriahYear} onChange={(e) => handleNisSettingChange('manualHijriahYear', parseInt(e.target.value) || 1445)} className="mt-2 w-full border p-2 rounded"/>}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {localSettings.nisSettings.generationMethod === 'global' && (
+                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Prefix Global</label>
+                                    <input type="text" value={localSettings.nisSettings.globalPrefix} onChange={(e) => handleNisSettingChange('globalPrefix', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" placeholder="Contoh: PS" />
+                                </div>
+                                <div className="flex items-center pt-6">
+                                    <input type="checkbox" checked={localSettings.nisSettings.globalUseYearPrefix} onChange={(e) => handleNisSettingChange('globalUseYearPrefix', e.target.checked)} className="w-4 h-4 text-teal-600 rounded"/>
+                                    <label className="ml-2 text-sm text-gray-700">Gunakan Tahun Masuk sebagai Prefix (YYYY)</label>
+                                </div>
+                                <div className="flex items-center pt-6">
+                                    <input type="checkbox" checked={localSettings.nisSettings.globalUseJenjangCode} onChange={(e) => handleNisSettingChange('globalUseJenjangCode', e.target.checked)} className="w-4 h-4 text-teal-600 rounded"/>
+                                    <label className="ml-2 text-sm text-gray-700">Sisipkan Kode Jenjang</label>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Mulai Nomor Urut</label>
+                                    <input type="number" value={localSettings.nisSettings.globalStartNumber} onChange={(e) => handleNisSettingChange('globalStartNumber', parseInt(e.target.value) || 1)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Digit Padding</label>
+                                    <input type="number" value={localSettings.nisSettings.globalPadding} onChange={(e) => handleNisSettingChange('globalPadding', parseInt(e.target.value) || 4)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {localSettings.nisSettings.generationMethod === 'dob' && (
+                        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Format Tanggal</label>
+                                    <select value={localSettings.nisSettings.dobFormat} onChange={(e) => handleNisSettingChange('dobFormat', e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5">
+                                        <option value="YYYYMMDD">YYYYMMDD (20100101)</option>
+                                        <option value="DDMMYY">DDMMYY (010110)</option>
+                                        <option value="YYMMDD">YYMMDD (100101)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Pemisah (Separator)</label>
+                                    <input type="text" value={localSettings.nisSettings.dobSeparator} onChange={(e) => handleNisSettingChange('dobSeparator', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" placeholder="Kosongkan jika tidak ada" />
+                                </div>
+                            </div>
+                            <div className="flex items-center">
+                                <input type="checkbox" checked={localSettings.nisSettings.dobUseJenjangCode} onChange={(e) => handleNisSettingChange('dobUseJenjangCode', e.target.checked)} className="w-4 h-4 text-teal-600 rounded"/>
+                                <label className="ml-2 text-sm text-gray-700">Sisipkan Kode Jenjang setelah Tanggal</label>
+                            </div>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Digit Padding (Nomor Urut)</label>
+                                <input type="number" value={localSettings.nisSettings.dobPadding} onChange={(e) => handleNisSettingChange('dobPadding', parseInt(e.target.value) || 3)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 md:w-1/2" />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -635,7 +769,10 @@ const Settings: React.FC<SettingsProps> = () => {
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block mb-2 text-sm font-medium text-gray-700">Supabase Anon Key</label>
-                                <input type="password" value={localSettings.cloudSyncConfig.supabaseKey || ''} onChange={(e) => handleSyncConfigChange('supabaseKey', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" />
+                                <SensitiveInput 
+                                    value={localSettings.cloudSyncConfig.supabaseKey || ''} 
+                                    onChange={(val) => handleSyncConfigChange('supabaseKey', val)} 
+                                />
                             </div>
                              <div>
                                 <label className="block mb-2 text-sm font-medium text-gray-700">ID Admin / Username</label>
@@ -656,12 +793,10 @@ const Settings: React.FC<SettingsProps> = () => {
                             </div>
                             <div>
                                 <label className="block mb-2 text-sm font-medium text-gray-700">App Key</label>
-                                <input 
-                                    type="text" 
+                                <SensitiveInput 
                                     value={localSettings.cloudSyncConfig.dropboxAppKey || ''}
-                                    onChange={(e) => handleSyncConfigChange('dropboxAppKey', e.target.value)}
+                                    onChange={(val) => handleSyncConfigChange('dropboxAppKey', val)}
                                     placeholder="Contoh: u9g7..."
-                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
                                 />
                             </div>
                             <div>
@@ -698,7 +833,10 @@ const Settings: React.FC<SettingsProps> = () => {
                             </div>
                             <div>
                                 <label className="block mb-2 text-sm font-medium text-gray-700">Password</label>
-                                <input type="password" value={localSettings.cloudSyncConfig.webdavPassword || ''} onChange={(e) => handleSyncConfigChange('webdavPassword', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" />
+                                <SensitiveInput 
+                                    value={localSettings.cloudSyncConfig.webdavPassword || ''}
+                                    onChange={(val) => handleSyncConfigChange('webdavPassword', val)}
+                                />
                             </div>
                        </div>
                     )}

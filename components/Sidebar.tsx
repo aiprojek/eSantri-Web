@@ -39,13 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           return;
       }
 
-      // If Supabase, Sync concept is different (it's realtime), warn user
-      if (config.provider === 'supabase') {
-          showAlert('Supabase Aktif', 'Anda menggunakan Database Realtime (Supabase). Semua perubahan data otomatis tersimpan ke cloud saat Anda bekerja. Tidak perlu upload/download manual.');
-          return;
-      }
-
-      // Open the choice modal
+      // Open the choice modal for all providers (including Supabase for manual backup)
       setShowSyncOptions(true);
   };
 
@@ -53,12 +47,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
       setShowSyncOptions(false); // Close choice modal
       
       const config = settings.cloudSyncConfig;
-      const providerName = config.provider === 'dropbox' ? 'Dropbox' : 'WebDAV';
+      let providerName = 'Cloud';
+      if (config.provider === 'dropbox') providerName = 'Dropbox';
+      if (config.provider === 'webdav') providerName = 'WebDAV';
+      if (config.provider === 'supabase') providerName = 'Supabase Storage';
       
       const title = direction === 'up' ? `Backup ke ${providerName}?` : `Restore dari ${providerName}?`;
       
       const message = direction === 'up' 
-        ? `Data di Cloud akan DITIMPA dengan data yang ada di komputer ini. Pastikan data lokal Anda adalah yang terbaru.`
+        ? `Data di Cloud akan DITIMPA dengan data yang ada di komputer ini. Termasuk semua Data Master, Santri, dan Keuangan.`
         : `PERINGATAN: Semua data di komputer ini akan DIHAPUS dan digantikan dengan data dari Cloud. Pastikan Anda yakin.`;
 
       const confirmColor = direction === 'up' ? 'blue' : 'red';
@@ -72,17 +69,32 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
               try {
                   const timestamp = await performSync(config, direction);
                   
-                  const updatedSettings = {
-                      ...settings,
-                      cloudSyncConfig: { ...config, lastSync: timestamp }
-                  };
-                  await onSaveSettings(updatedSettings);
-                  
-                  if (direction === 'down') {
-                      showToast('Restore Berhasil! Aplikasi akan dimuat ulang...', 'success');
-                      setTimeout(() => window.location.reload(), 2000);
-                  } else {
+                  if (direction === 'up') {
+                      // Jika Upload: Update state lokal dengan timestamp baru dan simpan
+                      const updatedSettings = {
+                          ...settings,
+                          cloudSyncConfig: { ...config, lastSync: timestamp }
+                      };
+                      await onSaveSettings(updatedSettings);
                       showToast('Backup Berhasil Disimpan ke Cloud!', 'success');
+                  } else {
+                      // Jika Download (Restore): JANGAN gunakan 'settings' dari state karena itu data lama (stale).
+                      // Kita harus update timestamp langsung ke DB pada data yang BARU saja di-restore.
+                      const { db } = await import('../db');
+                      const restoredSettings = await db.settings.toCollection().first();
+                      
+                      if (restoredSettings && restoredSettings.id) {
+                           // Pertahankan config koneksi cloud agar tidak terputus, tapi update timestamp
+                           const updatedConfig = { 
+                               ...restoredSettings.cloudSyncConfig, 
+                               lastSync: timestamp 
+                           };
+                           await db.settings.update(restoredSettings.id, { cloudSyncConfig: updatedConfig });
+                      }
+
+                      showToast('Restore Berhasil! Aplikasi akan dimuat ulang...', 'success');
+                      // Reload wajib dilakukan untuk merefresh state aplikasi dari DB
+                      setTimeout(() => window.location.reload(), 2000);
                   }
               } catch (error) {
                   showToast(`Gagal Sync: ${(error as Error).message}`, 'error');

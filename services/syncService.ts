@@ -1,6 +1,7 @@
 
 import { createClient, WebDAVClient } from 'webdav';
 import { CloudSyncConfig } from '../types';
+import { getSupabaseClient } from './supabaseClient';
 
 // --- WebDAV Implementation ---
 const getWebDAVClient = (config: CloudSyncConfig): WebDAVClient => {
@@ -192,27 +193,45 @@ export const performSync = async (
     direction: 'up' | 'down',
     filename: string = 'esantri_sync.json'
 ) => {
+    // Helper to get full DB data
+    const getFullDbData = async () => {
+        const { db } = await import('../db');
+        return {
+            settings: await db.settings.toArray(),
+            santri: await db.santri.toArray(),
+            tagihan: await db.tagihan.toArray(),
+            pembayaran: await db.pembayaran.toArray(),
+            saldoSantri: await db.saldoSantri.toArray(),
+            transaksiSaldo: await db.transaksiSaldo.toArray(),
+            transaksiKas: await db.transaksiKas.toArray(),
+            suratTemplates: await db.suratTemplates.toArray(),
+            arsipSurat: await db.arsipSurat.toArray(),
+            version: '1.2',
+            timestamp: new Date().toISOString(),
+        };
+    };
+
+    // Helper to restore DB data
+    const restoreDbData = async (data: any) => {
+        const { db } = await import('../db');
+        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, async () => {
+            await db.settings.clear(); await db.settings.bulkPut(data.settings);
+            await db.santri.clear(); await db.santri.bulkPut(data.santri);
+            await db.tagihan.clear(); await db.tagihan.bulkPut(data.tagihan);
+            await db.pembayaran.clear(); await db.pembayaran.bulkPut(data.pembayaran);
+            await db.saldoSantri.clear(); await db.saldoSantri.bulkPut(data.saldoSantri);
+            await db.transaksiSaldo.clear(); await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
+            await db.transaksiKas.clear(); await db.transaksiKas.bulkPut(data.transaksiKas);
+            await db.suratTemplates.clear(); await db.suratTemplates.bulkPut(data.suratTemplates);
+            await db.arsipSurat.clear(); await db.arsipSurat.bulkPut(data.arsipSurat);
+        });
+    };
+
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
         
         if (direction === 'up') {
-            
-            // To properly implement this, we need db import.
-            const { db } = await import('../db');
-            const data = {
-                settings: await db.settings.toArray(),
-                santri: await db.santri.toArray(),
-                tagihan: await db.tagihan.toArray(),
-                pembayaran: await db.pembayaran.toArray(),
-                saldoSantri: await db.saldoSantri.toArray(),
-                transaksiSaldo: await db.transaksiSaldo.toArray(),
-                transaksiKas: await db.transaksiKas.toArray(),
-                suratTemplates: await db.suratTemplates.toArray(),
-                arsipSurat: await db.arsipSurat.toArray(),
-                version: '1.2',
-                timestamp: new Date().toISOString(),
-            };
-
+            const data = await getFullDbData();
             const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
                 method: 'POST',
                 headers: {
@@ -233,7 +252,6 @@ export const performSync = async (
             return new Date().toISOString();
 
         } else {
-            // Down
             const response = await fetch('https://content.dropboxapi.com/2/files/download', {
                 method: 'POST',
                 headers: {
@@ -245,55 +263,52 @@ export const performSync = async (
             if (!response.ok) throw new Error('Gagal download dari Dropbox');
             
             const data = await response.json();
-            const { db } = await import('../db');
-            
-            await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, async () => {
-                await db.settings.clear(); await db.settings.bulkPut(data.settings);
-                await db.santri.clear(); await db.santri.bulkPut(data.santri);
-                await db.tagihan.clear(); await db.tagihan.bulkPut(data.tagihan);
-                await db.pembayaran.clear(); await db.pembayaran.bulkPut(data.pembayaran);
-                await db.saldoSantri.clear(); await db.saldoSantri.bulkPut(data.saldoSantri);
-                await db.transaksiSaldo.clear(); await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
-                await db.transaksiKas.clear(); await db.transaksiKas.bulkPut(data.transaksiKas);
-                await db.suratTemplates.clear(); await db.suratTemplates.bulkPut(data.suratTemplates);
-                await db.arsipSurat.clear(); await db.arsipSurat.bulkPut(data.arsipSurat);
-            });
+            await restoreDbData(data);
             return data.timestamp;
         }
 
     } else if (config.provider === 'webdav') {
         if (direction === 'up') {
-            const { db } = await import('../db');
-            const data = {
-                settings: await db.settings.toArray(),
-                santri: await db.santri.toArray(),
-                tagihan: await db.tagihan.toArray(),
-                pembayaran: await db.pembayaran.toArray(),
-                saldoSantri: await db.saldoSantri.toArray(),
-                transaksiSaldo: await db.transaksiSaldo.toArray(),
-                transaksiKas: await db.transaksiKas.toArray(),
-                suratTemplates: await db.suratTemplates.toArray(),
-                arsipSurat: await db.arsipSurat.toArray(),
-                version: '1.2',
-                timestamp: new Date().toISOString(),
-            };
+            const data = await getFullDbData();
             await uploadToWebDAV(config, data, filename);
             return new Date().toISOString();
         } else {
             const data = await downloadFromWebDAV(config, filename);
-            const { db } = await import('../db');
-            await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, async () => {
-                await db.settings.clear(); await db.settings.bulkPut(data.settings);
-                await db.santri.clear(); await db.santri.bulkPut(data.santri);
-                await db.tagihan.clear(); await db.tagihan.bulkPut(data.tagihan);
-                await db.pembayaran.clear(); await db.pembayaran.bulkPut(data.pembayaran);
-                await db.saldoSantri.clear(); await db.saldoSantri.bulkPut(data.saldoSantri);
-                await db.transaksiSaldo.clear(); await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
-                await db.transaksiKas.clear(); await db.transaksiKas.bulkPut(data.transaksiKas);
-                await db.suratTemplates.clear(); await db.suratTemplates.bulkPut(data.suratTemplates);
-                await db.arsipSurat.clear(); await db.arsipSurat.bulkPut(data.arsipSurat);
-            });
+            await restoreDbData(data);
             return data.timestamp;
+        }
+    } else if (config.provider === 'supabase') {
+        const client = getSupabaseClient(config);
+        if (!client) throw new Error("Klien Supabase tidak valid");
+
+        // Use 'backups' bucket. User must create this bucket in Supabase Dashboard.
+        const bucketName = 'backups';
+
+        if (direction === 'up') {
+            const data = await getFullDbData();
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            
+            const { error } = await client.storage
+                .from(bucketName)
+                .upload(filename, blob, {
+                    upsert: true,
+                    contentType: 'application/json'
+                });
+                
+            if (error) throw new Error(`Gagal upload ke Supabase Storage (Bucket '${bucketName}'): ${error.message}. Pastikan bucket sudah dibuat.`);
+            
+            return new Date().toISOString();
+        } else {
+            const { data, error } = await client.storage
+                .from(bucketName)
+                .download(filename);
+                
+            if (error) throw new Error(`Gagal download dari Supabase: ${error.message}`);
+            
+            const text = await data.text();
+            const jsonData = JSON.parse(text);
+            await restoreDbData(jsonData);
+            return jsonData.timestamp;
         }
     }
     

@@ -1,165 +1,5 @@
-
-import { createClient, WebDAVClient } from "webdav";
-import { db } from '../db';
-import { CloudSyncConfig, Pendaftar } from '../types';
-
-// Helper to get full backup data object
-const getBackupData = async () => {
-    const settingsData = await db.settings.toArray();
-    const santriData = await db.santri.toArray();
-    const tagihanData = await db.tagihan.toArray();
-    const pembayaranData = await db.pembayaran.toArray();
-    const saldoSantriData = await db.saldoSantri.toArray();
-    const transaksiSaldoData = await db.transaksiSaldo.toArray();
-    const transaksiKasData = await db.transaksiKas.toArray();
-    const suratTemplatesData = await db.suratTemplates.toArray();
-    const arsipSuratData = await db.arsipSurat.toArray();
-
-    return {
-        settings: settingsData,
-        santri: santriData,
-        tagihan: tagihanData,
-        pembayaran: pembayaranData,
-        saldoSantri: saldoSantriData,
-        transaksiSaldo: transaksiSaldoData,
-        transaksiKas: transaksiKasData,
-        suratTemplates: suratTemplatesData,
-        arsipSurat: arsipSuratData,
-        backupVersion: '1.2',
-        syncTimestamp: new Date().toISOString(),
-    };
-};
-
-const restoreBackupData = async (data: any) => {
-    if (!data.settings || !data.santri) throw new Error("Format data tidak valid");
-    
-    await (db as any).transaction('rw', [db.santri, db.settings, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat], async () => {
-        await db.santri.clear();
-        await db.settings.clear();
-        await db.tagihan.clear();
-        await db.pembayaran.clear();
-        await db.saldoSantri.clear();
-        await db.transaksiSaldo.clear();
-        await db.transaksiKas.clear();
-        await db.suratTemplates.clear();
-        await db.arsipSurat.clear();
-
-        await db.settings.bulkAdd(data.settings);
-        await db.santri.bulkAdd(data.santri);
-        if(data.tagihan) await db.tagihan.bulkAdd(data.tagihan);
-        if(data.pembayaran) await db.pembayaran.bulkAdd(data.pembayaran);
-        if(data.saldoSantri) await db.saldoSantri.bulkAdd(data.saldoSantri);
-        if(data.transaksiSaldo) await db.transaksiSaldo.bulkAdd(data.transaksiSaldo);
-        if(data.transaksiKas) await db.transaksiKas.bulkAdd(data.transaksiKas);
-        if(data.suratTemplates) await db.suratTemplates.bulkAdd(data.suratTemplates);
-        if(data.arsipSurat) await db.arsipSurat.bulkAdd(data.arsipSurat);
-    });
-};
-
-// --- Dropbox PSB Implementation ---
-export const fetchPsbFromDropbox = async (token: string) => {
-    const folderPath = '/esantri_psb';
-    
-    // 1. List files in the folder
-    const listResponse = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ path: folderPath, recursive: false })
-    });
-
-    if (!listResponse.ok) {
-        if(listResponse.status === 409) return []; // Folder might not exist yet
-        throw new Error("Gagal membaca folder PSB di Dropbox");
-    }
-
-    const listData = await listResponse.json();
-    const entries = listData.entries.filter((e: any) => e['.tag'] === 'file' && e.name.endsWith('.json'));
-    
-    const newPendaftar: Omit<Pendaftar, 'id'>[] = [];
-    const filesToDelete: string[] = [];
-
-    // 2. Download each file
-    for (const file of entries) {
-        const downloadResponse = await fetch('https://content.dropboxapi.com/2/files/download', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Dropbox-API-Arg': JSON.stringify({ path: file.path_lower })
-            }
-        });
-
-        if (downloadResponse.ok) {
-            const data = await downloadResponse.json();
-            // Basic mapping check
-            if (data.namaLengkap) {
-                newPendaftar.push(data);
-                filesToDelete.push(file.path_lower);
-            }
-        }
-    }
-
-    // 3. Delete processed files from Dropbox to avoid duplicates
-    for (const path of filesToDelete) {
-        await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ path })
-        });
-    }
-
-    return newPendaftar;
-};
-
-// --- Supabase Implementation ---
-// Handled via standard supabase-js client in components if needed
-
-// --- Dropbox Implementation ---
-const uploadToDropbox = async (token: string, data: any, filename: string) => {
-    const fileContent = JSON.stringify(data);
-    const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Dropbox-API-Arg': JSON.stringify({
-                path: '/' + filename,
-                mode: 'overwrite',
-                autorename: false,
-                mute: false
-            }),
-            'Content-Type': 'application/octet-stream'
-        },
-        body: fileContent
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Dropbox Upload Failed: ${errorText}`);
-    }
-    return await response.json();
-};
-
-const downloadFromDropbox = async (token: string, filename: string) => {
-    const response = await fetch('https://content.dropboxapi.com/2/files/download', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Dropbox-API-Arg': JSON.stringify({
-                path: '/' + filename
-            })
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`Dropbox Download Failed: ${response.statusText}`);
-    }
-    return await response.json();
-};
+import { createClient, WebDAVClient } from 'webdav';
+import { CloudSyncConfig } from '../types';
 
 // --- WebDAV Implementation ---
 const getWebDAVClient = (config: CloudSyncConfig): WebDAVClient => {
@@ -184,6 +24,166 @@ const downloadFromWebDAV = async (config: CloudSyncConfig, filename: string) => 
     return JSON.parse(fileContent as string);
 };
 
+// --- Dropbox Auth & Helper ---
+export const exchangeCodeForToken = async (appKey: string, code: string, codeVerifier: string) => {
+    const redirectUri = window.location.origin + window.location.pathname;
+    const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+            code,
+            grant_type: 'authorization_code',
+            client_id: appKey,
+            code_verifier: codeVerifier,
+            redirect_uri: redirectUri,
+        }),
+    });
+
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error_description || 'Gagal menukar token');
+    }
+
+    return await response.json();
+};
+
+export const getValidDropboxToken = async (config: CloudSyncConfig): Promise<string> => {
+    if (!config.dropboxRefreshToken || !config.dropboxAppKey) {
+        throw new Error("Dropbox belum dikonfigurasi.");
+    }
+
+    // If we have a token and it's not expired (buffer 5 mins)
+    if (config.dropboxToken && config.dropboxTokenExpiresAt && Date.now() < config.dropboxTokenExpiresAt - 300000) {
+        return config.dropboxToken;
+    }
+
+    // Refresh token
+    const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: config.dropboxRefreshToken,
+            client_id: config.dropboxAppKey,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error("Gagal refresh token Dropbox.");
+    }
+
+    const data = await response.json();
+    return data.access_token;
+};
+
+// --- Storage Stats Implementation ---
+export const getCloudStorageStats = async (config: CloudSyncConfig) => {
+    if (config.provider === 'dropbox') {
+        const token = await getValidDropboxToken(config);
+        const response = await fetch('https://api.dropboxapi.com/2/users/get_space_usage', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            }
+        });
+        
+        if (!response.ok) throw new Error('Gagal mengambil data kuota Dropbox');
+        
+        const data = await response.json();
+        const used = data.used || 0;
+        const total = data.allocation?.allocated || 0;
+        
+        return {
+            used,
+            total,
+            percent: total > 0 ? (used / total) * 100 : 0
+        };
+
+    } else if (config.provider === 'webdav') {
+        const client = getWebDAVClient(config);
+        try {
+            const quota = await client.getQuota();
+            if (quota) {
+                const used = parseInt(String(quota.used), 10) || 0;
+                const available = parseInt(String(quota.available), 10) || 0;
+                const total = used + available;
+                
+                if (total > 0) {
+                    return {
+                        used,
+                        total,
+                        percent: (used / total) * 100
+                    };
+                }
+                return { used, total: 0, percent: 0 };
+            }
+        } catch (e) {
+            console.warn("WebDAV Quota not supported by server", e);
+            return null;
+        }
+    }
+    return null;
+};
+
+// --- PSB Sync Implementation ---
+export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
+    // List files in /esantri_psb
+    const listResponse = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            path: '/esantri_psb',
+            recursive: false,
+            include_media_info: false
+        })
+    });
+
+    if (!listResponse.ok) {
+        // Folder might not exist yet
+        return [];
+    }
+
+    const listData = await listResponse.json();
+    const newItems = [];
+
+    for (const entry of listData.entries) {
+        if (entry['.tag'] === 'file' && entry.name.endsWith('.json')) {
+            const downloadResponse = await fetch('https://content.dropboxapi.com/2/files/download', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Dropbox-API-Arg': JSON.stringify({ path: entry.path_lower })
+                }
+            });
+            
+            if (downloadResponse.ok) {
+                const item = await downloadResponse.json();
+                newItems.push(item);
+                // Move to processed
+                await fetch('https://api.dropboxapi.com/2/files/move_v2', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        from_path: entry.path_lower,
+                        to_path: `/esantri_psb/processed/${entry.name}`,
+                        autorename: true
+                    })
+                });
+            }
+        }
+    }
+    return newItems;
+};
 
 // --- Main Sync Function ---
 export const performSync = async (
@@ -191,33 +191,118 @@ export const performSync = async (
     direction: 'up' | 'down',
     filename: string = 'esantri_sync.json'
 ) => {
-    if (config.provider === 'none') throw new Error("Penyedia sinkronisasi belum dipilih.");
+    if (config.provider === 'dropbox') {
+        const token = await getValidDropboxToken(config);
+        
+        if (direction === 'up') {
+            const dataToSync = {
+                // Fetch data dynamically? Or assume caller handles data gathering?
+                // The current architecture assumes performSync gathers data from DB if passed a callback or data object.
+                // However, based on AppContext usage, it expects performSync to do the work. 
+                // But performSync cannot access DB directly here without import.
+                // Let's assume for this snippet we need to fetch from DB.
+                // Since this file is a service, we'll import db.
+            };
+            
+            // To properly implement this, we need db import.
+            const { db } = await import('../db');
+            const data = {
+                settings: await db.settings.toArray(),
+                santri: await db.santri.toArray(),
+                tagihan: await db.tagihan.toArray(),
+                pembayaran: await db.pembayaran.toArray(),
+                saldoSantri: await db.saldoSantri.toArray(),
+                transaksiSaldo: await db.transaksiSaldo.toArray(),
+                transaksiKas: await db.transaksiKas.toArray(),
+                suratTemplates: await db.suratTemplates.toArray(),
+                arsipSurat: await db.arsipSurat.toArray(),
+                version: '1.2',
+                timestamp: new Date().toISOString(),
+            };
 
-    if (direction === 'up') {
-        const data = await getBackupData();
-        
-        if (config.provider === 'dropbox') {
-            if (!config.dropboxToken) throw new Error("Token Dropbox belum diisi.");
-            await uploadToDropbox(config.dropboxToken, data, filename);
-        } else if (config.provider === 'webdav') {
-            await uploadToWebDAV(config, data, filename);
-        }
-        
-        return new Date().toISOString(); // Return new sync timestamp
-    } else {
-        let data;
-        if (config.provider === 'dropbox') {
-            if (!config.dropboxToken) throw new Error("Token Dropbox belum diisi.");
-            data = await downloadFromDropbox(config.dropboxToken, filename);
-        } else if (config.provider === 'webdav') {
-            data = await downloadFromWebDAV(config, filename);
-        }
-        
-        if (data) {
-            await restoreBackupData(data);
-            return data.syncTimestamp || new Date().toISOString();
+            const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Dropbox-API-Arg': JSON.stringify({
+                        path: `/${filename}`,
+                        mode: 'overwrite',
+                        autorename: false,
+                        mute: false,
+                        strict_conflict: false
+                    }),
+                    'Content-Type': 'application/octet-stream'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) throw new Error('Gagal upload ke Dropbox');
+            return new Date().toISOString();
+
         } else {
-            throw new Error("File sinkronisasi tidak ditemukan di cloud.");
+            // Down
+            const response = await fetch('https://content.dropboxapi.com/2/files/download', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Dropbox-API-Arg': JSON.stringify({ path: `/${filename}` })
+                }
+            });
+
+            if (!response.ok) throw new Error('Gagal download dari Dropbox');
+            
+            const data = await response.json();
+            const { db } = await import('../db');
+            
+            await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, async () => {
+                await db.settings.clear(); await db.settings.bulkPut(data.settings);
+                await db.santri.clear(); await db.santri.bulkPut(data.santri);
+                await db.tagihan.clear(); await db.tagihan.bulkPut(data.tagihan);
+                await db.pembayaran.clear(); await db.pembayaran.bulkPut(data.pembayaran);
+                await db.saldoSantri.clear(); await db.saldoSantri.bulkPut(data.saldoSantri);
+                await db.transaksiSaldo.clear(); await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
+                await db.transaksiKas.clear(); await db.transaksiKas.bulkPut(data.transaksiKas);
+                await db.suratTemplates.clear(); await db.suratTemplates.bulkPut(data.suratTemplates);
+                await db.arsipSurat.clear(); await db.arsipSurat.bulkPut(data.arsipSurat);
+            });
+            return data.timestamp;
+        }
+
+    } else if (config.provider === 'webdav') {
+        if (direction === 'up') {
+            const { db } = await import('../db');
+            const data = {
+                settings: await db.settings.toArray(),
+                santri: await db.santri.toArray(),
+                tagihan: await db.tagihan.toArray(),
+                pembayaran: await db.pembayaran.toArray(),
+                saldoSantri: await db.saldoSantri.toArray(),
+                transaksiSaldo: await db.transaksiSaldo.toArray(),
+                transaksiKas: await db.transaksiKas.toArray(),
+                suratTemplates: await db.suratTemplates.toArray(),
+                arsipSurat: await db.arsipSurat.toArray(),
+                version: '1.2',
+                timestamp: new Date().toISOString(),
+            };
+            await uploadToWebDAV(config, data, filename);
+            return new Date().toISOString();
+        } else {
+            const data = await downloadFromWebDAV(config, filename);
+            const { db } = await import('../db');
+            await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, async () => {
+                await db.settings.clear(); await db.settings.bulkPut(data.settings);
+                await db.santri.clear(); await db.santri.bulkPut(data.santri);
+                await db.tagihan.clear(); await db.tagihan.bulkPut(data.tagihan);
+                await db.pembayaran.clear(); await db.pembayaran.bulkPut(data.pembayaran);
+                await db.saldoSantri.clear(); await db.saldoSantri.bulkPut(data.saldoSantri);
+                await db.transaksiSaldo.clear(); await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
+                await db.transaksiKas.clear(); await db.transaksiKas.bulkPut(data.transaksiKas);
+                await db.suratTemplates.clear(); await db.suratTemplates.bulkPut(data.suratTemplates);
+                await db.arsipSurat.clear(); await db.arsipSurat.bulkPut(data.arsipSurat);
+            });
+            return data.timestamp;
         }
     }
+    
+    throw new Error("Provider tidak valid");
 };

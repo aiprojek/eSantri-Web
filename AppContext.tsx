@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { PondokSettings, Santri, Tagihan, Pembayaran, Alamat, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat } from './types';
+import { PondokSettings, Santri, Tagihan, Pembayaran, Alamat, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, AuditLog } from './types';
 import { db, PondokSettingsWithId } from './db';
 import { initialSantri, initialSettings } from './data/mock';
 import { generateTagihanBulanan, generateTagihanAwal } from './services/financeService';
@@ -198,6 +198,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setToasts(prev => prev.filter(toast => toast.id !== id));
     }, []);
 
+    // --- Local Audit Log Helper ---
+    const logActivity = async (tableName: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', recordId: string, oldData?: any, newData?: any) => {
+        const log: AuditLog = {
+            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            table_name: tableName,
+            record_id: recordId,
+            operation,
+            old_data: oldData,
+            new_data: newData,
+            changed_by: settings.cloudSyncConfig?.adminIdentity || 'Admin Local',
+            created_at: new Date().toISOString()
+        };
+        await db.auditLogs.add(log);
+    };
+
     const triggerAutoSync = useCallback(() => {
         if (!settings.cloudSyncConfig?.autoSync || settings.cloudSyncConfig.provider === 'none') return;
         if (settings.cloudSyncConfig.provider === 'supabase') return;
@@ -224,6 +239,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const settingsWithId = { ...newSettings, id };
         await db.settings.put(settingsWithId);
         setSettings(settingsWithId);
+        await logActivity('settings', 'UPDATE', id?.toString() || '1', null, newSettings);
         triggerAutoSync();
     };
 
@@ -231,6 +247,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const id = await db.santri.add(santriData as Santri);
         const newSantri = { ...santriData, id } as Santri;
         setSantriList(prev => [...prev, newSantri]);
+        await logActivity('santri', 'INSERT', id.toString(), null, newSantri);
         triggerAutoSync();
     };
 
@@ -238,12 +255,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const ids = await db.santri.bulkAdd(newSantriData as Santri[], { allKeys: true });
         const addedSantri = newSantriData.map((s, i) => ({ ...s, id: ids[i] as number } as Santri));
         setSantriList(prev => [...prev, ...addedSantri]);
+        await logActivity('santri', 'INSERT', 'BULK', null, { count: addedSantri.length });
         triggerAutoSync();
     };
 
     const onUpdateSantri = async (santri: Santri) => {
         await db.santri.put(santri);
         setSantriList(prev => prev.map(s => s.id === santri.id ? santri : s));
+        await logActivity('santri', 'UPDATE', santri.id.toString(), null, santri); // Optimistic: no oldData fetched
         triggerAutoSync();
     };
 
@@ -251,23 +270,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await db.santri.bulkPut(updatedSantriList);
         const updatedIds = updatedSantriList.map(s => s.id);
         setSantriList(prev => prev.map(s => updatedIds.includes(s.id) ? updatedSantriList.find(u => u.id === s.id)! : s));
+        await logActivity('santri', 'UPDATE', 'BULK', null, { count: updatedSantriList.length });
         triggerAutoSync();
     };
 
     const onDeleteSantri = async (id: number) => {
         await db.santri.delete(id);
         setSantriList(prev => prev.filter(s => s.id !== id));
+        await logActivity('santri', 'DELETE', id.toString());
         triggerAutoSync();
     };
 
     const onDeleteSampleData = async () => {
-        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, async () => {
+        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.auditLogs, async () => {
             await db.santri.clear();
             await db.tagihan.clear();
             await db.pembayaran.clear();
             await db.saldoSantri.clear();
             await db.transaksiSaldo.clear();
             await db.transaksiKas.clear();
+            await db.auditLogs.clear();
         });
         setSantriList([]); setTagihanList([]); setPembayaranList([]); setSaldoSantriList([]); setTransaksiSaldoList([]); setTransaksiKasList([]);
         triggerAutoSync();
@@ -289,6 +311,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const onGenerateTagihanBulanan = async (tahun: number, bulan: number) => {
         const { result, newTagihan } = await generateTagihanBulanan(db, settings, santriList, tahun, bulan);
         setTagihanList(prev => [...prev, ...newTagihan]);
+        await logActivity('tagihan', 'INSERT', 'GENERATE_BULANAN', null, { tahun, bulan, count: result.generated });
         triggerAutoSync();
         return result;
     };
@@ -296,6 +319,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const onGenerateTagihanAwal = async () => {
         const { result, newTagihan } = await generateTagihanAwal(db, settings, santriList);
         setTagihanList(prev => [...prev, ...newTagihan]);
+        await logActivity('tagihan', 'INSERT', 'GENERATE_AWAL', null, { count: result.generated });
         triggerAutoSync();
         return result;
     };
@@ -316,6 +340,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
         }
         setTagihanList(prev => prev.map(t => updatedTagihanList.find(ut => ut.id === t.id) || t));
+        await logActivity('pembayaran', 'INSERT', id.toString(), null, newPembayaran);
         triggerAutoSync();
     };
 
@@ -334,6 +359,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (existing) return prev.map(s => s.santriId === data.santriId ? { ...s, saldo: saldoSetelah } : s);
             return [...prev, { santriId: data.santriId, saldo: saldoSetelah }];
         });
+        await logActivity('transaksiSaldo', 'INSERT', id.toString(), null, newTransaksi);
         triggerAutoSync();
     };
 
@@ -346,6 +372,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         else saldoSetelah -= data.jumlah;
         const id = await db.transaksiKas.add({ ...data, saldoSetelah, tanggal } as TransaksiKas);
         setTransaksiKasList(prev => [...prev, { ...data, saldoSetelah, tanggal, id } as TransaksiKas]);
+        await logActivity('transaksiKas', 'INSERT', id.toString(), null, data);
         triggerAutoSync();
     };
 
@@ -363,18 +390,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const onSaveSuratTemplate = async (template: SuratTemplate) => {
-        if (template.id) { await db.suratTemplates.put(template); setSuratTemplates(prev => prev.map(t => t.id === template.id ? template : t)); }
-        else { const newId = await db.suratTemplates.add(template); setSuratTemplates(prev => [...prev, { ...template, id: newId }]); }
+        if (template.id) { 
+            await db.suratTemplates.put(template); 
+            setSuratTemplates(prev => prev.map(t => t.id === template.id ? template : t)); 
+            await logActivity('suratTemplates', 'UPDATE', template.id.toString());
+        }
+        else { 
+            const newId = await db.suratTemplates.add(template); 
+            setSuratTemplates(prev => [...prev, { ...template, id: newId }]); 
+            await logActivity('suratTemplates', 'INSERT', newId.toString());
+        }
         triggerAutoSync();
     };
 
-    const onDeleteSuratTemplate = async (id: number) => { await db.suratTemplates.delete(id); setSuratTemplates(prev => prev.filter(t => t.id !== id)); triggerAutoSync(); };
-    const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => { const id = await db.arsipSurat.add(surat as ArsipSurat); setArsipSuratList(prev => [...prev, { ...surat, id } as ArsipSurat]); triggerAutoSync(); };
-    const onDeleteArsipSurat = async (id: number) => { await db.arsipSurat.delete(id); setArsipSuratList(prev => prev.filter(a => a.id !== id)); triggerAutoSync(); };
+    const onDeleteSuratTemplate = async (id: number) => { 
+        await db.suratTemplates.delete(id); 
+        setSuratTemplates(prev => prev.filter(t => t.id !== id)); 
+        await logActivity('suratTemplates', 'DELETE', id.toString());
+        triggerAutoSync(); 
+    };
+    const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => { 
+        const id = await db.arsipSurat.add(surat as ArsipSurat); 
+        setArsipSuratList(prev => [...prev, { ...surat, id } as ArsipSurat]); 
+        await logActivity('arsipSurat', 'INSERT', id.toString());
+        triggerAutoSync(); 
+    };
+    const onDeleteArsipSurat = async (id: number) => { 
+        await db.arsipSurat.delete(id); 
+        setArsipSuratList(prev => prev.filter(a => a.id !== id)); 
+        await logActivity('arsipSurat', 'DELETE', id.toString());
+        triggerAutoSync(); 
+    };
 
     const downloadBackup = async () => {
         const data = {
-            settings: await db.settings.toArray(), santri: await db.santri.toArray(), tagihan: await db.tagihan.toArray(), pembayaran: await db.pembayaran.toArray(), saldoSantri: await db.saldoSantri.toArray(), transaksiSaldo: await db.transaksiSaldo.toArray(), transaksiKas: await db.transaksiKas.toArray(), suratTemplates: await db.suratTemplates.toArray(), arsipSurat: await db.arsipSurat.toArray(), version: '1.2', timestamp: new Date().toISOString(),
+            settings: await db.settings.toArray(), santri: await db.santri.toArray(), tagihan: await db.tagihan.toArray(), pembayaran: await db.pembayaran.toArray(), saldoSantri: await db.saldoSantri.toArray(), transaksiSaldo: await db.transaksiSaldo.toArray(), transaksiKas: await db.transaksiKas.toArray(), suratTemplates: await db.suratTemplates.toArray(), arsipSurat: await db.arsipSurat.toArray(), pendaftar: await db.pendaftar.toArray(), auditLogs: await db.auditLogs.toArray(), version: '1.2', timestamp: new Date().toISOString(),
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

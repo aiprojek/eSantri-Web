@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { AuditLog } from '../types';
 import { useAppContext } from '../AppContext';
 import { getSupabaseClient } from '../services/supabaseClient';
+import { db } from '../db';
 
 export const AuditLogView: React.FC = () => {
     const { settings, showToast } = useAppContext();
@@ -13,25 +14,28 @@ export const AuditLogView: React.FC = () => {
     const [filterTable, setFilterTable] = useState('');
     const [filterOp, setFilterOp] = useState('');
     
-    const client = getSupabaseClient(settings.cloudSyncConfig);
+    const isSupabase = settings.cloudSyncConfig?.provider === 'supabase';
+    const client = isSupabase ? getSupabaseClient(settings.cloudSyncConfig) : null;
 
     useEffect(() => {
-        if (!client) {
-            setError("Supabase belum dikonfigurasi. Silakan atur URL dan Key di menu Pengaturan -> Sinkronisasi Cloud.");
-            return;
-        }
-
         const fetchLogs = async () => {
             setIsLoading(true);
             try {
-                const { data, error } = await client
-                    .from('audit_logs')
-                    .select('*')
-                    .order('created_at', { ascending: false })
-                    .limit(100);
+                if (isSupabase && client) {
+                    // Fetch from Supabase
+                    const { data, error } = await client
+                        .from('audit_logs')
+                        .select('*')
+                        .order('created_at', { ascending: false })
+                        .limit(100);
 
-                if (error) throw error;
-                setLogs(data as AuditLog[]);
+                    if (error) throw error;
+                    setLogs(data as AuditLog[]);
+                } else {
+                    // Fetch from Local IndexedDB
+                    const data = await db.auditLogs.orderBy('created_at').reverse().limit(100).toArray();
+                    setLogs(data);
+                }
                 setError(null);
             } catch (err: any) {
                 console.error("Error fetching logs:", err);
@@ -43,24 +47,26 @@ export const AuditLogView: React.FC = () => {
 
         fetchLogs();
 
-        // Realtime Subscription
-        const channel = client
-            .channel('audit_logs_changes')
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'audit_logs' },
-                (payload) => {
-                    const newLog = payload.new as AuditLog;
-                    setLogs(prev => [newLog, ...prev]);
-                    showToast(`Aktivitas baru: ${newLog.operation} pada ${newLog.table_name}`, 'info');
-                }
-            )
-            .subscribe();
+        // Realtime Subscription (Only for Supabase)
+        if (isSupabase && client) {
+            const channel = client
+                .channel('audit_logs_changes')
+                .on(
+                    'postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'audit_logs' },
+                    (payload) => {
+                        const newLog = payload.new as AuditLog;
+                        setLogs(prev => [newLog, ...prev]);
+                        showToast(`Aktivitas baru: ${newLog.operation} pada ${newLog.table_name}`, 'info');
+                    }
+                )
+                .subscribe();
 
-        return () => {
-            client.removeChannel(channel);
-        };
-    }, [settings.cloudSyncConfig]);
+            return () => {
+                client.removeChannel(channel);
+            };
+        }
+    }, [settings.cloudSyncConfig, isSupabase]);
 
     const filteredLogs = logs.filter(log => {
         const tableMatch = !filterTable || log.table_name.toLowerCase().includes(filterTable.toLowerCase());
@@ -83,17 +89,19 @@ export const AuditLogView: React.FC = () => {
         
         const changes: string[] = [];
         // Simple shallow comparison for display
-        Object.keys(newData).forEach(key => {
-            if (JSON.stringify(newData[key]) !== JSON.stringify(oldData[key])) {
-                // Ignore lengthy fields for clean UI
-                if (key === 'updated_at' || key === 'created_at') return;
-                let valOld = JSON.stringify(oldData[key]);
-                let valNew = JSON.stringify(newData[key]);
-                if (valOld?.length > 20) valOld = valOld.substring(0, 20) + '...';
-                if (valNew?.length > 20) valNew = valNew.substring(0, 20) + '...';
-                changes.push(`${key}: ${valOld} -> ${valNew}`);
-            }
-        });
+        if (typeof newData === 'object' && newData !== null) {
+            Object.keys(newData).forEach(key => {
+                if (JSON.stringify(newData[key]) !== JSON.stringify(oldData[key])) {
+                    // Ignore lengthy fields for clean UI
+                    if (key === 'updated_at' || key === 'created_at') return;
+                    let valOld = JSON.stringify(oldData[key]);
+                    let valNew = JSON.stringify(newData[key]);
+                    if (valOld?.length > 20) valOld = valOld.substring(0, 20) + '...';
+                    if (valNew?.length > 20) valNew = valNew.substring(0, 20) + '...';
+                    changes.push(`${key}: ${valOld} -> ${valNew}`);
+                }
+            });
+        }
         
         if (changes.length === 0) return "Tidak ada perubahan signifikan (mungkin timestamp)";
         return changes.join(', ');
@@ -103,7 +111,7 @@ export const AuditLogView: React.FC = () => {
         return (
             <div className="p-6 bg-red-50 border border-red-200 rounded-lg text-center">
                 <i className="bi bi-exclamation-triangle text-4xl text-red-500 mb-2 block"></i>
-                <h3 className="text-lg font-bold text-red-700">Koneksi Supabase Bermasalah</h3>
+                <h3 className="text-lg font-bold text-red-700">Terjadi Kesalahan</h3>
                 <p className="text-gray-600">{error}</p>
             </div>
         );
@@ -111,7 +119,15 @@ export const AuditLogView: React.FC = () => {
 
     return (
         <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Log Aktivitas Sistem (Realtime)</h1>
+            <div className="mb-6">
+                <h1 className="text-3xl font-bold text-gray-800">Log Aktivitas Sistem</h1>
+                <p className="text-sm text-gray-500 mt-1">
+                    {isSupabase 
+                        ? <span className="text-emerald-600 font-semibold"><i className="bi bi-cloud-check-fill"></i> Terhubung ke Supabase (Realtime)</span> 
+                        : <span className="text-blue-600 font-semibold"><i className="bi bi-hdd-fill"></i> Mode Lokal (Offline/File-Sync)</span>
+                    }
+                </p>
+            </div>
             
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="flex flex-wrap gap-4 mb-6">
@@ -179,9 +195,6 @@ export const AuditLogView: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
-                <p className="text-xs text-gray-400 mt-4 text-center">
-                    Catatan: Log ini disinkronkan secara realtime dari database cloud Supabase. Pastikan koneksi internet aktif.
-                </p>
             </div>
         </div>
     );

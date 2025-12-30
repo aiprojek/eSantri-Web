@@ -206,6 +206,8 @@ export const performSync = async (
             transaksiKas: await db.transaksiKas.toArray(),
             suratTemplates: await db.suratTemplates.toArray(),
             arsipSurat: await db.arsipSurat.toArray(),
+            pendaftar: await db.pendaftar.toArray(),
+            auditLogs: await db.auditLogs.toArray(), // Added auditLogs
             version: '1.2',
             timestamp: new Date().toISOString(),
         };
@@ -214,16 +216,18 @@ export const performSync = async (
     // Helper to restore DB data
     const restoreDbData = async (data: any) => {
         const { db } = await import('../db');
-        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, async () => {
-            await db.settings.clear(); await db.settings.bulkPut(data.settings);
-            await db.santri.clear(); await db.santri.bulkPut(data.santri);
-            await db.tagihan.clear(); await db.tagihan.bulkPut(data.tagihan);
-            await db.pembayaran.clear(); await db.pembayaran.bulkPut(data.pembayaran);
-            await db.saldoSantri.clear(); await db.saldoSantri.bulkPut(data.saldoSantri);
-            await db.transaksiSaldo.clear(); await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
-            await db.transaksiKas.clear(); await db.transaksiKas.bulkPut(data.transaksiKas);
-            await db.suratTemplates.clear(); await db.suratTemplates.bulkPut(data.suratTemplates);
-            await db.arsipSurat.clear(); await db.arsipSurat.bulkPut(data.arsipSurat);
+        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, async () => {
+            await db.settings.clear(); if(data.settings) await db.settings.bulkPut(data.settings);
+            await db.santri.clear(); if(data.santri) await db.santri.bulkPut(data.santri);
+            await db.tagihan.clear(); if(data.tagihan) await db.tagihan.bulkPut(data.tagihan);
+            await db.pembayaran.clear(); if(data.pembayaran) await db.pembayaran.bulkPut(data.pembayaran);
+            await db.saldoSantri.clear(); if(data.saldoSantri) await db.saldoSantri.bulkPut(data.saldoSantri);
+            await db.transaksiSaldo.clear(); if(data.transaksiSaldo) await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
+            await db.transaksiKas.clear(); if(data.transaksiKas) await db.transaksiKas.bulkPut(data.transaksiKas);
+            await db.suratTemplates.clear(); if(data.suratTemplates) await db.suratTemplates.bulkPut(data.suratTemplates);
+            await db.arsipSurat.clear(); if(data.arsipSurat) await db.arsipSurat.bulkPut(data.arsipSurat);
+            await db.pendaftar.clear(); if(data.pendaftar) await db.pendaftar.bulkPut(data.pendaftar);
+            await db.auditLogs.clear(); if(data.auditLogs) await db.auditLogs.bulkPut(data.auditLogs); // Restore Logs
         });
     };
 
@@ -281,7 +285,6 @@ export const performSync = async (
         const client = getSupabaseClient(config);
         if (!client) throw new Error("Klien Supabase tidak valid");
 
-        // Use 'backups' bucket. User must create this bucket in Supabase Dashboard.
         const bucketName = 'backups';
 
         if (direction === 'up') {

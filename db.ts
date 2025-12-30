@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog } from './types';
 
 // PondokSettings needs an ID for Dexie to handle it as a collection of 1 (or more)
 export interface PondokSettingsWithId extends PondokSettings {
@@ -18,10 +18,11 @@ export class ESantriDatabase extends Dexie {
   suratTemplates!: Table<SuratTemplate, number>;
   arsipSurat!: Table<ArsipSurat, number>;
   pendaftar!: Table<Pendaftar, number>;
+  auditLogs!: Table<AuditLog, string>; // Local Audit Log Table
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(19).stores({
+    (this as any).version(20).stores({
       santri: '++id, nis, namaLengkap, kamarId',
       settings: '++id',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
@@ -32,6 +33,7 @@ export class ESantriDatabase extends Dexie {
       suratTemplates: '++id, nama, kategori',
       arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
       pendaftar: '++id, namaLengkap, jenjangId, tanggalDaftar, status',
+      auditLogs: 'id, table_name, operation, created_at', // New Table
     }).upgrade(async (tx: any) => {
        // Migration: Update settings to include customFields if missing
        await tx.table('settings').toCollection().modify((s: any) => {
@@ -62,29 +64,6 @@ export class ESantriDatabase extends Dexie {
                     }
                     s.psbConfig.customFields = fields;
                 }
-            } else {
-                 // Default if psbConfig missing completely
-                 s.psbConfig = {
-                    tahunAjaranAktif: new Date().getFullYear() + '/' + (new Date().getFullYear() + 1),
-                    targetKuota: 100,
-                    nomorHpAdmin: '',
-                    telegramUsername: '',
-                    pesanSukses: 'Terima kasih telah mendaftar. Silakan hubungi admin untuk konfirmasi.',
-                    activeGelombang: 1,
-                    biayaPendaftaran: 0,
-                    infoRekening: '',
-                    activeFields: ['namaLengkap', 'nisn', 'jenisKelamin', 'tempatLahir', 'tanggalLahir', 'alamat', 'namaWali', 'nomorHpWali', 'asalSekolah'],
-                    requiredDocuments: ['Kartu Keluarga (KK)', 'Akte Kelahiran', 'Pas Foto 3x4'],
-                    designStyle: 'classic',
-                    posterTitle: 'Penerimaan Santri Baru',
-                    posterSubtitle: 'Tahun Ajaran 2025/2026',
-                    posterInfo: 'Segera Daftarkan Putra/Putri Anda!',
-                    customFields: [
-                        { id: 'sec_1', type: 'section', label: 'SURAT PERNYATAAN', required: false },
-                        { id: 'stmt_1', type: 'statement', label: 'Dengan ini saya menyatakan sanggup menaati segala peraturan pondok.', required: false },
-                        { id: 'chk_1', type: 'checkbox', label: 'Persetujuan', options: ['Saya Setuju'], required: true }
-                    ]
-                };
             }
         });
     });

@@ -337,20 +337,36 @@ const Settings: React.FC<SettingsProps> = () => {
                 try {
                     const timestamp = await performSync(localSettings.cloudSyncConfig, direction);
                     
-                    const updatedSettings = {
-                        ...localSettings,
-                        cloudSyncConfig: { ...localSettings.cloudSyncConfig, lastSync: timestamp }
-                    };
-                    await onSaveSettings(updatedSettings);
-                    
-                    if (direction === 'down') {
-                        showToast('Sinkronisasi berhasil! Aplikasi akan dimuat ulang.', 'success');
-                        setTimeout(() => window.location.reload(), 2000);
-                    } else {
+                    if (direction === 'up') {
+                        // Jika Upload: Update state lokal dengan timestamp baru dan simpan
+                        const updatedSettings = {
+                            ...localSettings,
+                            cloudSyncConfig: { ...localSettings.cloudSyncConfig, lastSync: timestamp }
+                        };
+                        await onSaveSettings(updatedSettings);
                         showToast('Data berhasil diupload ke cloud.', 'success');
-                        // Refresh stats after upload (especially for Dropbox/WebDAV)
+                        
+                        // Refresh stats after upload
                         const stats = await getCloudStorageStats(localSettings.cloudSyncConfig);
                         setStorageStats(stats);
+                    } else {
+                        // Jika Download: JANGAN gunakan 'localSettings' karena itu data lama!
+                        // Data baru sudah ada di IndexedDB berkat performSync('down').
+                        // Kita harus update timestamp di DB langsung pada record yang baru di-restore.
+                        const { db } = await import('../db');
+                        const restoredSettings = await db.settings.toCollection().first();
+                        
+                        if (restoredSettings && restoredSettings.id) {
+                             // Update timestamp di DB agar indikator 'Last Sync' benar setelah reload
+                             const updatedConfig = { 
+                                 ...restoredSettings.cloudSyncConfig, 
+                                 lastSync: timestamp 
+                             };
+                             await db.settings.update(restoredSettings.id, { cloudSyncConfig: updatedConfig });
+                        }
+
+                        showToast('Sinkronisasi berhasil! Aplikasi akan dimuat ulang.', 'success');
+                        setTimeout(() => window.location.reload(), 2000);
                     }
                 } catch (error) {
                     console.error("Sync error:", error);
@@ -419,9 +435,10 @@ const Settings: React.FC<SettingsProps> = () => {
         reader.onload = (e) => {
             try {
                 const jsonString = e.target?.result as string;
-                const backupData = JSON.parse(jsonString);
+                const data = JSON.parse(jsonString);
 
-                if (!backupData.settings || !backupData.santri) {
+                // Validation check
+                if (!data.settings || !data.santri) {
                     throw new Error('File cadangan tidak valid atau rusak.');
                 }
                 
@@ -430,11 +447,19 @@ const Settings: React.FC<SettingsProps> = () => {
                     'PERHATIAN: Tindakan ini akan MENGHAPUS SEMUA DATA saat ini dan menggantinya dengan data dari file cadangan. Apakah Anda yakin ingin melanjutkan?',
                     async () => {
                         try {
-                           await (db as any).transaction('rw', db.settings, db.santri, async () => {
-                                await db.settings.clear();
-                                await db.santri.clear();
-                                await db.settings.bulkPut(backupData.settings);
-                                await db.santri.bulkPut(backupData.santri);
+                           // FIXED: Comprehensive restore logic matching SyncService
+                           await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, async () => {
+                                await db.settings.clear(); if(data.settings) await db.settings.bulkPut(data.settings);
+                                await db.santri.clear(); if(data.santri) await db.santri.bulkPut(data.santri);
+                                await db.tagihan.clear(); if(data.tagihan) await db.tagihan.bulkPut(data.tagihan);
+                                await db.pembayaran.clear(); if(data.pembayaran) await db.pembayaran.bulkPut(data.pembayaran);
+                                await db.saldoSantri.clear(); if(data.saldoSantri) await db.saldoSantri.bulkPut(data.saldoSantri);
+                                await db.transaksiSaldo.clear(); if(data.transaksiSaldo) await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
+                                await db.transaksiKas.clear(); if(data.transaksiKas) await db.transaksiKas.bulkPut(data.transaksiKas);
+                                await db.suratTemplates.clear(); if(data.suratTemplates) await db.suratTemplates.bulkPut(data.suratTemplates);
+                                await db.arsipSurat.clear(); if(data.arsipSurat) await db.arsipSurat.bulkPut(data.arsipSurat);
+                                await db.pendaftar.clear(); if(data.pendaftar) await db.pendaftar.bulkPut(data.pendaftar);
+                                await db.auditLogs.clear(); if(data.auditLogs) await db.auditLogs.bulkPut(data.auditLogs);
                            });
                            showToast('Data berhasil dipulihkan. Aplikasi akan dimuat ulang.', 'success');
                            setTimeout(() => window.location.reload(), 1500);

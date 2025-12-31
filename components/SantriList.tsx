@@ -8,7 +8,6 @@ import { SantriModal } from './santri/SantriModal';
 import { Pagination } from './common/Pagination';
 import { BulkStatusModal } from './santri/modals/BulkStatusModal';
 import { BulkMoveModal } from './santri/modals/BulkMoveModal';
-// Import new service functions
 import { generateSantriCsvForUpdate, generateSantriCsvTemplate, parseSantriCsv, ParsedCsvResult } from '../services/csvService';
 import { BulkSantriEditor } from './santri/modals/BulkSantriEditor';
 
@@ -17,9 +16,7 @@ interface SantriListProps {
 }
 
 type ImportMode = 'update' | 'add';
-// The interface is now imported from the service
 type ImportPreview = ParsedCsvResult;
-
 
 const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const { 
@@ -52,7 +49,6 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const [isImporting, setIsImporting] = useState(false);
   const [isExportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
-
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
@@ -90,10 +86,9 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
     };
   }, [exportMenuRef]);
 
-
   const getDetailName = (type: 'jenjang' | 'kelas' | 'rombel', id: number): string => {
     const item = settings[type].find(i => i.id === id);
-    return item ? item.nama : 'N/A';
+    return item ? item.nama : '-';
   }
   
   const paginatedSantri = useMemo(() => {
@@ -175,7 +170,6 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         setBulkMoveModalOpen(false);
     };
 
-
   const openModal = (santri: Santri | null = null) => {
     if (santri) {
       setSelectedSantri(santri);
@@ -221,7 +215,6 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
       if (data.id > 0) {
         await onUpdateSantri(data);
       } else {
-        // Automatically add "Masuk" status history for new santri
         const firstRiwayat: RiwayatStatus = {
             id: Date.now(),
             status: 'Masuk',
@@ -257,8 +250,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
     );
   };
 
-  // --- Refactored Export/Import Logic ---
-
+  // --- Helpers for Export/Import ---
   const downloadCsv = (csvContent: string, fileName: string) => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -318,16 +310,8 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
     }
   };
   
-  // --- Bulk Editor Handler ---
-  const handleOpenBulkEditorAdd = () => {
-      setBulkEditorMode('add');
-      setBulkEditorOpen(true);
-  };
-
-  const handleOpenBulkEditorEdit = () => {
-      setBulkEditorMode('edit');
-      setBulkEditorOpen(true);
-  };
+  const handleOpenBulkEditorAdd = () => { setBulkEditorMode('add'); setBulkEditorOpen(true); };
+  const handleOpenBulkEditorEdit = () => { setBulkEditorMode('edit'); setBulkEditorOpen(true); };
 
   const handleSaveBulkEditor = async (data: any[]) => {
       try {
@@ -337,15 +321,13 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
           } else {
               await onBulkUpdateSantri(data);
               showToast(`${data.length} data santri berhasil diperbarui.`, 'success');
-              setSelectedSantriIds([]); // Clear selection after update
+              setSelectedSantriIds([]);
           }
       } catch (error) {
           console.error(error);
           showToast('Terjadi kesalahan saat menyimpan data massal.', 'error');
       }
   };
-  
-  // --- End Refactored Logic ---
   
   const ImportModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex justify-center items-center p-4">
@@ -409,299 +391,234 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         </div>
     );
   };
-  
-  if (santriList.length === 0) {
-    return (
-      <div>
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">Database Santri</h1>
-        <div className="bg-white p-6 rounded-lg shadow-md text-center py-20">
-          <i className="bi bi-people text-6xl text-gray-300"></i>
-          <h2 className="mt-4 text-2xl font-bold text-gray-700">Database Santri Masih Kosong</h2>
-          <p className="mt-2 text-gray-500">Mulai dengan menambahkan data santri baru atau impor data dari file CSV.</p>
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <button 
-              onClick={() => openModal()} 
-              className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-            >
-              <i className="bi bi-person-plus-fill"></i>
-              Tambah Santri Baru
-            </button>
-             <button 
-              onClick={handleOpenBulkEditorAdd}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-            >
-              <i className="bi bi-table"></i>
-              Tambah Massal (Editor)
-            </button>
-            <button
-              onClick={() => setImportModalOpen(true)}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-            >
-              <i className="bi bi-box-arrow-in-down"></i>
-              Impor dari CSV
-            </button>
-            <button
-              onClick={handleExportTemplate}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-            >
-              <i className="bi bi-file-earmark-arrow-down"></i>
-              Unduh Template
-            </button>
+
+  // Avatar Component for Table
+  const TableAvatar = ({ name, url }: { name: string, url?: string }) => {
+      const hasPhoto = url && !url.includes('text=Foto');
+      const initials = name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
+      
+      return (
+          <div className="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden mr-3 bg-teal-100 flex items-center justify-center text-teal-700 text-xs font-bold border border-teal-200">
+              {hasPhoto ? (
+                  <img src={url} alt={name} className="w-full h-full object-cover" />
+              ) : (
+                  <span>{initials}</span>
+              )}
           </div>
-        </div>
-        {isModalOpen && (
-          <SantriModal
-            isOpen={isModalOpen}
-            onClose={closeModal}
-            onSave={handleSave}
-            santriData={selectedSantri}
-          />
-        )}
-        {isImportModalOpen && <ImportModal />}
-        {importPreview && <ImportPreviewModal />}
-        {isBulkEditorOpen && <BulkSantriEditor isOpen={isBulkEditorOpen} onClose={() => setBulkEditorOpen(false)} mode={bulkEditorMode} onSave={handleSaveBulkEditor} />}
-      </div>
-    );
-  }
+      );
+  };
+
+  // Status Badge Component
+  const StatusBadge = ({ status }: { status: Santri['status'] }) => {
+      const colors = {
+          'Aktif': 'bg-green-50 text-green-700 border-green-200',
+          'Hiatus': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+          'Lulus': 'bg-blue-50 text-blue-700 border-blue-200',
+          'Keluar/Pindah': 'bg-red-50 text-red-700 border-red-200',
+          'Masuk': 'bg-gray-50 text-gray-700 border-gray-200'
+      };
+      const colorClass = colors[status] || colors['Aktif'];
+      return (
+          <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-medium rounded-full border ${colorClass}`}>
+              {status}
+          </span>
+      );
+  };
 
   return (
-    <div>
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">Database Santri</h1>
-
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
-                <div className="lg:col-span-3 xl:col-span-4">
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                            <i className="bi bi-search text-gray-400"></i>
-                        </div>
-                        <input
-                            type="text"
-                            placeholder="Cari berdasarkan Nama, NIS, atau NIK..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 p-2.5"
-                        />
-                    </div>
+    <div className="w-full">
+        {/* Header & Controls Section */}
+        <div className="flex flex-col gap-6 mb-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Database Santri</h1>
+                    <p className="text-gray-500 text-sm mt-1">Kelola data santri, filter, dan ekspor data.</p>
                 </div>
-                <select value={filters.jenjang} onChange={(e) => handleFilterChange('jenjang', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5">
-                    <option value="">Semua Jenjang</option>
-                    {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
-                </select>
-                <select value={filters.kelas} onChange={(e) => handleFilterChange('kelas', e.target.value)} disabled={!filters.jenjang} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5 disabled:bg-gray-200">
-                    <option value="">Semua Kelas</option>
-                    {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-                </select>
-                <select value={filters.rombel} onChange={(e) => handleFilterChange('rombel', e.target.value)} disabled={!filters.kelas} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5 disabled:bg-gray-200">
-                    <option value="">Semua Rombel</option>
-                     {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-                </select>
-                <select value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5">
-                    <option value="">Semua Status</option>
-                    <option value="Aktif">Aktif</option>
-                    <option value="Hiatus">Hiatus</option>
-                    <option value="Lulus">Lulus</option>
-                    <option value="Keluar/Pindah">Keluar/Pindah</option>
-                </select>
-                <select value={filters.gender} onChange={(e) => handleFilterChange('gender', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5">
-                    <option value="">Semua Gender</option>
-                    <option value="Laki-laki">Laki-laki</option>
-                    <option value="Perempuan">Perempuan</option>
-                </select>
-                 <input type="text" placeholder="Filter Provinsi..." value={filters.provinsi} onChange={(e) => handleFilterChange('provinsi', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" />
-                 <input type="text" placeholder="Filter Kabupaten/Kota..." value={filters.kabupatenKota} onChange={(e) => handleFilterChange('kabupatenKota', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" />
-                 <input type="text" placeholder="Filter Kecamatan..." value={filters.kecamatan} onChange={(e) => handleFilterChange('kecamatan', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" />
+                <div className="flex flex-wrap gap-2">
+                    <button onClick={handleOpenBulkEditorAdd} className="flex items-center justify-center px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors">
+                        <i className="bi bi-table mr-2"></i> Editor Massal
+                    </button>
+                    <button onClick={() => openModal()} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 shadow-sm transition-colors focus:ring-4 focus:ring-teal-300">
+                        <i className="bi bi-plus-lg"></i> Tambah Santri
+                    </button>
+                </div>
             </div>
 
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-               {selectedSantriIds.length > 0 ? (
-                    <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 p-2 rounded-lg bg-teal-50 border border-teal-200">
-                        <div className="text-sm font-semibold text-teal-800">
-                            {selectedSantriIds.length} santri dipilih. 
-                             <button onClick={() => setSelectedSantriIds([])} className="ml-2 text-red-600 hover:underline font-medium">Batalkan</button>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap justify-center">
-                            <button onClick={handleOpenBulkEditorEdit} className="flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-teal-700 bg-white rounded-md hover:bg-teal-50 border border-teal-300">
-                                <i className="bi bi-pencil-square"></i> Edit Massal
-                            </button>
-                             <button onClick={() => setBulkMoveModalOpen(true)} className="flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white rounded-md hover:bg-gray-100 border border-gray-300">
-                                <i className="bi bi-arrows-move"></i> Pindahkan Rombel
-                            </button>
-                            <button onClick={() => setBulkStatusModalOpen(true)} className="flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white rounded-md hover:bg-gray-100 border border-gray-300">
-                                <i className="bi bi-tag-fill"></i> Ubah Status
-                            </button>
-                        </div>
+            {/* Selection Toolbar */}
+            {selectedSantriIds.length > 0 && (
+                <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+                    <div className="flex items-center gap-2 text-teal-800 text-sm font-medium">
+                        <span className="bg-teal-200 text-teal-800 text-xs px-2 py-0.5 rounded-full">{selectedSantriIds.length}</span>
+                        <span>santri dipilih</span>
+                        <span className="text-gray-300 mx-1">|</span>
+                        <button onClick={() => setSelectedSantriIds([])} className="text-teal-600 hover:text-teal-800 hover:underline">Batalkan</button>
                     </div>
-                ) : (
-                    <div className="flex-wrap w-full md:w-auto flex items-center justify-center md:justify-start gap-x-4 gap-y-2 text-sm text-gray-600">
-                        <div className="flex items-center gap-2">
-                            <label htmlFor="items-per-page-select" className="sr-only">Items per page</label>
-                            <select
-                                id="items-per-page-select"
-                                value={itemsPerPage}
-                                onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-1.5"
-                            >
-                                <option value={10}>10 per halaman</option>
-                                <option value={25}>25 per halaman</option>
-                                <option value={50}>50 per halaman</option>
-                                <option value={100}>100 per halaman</option>
-                            </select>
-                        </div>
-                        <div className="text-gray-500 text-center">
-                            <span className="font-semibold text-gray-800">{filteredSantri.length}</span> hasil ditemukan
-                            <span className="hidden lg:inline"> (dari total <span className="font-semibold text-gray-800">{santriList.length}</span> santri)</span>
-                        </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={handleOpenBulkEditorEdit} className="px-3 py-1.5 text-xs font-medium text-teal-700 bg-white border border-teal-300 rounded-md hover:bg-teal-50 transition-colors">
+                            <i className="bi bi-pencil-square mr-1"></i> Edit
+                        </button>
+                        <button onClick={() => setBulkMoveModalOpen(true)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                            <i className="bi bi-arrows-move mr-1"></i> Pindah Kelas
+                        </button>
+                        <button onClick={() => setBulkStatusModalOpen(true)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                            <i className="bi bi-tag mr-1"></i> Ubah Status
+                        </button>
                     </div>
-                )}
+                </div>
+            )}
 
-                <div className="w-full md:w-auto">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        <button onClick={() => setImportModalOpen(true)} disabled={isImporting} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                            {isImporting ? (
-                                <>
-                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    <span>Memproses...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <i className="bi bi-box-arrow-in-down"></i>
-                                    Impor
-                                </>
-                            )}
+            {/* Search & Filters Bar */}
+            <div className="flex flex-col xl:flex-row gap-4">
+                <div className="relative flex-grow xl:max-w-md">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+                        <i className="bi bi-search"></i>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Cari nama, NIS, atau NIK..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full pl-10 p-2.5 shadow-sm"
+                    />
+                </div>
+                
+                <div className="flex-grow flex flex-wrap xl:flex-nowrap gap-2 items-center overflow-x-auto pb-2 xl:pb-0 scrollbar-hide">
+                    {/* Filter Pills */}
+                    <select value={filters.jenjang} onChange={(e) => handleFilterChange('jenjang', e.target.value)} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-2.5 min-w-[140px]">
+                        <option value="">Semua Jenjang</option>
+                        {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                    </select>
+                    <select value={filters.kelas} onChange={(e) => handleFilterChange('kelas', e.target.value)} disabled={!filters.jenjang} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-2.5 min-w-[120px] disabled:bg-gray-100 disabled:text-gray-400">
+                        <option value="">Semua Kelas</option>
+                        {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                    </select>
+                    <select value={filters.rombel} onChange={(e) => handleFilterChange('rombel', e.target.value)} disabled={!filters.kelas} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-2.5 min-w-[140px] disabled:bg-gray-100 disabled:text-gray-400">
+                        <option value="">Semua Rombel</option>
+                        {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                    </select>
+                    <select value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-2.5 min-w-[120px]">
+                        <option value="">Semua Status</option>
+                        <option value="Aktif">Aktif</option>
+                        <option value="Hiatus">Hiatus</option>
+                        <option value="Lulus">Lulus</option>
+                        <option value="Keluar/Pindah">Keluar/Pindah</option>
+                    </select>
+                    
+                    {/* More Actions (Import/Export) Dropdown or Buttons */}
+                    <div className="ml-auto flex gap-2 pl-2 border-l border-gray-300">
+                        <button onClick={() => setImportModalOpen(true)} disabled={isImporting} className="p-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg" title="Impor CSV">
+                            {isImporting ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-upload"></i>}
                         </button>
                         <div className="relative">
-                            <button
-                                onClick={() => setExportMenuOpen(prev => !prev)}
-                                className="w-full h-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                            >
-                                <i className="bi bi-box-arrow-up"></i>
-                                Ekspor
-                                <i className={`bi bi-chevron-down transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`}></i>
+                            <button onClick={() => setExportMenuOpen(!isExportMenuOpen)} className="p-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1" title="Ekspor CSV">
+                                <i className="bi bi-download"></i>
                             </button>
                             {isExportMenuOpen && (
-                                <div ref={exportMenuRef} className="absolute right-0 mt-2 w-64 origin-top-right bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
-                                    <div className="py-1">
-                                        <button 
-                                            onClick={(e) => { e.preventDefault(); handleExportForUpdate(); setExportMenuOpen(false); }} 
-                                            className="w-full text-left block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                                        >
-                                            <div className="font-medium text-gray-800">Ekspor Data (untuk Update)</div>
-                                            <p className="text-xs text-gray-500 mt-1">Unduh data yang ditampilkan saat ini (sesuai filter). File ini berisi ID untuk memperbarui data yang sudah ada.</p>
-                                        </button>
-                                        <button 
-                                            onClick={(e) => { e.preventDefault(); handleExportTemplate(); setExportMenuOpen(false); }} 
-                                            className="w-full text-left block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                                        >
-                                            <div className="font-medium text-gray-800">Unduh Template (untuk Tambah)</div>
-                                            <p className="text-xs text-gray-500 mt-1">Unduh file CSV kosong dengan header yang benar untuk menambahkan santri baru.</p>
-                                        </button>
-                                    </div>
+                                <div ref={exportMenuRef} className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50 py-1 origin-top-right">
+                                    <button onClick={(e) => { e.preventDefault(); handleExportForUpdate(); setExportMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><i className="bi bi-file-earmark-spreadsheet mr-2"></i> Ekspor Data (Lengkap)</button>
+                                    <button onClick={(e) => { e.preventDefault(); handleExportTemplate(); setExportMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><i className="bi bi-file-earmark-plus mr-2"></i> Unduh Template Kosong</button>
                                 </div>
                             )}
                         </div>
-                         <div className="col-span-2 md:col-span-1 flex gap-1">
-                            <button onClick={handleOpenBulkEditorAdd} className="flex-1 flex items-center justify-center px-3 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-l-lg hover:bg-teal-100 focus:outline-none" title="Tambah Massal (Editor)">
-                                <i className="bi bi-table"></i>
-                            </button>
-                            <button onClick={() => openModal()} className="flex-grow flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-r-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
-                                <i className="bi bi-person-plus-fill"></i>
-                                Tambah
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div className="overflow-x-auto border rounded-lg">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="sticky top-0 bg-gray-50 z-30">
+        {/* Main Table Area */}
+        <div className="bg-white border border-gray-200 rounded-none md:rounded-xl shadow-sm overflow-hidden flex flex-col">
+            <div className="overflow-x-auto min-h-[300px]">
+                <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-50/50 border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm">
                         <tr>
-                            <th scope="col" className="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                               <input 
-                                    type="checkbox" 
-                                    ref={selectAllCheckboxRef}
-                                    onChange={handleSelectAllOnPage}
-                                    className="h-4 w-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                                    aria-label="Pilih semua santri di halaman ini"
-                                />
+                            <th scope="col" className="p-4 w-10">
+                                <div className="flex items-center">
+                                    <input 
+                                        type="checkbox" 
+                                        ref={selectAllCheckboxRef}
+                                        onChange={handleSelectAllOnPage}
+                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                                    />
+                                </div>
                             </th>
-                            <th scope="col" className="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 top-0 bg-gray-50 z-40">
-                                NIS
-                            </th>
-                            <th scope="col" className="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Nama Lengkap
-                            </th>
-                            <th scope="col" className="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Rombel
-                            </th>
-                            <th scope="col" className="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Jenjang
-                            </th>
-                            <th scope="col" className="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Status
-                            </th>
-                             <th scope="col" className="p-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Tgl. Masuk
-                            </th>
-                            <th scope="col" className="relative p-3">
-                                <span className="sr-only">Aksi</span>
-                            </th>
+                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Nama Lengkap</th>
+                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Identitas</th>
+                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Kelas</th>
+                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Status</th>
+                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Info</th>
+                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase text-right">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                         {paginatedSantri.map(santri => (
-                            <tr key={santri.id} className={`group ${selectedSantriIds.includes(santri.id) ? 'bg-teal-50' : 'hover:bg-gray-50'}`}>
-                                <td className="p-3">
-                                   <input 
-                                        type="checkbox" 
-                                        checked={selectedSantriIds.includes(santri.id)}
-                                        onChange={() => handleSelectOne(santri.id)}
-                                        className="h-4 w-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                                        aria-label={`Pilih ${santri.namaLengkap}`}
-                                    />
+                            <tr key={santri.id} className={`group transition-colors ${selectedSantriIds.includes(santri.id) ? 'bg-teal-50/60 hover:bg-teal-50' : 'hover:bg-gray-50'}`}>
+                                <td className="p-4">
+                                    <div className="flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedSantriIds.includes(santri.id)}
+                                            onChange={() => handleSelectOne(santri.id)}
+                                            className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                                        />
+                                    </div>
                                 </td>
-                                <td className={`p-3 whitespace-nowrap text-sm font-medium text-gray-800 sticky left-0 z-20 ${selectedSantriIds.includes(santri.id) ? 'bg-teal-50' : 'bg-white group-hover:bg-gray-50'}`}>
-                                    {santri.nis}
+                                <td className="p-4">
+                                    <div className="flex items-center">
+                                        <TableAvatar name={santri.namaLengkap} url={santri.fotoUrl} />
+                                        <div>
+                                            <div className="text-sm font-medium text-gray-900">{santri.namaLengkap}</div>
+                                            {santri.namaHijrah && <div className="text-xs text-gray-500">({santri.namaHijrah})</div>}
+                                        </div>
+                                    </div>
                                 </td>
-                                <td className="p-3 whitespace-nowrap text-sm text-gray-900">{santri.namaLengkap}</td>
-                                <td className="p-3 whitespace-nowrap text-sm text-gray-500">{getDetailName('rombel', santri.rombelId)}</td>
-                                <td className="p-3 whitespace-nowrap text-sm text-gray-500">{getDetailName('jenjang', santri.jenjangId)}</td>
-                                <td className="p-3 whitespace-nowrap text-sm">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                        santri.status === 'Aktif' ? 'bg-green-100 text-green-800' :
-                                        santri.status === 'Hiatus' ? 'bg-yellow-100 text-yellow-800' :
-                                        santri.status === 'Lulus' ? 'bg-blue-100 text-blue-800' :
-                                        'bg-red-100 text-red-800'
-                                    }`}>
-                                        {santri.status}
-                                    </span>
+                                <td className="p-4">
+                                    <div className="text-sm text-gray-900 font-mono">{santri.nis}</div>
+                                    {santri.nisn && <div className="text-xs text-gray-500">NISN: {santri.nisn}</div>}
                                 </td>
-                                <td className="p-3 whitespace-nowrap text-sm text-gray-500">{new Date(santri.tanggalMasuk).toLocaleDateString('id-ID')}</td>
-                                <td className="p-3 whitespace-nowrap text-right text-sm font-medium">
-                                    <button onClick={() => openModal(santri)} className="text-blue-600 hover:text-blue-900 mr-4" aria-label={`Edit data ${santri.namaLengkap}`}><i className="bi bi-pencil-square"></i></button>
-                                    <button onClick={() => handleDelete(santri.id)} className="text-red-600 hover:text-red-900" aria-label={`Hapus data ${santri.namaLengkap}`}><i className="bi bi-trash-fill"></i></button>
+                                <td className="p-4">
+                                    <div className="text-sm text-gray-900">{getDetailName('rombel', santri.rombelId)}</div>
+                                    <div className="text-xs text-gray-500">{getDetailName('jenjang', santri.jenjangId)}</div>
+                                </td>
+                                <td className="p-4">
+                                    <StatusBadge status={santri.status} />
+                                </td>
+                                <td className="p-4">
+                                    <div className="text-xs text-gray-500 flex flex-col gap-0.5">
+                                        <span title="Tanggal Masuk"><i className="bi bi-calendar-event mr-1"></i> {new Date(santri.tanggalMasuk).toLocaleDateString('id-ID')}</span>
+                                        <span title="Jenis Kelamin"><i className={`bi bi-gender-${santri.jenisKelamin === 'Laki-laki' ? 'male text-blue-500' : 'female text-pink-500'} mr-1`}></i> {santri.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</span>
+                                    </div>
+                                </td>
+                                <td className="p-4 text-right">
+                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => openModal(santri)} className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors" title="Edit">
+                                            <i className="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button onClick={() => handleDelete(santri.id)} className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors" title="Hapus">
+                                            <i className="bi bi-trash"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
-                         {filteredSantri.length === 0 && (
+                        {filteredSantri.length === 0 && (
                             <tr>
-                                <td colSpan={8} className="text-center py-16 text-gray-500">
-                                    <i className="bi bi-search text-5xl text-gray-400"></i>
-                                    <h3 className="mt-4 text-xl font-semibold text-gray-700">Hasil Tidak Ditemukan</h3>
-                                    <p className="mt-1">Tidak ada santri yang cocok dengan kriteria filter Anda.</p>
-                                    <button 
-                                        onClick={() => {
-                                            setSearchTerm('');
-                                            setSantriFilters({ search: '', jenjang: '', kelas: '', rombel: '', status: '', gender: '', provinsi: '', kabupatenKota: '', kecamatan: '' });
-                                        }} 
-                                        className="mt-4 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                                    >
-                                        Hapus Filter
-                                    </button>
+                                <td colSpan={7} className="px-6 py-12 text-center">
+                                    <div className="flex flex-col items-center justify-center">
+                                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-3">
+                                            <i className="bi bi-search text-xl"></i>
+                                        </div>
+                                        <h3 className="text-sm font-medium text-gray-900">Tidak ada data ditemukan</h3>
+                                        <p className="text-xs text-gray-500 mt-1 max-w-xs">Coba ubah kata kunci pencarian atau filter Anda, atau tambahkan santri baru.</p>
+                                        <button 
+                                            onClick={() => {
+                                                setSearchTerm('');
+                                                setSantriFilters({ search: '', jenjang: '', kelas: '', rombel: '', status: '', gender: '', provinsi: '', kabupatenKota: '', kecamatan: '' });
+                                            }} 
+                                            className="mt-4 px-3 py-1.5 text-xs font-medium text-teal-600 bg-teal-50 rounded-md hover:bg-teal-100"
+                                        >
+                                            Reset Filter
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         )}
@@ -709,15 +626,28 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                 </table>
             </div>
             
-            <div className="flex flex-col sm:flex-row justify-between items-center mt-4 text-sm text-gray-600">
-                <p className="mb-2 sm:mb-0">
-                    Menampilkan <span className="font-semibold">{startItem}</span> - <span className="font-semibold">{endItem}</span> dari <span className="font-semibold">{filteredSantri.length}</span> santri
-                </p>
-                <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                />
+            {/* Pagination Footer */}
+            <div className="bg-gray-50 border-t border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-sm text-gray-600">
+                    Menampilkan <span className="font-medium text-gray-900">{startItem}-{endItem}</span> dari <span className="font-medium text-gray-900">{filteredSantri.length}</span> santri
+                </div>
+                <div className="flex items-center gap-4">
+                    <select
+                        value={itemsPerPage}
+                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                        className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-1.5"
+                    >
+                        <option value={10}>10 baris</option>
+                        <option value={25}>25 baris</option>
+                        <option value={50}>50 baris</option>
+                        <option value={100}>100 baris</option>
+                    </select>
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                    />
+                </div>
             </div>
         </div>
 

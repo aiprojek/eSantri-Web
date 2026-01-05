@@ -328,7 +328,7 @@ $$ language plpgsql security definer;
                 <p className="text-sm mb-2">Pilih beberapa santri (centang), lalu klik tombol <span className="font-semibold bg-white border border-teal-300 text-teal-700 px-2 py-0.5 rounded-md text-xs">Edit</span> di toolbar yang muncul. Anda bisa mengedit data mereka secara bersamaan (seperti Excel), cocok untuk input nilai atau perbaikan data massal.</p>
 
                 <h4 className="font-semibold text-base mt-4 mb-2">C. Impor & Ekspor File CSV</h4>
-                <p className="text-sm mb-2">Klik tombol <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Ekspor</span> > "Unduh Template". Isi data di Excel, lalu impor kembali. Cocok untuk migrasi data awal dari aplikasi lain.</p>
+                <p className="text-sm mb-2">Klik tombol <span className="font-semibold bg-gray-200 px-2 py-0.5 rounded-md text-xs">Ekspor</span> &gt; "Unduh Template". Isi data di Excel, lalu impor kembali. Cocok untuk migrasi data awal dari aplikasi lain.</p>
             </PanduanLangkah>
             
             <PanduanLangkah number={10} title="Membuat & Mengelola Surat Menyurat">

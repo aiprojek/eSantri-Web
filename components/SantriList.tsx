@@ -44,12 +44,15 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const [selectedSantri, setSelectedSantri] = useState<Santri | null>(null);
   
   const [isImportModalOpen, setImportModalOpen] = useState(false);
+  const [isExportModalOpen, setExportModalOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [isExportMenuOpen, setExportMenuOpen] = useState(false);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Refs terpisah untuk input file agar tidak konflik
+  const fileInputUpdateRef = useRef<HTMLInputElement>(null);
+  const fileInputAddRef = useRef<HTMLInputElement>(null);
 
+  const [isImporting, setIsImporting] = useState(false);
+  
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   
@@ -59,6 +62,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const [isBulkMoveModalOpen, setBulkMoveModalOpen] = useState(false);
   const [isBulkEditorOpen, setBulkEditorOpen] = useState(false);
   const [bulkEditorMode, setBulkEditorMode] = useState<'add' | 'edit'>('add');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
 
@@ -73,18 +77,6 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   useEffect(() => {
     setSelectedSantriIds([]);
   }, [filters]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-        if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
-            setExportMenuOpen(false);
-        }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [exportMenuRef]);
 
   const getDetailName = (type: 'jenjang' | 'kelas' | 'rombel', id: number): string => {
     const item = settings[type].find(i => i.id === id);
@@ -264,11 +256,13 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const handleExportForUpdate = () => {
     const csvContent = generateSantriCsvForUpdate(filteredSantri);
     downloadCsv(csvContent, `data_santri_update_${new Date().toISOString().slice(0, 10)}.csv`);
+    setExportModalOpen(false);
   };
 
   const handleExportTemplate = () => {
     const csvContent = generateSantriCsvTemplate();
     downloadCsv(csvContent, `template_tambah_santri.csv`);
+    setExportModalOpen(false);
   };
 
   const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>, mode: ImportMode) => {
@@ -284,7 +278,9 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         } catch (error) {
             showAlert(`Gagal Memproses File`, `Terjadi kesalahan saat membaca file CSV: ${(error as Error).message}`);
         } finally {
-            if (fileInputRef.current) { fileInputRef.current.value = ''; }
+            // Reset input values manually
+            if (fileInputUpdateRef.current) fileInputUpdateRef.current.value = '';
+            if (fileInputAddRef.current) fileInputAddRef.current.value = '';
             setImportModalOpen(false);
         }
     };
@@ -334,8 +330,9 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         <div className="bg-white rounded-lg shadow-xl w-full max-w-lg">
             <div className="p-5 border-b flex justify-between items-center"><h3 className="text-lg font-semibold text-gray-800">Impor Data Massal</h3><button onClick={() => setImportModalOpen(false)} className="text-gray-400 hover:text-gray-600" aria-label="Tutup"><i className="bi bi-x-lg"></i></button></div>
             <div className="p-6 space-y-4">
-                <input type="file" accept=".csv" ref={fileInputRef} id="import-update-input" className="hidden" onChange={(e) => handleImportFile(e, 'update')} />
-                <input type="file" accept=".csv" ref={fileInputRef} id="import-add-input" className="hidden" onChange={(e) => handleImportFile(e, 'add')} />
+                <input type="file" accept=".csv" ref={fileInputUpdateRef} id="import-update-input" className="hidden" onChange={(e) => handleImportFile(e, 'update')} />
+                <input type="file" accept=".csv" ref={fileInputAddRef} id="import-add-input" className="hidden" onChange={(e) => handleImportFile(e, 'add')} />
+                
                 <label htmlFor="import-update-input" className="w-full cursor-pointer p-4 border rounded-lg flex items-start gap-4 hover:bg-gray-50 hover:border-teal-400 transition-colors">
                     <i className="bi bi-arrow-repeat text-2xl text-teal-600 mt-1"></i>
                     <div><h4 className="font-semibold text-gray-800">Perbarui Data yang Ada</h4><p className="text-sm text-gray-600">Pilih mode ini jika file CSV Anda berisi santri yang sudah ada di database dan memiliki kolom 'id'.</p></div>
@@ -344,6 +341,24 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                      <i className="bi bi-person-plus-fill text-2xl text-green-600 mt-1"></i>
                     <div><h4 className="font-semibold text-gray-800">Tambah sebagai Data Baru</h4><p className="text-sm text-gray-600">Pilih mode ini untuk menambahkan semua baris di file CSV sebagai santri baru. Kolom 'id' akan diabaikan.</p></div>
                 </label>
+            </div>
+        </div>
+    </div>
+  );
+
+  const ExportModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex justify-center items-center p-4">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-lg">
+            <div className="p-5 border-b flex justify-between items-center"><h3 className="text-lg font-semibold text-gray-800">Ekspor Data</h3><button onClick={() => setExportModalOpen(false)} className="text-gray-400 hover:text-gray-600" aria-label="Tutup"><i className="bi bi-x-lg"></i></button></div>
+            <div className="p-6 space-y-4">
+                <button onClick={handleExportForUpdate} className="w-full cursor-pointer p-4 border rounded-lg flex items-start gap-4 hover:bg-gray-50 hover:border-blue-400 transition-colors text-left">
+                    <i className="bi bi-file-earmark-spreadsheet text-2xl text-blue-600 mt-1"></i>
+                    <div><h4 className="font-semibold text-gray-800">Ekspor Data Santri (Lengkap)</h4><p className="text-sm text-gray-600">Unduh semua data santri saat ini untuk backup atau diedit di Excel. Hasilnya bisa diimpor kembali.</p></div>
+                </button>
+                <button onClick={handleExportTemplate} className="w-full cursor-pointer p-4 border rounded-lg flex items-start gap-4 hover:bg-gray-50 hover:border-orange-400 transition-colors text-left">
+                     <i className="bi bi-file-earmark-plus text-2xl text-orange-600 mt-1"></i>
+                    <div><h4 className="font-semibold text-gray-800">Unduh Template Kosong</h4><p className="text-sm text-gray-600">Unduh template CSV kosong untuk memasukkan data santri baru secara massal dari aplikasi lain.</p></div>
+                </button>
             </div>
         </div>
     </div>
@@ -436,7 +451,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <button onClick={handleOpenBulkEditorAdd} className="flex items-center justify-center px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors">
-                        <i className="bi bi-table mr-2"></i> Editor Massal
+                        <i className="bi bi-plus-square-dotted mr-2"></i> Tambah Massal
                     </button>
                     <button onClick={() => openModal()} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 shadow-sm transition-colors focus:ring-4 focus:ring-teal-300">
                         <i className="bi bi-plus-lg"></i> Tambah Santri
@@ -503,26 +518,42 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                         <option value="Lulus">Lulus</option>
                         <option value="Keluar/Pindah">Keluar/Pindah</option>
                     </select>
+                    <select value={filters.gender} onChange={(e) => handleFilterChange('gender', e.target.value)} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-2.5 min-w-[120px]">
+                        <option value="">Semua Gender</option>
+                        <option value="Laki-laki">Laki-laki</option>
+                        <option value="Perempuan">Perempuan</option>
+                    </select>
                     
+                    <button 
+                        onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} 
+                        className={`p-2.5 rounded-lg border transition-colors ${showAdvancedFilters ? 'bg-teal-50 border-teal-500 text-teal-700' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`} 
+                        title="Filter Lanjutan"
+                    >
+                        <i className="bi bi-sliders"></i>
+                    </button>
+
                     {/* More Actions (Import/Export) Dropdown or Buttons */}
                     <div className="ml-auto flex gap-2 pl-2 border-l border-gray-300">
                         <button onClick={() => setImportModalOpen(true)} disabled={isImporting} className="p-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg" title="Impor CSV">
                             {isImporting ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-upload"></i>}
                         </button>
                         <div className="relative">
-                            <button onClick={() => setExportMenuOpen(!isExportMenuOpen)} className="p-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1" title="Ekspor CSV">
+                            <button onClick={() => setExportModalOpen(true)} className="p-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1" title="Ekspor CSV">
                                 <i className="bi bi-download"></i>
                             </button>
-                            {isExportMenuOpen && (
-                                <div ref={exportMenuRef} className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50 py-1 origin-top-right">
-                                    <button onClick={(e) => { e.preventDefault(); handleExportForUpdate(); setExportMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><i className="bi bi-file-earmark-spreadsheet mr-2"></i> Ekspor Data (Lengkap)</button>
-                                    <button onClick={(e) => { e.preventDefault(); handleExportTemplate(); setExportMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"><i className="bi bi-file-earmark-plus mr-2"></i> Unduh Template Kosong</button>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* Advanced Filters Section */}
+            {showAdvancedFilters && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-down">
+                    <input type="text" placeholder="Filter Provinsi..." value={filters.provinsi} onChange={(e) => handleFilterChange('provinsi', e.target.value)} className="bg-white border border-gray-300 text-sm rounded-lg p-2.5 w-full"/>
+                    <input type="text" placeholder="Filter Kab/Kota..." value={filters.kabupatenKota} onChange={(e) => handleFilterChange('kabupatenKota', e.target.value)} className="bg-white border border-gray-300 text-sm rounded-lg p-2.5 w-full"/>
+                    <input type="text" placeholder="Filter Kecamatan..." value={filters.kecamatan} onChange={(e) => handleFilterChange('kecamatan', e.target.value)} className="bg-white border border-gray-300 text-sm rounded-lg p-2.5 w-full"/>
+                </div>
+            )}
         </div>
 
         {/* Main Table Area */}
@@ -657,9 +688,11 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                 onClose={closeModal}
                 onSave={handleSave}
                 santriData={selectedSantri}
+                onSwitchToBulk={() => { closeModal(); handleOpenBulkEditorAdd(); }}
             />
         )}
         {isImportModalOpen && <ImportModal />}
+        {isExportModalOpen && <ExportModal />}
         {importPreview && <ImportPreviewModal />}
         {isBulkStatusModalOpen && <BulkStatusModal isOpen={isBulkStatusModalOpen} onClose={() => setBulkStatusModalOpen(false)} onSave={handleBulkStatusSave} selectedCount={selectedSantriIds.length} />}
         {isBulkMoveModalOpen && <BulkMoveModal isOpen={isBulkMoveModalOpen} onClose={() => setBulkMoveModalOpen(false)} onSave={handleBulkMoveSave} selectedCount={selectedSantriIds.length} />}

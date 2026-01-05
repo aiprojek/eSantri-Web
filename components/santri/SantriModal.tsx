@@ -17,6 +17,7 @@ interface SantriModalProps {
   onClose: () => void;
   onSave: (data: Santri) => Promise<void>;
   santriData: Santri | null;
+  onSwitchToBulk?: () => void;
 }
 
 export const SantriModal: React.FC<SantriModalProps> = ({
@@ -24,6 +25,7 @@ export const SantriModal: React.FC<SantriModalProps> = ({
   onClose,
   onSave,
   santriData,
+  onSwitchToBulk
 }) => {
   const { settings, santriList, showAlert } = useAppContext();
   const formMethods = useForm<Santri>();
@@ -123,8 +125,20 @@ export const SantriModal: React.FC<SantriModalProps> = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" onClick={onClose}>
         <form onSubmit={handleSubmit(onFormSubmit)} noValidate className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b flex justify-between items-center">
-                <h3 className="text-xl font-semibold text-gray-800">{santriData.id > 0 ? 'Edit Data Santri' : 'Tambah Santri Baru'}</h3>
+            <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+                <div className="flex items-center gap-4">
+                    <h3 className="text-xl font-semibold text-gray-800">{santriData.id > 0 ? 'Edit Data Santri' : 'Tambah Santri Baru'}</h3>
+                    {santriData.id === 0 && onSwitchToBulk && (
+                        <button 
+                            type="button" 
+                            onClick={onSwitchToBulk}
+                            className="text-xs bg-teal-100 text-teal-700 px-3 py-1.5 rounded-full hover:bg-teal-200 transition-colors font-medium flex items-center gap-1"
+                        >
+                            <i className="bi bi-table"></i>
+                            Input Banyak Data?
+                        </button>
+                    )}
+                </div>
                 <button onClick={onClose} type="button" className="text-gray-400 hover:text-gray-600"><i className="bi bi-x-lg text-xl"></i></button>
             </div>
             <div className="flex-grow overflow-y-auto p-6">
@@ -148,7 +162,7 @@ export const SantriModal: React.FC<SantriModalProps> = ({
                     )}
                 </div>
             </div>
-            <div className="p-4 border-t flex justify-end space-x-2 bg-gray-50">
+            <div className="p-4 border-t flex justify-end space-x-2 bg-gray-50 rounded-b-lg">
                 <button onClick={onClose} type="button" className="text-gray-600 bg-white hover:bg-gray-100 focus:ring-4 focus:outline-none focus:ring-blue-300 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5 hover:text-gray-900 focus:z-10">Batal</button>
                 <button type="submit" disabled={isSubmitting} className="text-white bg-teal-700 hover:bg-teal-800 focus:ring-4 focus:outline-none focus:ring-teal-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center flex items-center justify-center min-w-[130px] disabled:bg-teal-400 disabled:cursor-not-allowed">
                     {isSubmitting ? (

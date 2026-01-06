@@ -1,9 +1,6 @@
-
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { AuditLog } from '../types';
 import { useAppContext } from '../AppContext';
-import { getSupabaseClient } from '../services/supabaseClient';
 import { db } from '../db';
 
 export const AuditLogView: React.FC = () => {
@@ -14,28 +11,13 @@ export const AuditLogView: React.FC = () => {
     const [filterTable, setFilterTable] = useState('');
     const [filterOp, setFilterOp] = useState('');
     
-    const isSupabase = settings.cloudSyncConfig?.provider === 'supabase';
-    const client = isSupabase ? getSupabaseClient(settings.cloudSyncConfig) : null;
-
     useEffect(() => {
         const fetchLogs = async () => {
             setIsLoading(true);
             try {
-                if (isSupabase && client) {
-                    // Fetch from Supabase
-                    const { data, error } = await client
-                        .from('audit_logs')
-                        .select('*')
-                        .order('created_at', { ascending: false })
-                        .limit(100);
-
-                    if (error) throw error;
-                    setLogs(data as AuditLog[]);
-                } else {
-                    // Fetch from Local IndexedDB
-                    const data = await db.auditLogs.orderBy('created_at').reverse().limit(100).toArray();
-                    setLogs(data);
-                }
+                // Fetch from Local IndexedDB
+                const data = await db.auditLogs.orderBy('created_at').reverse().limit(100).toArray();
+                setLogs(data);
                 setError(null);
             } catch (err: any) {
                 console.error("Error fetching logs:", err);
@@ -46,27 +28,7 @@ export const AuditLogView: React.FC = () => {
         };
 
         fetchLogs();
-
-        // Realtime Subscription (Only for Supabase)
-        if (isSupabase && client) {
-            const channel = client
-                .channel('audit_logs_changes')
-                .on(
-                    'postgres_changes',
-                    { event: 'INSERT', schema: 'public', table: 'audit_logs' },
-                    (payload) => {
-                        const newLog = payload.new as AuditLog;
-                        setLogs(prev => [newLog, ...prev]);
-                        showToast(`Aktivitas baru: ${newLog.operation} pada ${newLog.table_name}`, 'info');
-                    }
-                )
-                .subscribe();
-
-            return () => {
-                client.removeChannel(channel);
-            };
-        }
-    }, [settings.cloudSyncConfig, isSupabase]);
+    }, [settings.cloudSyncConfig]);
 
     const filteredLogs = logs.filter(log => {
         const tableMatch = !filterTable || log.table_name.toLowerCase().includes(filterTable.toLowerCase());
@@ -122,10 +84,7 @@ export const AuditLogView: React.FC = () => {
             <div className="mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">Log Aktivitas Sistem</h1>
                 <p className="text-sm text-gray-500 mt-1">
-                    {isSupabase 
-                        ? <span className="text-emerald-600 font-semibold"><i className="bi bi-cloud-check-fill"></i> Terhubung ke Supabase (Realtime)</span> 
-                        : <span className="text-blue-600 font-semibold"><i className="bi bi-hdd-fill"></i> Mode Lokal (Offline/File-Sync)</span>
-                    }
+                    <span className="text-blue-600 font-semibold"><i className="bi bi-hdd-fill"></i> Mode Lokal (Offline/File-Sync)</span>
                 </p>
             </div>
             

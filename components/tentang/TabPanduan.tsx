@@ -119,9 +119,9 @@ export const TabPanduan: React.FC = () => {
                 <PanduanLangkah number={1} title="Konfigurasi Awal (Wajib)" color="purple">
                     <p>Lakukan langkah ini sebelum menggunakan fitur lain:</p>
                     <ol className="list-decimal pl-5 space-y-1 mt-2 bg-gray-50 p-3 rounded border border-gray-200 text-sm">
-                        <li><strong>Pengaturan > Umum:</strong> Isi nama yayasan, ponpes, alamat, dan logo. Data ini akan muncul di kop surat dan laporan.</li>
-                        <li><strong>Data Master > Tenaga Pendidik:</strong> Input data pengajar, Mudir, dan Wali Kelas.</li>
-                        <li><strong>Data Master > Struktur Pendidikan:</strong>
+                        <li><strong>Pengaturan &gt; Umum:</strong> Isi nama yayasan, ponpes, alamat, dan logo. Data ini akan muncul di kop surat dan laporan.</li>
+                        <li><strong>Data Master &gt; Tenaga Pendidik:</strong> Input data pengajar, Mudir, dan Wali Kelas.</li>
+                        <li><strong>Data Master &gt; Struktur Pendidikan:</strong>
                             <ul className="list-disc pl-5 mt-1 text-xs text-gray-500">
                                 <li>Buat <strong>Jenjang</strong> (Misal: Wustho, Ulya).</li>
                                 <li>Buat <strong>Kelas</strong> (Misal: Kelas 1, Kelas 2).</li>
@@ -134,7 +134,7 @@ export const TabPanduan: React.FC = () => {
                 <PanduanLangkah number={2} title="Keamanan: Kunci Pemulihan Darurat" color="purple">
                     <p><strong>Skenario Kritis: Admin Lupa Password & Jawaban Keamanan.</strong></p>
                     <div className="mt-2 p-3 border rounded bg-yellow-50 text-sm space-y-2">
-                        <p>Saat Anda mengaktifkan <strong>Mode Multi-User</strong> di <em>Pengaturan > User & Keamanan</em>, sistem akan membuatkan satu <strong>Kunci Pemulihan (Recovery Key)</strong>.</p>
+                        <p>Saat Anda mengaktifkan <strong>Mode Multi-User</strong> di <em>Pengaturan &gt; User & Keamanan</em>, sistem akan membuatkan satu <strong>Kunci Pemulihan (Recovery Key)</strong>.</p>
                         <div className="p-2 bg-white border border-red-200 rounded text-red-700 font-mono text-xs">
                             Contoh: ESANTRI-8A92-B3C1-9982
                         </div>
@@ -194,9 +194,9 @@ export const TabPanduan: React.FC = () => {
 
                 <PanduanLangkah number={6} title="Setup Biaya & Tagihan" color="blue">
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Komponen Biaya:</strong> Atur di <em>Keuangan > Pengaturan Biaya</em>. Contoh: SPP (Bulanan), Uang Gedung (Sekali Bayar/Cicilan).</li>
+                        <li><strong>Komponen Biaya:</strong> Atur di <em>Keuangan &gt; Pengaturan Biaya</em>. Contoh: SPP (Bulanan), Uang Gedung (Sekali Bayar/Cicilan).</li>
                         <li><strong>Generate Tagihan:</strong> Dilakukan setiap awal bulan atau awal tahun ajaran. 
-                            <br/>Buka <em>Keuangan > Status Pembayaran > Generate Tagihan</em>.
+                            <br/>Buka <em>Keuangan &gt; Status Pembayaran &gt; Generate Tagihan</em>.
                             <br/>Sistem akan membuat tagihan massal untuk seluruh santri aktif sesuai jenjangnya.
                         </li>
                     </ul>
@@ -221,7 +221,7 @@ export const TabPanduan: React.FC = () => {
                 <PanduanLangkah number={8} title="Penerimaan Santri Baru (PSB)" color="orange">
                     <p>Sistem pendaftaran lengkap:</p>
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Formulir Online:</strong> Desain formulir di menu <em>PSB > Desain Formulir</em>. Pilih metode WhatsApp atau Google Sheet.</li>
+                        <li><strong>Formulir Online:</strong> Desain formulir di menu <em>PSB &gt; Desain Formulir</em>. Pilih metode WhatsApp atau Google Sheet.</li>
                         <li><strong>Poster AI:</strong> Buat kata-kata promosi dan prompt gambar poster menggunakan AI di menu <em>Poster AI</em>.</li>
                         <li><strong>Rekap & Seleksi:</strong> Data pendaftar masuk ke menu Rekap. Admin bisa melakukan seleksi dan klik "Terima" untuk memindahkan data ke database santri utama secara otomatis.</li>
                     </ul>
@@ -272,9 +272,9 @@ export const TabPanduan: React.FC = () => {
                     <div>
                         <h4 className="font-bold text-gray-700 mb-2">SOP Staff (Kontributor)</h4>
                         <ol className="list-decimal pl-5 space-y-1 text-sm bg-gray-50 p-3 rounded">
-                            <li><strong>PAGI:</strong> Klik <em>Sync Cloud > Ambil Master Data</em>. (Wajib agar ID data sinkron).</li>
+                            <li><strong>PAGI:</strong> Klik <em>Sync Cloud &gt; Ambil Master Data</em>. (Wajib agar ID data sinkron).</li>
                             <li><strong>KERJA:</strong> Input pembayaran, data santri, dll seperti biasa.</li>
-                            <li><strong>SORE:</strong> Klik <em>Sync Cloud > Kirim Perubahan</em>. Data dikirim ke Inbox Admin.</li>
+                            <li><strong>SORE:</strong> Klik <em>Sync Cloud &gt; Kirim Perubahan</em>. Data dikirim ke Inbox Admin.</li>
                         </ol>
                     </div>
                     <div>

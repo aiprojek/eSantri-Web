@@ -1,3 +1,4 @@
+
 export type Page = 
   | 'Dashboard' 
   | 'Santri' 
@@ -10,6 +11,7 @@ export type Page =
   | 'Laporan' 
   | 'AuditLog' 
   | 'Pengaturan' 
+  | 'SyncAdmin' 
   | 'Tentang';
 
 export const Page = {
@@ -24,33 +26,60 @@ export const Page = {
   Laporan: 'Laporan' as Page,
   AuditLog: 'AuditLog' as Page,
   Pengaturan: 'Pengaturan' as Page,
+  SyncAdmin: 'SyncAdmin' as Page,
   Tentang: 'Tentang' as Page,
 };
 
-export type SyncProvider = 'none' | 'supabase' | 'dropbox' | 'webdav';
-export type BackupFrequency = 'daily' | 'weekly' | 'never';
+export type UserRole = 'admin' | 'staff';
+export type AccessLevel = 'none' | 'read' | 'write';
+
+export interface UserPermissions {
+    santri: AccessLevel;
+    psb: AccessLevel;
+    datamaster: AccessLevel;
+    keuangan: AccessLevel;
+    keasramaan: AccessLevel;
+    bukukas: AccessLevel;
+    surat: AccessLevel;
+    laporan: AccessLevel;
+    auditlog: AccessLevel;
+    pengaturan: AccessLevel;
+}
+
+export interface User {
+    id: number;
+    username: string;
+    passwordHash: string;
+    fullName: string;
+    role: UserRole;
+    permissions: UserPermissions;
+    securityQuestion: string;
+    securityAnswerHash: string;
+    recoveryKeyHash?: string; // New field for emergency reset
+    isDefaultAdmin?: boolean;
+    lastLogin?: string;
+}
+
+export type SyncProvider = 'none' | 'dropbox';
 
 export interface CloudSyncConfig {
     provider: SyncProvider;
     lastSync: string | null;
     autoSync?: boolean;
-    supabaseUrl?: string;
-    supabaseKey?: string;
-    adminIdentity?: string;
     dropboxToken?: string;
     dropboxAppKey?: string;
     dropboxRefreshToken?: string;
     dropboxTokenExpiresAt?: number;
-    webdavUrl?: string;
-    webdavUsername?: string;
-    webdavPassword?: string;
 }
 
 export interface StorageStats {
     used: number;
     total?: number;
     percent?: number;
-    label?: string;
+}
+
+export interface SyncedEntity {
+    lastModified?: number;
 }
 
 export interface Alamat {
@@ -87,7 +116,7 @@ export interface Pelanggaran {
     pelapor: string;
 }
 
-export interface Santri {
+export interface Santri extends SyncedEntity {
     id: number;
     nis: string;
     nisn?: string;
@@ -106,7 +135,6 @@ export interface Santri {
     
     alamat: Alamat;
     
-    // Orang Tua
     namaAyah?: string;
     nikAyah?: string;
     statusAyah?: string;
@@ -129,9 +157,8 @@ export interface Santri {
     tanggalLahirIbu?: string;
     alamatIbu?: Alamat;
 
-    // Wali
     namaWali?: string;
-    statusWali?: string; // Hubungan
+    statusWali?: string;
     statusHidupWali?: string;
     pekerjaanWali?: string;
     pendidikanWali?: string;
@@ -141,7 +168,6 @@ export interface Santri {
     tanggalLahirWali?: string;
     alamatWali?: Alamat;
 
-    // Akademik
     jenjangId: number;
     kelasId: number;
     rombelId: number;
@@ -152,36 +178,33 @@ export interface Santri {
     tanggalStatus?: string;
     fotoUrl?: string;
 
-    // Asrama
     kamarId?: number;
 
-    // Lainnya
     riwayatStatus?: RiwayatStatus[];
     prestasi?: Prestasi[];
     pelanggaran?: Pelanggaran[];
     hobi?: string[];
     
-    // Kesehatan
     tinggiBadan?: number;
     beratBadan?: number;
     riwayatPenyakit?: string;
     jarakKePondok?: string;
 }
 
-export interface Jenjang {
+export interface Jenjang extends SyncedEntity {
     id: number;
     nama: string;
     kode?: string;
     mudirId?: number;
 }
 
-export interface Kelas {
+export interface Kelas extends SyncedEntity {
     id: number;
     nama: string;
     jenjangId: number;
 }
 
-export interface Rombel {
+export interface Rombel extends SyncedEntity {
     id: number;
     nama: string;
     kelasId: number;
@@ -195,25 +218,25 @@ export interface RiwayatJabatan {
     tanggalSelesai?: string;
 }
 
-export interface TenagaPengajar {
+export interface TenagaPengajar extends SyncedEntity {
     id: number;
     nama: string;
     riwayatJabatan: RiwayatJabatan[];
 }
 
-export interface MataPelajaran {
+export interface MataPelajaran extends SyncedEntity {
     id: number;
     nama: string;
     jenjangId: number;
 }
 
-export interface GedungAsrama {
+export interface GedungAsrama extends SyncedEntity {
     id: number;
     nama: string;
     jenis: 'Putra' | 'Putri';
 }
 
-export interface Kamar {
+export interface Kamar extends SyncedEntity {
     id: number;
     nama: string;
     gedungId: number;
@@ -221,7 +244,7 @@ export interface Kamar {
     musyrifId?: number;
 }
 
-export interface Biaya {
+export interface Biaya extends SyncedEntity {
     id: number;
     nama: string;
     jenis: 'Bulanan' | 'Sekali Bayar' | 'Cicilan';
@@ -232,12 +255,12 @@ export interface Biaya {
     nominalCicilan?: number;
 }
 
-export interface Tagihan {
+export interface Tagihan extends SyncedEntity {
     id: number;
     santriId: number;
     biayaId: number;
     deskripsi: string;
-    bulan: number; // 1-12 or installment number
+    bulan: number;
     tahun: number;
     nominal: number;
     status: 'Belum Lunas' | 'Lunas';
@@ -245,7 +268,7 @@ export interface Tagihan {
     pembayaranId?: number;
 }
 
-export interface Pembayaran {
+export interface Pembayaran extends SyncedEntity {
     id: number;
     santriId: number;
     tagihanIds: number[];
@@ -256,12 +279,12 @@ export interface Pembayaran {
     disetorKeKas: boolean;
 }
 
-export interface SaldoSantri {
+export interface SaldoSantri extends SyncedEntity {
     santriId: number;
     saldo: number;
 }
 
-export interface TransaksiSaldo {
+export interface TransaksiSaldo extends SyncedEntity {
     id: number;
     santriId: number;
     tanggal: string;
@@ -271,7 +294,7 @@ export interface TransaksiSaldo {
     saldoSetelah: number;
 }
 
-export interface TransaksiKas {
+export interface TransaksiKas extends SyncedEntity {
     id: number;
     tanggal: string;
     jenis: 'Pemasukan' | 'Pengeluaran';
@@ -312,8 +335,10 @@ export interface BackupConfig {
     lastBackup: string | null;
 }
 
+export type BackupFrequency = 'daily' | 'weekly' | 'never';
 export type PsbDesignStyle = 'classic' | 'modern' | 'bold' | 'dark' | 'ceria';
 export type PsbFieldType = 'text' | 'paragraph' | 'radio' | 'checkbox' | 'file' | 'section' | 'statement';
+export type PsbSubmissionMethod = 'whatsapp' | 'google_sheet' | 'hybrid'; 
 
 export interface PsbCustomField {
     id: string;
@@ -331,6 +356,19 @@ export interface PsbFormTemplate {
     activeFields: string[];
     requiredDocuments: string[];
     customFields: PsbCustomField[];
+    submissionMethod?: PsbSubmissionMethod;
+    googleScriptUrl?: string;
+}
+
+// NEW INTERFACE FOR POSTER TEMPLATES
+export interface PsbPosterTemplate {
+    id: string;
+    name: string;
+    style: PsbDesignStyle;
+    ratio: string;
+    customInfo: string;
+    details: string;
+    generatedPrompt?: string;
 }
 
 export interface PsbConfig {
@@ -350,12 +388,15 @@ export interface PsbConfig {
     posterInfo?: string;
     customFields?: PsbCustomField[];
     templates?: PsbFormTemplate[];
+    posterTemplates?: PsbPosterTemplate[]; // Added this
     enableCloudSubmit?: boolean;
     suratPernyataan?: { aktif: boolean; judul: string; isi: string; };
-    telegramUsername?: string; 
+    telegramUsername?: string;
+    submissionMethod?: PsbSubmissionMethod; 
+    googleScriptUrl?: string; 
 }
 
-export interface PondokSettings {
+export interface PondokSettings extends SyncedEntity {
     namaYayasan: string;
     namaPonpes: string;
     skMenteri?: string;
@@ -383,6 +424,8 @@ export interface PondokSettings {
     backupConfig: BackupConfig;
     cloudSyncConfig: CloudSyncConfig;
     psbConfig: PsbConfig;
+    
+    multiUserMode: boolean;
 
     suratTagihanPembuka: string;
     suratTagihanPenutup: string;
@@ -423,7 +466,7 @@ export interface StampConfig {
     placementSignatoryId?: string;
 }
 
-export interface SuratTemplate {
+export interface SuratTemplate extends SyncedEntity {
     id: number;
     nama: string;
     kategori: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Lainnya';
@@ -437,7 +480,7 @@ export interface SuratTemplate {
     stampConfig?: StampConfig;
 }
 
-export interface ArsipSurat {
+export interface ArsipSurat extends SyncedEntity {
     id: number;
     nomorSurat: string;
     perihal: string;
@@ -455,7 +498,7 @@ export interface ArsipSurat {
     showJudulSnapshot?: boolean;
 }
 
-export interface Pendaftar {
+export interface Pendaftar extends SyncedEntity {
     id: number;
     namaLengkap: string;
     namaHijrah?: string;
@@ -490,7 +533,7 @@ export interface Pendaftar {
     teleponIbu?: string;
 
     namaWali?: string;
-    nomorHpWali: string; // Used as main contact
+    nomorHpWali: string;
     hubunganWali?: string;
     statusHidupWali?: string;
     pekerjaanWali?: string;
@@ -524,6 +567,24 @@ export interface AuditLog {
     changed_by: string;
     username?: string;
     created_at: string;
+}
+
+export interface SyncFileRecord {
+    id: string;
+    name: string;
+    path_lower: string;
+    client_modified: string;
+    size: number;
+    status: 'pending' | 'merged' | 'ignored';
+}
+
+export interface SyncHistory {
+    id: string;
+    fileId: string;
+    fileName: string;
+    mergedAt: string;
+    mergedBy: string;
+    recordCount: number;
 }
 
 export enum ReportType {

@@ -10,9 +10,10 @@ interface StatusPembayaranViewProps {
     onBayarClick: (santri: Santri) => void;
     onHistoryClick: (santri: Santri) => void;
     setPrintableSuratTagihanData: (data: { santri: Santri, tunggakan: Tagihan[], total: number }[]) => void;
+    canWrite: boolean;
 }
 
-export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBayarClick, onHistoryClick, setPrintableSuratTagihanData }) => {
+export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBayarClick, onHistoryClick, setPrintableSuratTagihanData, canWrite }) => {
     const { santriList, tagihanList, settings, showConfirmation } = useAppContext();
     const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
     
@@ -128,7 +129,9 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
         <div className="bg-white p-6 rounded-lg shadow-md">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
                 <h2 className="text-xl font-bold text-gray-700">Status Pembayaran Santri</h2>
-                <button onClick={() => setIsGenerateModalOpen(true)} className="w-full md:w-auto px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm flex items-center justify-center gap-2"><i className="bi bi-plus-circle"></i> Generate Tagihan</button>
+                {canWrite && (
+                    <button onClick={() => setIsGenerateModalOpen(true)} className="w-full md:w-auto px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm flex items-center justify-center gap-2"><i className="bi bi-plus-circle"></i> Generate Tagihan</button>
+                )}
             </div>
              {/* Filters UI */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border">
@@ -146,7 +149,7 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                     <div className="text-sm font-semibold text-teal-800">{selectedSantriIds.length} santri dipilih. <button onClick={() => setSelectedSantriIds([])} className="ml-2 text-red-600 hover:underline font-medium">Batalkan</button></div>
                     <div className="flex items-center gap-2">
                          <button onClick={() => handleBulkAction('print')} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white rounded-md hover:bg-gray-100 border"><i className="bi bi-printer"></i> Cetak Surat Tagihan</button>
-                         <button onClick={() => handleBulkAction('wa')} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 border"><i className="bi bi-whatsapp"></i> Kirim Notifikasi WA</button>
+                         {canWrite && <button onClick={() => handleBulkAction('wa')} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 border"><i className="bi bi-whatsapp"></i> Kirim Notifikasi WA</button>}
                     </div>
                 </div>
             )}
@@ -170,7 +173,7 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                                 <td className="px-4 py-3 font-semibold text-red-600">{formatRupiah(tunggakan.total)}</td>
                                 <td className="px-4 py-3">{tunggakan.count} tagihan</td>
                                 <td className="px-4 py-3 text-center space-x-2">
-                                    <button onClick={() => onBayarClick(santri)} className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700">Bayar</button>
+                                    {canWrite && <button onClick={() => onBayarClick(santri)} className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700">Bayar</button>}
                                     <button onClick={() => onHistoryClick(santri)} className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-xs font-semibold hover:bg-gray-300">Riwayat</button>
                                 </td>
                             </tr>

@@ -33,7 +33,6 @@ const Tentang: React.FC = () => {
                     <span className="bg-teal-100 text-teal-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-teal-200">
                         <i className="bi bi-rocket-takeoff mr-1"></i> Versi Terbaru: {latestVersion}
                     </span>
-                    <span className="text-sm text-gray-500">Terakhir diperbarui: {latestUpdateDate}</span>
                 </div>
             </div>
 

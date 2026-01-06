@@ -3,15 +3,11 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// --- MODE PREVIEW (CDN) ---
-// Saat ini style & icon dimuat via CDN di index.html agar bisa jalan di preview browser.
+// --- MODE HYBRID (DEV/PREVIEW) ---
+// Note: Uncomment baris di bawah ini HANYA jika Anda melakukan 'npm run build' untuk produksi offline penuh.
+// Untuk preview di Google AI Studio, biarkan terkomentar agar menggunakan CDN di index.html.
 
-// --- MODE OFFLINE (PRODUCTION) ---
-// Jika ingin build 100% offline (tanpa internet), lakukan langkah ini:
-// 1. Hapus link CDN Tailwind & Bootstrap Icons di index.html
-// 2. Uncomment (aktifkan) 2 baris import di bawah ini:
-
-// import './index.css';
+// import './index.css'; 
 // import 'bootstrap-icons/font/bootstrap-icons.css';
 
 const rootElement = document.getElementById('root');

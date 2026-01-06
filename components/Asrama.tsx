@@ -172,9 +172,12 @@ const AsramaDashboard: React.FC = () => {
 };
 
 const ManajemenAsrama: React.FC = () => {
-    const { settings, onSaveSettings, showConfirmation, showAlert, santriList } = useAppContext();
+    const { settings, onSaveSettings, showConfirmation, showAlert, santriList, currentUser } = useAppContext();
     const [gedungModalData, setGedungModalData] = useState<{ mode: 'add' | 'edit', item: GedungAsrama | null } | null>(null);
     const [kamarModalData, setKamarModalData] = useState<{ mode: 'add' | 'edit', item: Kamar | null, gedungId: number } | null>(null);
+
+    // Permission Check
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.keasramaan === 'write';
 
     const handleSaveGedung = async (gedung: GedungAsrama) => {
         let updatedList;
@@ -230,8 +233,17 @@ const ManajemenAsrama: React.FC = () => {
          <div className="bg-white p-6 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-gray-700">Manajemen Asrama & Kamar</h2>
-                <button onClick={() => setGedungModalData({ mode: 'add', item: null })} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm flex items-center gap-2"><i className="bi bi-plus-circle"></i> Tambah Gedung</button>
+                {canWrite && (
+                    <button onClick={() => setGedungModalData({ mode: 'add', item: null })} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm flex items-center gap-2">
+                        <i className="bi bi-plus-circle"></i> Tambah Gedung
+                    </button>
+                )}
             </div>
+            {!canWrite && (
+                <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 text-sm rounded border border-yellow-200 flex items-center">
+                    <i className="bi bi-eye-fill mr-2"></i> Mode Lihat Saja: Anda tidak memiliki akses untuk mengubah data asrama.
+                </div>
+            )}
             <div className="space-y-4">
                 {settings.gedungAsrama.map(gedung => (
                     <div key={gedung.id} className="p-4 border rounded-lg bg-gray-50">
@@ -240,10 +252,12 @@ const ManajemenAsrama: React.FC = () => {
                                 <h3 className="text-lg font-bold text-gray-800">{gedung.nama}</h3>
                                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${gedung.jenis === 'Putra' ? 'bg-blue-100 text-blue-800' : 'bg-pink-100 text-pink-800'}`}>{gedung.jenis}</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => setGedungModalData({ mode: 'edit', item: gedung })} className="text-blue-600 hover:text-blue-800"><i className="bi bi-pencil-square"></i></button>
-                                <button onClick={() => handleDeleteGedung(gedung.id)} className="text-red-600 hover:text-red-800"><i className="bi bi-trash-fill"></i></button>
-                            </div>
+                            {canWrite && (
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => setGedungModalData({ mode: 'edit', item: gedung })} className="text-blue-600 hover:text-blue-800"><i className="bi bi-pencil-square"></i></button>
+                                    <button onClick={() => handleDeleteGedung(gedung.id)} className="text-red-600 hover:text-red-800"><i className="bi bi-trash-fill"></i></button>
+                                </div>
+                            )}
                         </div>
                         <div className="space-y-2 pl-4 border-l-2">
                             {settings.kamar.filter(k => k.gedungId === gedung.id).map(kamar => {
@@ -255,13 +269,17 @@ const ManajemenAsrama: React.FC = () => {
                                         <p className="font-semibold text-sm">{kamar.nama}</p>
                                         <p className="text-xs text-gray-500">Kapasitas: {penghuni}/{kamar.kapasitas} | Musyrif: {musyrif?.nama || '-'}</p>
                                     </div>
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
-                                        <button onClick={() => setKamarModalData({ mode: 'edit', item: kamar, gedungId: gedung.id })} className="text-blue-500 text-xs"><i className="bi bi-pencil-square"></i></button>
-                                        <button onClick={() => handleDeleteKamar(kamar.id)} className="text-red-500 text-xs"><i className="bi bi-trash-fill"></i></button>
-                                    </div>
+                                    {canWrite && (
+                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => setKamarModalData({ mode: 'edit', item: kamar, gedungId: gedung.id })} className="text-blue-500 text-xs"><i className="bi bi-pencil-square"></i></button>
+                                            <button onClick={() => handleDeleteKamar(kamar.id)} className="text-red-500 text-xs"><i className="bi bi-trash-fill"></i></button>
+                                        </div>
+                                    )}
                                 </div>
                             )})}
-                            <button onClick={() => setKamarModalData({ mode: 'add', item: null, gedungId: gedung.id })} className="text-sm text-teal-600 hover:text-teal-800 font-medium mt-2">+ Tambah Kamar</button>
+                            {canWrite && (
+                                <button onClick={() => setKamarModalData({ mode: 'add', item: null, gedungId: gedung.id })} className="text-sm text-teal-600 hover:text-teal-800 font-medium mt-2">+ Tambah Kamar</button>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -274,9 +292,12 @@ const ManajemenAsrama: React.FC = () => {
 };
 
 const PenempatanSantri: React.FC = () => {
-     const { settings, santriList, onBulkUpdateSantri, showToast, showAlert, showConfirmation } = useAppContext();
+     const { settings, santriList, onBulkUpdateSantri, showToast, showAlert, showConfirmation, currentUser } = useAppContext();
     const { gedungAsrama, kamar, jenjang, kelas, rombel } = settings;
     
+    // Permission Check
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.keasramaan === 'write';
+
     const [filters, setFilters] = useState({ jenjang: '', kelas: '', rombel: '', gender: '' });
     const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
 
@@ -361,8 +382,8 @@ const PenempatanSantri: React.FC = () => {
                  <div className="max-h-96 overflow-y-auto border rounded-md divide-y">
                      {santriTanpaKamar.map(s => (
                         <div key={s.id} className="flex items-center p-2 hover:bg-gray-50">
-                            <input type="checkbox" checked={selectedSantriIds.includes(s.id)} onChange={() => handleSelectSantri(s.id)} className="h-4 w-4 text-teal-600 rounded mr-3"/>
-                            <div>
+                            <input type="checkbox" checked={selectedSantriIds.includes(s.id)} onChange={() => handleSelectSantri(s.id)} disabled={!canWrite} className="h-4 w-4 text-teal-600 rounded mr-3 disabled:text-gray-300"/>
+                            <div className={!canWrite ? "opacity-60" : ""}>
                                 <p className="font-semibold text-sm">{s.namaLengkap}</p>
                                 <p className="text-xs text-gray-500">{rombel.find(r=>r.id === s.rombelId)?.nama}</p>
                             </div>
@@ -373,6 +394,7 @@ const PenempatanSantri: React.FC = () => {
             </div>
              <div className="bg-white p-6 rounded-lg shadow-md">
                  <h3 className="text-xl font-bold text-gray-700 mb-4">Daftar Kamar Asrama</h3>
+                 {!canWrite && <p className="text-sm text-yellow-600 mb-2 italic">Mode Lihat Saja (Read-Only)</p>}
                  <div className="max-h-[30rem] overflow-y-auto space-y-4">
                     {gedungAsrama.map(gedung => (
                         <div key={gedung.id} className="p-3 border rounded-lg">
@@ -388,10 +410,19 @@ const PenempatanSantri: React.FC = () => {
                                                 <p className="font-semibold text-gray-700">{k.nama}</p>
                                                 <p className="text-xs text-gray-500">Kapasitas: {penghuni.length}/{k.kapasitas}</p>
                                             </div>
-                                            <button onClick={() => handleTempatkan(k)} disabled={selectedSantriIds.length === 0 || isFull} className="px-3 py-1 bg-teal-600 text-white rounded-md text-xs font-semibold hover:bg-teal-700 disabled:bg-gray-300">Tempatkan ({selectedSantriIds.length})</button>
+                                            <button onClick={() => handleTempatkan(k)} disabled={selectedSantriIds.length === 0 || isFull || !canWrite} className="px-3 py-1 bg-teal-600 text-white rounded-md text-xs font-semibold hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed">Tempatkan ({selectedSantriIds.length})</button>
                                         </div>
                                         {penghuni.length > 0 && <div className="mt-2 pt-2 border-t text-sm space-y-1">
-                                            {penghuni.map(s => <div key={s.id} className="flex justify-between items-center group"><p>{s.namaLengkap}</p><button onClick={() => handleKeluarkan(s)} className="text-red-500 text-xs opacity-0 group-hover:opacity-100"><i className="bi bi-box-arrow-right"></i> Keluarkan</button></div>)}
+                                            {penghuni.map(s => (
+                                                <div key={s.id} className="flex justify-between items-center group">
+                                                    <p>{s.namaLengkap}</p>
+                                                    {canWrite && (
+                                                        <button onClick={() => handleKeluarkan(s)} className="text-red-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <i className="bi bi-box-arrow-right"></i> Keluarkan
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>}
                                     </div>
                                     )

@@ -32,8 +32,12 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
     showAlert,
     santriFilters,
     setSantriFilters,
+    currentUser // Access User Auth
   } = useAppContext();
   
+  // Permission Check
+  const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.santri === 'write';
+
   const { filters, handleFilterChange, filteredSantri, getAvailableOptions } = useSantriFilter(santriList, santriFilters, setSantriFilters);
   const { availableKelas, availableRombel } = getAvailableOptions(settings);
   
@@ -163,6 +167,15 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
     };
 
   const openModal = (santri: Santri | null = null) => {
+    if (!canWrite && santri === null) return; // Prevent adding if no permission
+    
+    // Allow viewing (but disable saving in modal? SantriModal needs to handle view-only mode too, or we rely on this)
+    // For now, let's assume if canWrite is false, we pass a flag to modal or handle it there.
+    // Ideally SantriModal should support 'readOnly' prop.
+    // Given scope, we let them open to VIEW, but save will fail if we enforce it strictly in DB service (which we don't here).
+    // Let's rely on UI hiding save buttons inside modal? 
+    // Or just allow open for edit if canWrite, else view only.
+    
     if (santri) {
       setSelectedSantri(santri);
     } else {
@@ -202,6 +215,10 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   };
   
   const handleSave = async (data: Santri) => {
+    if (!canWrite) {
+        showToast('Anda tidak memiliki akses untuk menyimpan data.', 'error');
+        return;
+    }
     if (!data) return;
     try {
       if (data.id > 0) {
@@ -226,6 +243,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   };
 
   const handleDelete = (id: number) => {
+    if (!canWrite) return;
     const santri = santriList.find(s => s.id === id);
     showConfirmation(
         `Hapus Santri`,
@@ -288,7 +306,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   };
 
   const confirmImport = async () => {
-    if (!importPreview) return;
+    if (!importPreview || !canWrite) return;
     setIsImporting(true);
     try {
         if (importPreview.mode === 'update') {
@@ -310,6 +328,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const handleOpenBulkEditorEdit = () => { setBulkEditorMode('edit'); setBulkEditorOpen(true); };
 
   const handleSaveBulkEditor = async (data: any[]) => {
+      if (!canWrite) return;
       try {
           if (bulkEditorMode === 'add') {
               await onBulkAddSantri(data);
@@ -449,14 +468,16 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                     <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Database Santri</h1>
                     <p className="text-gray-500 text-sm mt-1">Kelola data santri, filter, dan ekspor data.</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <button onClick={handleOpenBulkEditorAdd} className="flex items-center justify-center px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors">
-                        <i className="bi bi-plus-square-dotted mr-2"></i> Tambah Massal
-                    </button>
-                    <button onClick={() => openModal()} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 shadow-sm transition-colors focus:ring-4 focus:ring-teal-300">
-                        <i className="bi bi-plus-lg"></i> Tambah Santri
-                    </button>
-                </div>
+                {canWrite && (
+                    <div className="flex flex-wrap gap-2">
+                        <button onClick={handleOpenBulkEditorAdd} className="flex items-center justify-center px-4 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors">
+                            <i className="bi bi-plus-square-dotted mr-2"></i> Tambah Massal
+                        </button>
+                        <button onClick={() => openModal()} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 shadow-sm transition-colors focus:ring-4 focus:ring-teal-300">
+                            <i className="bi bi-plus-lg"></i> Tambah Santri
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Selection Toolbar */}
@@ -468,17 +489,19 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                         <span className="text-gray-300 mx-1">|</span>
                         <button onClick={() => setSelectedSantriIds([])} className="text-teal-600 hover:text-teal-800 hover:underline">Batalkan</button>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button onClick={handleOpenBulkEditorEdit} className="px-3 py-1.5 text-xs font-medium text-teal-700 bg-white border border-teal-300 rounded-md hover:bg-teal-50 transition-colors">
-                            <i className="bi bi-pencil-square mr-1"></i> Edit
-                        </button>
-                        <button onClick={() => setBulkMoveModalOpen(true)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-                            <i className="bi bi-arrows-move mr-1"></i> Pindah Kelas
-                        </button>
-                        <button onClick={() => setBulkStatusModalOpen(true)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-                            <i className="bi bi-tag mr-1"></i> Ubah Status
-                        </button>
-                    </div>
+                    {canWrite && (
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleOpenBulkEditorEdit} className="px-3 py-1.5 text-xs font-medium text-teal-700 bg-white border border-teal-300 rounded-md hover:bg-teal-50 transition-colors">
+                                <i className="bi bi-pencil-square mr-1"></i> Edit
+                            </button>
+                            <button onClick={() => setBulkMoveModalOpen(true)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                                <i className="bi bi-arrows-move mr-1"></i> Pindah Kelas
+                            </button>
+                            <button onClick={() => setBulkStatusModalOpen(true)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                                <i className="bi bi-tag mr-1"></i> Ubah Status
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -534,9 +557,11 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
 
                     {/* More Actions (Import/Export) Dropdown or Buttons */}
                     <div className="ml-auto flex gap-2 pl-2 border-l border-gray-300">
-                        <button onClick={() => setImportModalOpen(true)} disabled={isImporting} className="p-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg" title="Impor CSV">
-                            {isImporting ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-upload"></i>}
-                        </button>
+                        {canWrite && (
+                            <button onClick={() => setImportModalOpen(true)} disabled={isImporting} className="p-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg" title="Impor CSV">
+                                {isImporting ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-upload"></i>}
+                            </button>
+                        )}
                         <div className="relative">
                             <button onClick={() => setExportModalOpen(true)} className="p-2.5 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg flex items-center gap-1" title="Ekspor CSV">
                                 <i className="bi bi-download"></i>
@@ -568,7 +593,8 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                                         type="checkbox" 
                                         ref={selectAllCheckboxRef}
                                         onChange={handleSelectAllOnPage}
-                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                                        disabled={!canWrite}
+                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2 disabled:text-gray-300"
                                     />
                                 </div>
                             </th>
@@ -589,7 +615,8 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                                             type="checkbox" 
                                             checked={selectedSantriIds.includes(santri.id)}
                                             onChange={() => handleSelectOne(santri.id)}
-                                            className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2"
+                                            disabled={!canWrite}
+                                            className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2 disabled:text-gray-300"
                                         />
                                     </div>
                                 </td>
@@ -621,12 +648,14 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                                 </td>
                                 <td className="p-4 text-right">
                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => openModal(santri)} className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors" title="Edit">
-                                            <i className="bi bi-pencil-square"></i>
+                                        <button onClick={() => openModal(santri)} className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors" title={canWrite ? "Edit" : "Lihat Detail"}>
+                                            <i className={`bi ${canWrite ? 'bi-pencil-square' : 'bi-eye-fill'}`}></i>
                                         </button>
-                                        <button onClick={() => handleDelete(santri.id)} className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors" title="Hapus">
-                                            <i className="bi bi-trash"></i>
-                                        </button>
+                                        {canWrite && (
+                                            <button onClick={() => handleDelete(santri.id)} className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors" title="Hapus">
+                                                <i className="bi bi-trash"></i>
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>

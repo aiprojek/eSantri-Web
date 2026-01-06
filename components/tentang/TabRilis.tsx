@@ -27,13 +27,6 @@ export const TabRilis: React.FC = () => {
     );
 };
 
-// Export placeholder variables to satisfy imports in Tentang.tsx if needed, 
-// though typically you'd remove the import there. 
-// Since I can only update specific files, I'm removing the exports here assuming
-// Tentang.tsx doesn't strictly depend on specific variable exports besides the component.
-// NOTE: Based on previous file content, Tentang.tsx imported 'latestVersion' and 'latestUpdateDate'.
-// To prevent breaking errors, we export dummy values or update Tentang.tsx. 
-// Assuming safer approach: I will export dummy values.
-
-export const latestVersion = "Live"; 
+// Export placeholder variables to satisfy imports in Tentang.tsx.
+export const latestVersion = "20260106"; 
 export const latestUpdateDate = "GitHub";

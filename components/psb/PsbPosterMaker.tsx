@@ -1,21 +1,27 @@
 
 import React, { useState } from 'react';
-import { PondokSettings, PsbDesignStyle } from '../../types';
+import { PondokSettings, PsbDesignStyle, PsbConfig, PsbPosterTemplate } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { generatePosterPrompt } from '../../services/aiService';
 
 interface PsbPosterMakerProps {
+    config: PsbConfig;
     settings: PondokSettings;
+    onSave?: (config: PsbConfig) => void;
 }
 
-export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ settings }) => {
-    const { showToast } = useAppContext();
+export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings, onSave }) => {
+    const { showToast, showConfirmation } = useAppContext();
     const [style, setStyle] = useState<PsbDesignStyle>('modern');
     const [ratio, setRatio] = useState<string>('9:16');
     const [details, setDetails] = useState<string>('');
     const [customInfo, setCustomInfo] = useState<string>('');
     const [generatedPrompt, setGeneratedPrompt] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
+
+    // Template State
+    const [templateName, setTemplateName] = useState('');
+    const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
 
     const handleGenerate = async () => {
         setIsLoading(true);
@@ -37,6 +43,79 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ settings }) => {
         showToast("Prompt disalin ke clipboard!", "success");
     };
 
+    const handleSaveTemplate = () => {
+        if (!onSave) {
+            showToast('Anda tidak memiliki akses untuk menyimpan template.', 'error');
+            return;
+        }
+        if (!templateName.trim()) {
+            showToast('Nama template tidak boleh kosong.', 'error');
+            return;
+        }
+
+        const isNew = !activeTemplateId;
+        const newTemplate: PsbPosterTemplate = {
+            id: activeTemplateId || 'pst_' + Date.now(),
+            name: templateName.trim(),
+            style,
+            ratio,
+            customInfo,
+            details,
+            generatedPrompt
+        };
+
+        let updatedTemplates;
+        if (isNew) {
+            updatedTemplates = [...(config.posterTemplates || []), newTemplate];
+            setActiveTemplateId(newTemplate.id);
+        } else {
+            updatedTemplates = (config.posterTemplates || []).map(t => t.id === activeTemplateId ? newTemplate : t);
+        }
+
+        const newConfig = { ...config, posterTemplates: updatedTemplates };
+        onSave(newConfig);
+        showToast(isNew ? 'Template poster disimpan.' : 'Perubahan template disimpan.', 'success');
+    };
+
+    const handleLoadTemplate = (templateId: string) => {
+        const tpl = config.posterTemplates?.find(t => t.id === templateId);
+        if (tpl) {
+            setTemplateName(tpl.name);
+            setStyle(tpl.style);
+            setRatio(tpl.ratio);
+            setCustomInfo(tpl.customInfo);
+            setDetails(tpl.details);
+            setGeneratedPrompt(tpl.generatedPrompt || '');
+            setActiveTemplateId(tpl.id);
+            showToast(`Template "${tpl.name}" dimuat.`, 'success');
+        }
+    };
+
+    const handleDeleteTemplate = (templateId: string) => {
+        if (!onSave) return;
+        const tplName = config.posterTemplates?.find(t => t.id === templateId)?.name;
+        showConfirmation('Hapus Template Poster?', `Hapus arsip "${tplName}"?`, () => {
+            const updatedTemplates = (config.posterTemplates || []).filter(t => t.id !== templateId);
+            const newConfig = { ...config, posterTemplates: updatedTemplates };
+            onSave(newConfig);
+            if (activeTemplateId === templateId) {
+                setActiveTemplateId(null);
+                setTemplateName('');
+            }
+            showToast('Template dihapus.', 'success');
+        }, { confirmColor: 'red' });
+    };
+
+    const handleReset = () => {
+        setTemplateName('');
+        setActiveTemplateId(null);
+        setStyle('modern');
+        setRatio('9:16');
+        setDetails('');
+        setCustomInfo('');
+        setGeneratedPrompt('');
+    };
+
     const ratioOptions = [
         { val: '9:16', label: 'Story/TikTok', icon: 'bi-phone' },
         { val: '1:1', label: 'Square/IG', icon: 'bi-square' },
@@ -48,14 +127,48 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ settings }) => {
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)]">
-            <div className="bg-white p-6 rounded-lg shadow-md overflow-y-auto">
-                <div className="flex items-center gap-3 mb-6 border-b pb-4">
+            <div className="bg-white p-6 rounded-lg shadow-md overflow-y-auto space-y-6">
+                <div className="flex items-center gap-3 border-b pb-4">
                     <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                         <i className="bi bi-stars text-xl"></i>
                     </div>
                     <div>
                         <h2 className="text-xl font-bold text-gray-800">Poster Prompt Maker</h2>
-                        <p className="text-xs text-gray-500">Buat prompt untuk AI Image Generator (Midjourney/DALL-E) secara Gratis.</p>
+                        <p className="text-xs text-gray-500">Buat prompt untuk AI Image Generator (Midjourney/DALL-E).</p>
+                    </div>
+                </div>
+
+                {/* Template Manager */}
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="font-bold text-purple-800 text-sm flex items-center gap-2"><i className="bi bi-folder-fill"></i> Manajemen Template</h3>
+                        {activeTemplateId && <button onClick={handleReset} className="text-xs text-gray-500 hover:text-gray-700 underline">Reset / Buat Baru</button>}
+                    </div>
+                    <div className="space-y-3">
+                        <div className="flex gap-2">
+                            <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Nama Template (mis: Kajian Rutin)" className="flex-grow border rounded p-1.5 text-xs focus:ring-purple-500 focus:border-purple-500"/>
+                            {onSave && (
+                                <button onClick={handleSaveTemplate} className="bg-purple-600 text-white px-3 rounded text-xs shrink-0 hover:bg-purple-700">
+                                    {activeTemplateId ? 'Update' : 'Simpan'}
+                                </button>
+                            )}
+                        </div>
+                        {config.posterTemplates && config.posterTemplates.length > 0 && (
+                            <div className="space-y-1 max-h-24 overflow-y-auto border bg-white rounded p-1 custom-scrollbar">
+                                {config.posterTemplates.map(tpl => (
+                                    <div key={tpl.id} className={`flex justify-between items-center p-1.5 hover:bg-purple-50 rounded transition-colors text-xs ${activeTemplateId === tpl.id ? 'bg-purple-100 ring-1 ring-purple-300' : ''}`}>
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0"></span>
+                                            <span className="font-medium truncate max-w-[150px]">{tpl.name}</span>
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                            <button onClick={() => handleLoadTemplate(tpl.id)} className="text-blue-600 hover:bg-white p-1 rounded" title="Muat"><i className="bi bi-box-arrow-in-down"></i></button>
+                                            {onSave && <button onClick={() => handleDeleteTemplate(tpl.id)} className="text-red-500 hover:bg-white p-1 rounded" title="Hapus"><i className="bi bi-trash"></i></button>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -100,7 +213,6 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ settings }) => {
                             placeholder="Contoh: Penerimaan Santri Baru 2025/2026, Pondok Pesantren Al-Hikmah. Program Unggulan: Tahfidz & Bahasa Arab. Segera Daftar, Kuota Terbatas!"
                             className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-purple-500 focus:border-purple-500 bg-purple-50/20"
                         ></textarea>
-                        <p className="text-xs text-gray-500 mt-1">Tuliskan teks apa saja yang ingin ditampilkan dalam desain.</p>
                     </div>
 
                     <div>
@@ -150,7 +262,7 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ settings }) => {
                         className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                         disabled={!generatedPrompt}
                     >
-                        Reset
+                        Bersihkan
                     </button>
                     <button 
                         onClick={copyToClipboard}

@@ -1,3 +1,4 @@
+
 export const formatRupiah = (number: number) => {
     return new Intl.NumberFormat('id-ID', {
         style: 'currency',
@@ -34,4 +35,13 @@ export const terbilang = (n: number): string => {
         str = terbilang(Math.floor(n / 1000000000000)) + " triliun " + terbilang(n % 1000000000000);
     }
     return str.replace(/satu puluh/g, 'sepuluh').replace(/satu ratus/g, 'seratus').replace(/satu ribu/g, 'seribu').trim().replace(/\s+/g, ' ');
+};
+
+export const formatBytes = (bytes: number, decimals = 2) => {
+    if (!+bytes) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };

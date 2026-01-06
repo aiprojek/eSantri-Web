@@ -9,9 +9,12 @@ import { PsbFormBuilder } from './psb/PsbFormBuilder';
 import { PsbPosterMaker } from './psb/PsbPosterMaker';
 
 const PSB: React.FC = () => {
-    const { settings, onSaveSettings, showToast } = useAppContext();
+    const { settings, onSaveSettings, showToast, currentUser } = useAppContext();
     const [activeTab, setActiveTab] = useState<'dashboard' | 'rekap' | 'form' | 'poster'>('dashboard');
     const [pendaftarList, setPendaftarList] = useState<Pendaftar[]>([]);
+
+    // Permission Check
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.psb === 'write';
 
     const fetchPendaftar = async () => {
         try {
@@ -27,6 +30,10 @@ const PSB: React.FC = () => {
     }, []);
 
     const handleSaveConfig = async (newConfig: PsbConfig) => {
+        if (!canWrite) {
+            showToast('Anda tidak memiliki akses untuk mengubah konfigurasi.', 'error');
+            return;
+        }
         const updatedSettings = { ...settings, psbConfig: newConfig };
         await onSaveSettings(updatedSettings);
     };
@@ -64,14 +71,14 @@ const PSB: React.FC = () => {
                 <nav className="flex -mb-px overflow-x-auto gap-4">
                     <button onClick={() => setActiveTab('dashboard')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'dashboard' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-speedometer2 mr-2"></i>Dashboard</button>
                     <button onClick={() => setActiveTab('rekap')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'rekap' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-people-fill mr-2"></i>Rekap Pendaftar</button>
-                    <button onClick={() => setActiveTab('form')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'form' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-ui-checks mr-2"></i>Desain Formulir Online</button>
+                    {canWrite && <button onClick={() => setActiveTab('form')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'form' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-ui-checks mr-2"></i>Desain Formulir Online</button>}
                     <button onClick={() => setActiveTab('poster')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'poster' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-stars mr-2"></i>Poster AI</button>
                 </nav>
             </div>
             {activeTab === 'dashboard' && <PsbDashboard pendaftarList={pendaftarList} config={settings.psbConfig} settings={settings} />}
-            {activeTab === 'rekap' && <PsbRekap pendaftarList={pendaftarList} settings={settings} onImportFromWA={handleImportFromWA} onUpdateList={fetchPendaftar} />}
-            {activeTab === 'form' && <PsbFormBuilder config={settings.psbConfig} settings={settings} onSave={handleSaveConfig} />}
-            {activeTab === 'poster' && <PsbPosterMaker settings={settings} />}
+            {activeTab === 'rekap' && <PsbRekap pendaftarList={pendaftarList} settings={settings} onImportFromWA={handleImportFromWA} onUpdateList={fetchPendaftar} canWrite={canWrite} />}
+            {activeTab === 'form' && canWrite && <PsbFormBuilder config={settings.psbConfig} settings={settings} onSave={handleSaveConfig} />}
+            {activeTab === 'poster' && <PsbPosterMaker config={settings.psbConfig} onSave={handleSaveConfig} settings={settings} />}
         </div>
     );
 };

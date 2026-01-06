@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import { Santri, Tagihan, Pembayaran } from '../types';
@@ -12,7 +13,7 @@ import { KuitansiTemplate } from './finance/print/KuitansiTemplate';
 import { SuratTagihanTemplate } from './finance/print/SuratTagihanTemplate';
 
 const Finance: React.FC = () => {
-    const { settings, santriList, tagihanList, pembayaranList } = useAppContext();
+    const { settings, santriList, tagihanList, pembayaranList, currentUser, showToast } = useAppContext();
     const [activeTab, setActiveTab] = useState<'dashboard' | 'status' | 'uangsaku' | 'pengaturan' | 'redaksi'>('dashboard');
     
     // State for Payment Modal
@@ -26,6 +27,8 @@ const Finance: React.FC = () => {
     const [printableData, setPrintableData] = useState<{ pembayaran: Pembayaran; santri: Santri; tagihanTerkait: Tagihan[] } | null>(null);
     const [printableSuratTagihanData, setPrintableSuratTagihanData] = useState<{ santri: Santri, tunggakan: Tagihan[], total: number }[] | null>(null);
 
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.keuangan === 'write';
+
     useEffect(() => {
         if (printableData || printableSuratTagihanData) {
             const timer = setTimeout(() => {
@@ -38,6 +41,10 @@ const Finance: React.FC = () => {
     }, [printableData, printableSuratTagihanData]);
 
     const openPembayaranModal = (santri: Santri) => {
+        if (!canWrite) {
+            showToast('Anda tidak memiliki akses untuk mencatat pembayaran.', 'error');
+            return;
+        }
         setSelectedSantri(santri);
         setIsPembayaranModalOpen(true);
     };
@@ -62,16 +69,20 @@ const Finance: React.FC = () => {
                     <button onClick={() => setActiveTab('dashboard')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'dashboard' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
                     <button onClick={() => setActiveTab('status')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'status' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Status Pembayaran</button>
                     <button onClick={() => setActiveTab('uangsaku')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'uangsaku' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Uang Saku</button>
-                    <button onClick={() => setActiveTab('pengaturan')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'pengaturan' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Biaya</button>
-                    <button onClick={() => setActiveTab('redaksi')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'redaksi' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Redaksi</button>
+                    {canWrite && (
+                        <>
+                            <button onClick={() => setActiveTab('pengaturan')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'pengaturan' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Biaya</button>
+                            <button onClick={() => setActiveTab('redaksi')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'redaksi' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Redaksi</button>
+                        </>
+                    )}
                 </nav>
             </div>
             
             {activeTab === 'dashboard' && <FinanceDashboard santriList={santriList} tagihanList={tagihanList} pembayaranList={pembayaranList} settings={settings} />}
-            {activeTab === 'status' && <StatusPembayaranView onBayarClick={openPembayaranModal} onHistoryClick={openHistoryModal} setPrintableSuratTagihanData={setPrintableSuratTagihanData} />}
-            {activeTab === 'uangsaku' && <UangSakuView />}
-            {activeTab === 'pengaturan' && <PengaturanBiaya />}
-            {activeTab === 'redaksi' && <PengaturanRedaksi />}
+            {activeTab === 'status' && <StatusPembayaranView onBayarClick={openPembayaranModal} onHistoryClick={openHistoryModal} setPrintableSuratTagihanData={setPrintableSuratTagihanData} canWrite={canWrite} />}
+            {activeTab === 'uangsaku' && <UangSakuView canWrite={canWrite} />}
+            {activeTab === 'pengaturan' && canWrite && <PengaturanBiaya />}
+            {activeTab === 'redaksi' && canWrite && <PengaturanRedaksi />}
             
             {isPembayaranModalOpen && selectedSantri && <PembayaranModal isOpen={isPembayaranModalOpen} onClose={() => setIsPembayaranModalOpen(false)} santri={selectedSantri} />}
             {historySantri && <RiwayatKeuanganSantriModal isOpen={!!historySantri} onClose={() => setHistorySantri(null)} santri={historySantri} onPrint={handlePrintKuitansi} />}

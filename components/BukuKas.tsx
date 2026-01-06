@@ -99,9 +99,12 @@ const TransaksiModal: React.FC<TransaksiModalProps> = ({ isOpen, onClose, onSave
 };
 
 const BukuKas: React.FC = () => {
-    const { transaksiKasList, onAddTransaksiKas, showToast, showAlert } = useAppContext();
+    const { transaksiKasList, onAddTransaksiKas, showToast, showAlert, currentUser } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     
+    // Permission Check
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.bukukas === 'write';
+
     const [filters, setFilters] = useState({ startDate: '', endDate: '', jenis: '', kategori: '' });
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(15);
@@ -138,6 +141,7 @@ const BukuKas: React.FC = () => {
     const totalPages = Math.ceil(filteredTransaksi.length / itemsPerPage);
 
     const handleSave = async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => {
+        if (!canWrite) return;
         try {
             await onAddTransaksiKas(data);
             showToast('Transaksi berhasil ditambahkan.', 'success');
@@ -156,9 +160,11 @@ const BukuKas: React.FC = () => {
                     <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Buku Kas Umum</h1>
                     <p className="text-gray-500 text-sm mt-1">Catat dan pantau arus kas masuk dan keluar secara rinci.</p>
                 </div>
-                <button onClick={() => setIsModalOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 shadow-sm transition-colors focus:ring-4 focus:ring-teal-300">
-                    <i className="bi bi-plus-lg"></i> Tambah Transaksi
-                </button>
+                {canWrite && (
+                    <button onClick={() => setIsModalOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 shadow-sm transition-colors focus:ring-4 focus:ring-teal-300">
+                        <i className="bi bi-plus-lg"></i> Tambah Transaksi
+                    </button>
+                )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">

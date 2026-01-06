@@ -156,6 +156,7 @@ export const initialSettings: PondokSettings = {
     dobUseJenjangCode: false,
     dobPadding: 3,
   },
+  multiUserMode: false,
   suratTagihanPembuka: `Assalamu'alaikum Warahmatullahi Wabarakatuh,\n\nDengan hormat, bersama surat ini kami sampaikan bahwa berdasarkan catatan administrasi keuangan kami, terdapat beberapa kewajiban pembayaran yang belum diselesaikan oleh ananda. Berikut adalah rinciannya:`,
   suratTagihanPenutup: `Kami memohon kepada Bapak/Ibu untuk dapat segera menyelesaikan administrasi tersebut. Untuk pembayaran dapat dilakukan secara langsung di kantor administrasi pondok.\n\nDemikian surat pemberitahuan ini kami sampaikan. Atas perhatian dan kerjasamanya, kami ucapkan Jazakumullahu khairan.\n\nWassalamu'alaikum Warahmatullahi Wabarakatuh.`,
   suratTagihanCatatan: `Pembayaran dapat dilakukan melalui transfer ke rekening Bank Syariah Indonesia (BSI) No. Rek: 123456789 a.n. Bendahara Pondok Pesantren.`,

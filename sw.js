@@ -1,19 +1,15 @@
 
-const CACHE_NAME = 'esantri-web-v1.7';
+const CACHE_NAME = 'esantri-web-hybrid-v2.1';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/index.tsx',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
+  '/public/icon.svg',
+  // Hybrid Mode Assets (Cached for offline use even in hybrid mode)
   'https://cdn.tailwindcss.com',
-  'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
-  'https://aistudiocdn.com/react-dom@^18.3.1/',
-  'https://aistudiocdn.com/react@^18.3.1',
-  'https://aistudiocdn.com/react@^18.3.1/',
-  'https://cdn.jsdelivr.net/npm/dexie@4.0.7/dist/dexie.mjs',
-  'https://cdn.jsdelivr.net/npm/react-hook-form/dist/index.esm.mjs'
+  'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css'
 ];
 
 // Install a service worker
@@ -25,7 +21,6 @@ self.addEventListener('install', event => {
         return cache.addAll(urlsToCache);
       })
       .then(() => {
-        // No longer forcing activation. The new SW will wait for a message.
         console.log('Service Worker: New version installed and waiting for activation.');
       })
   );
@@ -63,11 +58,11 @@ self.addEventListener('fetch', event => {
   const { request } = event;
 
   // For navigation and core assets (JS/CSS), use stale-while-revalidate.
-  // This serves content from cache immediately for speed, and updates cache in the background.
   if (
     request.mode === 'navigate' ||
     request.destination === 'script' ||
-    request.destination === 'style'
+    request.destination === 'style' ||
+    request.destination === 'image'
   ) {
     event.respondWith(
       caches.open(CACHE_NAME).then(cache => {
@@ -81,7 +76,6 @@ self.addEventListener('fetch', event => {
             console.warn('SW: Network request failed, probably offline.', request.url, error);
           });
 
-          // Return cached response immediately if available, otherwise wait for network.
           return cachedResponse || fetchPromise;
         });
       })
@@ -89,24 +83,10 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // For other assets (images, fonts, manifest), use cache-first.
-  // These assets are less likely to change frequently.
+  // Fallback
   event.respondWith(
     caches.match(request).then(cachedResponse => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(request).then(networkResponse => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(request, responseToCache);
-          });
-        }
-        return networkResponse;
-      }).catch(error => {
-        console.error('Fetch failed for non-core asset; browser will show its offline page.', error);
-      });
+      return cachedResponse || fetch(request);
     })
   );
 });

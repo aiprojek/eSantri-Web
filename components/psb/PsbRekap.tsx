@@ -13,9 +13,10 @@ interface PsbRekapProps {
     settings: PondokSettings;
     onImportFromWA: (text: string) => void;
     onUpdateList: () => void;
+    canWrite: boolean;
 }
 
-export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList }) => {
+export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList, canWrite }) => {
     const { onBulkAddSantri, showToast, showConfirmation, showAlert } = useAppContext();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterJenjang, setFilterJenjang] = useState('');
@@ -37,6 +38,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     }, [pendaftarList, searchTerm, filterJenjang]);
 
     const handleCloudSync = async () => {
+        if (!canWrite) return;
         const config = settings.cloudSyncConfig;
         if (!config || config.provider === 'none') {
             showAlert('Konfigurasi Cloud Belum Aktif', 'Silakan aktifkan Dropbox atau Supabase di menu Pengaturan untuk menggunakan fitur tarik data otomatis.');
@@ -74,12 +76,60 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
     const handleProcessWA = () => {
         if(!waInput.trim()) return;
-        onImportFromWA(waInput);
-        setWaInput('');
-        setIsWaModalOpen(false);
+        
+        try {
+            // Check for New Hybrid Format (Base64 Encoded Backup)
+            const backupMatch = waInput.match(/PSB_BACKUP_START([\s\S]*?)PSB_BACKUP_END/);
+            
+            if (backupMatch && backupMatch[1]) {
+                const encoded = backupMatch[1].trim();
+                // Decode: Base64 -> String (escaped) -> String (UTF-8)
+                const jsonString = decodeURIComponent(escape(atob(encoded)));
+                const data = JSON.parse(jsonString);
+                
+                processPendaftarData(data);
+                showToast('Data Backup Terenkripsi berhasil diproses!', 'success');
+                setWaInput('');
+                setIsWaModalOpen(false);
+                return;
+            }
+
+            // Fallback to Old JSON Format
+            const jsonMatch = waInput.match(/PSB_START([\s\S]*?)PSB_END/);
+            if (jsonMatch && jsonMatch[1]) {
+                const data = JSON.parse(jsonMatch[1].trim());
+                processPendaftarData(data);
+                showToast('Data JSON berhasil diimpor.', 'success');
+                setWaInput('');
+                setIsWaModalOpen(false);
+                return;
+            }
+
+            showToast('Format pesan tidak valid. Pastikan menyalin kode PSB_BACKUP_START atau PSB_START.', 'error');
+
+        } catch (e) {
+            console.error(e);
+            showToast('Gagal memproses data. Kode mungkin rusak atau tidak lengkap.', 'error');
+        }
+    }
+
+    const processPendaftarData = (data: any) => {
+        const newPendaftar: Pendaftar = {
+            id: Date.now(),
+            ...data,
+            jenjangId: parseInt(data.jenjangId),
+            tanggalDaftar: data.tanggalDaftar || new Date().toISOString(),
+            status: 'Baru',
+            kewarganegaraan: data.kewarganegaraan || 'WNI',
+            gelombang: settings.psbConfig.activeGelombang
+        };
+        db.pendaftar.add(newPendaftar).then(() => {
+            onUpdateList();
+        });
     }
 
     const handleDelete = (id: number) => {
+        if (!canWrite) return;
         showConfirmation('Hapus Pendaftar?', 'Data ini akan dihapus permanen.', async () => {
             await db.pendaftar.delete(id);
             onUpdateList();
@@ -88,6 +138,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     }
 
     const handleAccept = (pendaftar: Pendaftar) => {
+        if (!canWrite) return;
         showConfirmation('Terima Sebagai Santri?', `Pindahkan ${pendaftar.namaLengkap} ke Database Santri Aktif? Data akan disalin dan status pendaftar akan berubah menjadi "Diterima".`, async () => {
             
             // Initial Status History Entry
@@ -214,22 +265,24 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         <h2 className="text-xl font-bold text-gray-700">Data Pendaftar</h2>
                         <p className="text-xs text-gray-500">Kelola dan sinkronkan data santri baru.</p>
                     </div>
-                    <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-                        <button 
-                            onClick={handleCloudSync} 
-                            disabled={isSyncing}
-                            className="flex-grow lg:flex-grow-0 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center justify-center gap-2 shadow-sm disabled:bg-blue-400"
-                        >
-                            {isSyncing ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-cloud-download"></i>}
-                            Tarik Data Cloud
-                        </button>
-                        <button onClick={() => setIsWaModalOpen(true)} className="flex-grow lg:flex-grow-0 bg-green-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-600 flex items-center justify-center gap-2">
-                            <i className="bi bi-whatsapp"></i> Impor WA
-                        </button>
-                        <button onClick={() => { setEditingPendaftar(null); setIsPendaftarModalOpen(true); }} className="flex-grow lg:flex-grow-0 bg-teal-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-teal-700 flex items-center justify-center gap-2">
-                            <i className="bi bi-plus-lg"></i> Tambah
-                        </button>
-                    </div>
+                    {canWrite && (
+                        <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+                            <button 
+                                onClick={handleCloudSync} 
+                                disabled={isSyncing}
+                                className="flex-grow lg:flex-grow-0 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center justify-center gap-2 shadow-sm disabled:bg-blue-400"
+                            >
+                                {isSyncing ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-cloud-download"></i>}
+                                Tarik Data Cloud
+                            </button>
+                            <button onClick={() => setIsWaModalOpen(true)} className="flex-grow lg:flex-grow-0 bg-green-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-600 flex items-center justify-center gap-2">
+                                <i className="bi bi-whatsapp"></i> Impor WA
+                            </button>
+                            <button onClick={() => { setEditingPendaftar(null); setIsPendaftarModalOpen(true); }} className="flex-grow lg:flex-grow-0 bg-teal-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-teal-700 flex items-center justify-center gap-2">
+                                <i className="bi bi-plus-lg"></i> Tambah
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
@@ -293,17 +346,21 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                         </td>
                                         <td className="p-3 text-center">
                                             <div className="flex justify-center gap-2">
-                                                {p.status === 'Baru' && (
+                                                {canWrite && p.status === 'Baru' && (
                                                     <button onClick={() => handleAccept(p)} className="text-green-600 hover:bg-green-50 p-1.5 rounded" title="Terima sebagai Santri">
                                                         <i className="bi bi-check-lg"></i>
                                                     </button>
                                                 )}
-                                                <button onClick={() => { setEditingPendaftar(p); setIsPendaftarModalOpen(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Edit">
-                                                    <i className="bi bi-pencil-square"></i>
-                                                </button>
-                                                <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Hapus">
-                                                    <i className="bi bi-trash"></i>
-                                                </button>
+                                                {canWrite && (
+                                                    <>
+                                                        <button onClick={() => { setEditingPendaftar(p); setIsPendaftarModalOpen(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Edit">
+                                                            <i className="bi bi-pencil-square"></i>
+                                                        </button>
+                                                        <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Hapus">
+                                                            <i className="bi bi-trash"></i>
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -320,7 +377,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4">
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
                         <h3 className="text-lg font-bold mb-4">Impor Data dari WhatsApp</h3>
-                        <p className="text-sm text-gray-600 mb-2">Tempelkan seluruh pesan pendaftaran (termasuk kode <code>PSB_START</code> ... <code>PSB_END</code>) di bawah ini:</p>
+                        <p className="text-sm text-gray-600 mb-2">Tempelkan seluruh pesan pendaftaran (termasuk kode <code>PSB_BACKUP_START</code> atau <code>PSB_START</code>) di bawah ini:</p>
                         <textarea 
                             className="w-full border rounded-lg p-3 text-sm h-40 font-mono"
                             value={waInput}

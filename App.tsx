@@ -1,25 +1,33 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { AppProvider, useAppContext, ToastData } from './AppContext';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
-import SantriList from './components/SantriList';
-import DataMaster from './components/DataMaster';
-import Settings from './components/Settings';
-import Reports from './components/Reports';
-import Finance from './components/Finance';
-import Asrama from './components/Asrama';
-import BukuKas from './components/BukuKas';
-import SuratMenyurat from './components/SuratMenyurat';
-import PSB from './components/PSB';
 import ConfirmModal from './components/ConfirmModal';
-import Tentang from './components/Tentang';
 import WelcomeModal from './components/WelcomeModal';
-import { AuditLogView } from './components/AuditLogView';
-import { Page } from './types';
 import UpdateNotification from './components/UpdateNotification';
 import { BackupReminderModal } from './components/BackupReminderModal';
+import { LoginScreen } from './components/Login'; 
+import { Page, UserPermissions } from './types';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { LoadingFallback } from './components/common/LoadingFallback';
 
+// --- Lazy Load Pages ---
+// Optimasi: Halaman hanya akan didownload browser saat user mengaksesnya
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const SantriList = React.lazy(() => import('./components/SantriList'));
+const DataMaster = React.lazy(() => import('./components/DataMaster'));
+const Settings = React.lazy(() => import('./components/Settings'));
+const Reports = React.lazy(() => import('./components/Reports'));
+const Finance = React.lazy(() => import('./components/Finance'));
+const Asrama = React.lazy(() => import('./components/Asrama'));
+const BukuKas = React.lazy(() => import('./components/BukuKas'));
+const SuratMenyurat = React.lazy(() => import('./components/SuratMenyurat'));
+const PSB = React.lazy(() => import('./components/PSB'));
+const Tentang = React.lazy(() => import('./components/Tentang'));
+
+// Handle Named Exports for specific components
+const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
+const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
 
 // --- Alert Modal Component ---
 interface AlertModalProps {
@@ -134,6 +142,18 @@ const ToastContainer: React.FC<ToastContainerProps> = ({ toasts = [], onClose })
 };
 // --- End Toast Components ---
 
+// --- Access Denied Component ---
+const AccessDenied: React.FC = () => (
+    <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center p-6 animate-fade-in">
+        <div className="bg-red-100 text-red-600 w-20 h-20 rounded-full flex items-center justify-center mb-4">
+            <i className="bi bi-shield-lock-fill text-4xl"></i>
+        </div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Akses Ditolak</h2>
+        <p className="text-gray-600 max-w-md">
+            Anda tidak memiliki izin untuk mengakses halaman ini. Silakan hubungi Administrator jika Anda memerlukan akses.
+        </p>
+    </div>
+);
 
 const AppContent: React.FC = () => {
     const { 
@@ -148,7 +168,9 @@ const AppContent: React.FC = () => {
         backupModal,
         closeBackupModal,
         downloadBackup,
-        triggerBackupCheck
+        triggerBackupCheck,
+        settings, 
+        currentUser 
     } = useAppContext();
 
     const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
@@ -158,10 +180,10 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         const welcomeShown = localStorage.getItem('eSantriWelcomeShown');
-        if (welcomeShown !== 'true') {
+        if (welcomeShown !== 'true' && !settings.multiUserMode) {
             setShowWelcomeModal(true);
         }
-    }, []);
+    }, [settings.multiUserMode]);
 
     // Check backup status on load (once isLoading is false)
     useEffect(() => {
@@ -231,35 +253,50 @@ const AppContent: React.FC = () => {
         }
     };
 
+    const checkAccess = (permissionKey: keyof UserPermissions): boolean => {
+        if (!currentUser) return false;
+        if (currentUser.role === 'admin') return true;
+        return currentUser.permissions[permissionKey] !== 'none';
+    };
+
+    // Lazy load wrapper logic for cleaner switch
     const renderContent = () => {
-        switch (currentPage) {
-            case Page.Dashboard:
-                return <Dashboard navigateTo={handleNavigate} />;
-            case Page.Santri:
-                return <SantriList />;
-            case Page.DataMaster:
-                return <DataMaster />;
-            case Page.Keuangan:
-                return <Finance />;
-            case Page.Keasramaan:
-                return <Asrama />;
-            case Page.BukuKas:
-                return <BukuKas />;
-            case Page.Surat:
-                return <SuratMenyurat />;
-            case Page.PSB:
-                return <PSB />;
-            case Page.Pengaturan:
-                return <Settings />;
-            case Page.Laporan:
-                return <Reports />;
-            case Page.AuditLog:
-                return <AuditLogView />;
-            case Page.Tentang:
-                return <Tentang />;
-            default:
-                return <Dashboard navigateTo={handleNavigate} />;
-        }
+        return (
+            <Suspense fallback={<LoadingFallback />}>
+                {(() => {
+                    switch (currentPage) {
+                        case Page.Dashboard:
+                            return <Dashboard navigateTo={handleNavigate} />;
+                        case Page.Santri:
+                            return checkAccess('santri') ? <SantriList /> : <AccessDenied />;
+                        case Page.DataMaster:
+                            return checkAccess('datamaster') ? <DataMaster /> : <AccessDenied />;
+                        case Page.Keuangan:
+                            return checkAccess('keuangan') ? <Finance /> : <AccessDenied />;
+                        case Page.Keasramaan:
+                            return checkAccess('keasramaan') ? <Asrama /> : <AccessDenied />;
+                        case Page.BukuKas:
+                            return checkAccess('bukukas') ? <BukuKas /> : <AccessDenied />;
+                        case Page.Surat:
+                            return checkAccess('surat') ? <SuratMenyurat /> : <AccessDenied />;
+                        case Page.PSB:
+                            return checkAccess('psb') ? <PSB /> : <AccessDenied />;
+                        case Page.Pengaturan:
+                            return checkAccess('pengaturan') ? <Settings /> : <AccessDenied />;
+                        case Page.Laporan:
+                            return checkAccess('laporan') ? <Reports /> : <AccessDenied />;
+                        case Page.AuditLog:
+                            return checkAccess('auditlog') ? <AuditLogView /> : <AccessDenied />;
+                        case Page.SyncAdmin:
+                            return currentUser?.role === 'admin' ? <AdminSyncDashboard /> : <AccessDenied />;
+                        case Page.Tentang:
+                            return <Tentang />;
+                        default:
+                            return <Dashboard navigateTo={handleNavigate} />;
+                    }
+                })()}
+            </Suspense>
+        );
     };
     
     if (isLoading) {
@@ -270,6 +307,16 @@ const AppContent: React.FC = () => {
                     <p className="text-xl font-semibold text-gray-700 mt-4">Memuat data eSantri Web...</p>
                 </div>
             </div>
+        );
+    }
+
+    // AUTH GATEWAY
+    if (settings.multiUserMode && !currentUser) {
+        return (
+            <ErrorBoundary>
+                <ToastContainer toasts={toasts} onClose={removeToast} />
+                <LoginScreen />
+            </ErrorBoundary>
         );
     }
 
@@ -313,7 +360,9 @@ const AppContent: React.FC = () => {
 
             <main className="p-4 md:ml-64">
                 <div className="p-4 rounded-lg mt-14">
-                    {renderContent()}
+                    <ErrorBoundary>
+                        {renderContent()}
+                    </ErrorBoundary>
                 </div>
             </main>
             
@@ -332,9 +381,11 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ErrorBoundary>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+    </ErrorBoundary>
   );
 };
 

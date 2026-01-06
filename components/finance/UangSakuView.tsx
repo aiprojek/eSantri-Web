@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { Santri, SaldoSantri } from '../../types';
@@ -6,7 +7,7 @@ import { TransaksiSaldoModal } from './modals/TransaksiSaldoModal';
 import { RiwayatUangSakuModal } from './modals/RiwayatUangSakuModal';
 import { formatRupiah } from '../../utils/formatters';
 
-export const UangSakuView: React.FC = () => {
+export const UangSakuView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     const { settings, santriList, saldoSantriList, onAddTransaksiSaldo, showToast, showAlert } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalData, setModalData] = useState<{ santri: Santri, jenis: 'Deposit' | 'Penarikan' } | null>(null);
@@ -55,6 +56,7 @@ export const UangSakuView: React.FC = () => {
     const totalPages = Math.ceil(dataTampilan.length / itemsPerPage);
 
     const openModal = (santri: Santri, jenis: 'Deposit' | 'Penarikan') => {
+        if (!canWrite) return;
         setModalData({ santri, jenis });
         setIsModalOpen(true);
     };
@@ -64,7 +66,7 @@ export const UangSakuView: React.FC = () => {
     };
 
     const handleSave = async (data: { santriId: number, jumlah: number, keterangan: string }) => {
-        if (!modalData) return;
+        if (!modalData || !canWrite) return;
         try {
             await onAddTransaksiSaldo({ ...data, jenis: modalData.jenis });
             showToast('Transaksi berhasil disimpan.', 'success');
@@ -103,8 +105,12 @@ export const UangSakuView: React.FC = () => {
                                 <td className="px-4 py-3 whitespace-nowrap"><div className="font-semibold">{santri.namaLengkap}</div><div className="text-xs text-gray-500">{santri.nis}</div></td>
                                 <td className="px-4 py-3 font-semibold">{formatRupiah(saldo)}</td>
                                 <td className="px-4 py-3 text-center space-x-2">
-                                    <button onClick={() => openModal(santri, 'Deposit')} className="px-3 py-1 bg-green-600 text-white rounded-md text-xs font-semibold hover:bg-green-700">Deposit</button>
-                                    <button onClick={() => openModal(santri, 'Penarikan')} className="px-3 py-1 bg-yellow-500 text-white rounded-md text-xs font-semibold hover:bg-yellow-600">Penarikan</button>
+                                    {canWrite && (
+                                        <>
+                                            <button onClick={() => openModal(santri, 'Deposit')} className="px-3 py-1 bg-green-600 text-white rounded-md text-xs font-semibold hover:bg-green-700">Deposit</button>
+                                            <button onClick={() => openModal(santri, 'Penarikan')} className="px-3 py-1 bg-yellow-500 text-white rounded-md text-xs font-semibold hover:bg-yellow-600">Penarikan</button>
+                                        </>
+                                    )}
                                     <button onClick={() => openHistoryModal(santri)} className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-xs font-semibold hover:bg-gray-300">Riwayat</button>
                                 </td>
                             </tr>

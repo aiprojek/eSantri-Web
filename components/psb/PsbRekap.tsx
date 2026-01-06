@@ -4,7 +4,6 @@ import { useAppContext } from '../../AppContext';
 import { Pendaftar, PondokSettings, Santri, RiwayatStatus } from '../../types';
 import { db } from '../../db';
 import { fetchPsbFromDropbox } from '../../services/syncService';
-import { getSupabaseClient } from '../../services/supabaseClient';
 import { PendaftarModal } from './modals/PendaftarModal';
 import { BulkPendaftarEditor } from './modals/BulkPendaftarEditor';
 
@@ -41,7 +40,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         if (!canWrite) return;
         const config = settings.cloudSyncConfig;
         if (!config || config.provider === 'none') {
-            showAlert('Konfigurasi Cloud Belum Aktif', 'Silakan aktifkan Dropbox atau Supabase di menu Pengaturan untuk menggunakan fitur tarik data otomatis.');
+            showAlert('Konfigurasi Cloud Belum Aktif', 'Silakan aktifkan Dropbox di menu Pengaturan untuk menggunakan fitur tarik data otomatis.');
             return;
         }
 
@@ -51,13 +50,6 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             
             if (config.provider === 'dropbox') {
                 newItems = await fetchPsbFromDropbox(config.dropboxToken!);
-            } else if (config.provider === 'supabase') {
-                const client = getSupabaseClient(config);
-                if (client) {
-                    const { data, error } = await client.from('pendaftar').select('*').eq('status', 'Baru');
-                    if (error) throw error;
-                    newItems = (data as Pendaftar[]).map(({id, ...rest}) => rest);
-                }
             }
 
             if (newItems.length > 0) {

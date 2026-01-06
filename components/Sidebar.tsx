@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Page } from '../types';
+import { Page, UserPermissions } from '../types';
 import { useAppContext } from '../AppContext';
 
 interface SidebarProps {
@@ -14,7 +14,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
   const [isSyncing, setIsSyncing] = useState(false);
   const [showSyncOptions, setShowSyncOptions] = useState(false);
 
-  const canAccess = (feature: keyof typeof currentUser.permissions): boolean => {
+  const canAccess = (feature: keyof UserPermissions): boolean => {
       if (!currentUser) return false;
       if (currentUser.role === 'admin') return true;
       return currentUser.permissions[feature] !== 'none';

@@ -51,6 +51,10 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         setPermissions(prev => ({ ...prev, [module]: level }));
     };
 
+    const handleSyncAdminChange = (checked: boolean) => {
+        setPermissions(prev => ({ ...prev, syncAdmin: checked }));
+    };
+
     const handleSave = async () => {
         if (!username.trim() || !fullName.trim()) {
             showAlert('Input Tidak Lengkap', 'Username dan Nama Lengkap wajib diisi.');
@@ -188,7 +192,25 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                     {/* Permissions Table (Only for Staff) */}
                     {role === 'staff' && (
                         <div className="border rounded-lg overflow-hidden">
-                            <div className="bg-gray-100 px-4 py-2 border-b font-semibold text-sm text-gray-700">Hak Akses Modul</div>
+                            <div className="bg-gray-100 px-4 py-2 border-b flex justify-between items-center">
+                                <span className="font-semibold text-sm text-gray-700">Hak Akses Modul</span>
+                            </div>
+                            
+                            {/* NEW: Delegate Sync Admin */}
+                            <div className="p-3 bg-purple-50 border-b flex items-center gap-3">
+                                <input 
+                                    type="checkbox" 
+                                    id="syncAdminCheck"
+                                    checked={permissions.syncAdmin || false} 
+                                    onChange={(e) => handleSyncAdminChange(e.target.checked)}
+                                    className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                                />
+                                <div>
+                                    <label htmlFor="syncAdminCheck" className="text-sm font-bold text-purple-900 block cursor-pointer">Izinkan Kelola Sinkronisasi (Wakil Admin)</label>
+                                    <p className="text-xs text-purple-700">User ini dapat menggabungkan data (Merge) dan mempublikasikan Master Data jika Admin utama berhalangan.</p>
+                                </div>
+                            </div>
+
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-gray-50 border-b">
                                     <tr>

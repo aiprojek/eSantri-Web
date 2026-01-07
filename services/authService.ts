@@ -36,6 +36,7 @@ export const ADMIN_PERMISSIONS = {
     laporan: 'write',
     auditlog: 'write',
     pengaturan: 'write',
+    syncAdmin: true,
 };
 
 // Default Permissions for New Staff
@@ -50,4 +51,5 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     laporan: 'read',
     auditlog: 'none',
     pengaturan: 'none',
+    syncAdmin: false,
 };

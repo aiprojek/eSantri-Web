@@ -20,6 +20,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
       return currentUser.permissions[feature] !== 'none';
   };
 
+  // Helper to check if user can manage sync (Admin OR Delegated Staff)
+  const canManageSync = currentUser?.role === 'admin' || currentUser?.permissions?.syncAdmin;
+
   const navItems = [
     { page: Page.Dashboard, icon: 'bi-grid-1x2-fill', show: true },
     { page: Page.Santri, icon: 'bi-people-fill', show: canAccess('santri') },
@@ -32,8 +35,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
     { page: Page.Laporan, icon: 'bi-printer-fill', show: canAccess('laporan') },
     { page: Page.AuditLog, icon: 'bi-activity', show: canAccess('auditlog') }, 
     { page: Page.Pengaturan, icon: 'bi-gear-fill', show: canAccess('pengaturan') },
-    // Admin Sync Dashboard Link
-    { page: Page.SyncAdmin, icon: 'bi-cloud-check-fill', show: currentUser?.role === 'admin' && settings.cloudSyncConfig?.provider === 'dropbox' },
+    // Admin Sync Dashboard Link - Show if Admin OR has Permission
+    { page: Page.SyncAdmin, icon: 'bi-cloud-check-fill', show: canManageSync && settings.cloudSyncConfig?.provider === 'dropbox' },
     { page: Page.Tentang, icon: 'bi-info-circle-fill', show: true },
   ];
 
@@ -88,8 +91,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           logout();
       }, { confirmText: 'Keluar', confirmColor: 'red' });
   };
-
-  const isAdmin = currentUser?.role === 'admin';
 
   // Helper for Sync Status UI
   const renderSyncStatus = () => {
@@ -146,7 +147,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
             <div className="p-3 bg-teal-900/50 rounded-lg border border-teal-700">
                 <p className="text-xs text-teal-200 uppercase font-bold mb-1">Login Sebagai</p>
                 <p className="text-sm font-semibold truncate" title={currentUser?.fullName}>{currentUser?.fullName}</p>
-                <p className="text-xs text-teal-300 mt-0.5 capitalize badge bg-teal-950 px-2 py-0.5 rounded inline-block">{currentUser?.role}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                    <p className="text-xs text-teal-300 capitalize badge bg-teal-950 px-2 py-0.5 rounded inline-block">{currentUser?.role}</p>
+                    {canManageSync && currentUser?.role !== 'admin' && (
+                        <p className="text-[10px] text-yellow-300 border border-yellow-600 px-1 rounded" title="Wakil Admin (Sync)">Wakil</p>
+                    )}
+                </div>
             </div>
         </div>
         <ul className="space-y-2 font-medium">
@@ -202,10 +208,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
                 </div>
                 <div className="p-6 space-y-4">
                     
-                    {/* --- ADMIN VIEW --- */}
-                    {isAdmin ? (
+                    {/* --- ADMIN & DELEGATED STAFF VIEW --- */}
+                    {canManageSync ? (
                         <>
-                            <p className="text-sm text-gray-600 mb-2">Anda login sebagai <strong>Admin (Pusat)</strong>. Kelola data master dan gabungkan perubahan dari staff.</p>
+                            <p className="text-sm text-gray-600 mb-2">
+                                {currentUser?.role === 'admin' 
+                                    ? "Anda login sebagai **Admin (Pusat)**." 
+                                    : "Anda memiliki hak akses **Wakil Admin**."} 
+                                Kelola data master dan gabungkan perubahan dari staff.
+                            </p>
                             
                             <button 
                                 onClick={() => executeSync('admin_publish')}

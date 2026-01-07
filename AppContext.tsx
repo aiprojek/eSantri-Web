@@ -383,7 +383,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSyncStatus('syncing');
         try {
             if (action === 'admin_publish') {
-                if (currentUser?.role !== 'admin') throw new Error("Hanya Admin yang bisa mempublikasikan master data.");
+                // UPDATE: Allow if Role is Admin OR has syncAdmin permission
+                if (currentUser?.role !== 'admin' && !currentUser?.permissions?.syncAdmin) {
+                    throw new Error("Anda tidak memiliki izin untuk mempublikasikan master data.");
+                }
                 await publishMasterData(config);
                 showToast('Data Master berhasil dipublikasikan untuk semua staff.', 'success');
             } else if (action === 'up') {

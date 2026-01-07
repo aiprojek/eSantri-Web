@@ -44,6 +44,7 @@ export interface UserPermissions {
     laporan: AccessLevel;
     auditlog: AccessLevel;
     pengaturan: AccessLevel;
+    syncAdmin?: boolean; // New Permission: Allow staff to act as Sync Admin
 }
 
 export interface User {

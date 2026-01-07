@@ -153,6 +153,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setToasts(prev => prev.filter(toast => toast.id !== id));
     }, []);
 
+    // Helper: Generate Unique ID (Timestamp + Random) to prevent collision in distributed systems
+    // Replaces simple auto-increment
+    const generateUniqueId = (): number => {
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 1000);
+        return parseInt(`${timestamp}${random}`.slice(0, 16)); // Keep it within safe integer range if possible, or just use timestamp
+    };
+
     // Global Error Handler
     useEffect(() => {
         const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -213,7 +221,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     return addr;
                 };
 
-                const migratedSantri = currentSantri.map(s => ({
+                // Filter out deleted items (Soft Delete Implementation)
+                const filterDeleted = (list: any[]) => list.filter(item => !item.deleted);
+
+                const migratedSantri = filterDeleted(currentSantri).map(s => ({
                     ...s,
                     alamat: migrateAddress(s.alamat) || { detail: '' },
                     alamatAyah: migrateAddress(s.alamatAyah),
@@ -229,13 +240,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 setSettings(safeSettings);
                 setSantriList(migratedSantri);
-                setTagihanList(currentTagihan);
-                setPembayaranList(currentPembayaran);
-                setSaldoSantriList(currentSaldo);
-                setTransaksiSaldoList(currentTransaksi);
-                setTransaksiKasList(currentKas);
-                setSuratTemplates(currentTemplates);
-                setArsipSuratList(currentArsip);
+                setTagihanList(filterDeleted(currentTagihan));
+                setPembayaranList(filterDeleted(currentPembayaran));
+                setSaldoSantriList(filterDeleted(currentSaldo));
+                setTransaksiSaldoList(filterDeleted(currentTransaksi));
+                setTransaksiKasList(filterDeleted(currentKas));
+                setSuratTemplates(filterDeleted(currentTemplates));
+                setArsipSuratList(filterDeleted(currentArsip));
 
                 if (!safeSettings.multiUserMode) {
                     setCurrentUser(VIRTUAL_ADMIN);
@@ -360,21 +371,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     };
 
+    // MODIFIED: Use generateUniqueId instead of db.santri.add() which uses auto-increment
     const onAddSantri = async (santriData: Omit<Santri, 'id'>) => {
-        const withTs = addTimestamp(santriData);
-        const id = await db.santri.add(withTs as Santri);
-        const newSantri = { ...withTs, id } as Santri;
-        setSantriList(prev => [...prev, newSantri]);
-        await logActivity('santri', 'INSERT', id.toString(), null, newSantri);
+        const id = generateUniqueId();
+        const withTs = addTimestamp({ ...santriData, id });
+        await db.santri.put(withTs as Santri); // Use PUT instead of ADD
+        
+        setSantriList(prev => [...prev, withTs as Santri]);
+        await logActivity('santri', 'INSERT', id.toString(), null, withTs);
         triggerAutoSync();
     };
 
+    // MODIFIED: Use generateUniqueId for bulk add
     const onBulkAddSantri = async (newSantriData: Omit<Santri, 'id'>[]) => {
-        const withTs = newSantriData.map(s => addTimestamp(s));
-        const ids = await db.santri.bulkAdd(withTs as Santri[], { allKeys: true });
-        const addedSantri = withTs.map((s, i) => ({ ...s, id: ids[i] as number } as Santri));
-        setSantriList(prev => [...prev, ...addedSantri]);
-        await logActivity('santri', 'INSERT', 'BULK', null, { count: addedSantri.length });
+        const withTs = newSantriData.map(s => addTimestamp({ ...s, id: generateUniqueId() }));
+        await db.santri.bulkPut(withTs as Santri[]); // Use PUT
+        
+        setSantriList(prev => [...prev, ...withTs as Santri[]]);
+        await logActivity('santri', 'INSERT', 'BULK', null, { count: withTs.length });
         triggerAutoSync();
     };
 
@@ -395,8 +409,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerAutoSync();
     };
 
+    // MODIFIED: SOFT DELETE implementation
     const onDeleteSantri = async (id: number) => {
-        await db.santri.delete(id);
+        const santri = santriList.find(s => s.id === id);
+        if (!santri) return;
+        
+        const deletedSantri = { ...santri, deleted: true, lastModified: Date.now() };
+        await db.santri.put(deletedSantri);
+        
+        // Remove from current view, but keep in DB
         setSantriList(prev => prev.filter(s => s.id !== id));
         await logActivity('santri', 'DELETE', id.toString());
         triggerAutoSync();
@@ -429,9 +450,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const hideConfirmation = () => setConfirmation(prev => ({ ...prev, isOpen: false }));
 
+    // MODIFIED: Use generateUniqueId for Tagihan
     const onGenerateTagihanBulanan = async (tahun: number, bulan: number) => {
         const { result, newTagihan } = await generateTagihanBulanan(db, settings, santriList, tahun, bulan);
-        const withTs = newTagihan.map(t => addTimestamp(t));
+        // NOTE: generateTagihanBulanan internally now should ideally use generated IDs or we map them here
+        // For safety, let's assume service handles basic ID, but we override here if needed to be unique globally.
+        // Actually, the service returns data. Ideally we map IDs there.
+        // Let's patch the ID generation in service separately or map here.
+        const withTs = newTagihan.map(t => addTimestamp({ ...t, id: generateUniqueId() })); // Re-ID to be safe globally
+        
         await db.tagihan.bulkPut(withTs);
         setTagihanList(prev => [...prev, ...withTs]);
         
@@ -442,7 +469,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const onGenerateTagihanAwal = async () => {
         const { result, newTagihan } = await generateTagihanAwal(db, settings, santriList);
-        const withTs = newTagihan.map(t => addTimestamp(t));
+        const withTs = newTagihan.map(t => addTimestamp({ ...t, id: generateUniqueId() }));
         await db.tagihan.bulkPut(withTs);
         setTagihanList(prev => [...prev, ...withTs]);
         await logActivity('tagihan', 'INSERT', 'GENERATE_AWAL', null, { count: result.generated });
@@ -450,11 +477,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return result;
     };
 
+    // MODIFIED: Use generateUniqueId for Pembayaran
     const onAddPembayaran = async (pembayaranData: Omit<Pembayaran, 'id'>) => {
-        const withTs = addTimestamp(pembayaranData);
-        const id = await db.pembayaran.add(withTs as Pembayaran);
-        const newPembayaran = { ...withTs, id } as Pembayaran;
-        setPembayaranList(prev => [...prev, newPembayaran]);
+        const id = generateUniqueId();
+        const withTs = addTimestamp({ ...pembayaranData, id });
+        await db.pembayaran.put(withTs as Pembayaran);
+        
+        setPembayaranList(prev => [...prev, withTs as Pembayaran]);
         
         const updatedTagihanList: Tagihan[] = [];
         for (const tagihanId of pembayaranData.tagihanIds) {
@@ -466,10 +495,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
         }
         setTagihanList(prev => prev.map(t => updatedTagihanList.find(ut => ut.id === t.id) || t));
-        await logActivity('pembayaran', 'INSERT', id.toString(), null, newPembayaran);
+        await logActivity('pembayaran', 'INSERT', id.toString(), null, withTs);
         triggerAutoSync();
     };
 
+    // MODIFIED: Use generateUniqueId for Transaksi
     const onAddTransaksiSaldo = async (data: Omit<TransaksiSaldo, 'id' | 'saldoSetelah' | 'tanggal'>) => {
         const tanggal = new Date().toISOString();
         const currentSaldo = saldoSantriList.find(s => s.santriId === data.santriId)?.saldo || 0;
@@ -477,10 +507,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.jenis === 'Deposit') saldoSetelah += data.jumlah;
         else { if (currentSaldo < data.jumlah) throw new Error('Saldo tidak mencukupi.'); saldoSetelah -= data.jumlah; }
         
-        const txWithTs = addTimestamp({ ...data, saldoSetelah, tanggal });
-        const id = await db.transaksiSaldo.add(txWithTs as TransaksiSaldo);
-        const newTransaksi = { ...txWithTs, id } as TransaksiSaldo;
-        setTransaksiSaldoList(prev => [...prev, newTransaksi]);
+        const id = generateUniqueId();
+        const txWithTs = addTimestamp({ ...data, saldoSetelah, tanggal, id });
+        await db.transaksiSaldo.put(txWithTs as TransaksiSaldo);
+        setTransaksiSaldoList(prev => [...prev, txWithTs as TransaksiSaldo]);
         
         const saldoWithTs = addTimestamp({ santriId: data.santriId, saldo: saldoSetelah });
         await db.saldoSantri.put(saldoWithTs);
@@ -489,7 +519,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (existing) return prev.map(s => s.santriId === data.santriId ? saldoWithTs : s);
             return [...prev, saldoWithTs];
         });
-        await logActivity('transaksiSaldo', 'INSERT', id.toString(), null, newTransaksi);
+        await logActivity('transaksiSaldo', 'INSERT', id.toString(), null, txWithTs);
         triggerAutoSync();
     };
 
@@ -501,9 +531,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.jenis === 'Pemasukan') saldoSetelah += data.jumlah;
         else saldoSetelah -= data.jumlah;
         
-        const withTs = addTimestamp({ ...data, saldoSetelah, tanggal });
-        const id = await db.transaksiKas.add(withTs as TransaksiKas);
-        setTransaksiKasList(prev => [...prev, { ...withTs, id } as TransaksiKas]);
+        const id = generateUniqueId();
+        const withTs = addTimestamp({ ...data, saldoSetelah, tanggal, id });
+        await db.transaksiKas.put(withTs as TransaksiKas);
+        setTransaksiKasList(prev => [...prev, withTs as TransaksiKas]);
         await logActivity('transaksiKas', 'INSERT', id.toString(), null, data);
         triggerAutoSync();
     };
@@ -520,6 +551,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerAutoSync();
     };
 
+    // MODIFIED: Soft Delete for Templates
     const onSaveSuratTemplate = async (template: SuratTemplate) => {
         const withTs = addTimestamp(template);
         if (template.id) { 
@@ -528,28 +560,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await logActivity('suratTemplates', 'UPDATE', template.id.toString());
         }
         else { 
-            const newId = await db.suratTemplates.add(withTs); 
-            setSuratTemplates(prev => [...prev, { ...withTs, id: newId }]); 
+            const newId = generateUniqueId();
+            const newItem = { ...withTs, id: newId };
+            await db.suratTemplates.put(newItem); 
+            setSuratTemplates(prev => [...prev, newItem]); 
             await logActivity('suratTemplates', 'INSERT', newId.toString());
         }
         triggerAutoSync();
     };
 
     const onDeleteSuratTemplate = async (id: number) => { 
-        await db.suratTemplates.delete(id); 
+        const item = suratTemplates.find(t => t.id === id);
+        if(!item) return;
+        const deletedItem = { ...item, deleted: true, lastModified: Date.now() };
+        await db.suratTemplates.put(deletedItem);
         setSuratTemplates(prev => prev.filter(t => t.id !== id)); 
         await logActivity('suratTemplates', 'DELETE', id.toString());
         triggerAutoSync(); 
     };
+
     const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => { 
-        const withTs = addTimestamp(surat);
-        const id = await db.arsipSurat.add(withTs as ArsipSurat); 
-        setArsipSuratList(prev => [...prev, { ...withTs, id } as ArsipSurat]); 
+        const id = generateUniqueId();
+        const withTs = addTimestamp({ ...surat, id });
+        await db.arsipSurat.put(withTs as ArsipSurat); 
+        setArsipSuratList(prev => [...prev, withTs as ArsipSurat]); 
         await logActivity('arsipSurat', 'INSERT', id.toString());
         triggerAutoSync(); 
     };
+
     const onDeleteArsipSurat = async (id: number) => { 
-        await db.arsipSurat.delete(id); 
+        const item = arsipSuratList.find(a => a.id === id);
+        if(!item) return;
+        const deletedItem = { ...item, deleted: true, lastModified: Date.now() };
+        await db.arsipSurat.put(deletedItem);
         setArsipSuratList(prev => prev.filter(a => a.id !== id)); 
         await logActivity('arsipSurat', 'DELETE', id.toString());
         triggerAutoSync(); 

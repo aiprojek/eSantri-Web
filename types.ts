@@ -78,8 +78,10 @@ export interface StorageStats {
     percent?: number;
 }
 
+// UPDATE: Added 'deleted' property for Soft Delete support
 export interface SyncedEntity {
     lastModified?: number;
+    deleted?: boolean; 
 }
 
 export interface Alamat {

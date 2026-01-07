@@ -99,6 +99,7 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
             arsipSurat: await db.arsipSurat.toArray(),
             pendaftar: await db.pendaftar.toArray(),
             auditLogs: await db.auditLogs.toArray(),
+            users: await db.users.toArray(), // Added: Send user changes (password updates)
         }
     };
     
@@ -243,12 +244,9 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
     const data = fileContent.data;
 
     // Merge to Admin DB (Admin is TRUTH, but we accept incoming data as updates)
-    // For Admin merging Staff data: We generally Upsert everything from Staff 
-    // because Staff is the source of truth for their specific entries.
-    // However, to be safe, we can use the same Smart Merge logic if Admin also edits same records.
     let recordCount = 0;
 
-    await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, async () => {
+    await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, db.users, async () => {
         const merge = async (table: string, items: any[]) => {
             if (!items || items.length === 0) return;
             const tbl = (db as any)[table];
@@ -269,6 +267,14 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         // Merge Audit Logs
         if (data.auditLogs) {
             await db.auditLogs.bulkPut(data.auditLogs);
+        }
+
+        // Merge Users (Passwords)
+        if (data.users) {
+            // Only update non-admin users to prevent Staff overwriting Admin accidentally
+            // (Assuming Staff ID != Admin ID)
+            const staffUpdates = data.users.filter((u: any) => !u.isDefaultAdmin);
+            await db.users.bulkPut(staffUpdates);
         }
     });
 

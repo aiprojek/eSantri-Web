@@ -46,6 +46,9 @@ interface BackupModalState {
     reason: 'periodic' | 'action';
 }
 
+// NEW: Sync Status Type
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+
 interface AppContextType {
   isLoading: boolean;
   settings: PondokSettingsWithId;
@@ -68,6 +71,9 @@ interface AppContextType {
   currentUser: User | null;
   login: (user: User) => void;
   logout: () => void;
+
+  // Sync State
+  syncStatus: SyncStatus; // Expose status to UI
 
   onSaveSettings: (newSettings: PondokSettings) => Promise<void>;
   onAddSantri: (santriData: Omit<Santri, 'id'>) => Promise<void>;
@@ -131,6 +137,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Auth State
     const [currentUser, setCurrentUser] = useState<User | null>(null);
 
+    // Sync Status State
+    const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+    const hasPendingChanges = useRef(false); // Ref to track if we need to warn user before close
+
     const [santriFilters, setSantriFilters] = useState<SantriFilters>({
       search: '', jenjang: '', kelas: '', rombel: '', status: '', gender: '', provinsi: '', kabupatenKota: '', kecamatan: ''
     });
@@ -153,12 +163,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setToasts(prev => prev.filter(toast => toast.id !== id));
     }, []);
 
-    // Helper: Generate Unique ID (Timestamp + Random) to prevent collision in distributed systems
-    // Replaces simple auto-increment
     const generateUniqueId = (): number => {
         const timestamp = Date.now();
         const random = Math.floor(Math.random() * 1000);
-        return parseInt(`${timestamp}${random}`.slice(0, 16)); // Keep it within safe integer range if possible, or just use timestamp
+        return parseInt(`${timestamp}${random}`.slice(0, 16)); 
     };
 
     // Global Error Handler
@@ -166,7 +174,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
             const message = event.reason?.message || (typeof event.reason === 'string' ? event.reason : "Terjadi kesalahan yang tidak terduga.");
             console.error("Unhandled Rejection:", event.reason);
-            // Ignore benign errors if needed, but showing toast is safer for "Dropbox not configured"
             if (!message.includes('ResizeObserver')) {
                  showToast(`Error: ${message}`, 'error');
             }
@@ -186,6 +193,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             window.removeEventListener('error', handleError);
         };
     }, [showToast]);
+
+    // Prevent closing tab if syncing
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (syncStatus === 'syncing' || hasPendingChanges.current) {
+                e.preventDefault();
+                e.returnValue = 'Data sedang disinkronkan ke Cloud. Mohon tunggu sebentar.';
+                return e.returnValue;
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [syncStatus]);
 
     useEffect(() => {
         const loadData = async () => {
@@ -221,7 +241,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     return addr;
                 };
 
-                // Filter out deleted items (Soft Delete Implementation)
                 const filterDeleted = (list: any[]) => list.filter(item => !item.deleted);
 
                 const migratedSantri = filterDeleted(currentSantri).map(s => ({
@@ -254,6 +273,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     setCurrentUser(null);
                 }
 
+                // AUTO PULL ON LOAD (Solution 2)
+                if (safeSettings.cloudSyncConfig?.autoSync && safeSettings.cloudSyncConfig.provider === 'dropbox') {
+                    showToast('Memeriksa pembaruan data dari cloud...', 'info');
+                    setSyncStatus('syncing');
+                    downloadAndMergeMaster(safeSettings.cloudSyncConfig).then(result => {
+                        if (result.status === 'merged') {
+                            showToast('Data berhasil diperbarui dari Cloud.', 'success');
+                            // Reload handled internally by manual sync usually, but here we might need gentle refresh
+                            // For simplicity, we just notify. Ideally we re-fetch DB.
+                            setTimeout(() => window.location.reload(), 1500);
+                        }
+                        setSyncStatus('success');
+                        setTimeout(() => setSyncStatus('idle'), 3000);
+                    }).catch(err => {
+                        console.error("Auto pull failed", err);
+                        setSyncStatus('error'); // Don't show toast to avoid annoying user on offline start
+                    });
+                }
+
             } catch (error) {
                 console.error("Failed to load data from DexieDB", error);
                 showToast("Gagal memuat data lokal. Aplikasi akan menggunakan data default/kosong.", 'error');
@@ -266,7 +304,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadData();
     }, [showToast]);
 
-    // Setup Auto Pull Interval
+    // Setup Auto Pull Interval (Keep syncing periodically)
     useEffect(() => {
         if (settings.cloudSyncConfig?.autoSync && settings.cloudSyncConfig.provider === 'dropbox') {
             if (pullSyncIntervalRef.current) clearInterval(pullSyncIntervalRef.current);
@@ -288,7 +326,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const logActivity = async (tableName: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', recordId: string, oldData?: any, newData?: any) => {
         const username = currentUser?.username || 'System';
-        
         const log: AuditLog = {
             id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             table_name: tableName,
@@ -304,10 +341,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     // --- AUTO SYNC UP (PUSH CHANGES) ---
+    // Modified to handle sync status UI
     const triggerAutoSync = useCallback(() => {
         if (!settings.cloudSyncConfig?.autoSync || settings.cloudSyncConfig.provider === 'none') return;
         
-        if (currentUser?.role === 'admin' && settings.multiUserMode) return;
+        // Admin usually publishes manually, but if auto-sync is on, maybe we want them to push too?
+        // Current logic: Admin pushes via 'Publish Master'. Staff pushes via 'Upload Changes'.
+        // If MultiUser is OFF, everyone is admin, but acts as staff for sync unless publishing.
+        // Let's stick to: AutoSync = Upload Changes (Staff Logic) for safety.
+        
+        if (currentUser?.role === 'admin' && settings.multiUserMode) return; // Admins manually publish master
+
+        setSyncStatus('syncing');
+        hasPendingChanges.current = true;
 
         if (autoSyncTimeoutRef.current) clearTimeout(autoSyncTimeoutRef.current);
 
@@ -318,9 +364,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 
                 const now = new Date().toISOString();
                 setSettings(prev => ({ ...prev, cloudSyncConfig: { ...prev.cloudSyncConfig, lastSync: now } }));
+                setSyncStatus('success');
+                hasPendingChanges.current = false;
+                setTimeout(() => setSyncStatus('idle'), 3000);
             } catch (error) {
-                // Changed from console.warn to showToast to satisfy user request
-                showToast(`Auto-Sync Gagal: ${(error as Error).message}`, 'error');
+                setSyncStatus('error');
+                // Optional: showToast(`Auto-Sync Gagal: ${(error as Error).message}`, 'error');
+                // Retrying logic could go here
             }
         }, 5000); 
     }, [settings, currentUser, showToast]);
@@ -330,6 +380,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const config = settings.cloudSyncConfig;
         if (config.provider !== 'dropbox') return;
 
+        setSyncStatus('syncing');
         try {
             if (action === 'admin_publish') {
                 if (currentUser?.role !== 'admin') throw new Error("Hanya Admin yang bisa mempublikasikan master data.");
@@ -339,6 +390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const username = currentUser?.username || 'user';
                 await uploadStaffChanges(config, username);
                 showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
+                hasPendingChanges.current = false;
             } else {
                 const result = await downloadAndMergeMaster(config);
                 if (result.status === 'merged') {
@@ -348,8 +400,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     showToast('Belum ada Master Data dari Admin di Cloud.', 'info');
                 }
             }
+            setSyncStatus('success');
+            setTimeout(() => setSyncStatus('idle'), 3000);
         } catch (e) {
             console.error(e);
+            setSyncStatus('error');
             showToast(`Gagal Sync: ${(e as Error).message}`, 'error');
         }
     };
@@ -371,21 +426,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     };
 
-    // MODIFIED: Use generateUniqueId instead of db.santri.add() which uses auto-increment
     const onAddSantri = async (santriData: Omit<Santri, 'id'>) => {
         const id = generateUniqueId();
         const withTs = addTimestamp({ ...santriData, id });
-        await db.santri.put(withTs as Santri); // Use PUT instead of ADD
+        await db.santri.put(withTs as Santri); 
         
         setSantriList(prev => [...prev, withTs as Santri]);
         await logActivity('santri', 'INSERT', id.toString(), null, withTs);
         triggerAutoSync();
     };
 
-    // MODIFIED: Use generateUniqueId for bulk add
     const onBulkAddSantri = async (newSantriData: Omit<Santri, 'id'>[]) => {
         const withTs = newSantriData.map(s => addTimestamp({ ...s, id: generateUniqueId() }));
-        await db.santri.bulkPut(withTs as Santri[]); // Use PUT
+        await db.santri.bulkPut(withTs as Santri[]); 
         
         setSantriList(prev => [...prev, ...withTs as Santri[]]);
         await logActivity('santri', 'INSERT', 'BULK', null, { count: withTs.length });
@@ -409,7 +462,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerAutoSync();
     };
 
-    // MODIFIED: SOFT DELETE implementation
     const onDeleteSantri = async (id: number) => {
         const santri = santriList.find(s => s.id === id);
         if (!santri) return;
@@ -417,7 +469,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const deletedSantri = { ...santri, deleted: true, lastModified: Date.now() };
         await db.santri.put(deletedSantri);
         
-        // Remove from current view, but keep in DB
         setSantriList(prev => prev.filter(s => s.id !== id));
         await logActivity('santri', 'DELETE', id.toString());
         triggerAutoSync();
@@ -450,14 +501,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const hideConfirmation = () => setConfirmation(prev => ({ ...prev, isOpen: false }));
 
-    // MODIFIED: Use generateUniqueId for Tagihan
     const onGenerateTagihanBulanan = async (tahun: number, bulan: number) => {
         const { result, newTagihan } = await generateTagihanBulanan(db, settings, santriList, tahun, bulan);
-        // NOTE: generateTagihanBulanan internally now should ideally use generated IDs or we map them here
-        // For safety, let's assume service handles basic ID, but we override here if needed to be unique globally.
-        // Actually, the service returns data. Ideally we map IDs there.
-        // Let's patch the ID generation in service separately or map here.
-        const withTs = newTagihan.map(t => addTimestamp({ ...t, id: generateUniqueId() })); // Re-ID to be safe globally
+        const withTs = newTagihan.map(t => addTimestamp({ ...t, id: generateUniqueId() })); 
         
         await db.tagihan.bulkPut(withTs);
         setTagihanList(prev => [...prev, ...withTs]);
@@ -477,7 +523,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return result;
     };
 
-    // MODIFIED: Use generateUniqueId for Pembayaran
     const onAddPembayaran = async (pembayaranData: Omit<Pembayaran, 'id'>) => {
         const id = generateUniqueId();
         const withTs = addTimestamp({ ...pembayaranData, id });
@@ -499,7 +544,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerAutoSync();
     };
 
-    // MODIFIED: Use generateUniqueId for Transaksi
     const onAddTransaksiSaldo = async (data: Omit<TransaksiSaldo, 'id' | 'saldoSetelah' | 'tanggal'>) => {
         const tanggal = new Date().toISOString();
         const currentSaldo = saldoSantriList.find(s => s.santriId === data.santriId)?.saldo || 0;
@@ -551,7 +595,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerAutoSync();
     };
 
-    // MODIFIED: Soft Delete for Templates
     const onSaveSuratTemplate = async (template: SuratTemplate) => {
         const withTs = addTimestamp(template);
         if (template.id) { 
@@ -620,7 +663,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const link = document.createElement('a'); link.href = url; link.download = `backup_esantri_${new Date().toISOString().slice(0, 10)}.json`;
         document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
         
-        // Update setting last backup
         const newSettings = { ...settings, backupConfig: { ...settings.backupConfig, lastBackup: new Date().toISOString() } };
         onSaveSettings(newSettings);
     };
@@ -641,6 +683,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         <AppContext.Provider value={{
             isLoading, settings, santriList, tagihanList, pembayaranList, saldoSantriList, transaksiSaldoList, transaksiKasList, suratTemplates, arsipSuratList, santriFilters, setSantriFilters, toasts, confirmation, alertModal, backupModal, 
             currentUser, login, logout,
+            syncStatus, // Expose Sync Status
             onSaveSettings, onAddSantri, onBulkAddSantri, onUpdateSantri, onBulkUpdateSantri, onDeleteSantri, onDeleteSampleData, onGenerateTagihanBulanan, onGenerateTagihanAwal, onAddPembayaran, onAddTransaksiSaldo, onAddTransaksiKas, onSetorKeKas, onSaveSuratTemplate, onDeleteSuratTemplate, onSaveArsipSurat, onDeleteArsipSurat, downloadBackup, triggerBackupCheck, closeBackupModal, showToast, removeToast, showAlert, hideAlert, showConfirmation, hideConfirmation,
             triggerManualSync
         }}>

@@ -10,7 +10,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }) => {
-  const { settings, showToast, showConfirmation, currentUser, logout, triggerManualSync } = useAppContext();
+  const { settings, showToast, showConfirmation, currentUser, logout, triggerManualSync, syncStatus } = useAppContext();
   const [isSyncing, setIsSyncing] = useState(false);
   const [showSyncOptions, setShowSyncOptions] = useState(false);
 
@@ -91,6 +91,46 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
 
   const isAdmin = currentUser?.role === 'admin';
 
+  // Helper for Sync Status UI
+  const renderSyncStatus = () => {
+      if (syncStatus === 'syncing' || isSyncing) {
+          return (
+              <>
+                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span>
+                  <span>Menyimpan...</span>
+              </>
+          );
+      }
+      if (syncStatus === 'success') {
+          return (
+              <>
+                  <i className="bi bi-cloud-check-fill mr-2 text-green-300"></i>
+                  <span>Tersinkron</span>
+              </>
+          );
+      }
+      if (syncStatus === 'error') {
+          return (
+              <>
+                  <i className="bi bi-exclamation-triangle-fill mr-2 text-red-400 animate-pulse"></i>
+                  <span>Gagal Sync</span>
+              </>
+          );
+      }
+      return (
+          <>
+              <i className="bi bi-cloud-arrow-up-down mr-2 group-hover:text-white text-teal-200"></i>
+              <span>Sync Cloud</span>
+          </>
+      );
+  };
+
+  const getButtonClass = () => {
+      if (syncStatus === 'error') return 'bg-red-800 hover:bg-red-700';
+      if (syncStatus === 'success') return 'bg-teal-700 hover:bg-teal-600 border border-green-500';
+      return 'bg-teal-700 hover:bg-teal-600';
+  }
+
   return (
     <>
     <aside className={`fixed top-0 left-0 z-40 w-64 h-screen transition-transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 bg-teal-800 text-white no-print flex flex-col`}>
@@ -139,16 +179,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           )}
           <button 
             onClick={handleSyncClick} 
-            disabled={isSyncing}
-            className="flex items-center justify-center w-full p-2 bg-teal-700 hover:bg-teal-600 rounded-lg text-sm transition-colors group"
+            disabled={isSyncing || syncStatus === 'syncing'}
+            className={`flex items-center justify-center w-full p-2 rounded-lg text-sm transition-colors group ${getButtonClass()}`}
             title="Upload/Download data Cloud"
           >
-              {isSyncing ? (
-                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span>
-              ) : (
-                  <i className="bi bi-cloud-arrow-up-down mr-2 group-hover:text-white text-teal-200"></i>
-              )}
-              <span>Sync Cloud</span>
+              {renderSyncStatus()}
           </button>
       </div>
     </aside>

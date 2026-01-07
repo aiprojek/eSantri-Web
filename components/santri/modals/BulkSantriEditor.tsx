@@ -47,7 +47,10 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                     ...s, 
                     tempId: s.id,
                     tanggalLahir: toDisplayDate(s.tanggalLahir),
-                    tanggalMasuk: toDisplayDate(s.tanggalMasuk)
+                    tanggalMasuk: toDisplayDate(s.tanggalMasuk),
+                    tanggalLahirAyah: toDisplayDate(s.tanggalLahirAyah),
+                    tanggalLahirIbu: toDisplayDate(s.tanggalLahirIbu),
+                    tanggalLahirWali: toDisplayDate(s.tanggalLahirWali),
                 })));
             } else {
                 // Mode Add: Start with 3 empty rows
@@ -91,6 +94,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         pekerjaanAyah: '',
         penghasilanAyah: '',
         teleponAyah: '',
+        tanggalLahirAyah: '',
         
         // Data Ibu
         namaIbu: '',
@@ -100,6 +104,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         pekerjaanIbu: '',
         penghasilanIbu: '',
         teleponIbu: '',
+        tanggalLahirIbu: '',
 
         // Data Wali
         namaWali: '',
@@ -109,6 +114,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         pekerjaanWali: '',
         penghasilanWali: '',
         teleponWali: '',
+        tanggalLahirWali: '',
         
         anakKe: undefined,
         jumlahSaudara: undefined
@@ -176,7 +182,10 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
             const cleanData = validRows.map(({ tempId, ...rest }) => ({
                 ...rest,
                 tanggalLahir: toStorageDate(rest.tanggalLahir),
-                tanggalMasuk: toStorageDate(rest.tanggalMasuk)
+                tanggalMasuk: toStorageDate(rest.tanggalMasuk),
+                tanggalLahirAyah: toStorageDate(rest.tanggalLahirAyah),
+                tanggalLahirIbu: toStorageDate(rest.tanggalLahirIbu),
+                tanggalLahirWali: toStorageDate(rest.tanggalLahirWali),
             }));
             await onSave(cleanData);
             onClose();

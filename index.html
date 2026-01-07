@@ -134,6 +134,11 @@
         .print-portrait { page: portrait; }
         .print-landscape { page: landscape; }
 
+        /* Force Print Colors for Cards */
+        .print\:border-black { border-color: black !important; }
+        .print\:text-black { color: black !important; }
+        .print\:bg-white { background-color: white !important; }
+        
         /* --- Modal Printing Logic --- */
         
         /* If printing from a Modal (has .fixed.inset-0), hide the background main content */

@@ -219,11 +219,16 @@ export const TabPanduan: React.FC = () => {
                 </div>
 
                 <PanduanLangkah number={8} title="Penerimaan Santri Baru (PSB)" color="orange">
-                    <p>Sistem pendaftaran lengkap:</p>
+                    <p>Sistem pendaftaran lengkap dengan dua mode:</p>
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Formulir Online:</strong> Desain formulir di menu <em>PSB &gt; Desain Formulir</em>. Pilih metode WhatsApp atau Google Sheet.</li>
-                        <li><strong>Poster AI:</strong> Buat kata-kata promosi dan prompt gambar poster menggunakan AI di menu <em>Poster AI</em>.</li>
-                        <li><strong>Rekap & Seleksi:</strong> Data pendaftar masuk ke menu Rekap. Admin bisa melakukan seleksi dan klik "Terima" untuk memindahkan data ke database santri utama secara otomatis.</li>
+                        <li><strong>Formulir Online:</strong> Desain di menu <em>PSB &gt; Desain Formulir</em>. Pilih metode WhatsApp (Simple) atau Google Sheet/Hybrid (Lengkap dengan Upload File).</li>
+                        <li><strong>Tarik Data:</strong>
+                            <ul className="list-circle pl-5 mt-1 text-gray-500">
+                                <li><em>WhatsApp:</em> Admin menyalin pesan dari WA Calon Santri ke menu "Impor WA".</li>
+                                <li><em>Google Sheet:</em> Klik tombol <strong>"Ambil dari Google Sheet"</strong> di menu Rekap Pendaftar.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Seleksi:</strong> Lakukan seleksi di menu Rekap, lalu klik tombol "Terima" untuk memindahkan data ke database santri utama secara otomatis.</li>
                     </ul>
                 </PanduanLangkah>
 

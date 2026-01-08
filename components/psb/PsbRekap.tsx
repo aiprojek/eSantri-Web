@@ -79,34 +79,44 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
         setIsSyncing(true);
         try {
+            // Fetch data from Google Apps Script (doGet)
             const response = await fetch(scriptUrl);
-            if (!response.ok) throw new Error('Gagal menghubungi Google Script.');
+            if (!response.ok) throw new Error('Gagal menghubungi Google Script. Cek koneksi internet.');
             
             const rawData = await response.json();
             
-            if (!Array.isArray(rawData)) throw new Error('Format data tidak valid.');
+            if (!Array.isArray(rawData)) throw new Error('Format data dari Google Sheet tidak valid.');
 
             let addedCount = 0;
             const existingNames = new Set(pendaftarList.map(p => p.namaLengkap.toLowerCase().trim()));
 
+            // Define fields that map directly to Pendaftar, others go to customData
+            const standardFields = [
+                'namaLengkap', 'nisn', 'nik', 'jenisKelamin', 'tempatLahir', 'tanggalLahir', 
+                'alamat', 'desaKelurahan', 'kecamatan', 'kabupatenKota', 'provinsi', 'kodePos',
+                'namaAyah', 'nikAyah', 'statusAyah', 'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'teleponAyah',
+                'namaIbu', 'nikIbu', 'statusIbu', 'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'teleponIbu',
+                'namaWali', 'nomorHpWali', 'jenjangId', 'asalSekolah', 'tanggalDaftar', 'Timestamp'
+            ];
+
             for (const item of rawData) {
-                // Ensure required fields exist
+                // Validation: Must have name
                 if (!item.namaLengkap) continue;
                 
-                // Avoid duplicates based on Name (Simple check, could be improved with NIK/NISN)
+                // Duplicate Check (Simple by Name)
                 if (existingNames.has(item.namaLengkap.toString().toLowerCase().trim())) continue;
 
-                // Process Custom Data (Files)
+                // Separate Custom Fields / Files
                 const customDataObj: any = {};
                 Object.keys(item).forEach(key => {
-                    // Collect unknown keys as customData, excluding standard fields
-                    if (!['namaLengkap', 'nisn', 'nik', 'jenjangId', 'Timestamp', 'jenisKelamin'].includes(key)) {
+                    // If key is NOT a standard field, treat it as custom data (this handles File Links too)
+                    if (!standardFields.includes(key)) {
                         customDataObj[key] = item[key];
                     }
                 });
 
                 const newPendaftar: Pendaftar = {
-                    id: Date.now() + Math.random(), // Ensure unique ID
+                    id: Date.now() + Math.random(), // Ensure unique ID locally
                     namaLengkap: item.namaLengkap,
                     nisn: item.nisn || '',
                     nik: item.nik || '',
@@ -114,6 +124,12 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     tempatLahir: item.tempatLahir || '',
                     tanggalLahir: item.tanggalLahir || '',
                     alamat: item.alamat || '',
+                    desaKelurahan: item.desaKelurahan || '',
+                    kecamatan: item.kecamatan || '',
+                    kabupatenKota: item.kabupatenKota || '',
+                    provinsi: item.provinsi || '',
+                    kodePos: item.kodePos || '',
+                    
                     namaWali: item.namaWali || '',
                     nomorHpWali: item.nomorHpWali || '',
                     jenjangId: parseInt(item.jenjangId) || settings.psbConfig.targetJenjangId || 0,
@@ -122,13 +138,19 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     status: 'Baru',
                     kewarganegaraan: 'WNI',
                     gelombang: settings.psbConfig.activeGelombang,
+                    
+                    // Store extra fields (including Google Drive Links) here
                     customData: JSON.stringify(customDataObj),
                     
-                    // Map other fields loosely
                     namaAyah: item.namaAyah || '',
-                    namaIbu: item.namaIbu || '',
+                    nikAyah: item.nikAyah || '',
                     pekerjaanAyah: item.pekerjaanAyah || '',
+                    teleponAyah: item.teleponAyah || '',
+                    
+                    namaIbu: item.namaIbu || '',
+                    nikIbu: item.nikIbu || '',
                     pekerjaanIbu: item.pekerjaanIbu || '',
+                    teleponIbu: item.teleponIbu || '',
                 };
 
                 await db.pendaftar.add(newPendaftar);
@@ -137,7 +159,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
             if (addedCount > 0) {
                 onUpdateList();
-                showToast(`Berhasil menarik ${addedCount} data baru dari Google Sheet.`, 'success');
+                showToast(`Berhasil menarik ${addedCount} data pendaftar baru dari Google Sheet.`, 'success');
             } else {
                 showToast('Tidak ada data baru. Semua data di Sheet sudah ada di aplikasi.', 'info');
             }
@@ -326,10 +348,18 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         showToast(`${newItems.length} pendaftar ditambahkan.`, 'success');
     }
 
-    const handleOpenDocument = (base64: string) => {
-        const win = window.open();
-        if (win) {
-            win.document.write('<iframe src="' + base64 + '" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>');
+    const handleOpenDocument = (urlOrBase64: string) => {
+        if (!urlOrBase64) return;
+        
+        // If it's a URL (Google Drive), open in new tab
+        if (urlOrBase64.startsWith('http')) {
+            window.open(urlOrBase64, '_blank');
+        } else {
+            // It's likely a base64 string (from local/Dropbox), render in iframe wrapper
+            const win = window.open();
+            if (win) {
+                win.document.write('<iframe src="' + urlOrBase64 + '" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>');
+            }
         }
     }
 
@@ -343,24 +373,25 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     </div>
                     {canWrite && (
                         <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-                            {/* GOOGLE SYNC BUTTON (Conditional) */}
+                            {/* TOMBOL GOOGLE SYNC (Hanya muncul jika mode Google Sheet / Hybrid) */}
                             {(method === 'google_sheet' || method === 'hybrid') && (
                                 <button 
                                     onClick={handleGoogleSync}
                                     disabled={isSyncing}
                                     className="flex-grow lg:flex-grow-0 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center justify-center gap-2 shadow-sm disabled:bg-blue-400"
+                                    title="Tarik data terbaru dari Google Sheet"
                                 >
                                     {isSyncing ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-file-earmark-spreadsheet-fill"></i>}
                                     Ambil dari Google Sheet
                                 </button>
                             )}
 
-                            {/* DROPBOX SYNC (INTERNAL) */}
+                            {/* TOMBOL INTERNAL SYNC (DROPBOX) */}
                             <button 
                                 onClick={handleInternalSync} 
                                 disabled={isSyncing}
                                 className="flex-grow lg:flex-grow-0 bg-gray-100 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-200 flex items-center justify-center gap-2 shadow-sm disabled:bg-gray-100"
-                                title="Tarik data pendaftar dari sesama admin via Dropbox"
+                                title="Tarik data pendaftar dari sesama admin via Dropbox (Internal)"
                             >
                                 {isSyncing ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-cloud-download"></i>}
                                 Sync Sesama Admin
@@ -400,7 +431,12 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         <tbody className="divide-y">
                             {filteredData.map((p, idx) => {
                                 const customData = p.customData ? JSON.parse(p.customData) : {};
-                                const files = Object.keys(customData).filter(key => customData[key]?.startsWith('data:') || customData[key]?.startsWith('http'));
+                                
+                                // Detect files (Base64 OR Links)
+                                const files = Object.keys(customData).filter(key => {
+                                    const val = customData[key];
+                                    return typeof val === 'string' && (val.startsWith('data:') || val.startsWith('http'));
+                                });
                                 
                                 return (
                                     <tr key={p.id} className="hover:bg-gray-50">
@@ -417,16 +453,21 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                         <td className="p-3 text-center">
                                             {files.length > 0 ? (
                                                 <div className="flex flex-wrap justify-center gap-1">
-                                                    {files.map(fKey => (
-                                                        <button 
-                                                            key={fKey}
-                                                            onClick={() => handleOpenDocument(customData[fKey])}
-                                                            className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-200 text-[10px] hover:bg-blue-100"
-                                                            title="Lihat Dokumen"
-                                                        >
-                                                            <i className="bi bi-file-earmark-pdf"></i> File
-                                                        </button>
-                                                    ))}
+                                                    {files.map(fKey => {
+                                                        const val = customData[fKey];
+                                                        const isLink = val.startsWith('http');
+                                                        return (
+                                                            <button 
+                                                                key={fKey}
+                                                                onClick={() => handleOpenDocument(val)}
+                                                                className={`px-2 py-0.5 rounded border text-[10px] flex items-center gap-1 ${isLink ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'}`}
+                                                                title={`Lihat ${fKey}`}
+                                                            >
+                                                                <i className={`bi ${isLink ? 'bi-link-45deg' : 'bi-file-earmark-pdf'}`}></i> 
+                                                                {fKey.replace(/_/g, ' ')}
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
                                             ) : '-'}
                                         </td>

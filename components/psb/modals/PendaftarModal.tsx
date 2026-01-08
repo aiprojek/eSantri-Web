@@ -14,8 +14,11 @@ interface PendaftarModalProps {
 
 export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose, onSave, onUpdate, pendaftarData, settings }) => {
     const { showAlert } = useAppContext();
-    const [activeTab, setActiveTab] = useState<'dataDiri' | 'alamat' | 'ortu' | 'sekolah'>('dataDiri');
+    const [activeTab, setActiveTab] = useState<'dataDiri' | 'alamat' | 'ortu' | 'sekolah' | 'tambahan'>('dataDiri');
     
+    // State to hold parsed custom data
+    const [parsedCustomData, setParsedCustomData] = useState<Record<string, any>>({});
+
     // Initial state with comprehensive fields
     const [formData, setFormData] = useState<Partial<Pendaftar>>({
         namaLengkap: '',
@@ -66,13 +69,19 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         jalurPendaftaran: 'Reguler',
         catatan: '',
         status: 'Baru',
-        tanggalDaftar: new Date().toISOString()
+        tanggalDaftar: new Date().toISOString(),
+        customData: '{}'
     });
 
     useEffect(() => {
         if (isOpen) {
             if (pendaftarData) {
                 setFormData(pendaftarData);
+                try {
+                    setParsedCustomData(pendaftarData.customData ? JSON.parse(pendaftarData.customData) : {});
+                } catch (e) {
+                    setParsedCustomData({});
+                }
             } else {
                 setFormData({
                     namaLengkap: '',
@@ -97,8 +106,10 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                     jalurPendaftaran: 'Reguler',
                     catatan: '',
                     status: 'Baru',
-                    tanggalDaftar: new Date().toISOString()
+                    tanggalDaftar: new Date().toISOString(),
+                    customData: '{}'
                 });
+                setParsedCustomData({});
             }
             setActiveTab('dataDiri');
         }
@@ -108,6 +119,13 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
 
     const handleChange = (key: keyof Pendaftar, value: any) => {
         setFormData(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleCustomDataChange = (key: string, value: string) => {
+        const updated = { ...parsedCustomData, [key]: value };
+        setParsedCustomData(updated);
+        // Sync back to formData string immediately
+        setFormData(prev => ({ ...prev, customData: JSON.stringify(updated) }));
     };
 
     const handleSave = () => {
@@ -120,7 +138,9 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
             ...formData,
             jenjangId: Number(formData.jenjangId),
             anakKe: formData.anakKe ? Number(formData.anakKe) : undefined,
-            jumlahSaudara: formData.jumlahSaudara ? Number(formData.jumlahSaudara) : undefined
+            jumlahSaudara: formData.jumlahSaudara ? Number(formData.jumlahSaudara) : undefined,
+            // Ensure customData matches the current parsed state
+            customData: JSON.stringify(parsedCustomData)
         } as Pendaftar;
 
         if (pendaftarData?.id) {
@@ -135,7 +155,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         <button
             type="button"
             onClick={() => setActiveTab(id as any)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap ${
                 activeTab === id
                     ? 'border-b-2 border-teal-600 text-teal-600 bg-gray-50'
                     : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
@@ -144,6 +164,54 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
             {label}
         </button>
     );
+
+    const renderCustomValue = (key: string, val: any) => {
+        const stringVal = String(val || '');
+        const isUrl = stringVal.startsWith('http');
+        const isBase64Image = stringVal.startsWith('data:image');
+
+        if (isUrl) {
+            return (
+                <div className="flex items-center gap-2 mt-1">
+                    <input 
+                        type="text" 
+                        value={stringVal} 
+                        onChange={(e) => handleCustomDataChange(key, e.target.value)}
+                        className="flex-grow bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm"
+                    />
+                    <a href={stringVal} target="_blank" rel="noopener noreferrer" className="bg-blue-100 text-blue-700 px-3 py-2.5 rounded-lg hover:bg-blue-200 text-sm font-medium flex items-center gap-2">
+                        <i className="bi bi-box-arrow-up-right"></i> Buka
+                    </a>
+                </div>
+            );
+        } else if (isBase64Image) {
+            return (
+                <div className="mt-1 space-y-2">
+                    <img src={stringVal} alt={key} className="max-h-40 rounded border p-1 bg-white" />
+                    <button 
+                        onClick={() => {
+                            const w = window.open("");
+                            w?.document.write('<img src="' + stringVal + '" />');
+                        }}
+                        className="text-xs text-blue-600 hover:underline"
+                    >
+                        Lihat Ukuran Penuh
+                    </button>
+                    {/* Hidden input to hold value */}
+                    <input type="hidden" value={stringVal} /> 
+                </div>
+            );
+        } else {
+            return (
+                <input 
+                    type="text" 
+                    value={stringVal} 
+                    onChange={(e) => handleCustomDataChange(key, e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm mt-1"
+                />
+            );
+        }
+    };
 
     const pendidikanOptions = ['Tidak/Belum Sekolah', 'SD/Sederajat', 'SLTP/Sederajat', 'SLTA/Sederajat', 'Diploma', 'Sarjana', 'Pascasarjana'];
     const pekerjaanOptions = ['PNS', 'TNI/Polri', 'Wiraswasta', 'Petani', 'Nelayan', 'Karyawan Swasta', 'Buruh', 'Lainnya'];
@@ -158,11 +226,12 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                 </div>
                 
                 <div className="bg-white border-b px-6 pt-2">
-                    <nav className="flex space-x-2 overflow-x-auto">
-                        <TabButton id="dataDiri" label="Identitas & Kependudukan" />
-                        <TabButton id="alamat" label="Alamat Lengkap" />
-                        <TabButton id="ortu" label="Orang Tua & Wali" />
-                        <TabButton id="sekolah" label="Sekolah & Pendaftaran" />
+                    <nav className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide">
+                        <TabButton id="dataDiri" label="Identitas" />
+                        <TabButton id="alamat" label="Alamat" />
+                        <TabButton id="ortu" label="Orang Tua" />
+                        <TabButton id="sekolah" label="Sekolah" />
+                        <TabButton id="tambahan" label="Data Tambahan & Berkas" />
                     </nav>
                 </div>
 
@@ -351,6 +420,30 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Catatan Khusus</label>
                                     <input type="text" value={formData.catatan || ''} onChange={e => handleChange('catatan', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- TAB 5: DATA TAMBAHAN & BERKAS (NEW) --- */}
+                    {activeTab === 'tambahan' && (
+                        <div className="space-y-6">
+                            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded text-sm text-yellow-800">
+                                <p><strong>Info:</strong> Bagian ini menampilkan data tambahan yang diinput melalui Google Form atau tautan file yang diunggah ke Google Drive.</p>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 gap-4">
+                                {Object.keys(parsedCustomData).length > 0 ? (
+                                    Object.keys(parsedCustomData).map((key) => (
+                                        <div key={key} className="border p-3 rounded-lg bg-gray-50">
+                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                                {key.replace(/_/g, ' ')}
+                                            </label>
+                                            {renderCustomValue(key, parsedCustomData[key])}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-center text-gray-500 italic py-8">Tidak ada data tambahan atau berkas yang ditemukan.</p>
+                                )}
                             </div>
                         </div>
                     )}

@@ -7,6 +7,7 @@ import { StatusPembayaranView } from './finance/StatusPembayaranView';
 import { UangSakuView } from './finance/UangSakuView';
 import { PengaturanBiaya } from './finance/PengaturanBiaya';
 import { PengaturanRedaksi } from './finance/PengaturanRedaksi';
+import { SetoranKasView } from './finance/SetoranKasView'; // Import New View
 import { PembayaranModal } from './finance/modals/PembayaranModal';
 import { RiwayatKeuanganSantriModal } from './finance/modals/RiwayatKeuanganSantriModal';
 import { KuitansiTemplate } from './finance/print/KuitansiTemplate';
@@ -14,7 +15,7 @@ import { SuratTagihanTemplate } from './finance/print/SuratTagihanTemplate';
 
 const Finance: React.FC = () => {
     const { settings, santriList, tagihanList, pembayaranList, currentUser, showToast } = useAppContext();
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'status' | 'uangsaku' | 'pengaturan' | 'redaksi'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'status' | 'setoran' | 'uangsaku' | 'pengaturan' | 'redaksi'>('dashboard');
     
     // State for Payment Modal
     const [isPembayaranModalOpen, setIsPembayaranModalOpen] = useState(false);
@@ -66,13 +67,14 @@ const Finance: React.FC = () => {
 
             <div className="mb-6 border-b border-gray-200">
                 <nav className="flex -mb-px overflow-x-auto">
-                    <button onClick={() => setActiveTab('dashboard')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'dashboard' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
-                    <button onClick={() => setActiveTab('status')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'status' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Status Pembayaran</button>
-                    <button onClick={() => setActiveTab('uangsaku')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'uangsaku' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Uang Saku</button>
+                    <button onClick={() => setActiveTab('dashboard')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
+                    <button onClick={() => setActiveTab('status')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'status' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Status Pembayaran</button>
+                    <button onClick={() => setActiveTab('setoran')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'setoran' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-box-arrow-in-down mr-1"></i> Setoran Kas</button>
+                    <button onClick={() => setActiveTab('uangsaku')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'uangsaku' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Uang Saku</button>
                     {canWrite && (
                         <>
-                            <button onClick={() => setActiveTab('pengaturan')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'pengaturan' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Biaya</button>
-                            <button onClick={() => setActiveTab('redaksi')} className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === 'redaksi' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Redaksi</button>
+                            <button onClick={() => setActiveTab('pengaturan')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'pengaturan' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Biaya</button>
+                            <button onClick={() => setActiveTab('redaksi')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'redaksi' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Redaksi</button>
                         </>
                     )}
                 </nav>
@@ -80,6 +82,7 @@ const Finance: React.FC = () => {
             
             {activeTab === 'dashboard' && <FinanceDashboard santriList={santriList} tagihanList={tagihanList} pembayaranList={pembayaranList} settings={settings} />}
             {activeTab === 'status' && <StatusPembayaranView onBayarClick={openPembayaranModal} onHistoryClick={openHistoryModal} setPrintableSuratTagihanData={setPrintableSuratTagihanData} canWrite={canWrite} />}
+            {activeTab === 'setoran' && <SetoranKasView canWrite={canWrite} />}
             {activeTab === 'uangsaku' && <UangSakuView canWrite={canWrite} />}
             {activeTab === 'pengaturan' && canWrite && <PengaturanBiaya />}
             {activeTab === 'redaksi' && canWrite && <PengaturanRedaksi />}

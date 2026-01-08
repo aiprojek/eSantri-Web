@@ -10,18 +10,21 @@ const FaqItem: React.FC<FaqItemProps> = ({ question, answer }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     return (
-        <div className="border border-gray-200 rounded-lg bg-white overflow-hidden transition-shadow hover:shadow-sm">
+        <div className="border border-gray-200 rounded-lg bg-white overflow-hidden transition-all duration-200 hover:shadow-md">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex justify-between items-center p-4 text-left bg-gray-50 hover:bg-gray-100 transition-colors focus:outline-none"
+                className={`w-full flex justify-between items-center p-4 text-left transition-colors focus:outline-none ${isOpen ? 'bg-teal-50 text-teal-800' : 'bg-white hover:bg-gray-50 text-gray-700'}`}
             >
-                <span className="font-semibold text-gray-800 text-sm md:text-base pr-4">{question}</span>
-                <i className={`bi bi-chevron-down text-gray-500 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}></i>
+                <span className="font-semibold text-sm md:text-base pr-4 flex items-start gap-2">
+                    <i className="bi bi-question-circle-fill text-teal-500 mt-0.5 flex-shrink-0"></i>
+                    {question}
+                </span>
+                <i className={`bi bi-chevron-down text-gray-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? 'rotate-180 text-teal-600' : ''}`}></i>
             </button>
             <div 
-                className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
+                className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
             >
-                <div className="p-4 text-sm text-gray-600 border-t border-gray-100 leading-relaxed bg-white">
+                <div className="p-4 text-sm text-gray-600 border-t border-gray-100 leading-relaxed bg-white pl-10">
                     {answer}
                 </div>
             </div>
@@ -29,101 +32,178 @@ const FaqItem: React.FC<FaqItemProps> = ({ question, answer }) => {
     );
 };
 
+const FaqCategory: React.FC<{ title: string; icon: string; colorClass: string; children: React.ReactNode }> = ({ title, icon, colorClass, children }) => (
+    <div className="mb-8 break-inside-avoid">
+        <div className={`flex items-center gap-3 p-3 rounded-lg border-l-4 mb-4 ${colorClass}`}>
+            <i className={`bi ${icon} text-xl`}></i>
+            <h3 className="font-bold text-lg">{title}</h3>
+        </div>
+        <div className="space-y-2">
+            {children}
+        </div>
+    </div>
+);
+
 export const TabFaq: React.FC = () => {
     return (
-        <div className="space-y-8">
-            {/* SECTION 1: UMUM */}
-            <div>
-                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded text-blue-900 mb-4">
-                    <h3 className="font-bold text-lg mb-1">Pertanyaan Umum & Sinkronisasi</h3>
-                </div>
-                <div className="space-y-3">
-                    <FaqItem 
-                        question="Di menu PSB, apa bedanya 'Sync Sesama Admin' dan 'Ambil dari Google Sheet'?"
-                        answer={
-                            <div>
-                                <p className="mb-2">Ini adalah dua fitur dengan tujuan yang berbeda:</p>
-                                <ul className="list-disc pl-5 space-y-1">
-                                    <li><strong>Sync Sesama Admin (Dropbox):</strong> Ini adalah sinkronisasi <em>Internal</em>. Gunakan tombol ini jika Anda ingin menarik data yang diinput manual oleh Admin lain (misal: Admin B menginput pendaftar offline di laptopnya, dan Anda ingin menarik data tersebut).</li>
-                                    <li><strong>Ambil dari Google Sheet:</strong> Ini adalah sinkronisasi <em>Eksternal</em>. Gunakan tombol ini untuk menarik data pendaftar online (masyarakat umum) yang mengisi Formulir Web.</li>
-                                </ul>
-                            </div>
-                        }
-                    />
-                    <FaqItem 
-                        question="Bagaimana jika saya lupa melakukan Sync (Kirim Perubahan) sebelum menutup aplikasi?"
-                        answer={
-                            <div>
-                                <p className="mb-2">Tenang, sistem kami memiliki pengaman ganda:</p>
-                                <ul className="list-disc pl-5 space-y-1">
-                                    <li><strong>Auto-Sync:</strong> Setiap kali Anda menyimpan, mengedit, atau menghapus data, sistem secara otomatis mencoba mengirim perubahan ke Cloud di latar belakang.</li>
-                                    <li><strong>Peringatan Keluar:</strong> Jika proses sinkronisasi sedang berjalan atau tertunda, browser akan memunculkan peringatan konfirmasi jika Anda mencoba menutup tab atau aplikasi.</li>
-                                </ul>
-                            </div>
-                        }
-                    />
-                    <FaqItem 
-                        question="Apa yang terjadi jika saya lupa klik 'Ambil Master' saat mulai bekerja di pagi hari?"
-                        answer="Sistem menerapkan fitur 'Auto-Pull on Load'. Artinya, setiap kali Anda membuka aplikasi atau login ulang, sistem secara otomatis memeriksa dan mengunduh data Master terbaru dari Cloud di latar belakang, sehingga risiko mengedit data usang (basi) sangat kecil."
-                    />
-                    <FaqItem 
-                        question="Apakah data saya aman jika laptop rusak atau browser ter-uninstall?"
-                        answer="Data utama tersimpan di browser (IndexedDB). Jika laptop rusak/hilang, data di laptop tersebut hilang. OLEH KARENA ITU, sangat penting untuk mengaktifkan Cloud Sync (Dropbox) atau rutin melakukan 'Unduh Cadangan Data' (file JSON) dan menyimpannya di tempat aman (Flashdisk/Google Drive) sebagai backup."
-                    />
-                </div>
-            </div>
+        <div className="columns-1 lg:columns-2 gap-8 space-y-8">
+            
+            {/* 1. UMUM & SISTEM */}
+            <FaqCategory 
+                title="Umum & Keamanan Akun" 
+                icon="bi-shield-lock-fill" 
+                colorClass="bg-purple-50 border-purple-500 text-purple-900"
+            >
+                <FaqItem 
+                    question="Apakah aplikasi ini butuh internet?"
+                    answer="Secara umum TIDAK. Aplikasi ini berkonsep 'Offline-First'. Anda bisa input data, bayar SPP, dan cetak laporan tanpa internet. Internet HANYA dibutuhkan saat Anda ingin melakukan Sinkronisasi Data (Upload/Download) ke Dropbox atau backup ke Google Drive."
+                />
+                <FaqItem 
+                    question="Saya lupa password Admin, bagaimana cara resetnya?"
+                    answer={
+                        <div>
+                            <p className="mb-2">Jika Anda menggunakan mode Multi-User, gunakan <strong>Kunci Pemulihan (Recovery Key)</strong>:</p>
+                            <ol className="list-decimal pl-5 space-y-1">
+                                <li>Di halaman login, klik "Gunakan Kunci Darurat".</li>
+                                <li>Masukkan kode unik (format: ESANTRI-XXXX-XXXX) yang diberikan saat pertama kali mengaktifkan multi-user.</li>
+                                <li>Jika kunci valid, Anda bisa membuat password baru.</li>
+                            </ol>
+                            <p className="mt-2 text-xs italic text-red-600">Catatan: Jika Anda kehilangan Kunci Pemulihan, data tidak dapat dipulihkan demi keamanan.</p>
+                        </div>
+                    }
+                />
+                <FaqItem 
+                    question="Apa yang terjadi jika saya 'Clear Cache' browser?"
+                    answer={
+                        <span className="text-red-600 font-bold">
+                            JANGAN LAKUKAN INI TANPA BACKUP! Data aplikasi tersimpan di browser. Menghapus Cache/History akan MENGHAPUS SEMUA DATA SANTRI. Pastikan Anda rutin melakukan "Unduh Cadangan Data" (file JSON) atau Sinkronisasi Cloud.
+                        </span>
+                    }
+                />
+            </FaqCategory>
 
-            {/* SECTION 2: KEUANGAN */}
-            <div>
-                <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded text-green-900 mb-4">
-                    <h3 className="font-bold text-lg mb-1">Keuangan & Buku Kas</h3>
-                </div>
-                <div className="space-y-3">
-                    <FaqItem 
-                        question="Saya sudah input pembayaran SPP santri, kenapa Saldo Buku Kas tidak bertambah?"
-                        answer={
-                            <div>
-                                <p className="mb-2">Ini disengaja agar Buku Kas tetap rapi. Sistem menggunakan metode <strong>"Setoran Kas (Closing)"</strong>:</p>
-                                <ol className="list-decimal pl-5 space-y-1">
-                                    <li>Saat Anda klik "Bayar" pada santri, uang masuk ke "Laci Kasir" (Pending).</li>
-                                    <li>Di akhir hari/shift, buka menu <strong>Keuangan &gt; Setoran Kas</strong>.</li>
-                                    <li>Centang semua pembayaran hari itu, lalu klik <strong>"Setor ke Buku Kas"</strong>.</li>
-                                </ol>
-                                <p className="mt-2">Dengan cara ini, 50 transaksi pembayaran santri akan tercatat sebagai 1 baris pemasukan (Gelondongan) di Buku Kas, memudahkan pembukuan.</p>
-                            </div>
-                        }
-                    />
-                    <FaqItem 
-                        question="Bagaimana cara memisahkan uang Tunai dan Transfer di Buku Kas?"
-                        answer="Di menu 'Setoran Kas', terdapat filter Metode Pembayaran. Anda bisa memfilter 'Tunai' terlebih dahulu lalu klik Setor (untuk masuk ke Kas Tunai/Brankas), kemudian memfilter 'Transfer' dan klik Setor (untuk masuk ke Kas Bank). Berikan keterangan yang jelas saat menyetor."
-                    />
-                    <FaqItem 
-                        question="Saya salah input nominal pembayaran santri, bagaimana cara editnya?"
-                        answer={
-                            <div>
-                                <p>Tergantung status uangnya:</p>
-                                <ul className="list-disc pl-5 space-y-1">
-                                    <li><strong>Belum Disetor ke Kas:</strong> Buka menu <em>Status Pembayaran &gt; Klik tombol 'Riwayat' pada santri</em>. Anda bisa menghapus pembayaran yang salah di sana.</li>
-                                    <li><strong>Sudah Disetor ke Kas:</strong> Anda harus menghapus dulu transaksi setoran tersebut di menu <em>Buku Kas</em> agar pembayaran santri kembali berstatus 'Pending/Belum Disetor', baru kemudian bisa diedit/hapus di riwayat santri.</li>
-                                </ul>
-                            </div>
-                        }
-                    />
-                    <FaqItem 
-                        question="Apakah Uang Saku (Tabungan) santri dihitung sebagai Pemasukan Pondok?"
-                        answer="Secara akuntansi, TIDAK. Uang saku adalah 'Titipan' (Kewajiban/Utang Pondok ke Santri). Uang tersebut baru menjadi pemasukan riil pondok (Pendapatan) ketika santri membelanjakannya di kantin/koperasi atau digunakan untuk membayar SPP (Pemindahbukuan)."
-                    />
-                    <FaqItem 
-                        question="Apa bedanya 'Generate Tagihan Bulanan' dan 'Tagihan Awal'?"
-                        answer={
-                            <ul className="list-disc pl-5 space-y-1">
-                                <li><strong>Bulanan:</strong> Untuk biaya rutin seperti SPP, Makan, Kebersihan. Dibuat setiap awal bulan.</li>
-                                <li><strong>Awal (Sekali Bayar/Cicilan):</strong> Untuk biaya masuk seperti Uang Gedung, Seragam, Kitab. Dibuat hanya sekali saat santri baru masuk.</li>
-                            </ul>
-                        }
-                    />
-                </div>
-            </div>
+            {/* 2. DATA SANTRI */}
+            <FaqCategory 
+                title="Data Santri & Akademik" 
+                icon="bi-people-fill" 
+                colorClass="bg-teal-50 border-teal-500 text-teal-900"
+            >
+                <FaqItem 
+                    question="Bagaimana cara menaikan kelas santri secara massal?"
+                    answer="Gunakan fitur 'Pindahkan Rombel Massal' di menu Data Santri. Filter santri berdasarkan kelas lama -> Centang Semua -> Klik tombol 'Pindah Kelas' di atas tabel -> Pilih kelas tujuan. Selesai."
+                />
+                <FaqItem 
+                    question="Santri sudah lulus/boyong, apakah datanya dihapus?"
+                    answer="Sebaiknya JANGAN dihapus agar riwayatnya tetap ada. Cukup ubah statusnya menjadi 'Lulus' atau 'Keluar/Pindah'. Data mereka akan disembunyikan dari daftar aktif tapi tetap ada di laporan alumni."
+                />
+                <FaqItem 
+                    question="Kenapa foto santri tidak muncul saat dicetak?"
+                    answer="Pastikan ukuran foto yang diupload tidak terlalu besar (maksimal 500KB). Foto yang terlalu besar bisa membuat browser kehabisan memori saat mencetak banyak kartu sekaligus."
+                />
+            </FaqCategory>
+
+            {/* 3. KEUANGAN (CRITICAL) */}
+            <FaqCategory 
+                title="Keuangan & Pembayaran" 
+                icon="bi-cash-coin" 
+                colorClass="bg-green-50 border-green-500 text-green-900"
+            >
+                <FaqItem 
+                    question="Saya sudah terima uang SPP, kenapa Saldo Buku Kas tidak bertambah?"
+                    answer={
+                        <div>
+                            <p className="mb-2 font-semibold text-green-700">Ini adalah fitur keamanan (Double Entry).</p>
+                            <p className="mb-2">Saat Anda klik "Bayar" di menu santri, uang masuk ke status "Di Laci Kasir" (Pending). Agar masuk ke Buku Kas Umum, Anda harus melakukan <strong>Setoran Kas (Closing)</strong>:</p>
+                            <ol className="list-decimal pl-5 space-y-1">
+                                <li>Buka menu <strong>Keuangan &gt; Setoran Kas</strong>.</li>
+                                <li>Anda akan melihat daftar uang yang diterima hari ini.</li>
+                                <li>Centang semua, lalu klik <strong>"Setor ke Buku Kas"</strong>.</li>
+                            </ol>
+                            <p className="mt-2 text-xs">Tujuannya agar Admin Keuangan bisa memverifikasi uang fisik sebelum dicatat resmi sebagai pemasukan pondok.</p>
+                        </div>
+                    }
+                />
+                <FaqItem 
+                    question="Bagaimana jika ada santri bayar rapel 3 bulan sekaligus?"
+                    answer="Di menu pembayaran, centang saja 3 bulan tagihan tersebut sekaligus. Sistem akan menjumlahkannya totalnya dan mencetak 1 kuitansi gabungan agar hemat kertas."
+                />
+                <FaqItem 
+                    question="Salah input nominal pembayaran, cara editnya?"
+                    answer={
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li>Jika <strong>Belum Disetor</strong>: Buka Riwayat Pembayaran santri tersebut, hapus transaksinya, lalu input ulang.</li>
+                            <li>Jika <strong>Sudah Disetor</strong>: Hapus dulu transaksi "Setoran Kas" di menu Buku Kas, baru kemudian hapus pembayaran di data santri.</li>
+                        </ul>
+                    }
+                />
+                <FaqItem 
+                    question="Apakah Uang Saku bisa dipakai memotong SPP otomatis?"
+                    answer="Tidak otomatis. Anda harus melakukan 'Penarikan Uang Saku' terlebih dahulu (uang keluar dari tabungan), lalu lakukan 'Pembayaran SPP' (uang masuk ke SPP) secara terpisah."
+                />
+            </FaqCategory>
+
+            {/* 4. DATA MASTER */}
+            <FaqCategory 
+                title="Data Master (Pengaturan)" 
+                icon="bi-database-fill" 
+                colorClass="bg-blue-50 border-blue-500 text-blue-900"
+            >
+                <FaqItem 
+                    question="Kenapa saya tidak bisa menghapus Kelas atau Jenjang?"
+                    answer="Sistem mencegah penghapusan data induk yang sedang digunakan. Jika ada Santri yang masih terdaftar di Kelas tersebut, Anda harus memindahkan santri-santri tersebut ke kelas lain dulu sebelum bisa menghapus kelasnya."
+                />
+                <FaqItem 
+                    question="Bagaimana menambah Wali Kelas baru?"
+                    answer="Pertama, tambahkan nama guru tersebut di menu 'Tenaga Pendidik'. Setelah itu, edit data Rombel di 'Struktur Pendidikan' dan pilih nama guru tersebut sebagai Wali Kelas."
+                />
+            </FaqCategory>
+
+            {/* 5. PSB & IMPORT */}
+            <FaqCategory 
+                title="PSB & Import Data" 
+                icon="bi-person-plus-fill" 
+                colorClass="bg-orange-50 border-orange-500 text-orange-900"
+            >
+                <FaqItem 
+                    question="Bagaimana cara import data dari WhatsApp?"
+                    answer="Saat calon wali santri mengisi formulir via WA (yang dihasilkan aplikasi), akan ada kode di bagian bawah pesan (diawali PSB_START...). Copy SELURUH pesan tersebut, lalu paste di menu 'Impor WA' pada dashboard PSB."
+                />
+                <FaqItem 
+                    question="Saya punya data Excel, bisa diupload?"
+                    answer={
+                        <div>
+                            <p>Bisa. Gunakan fitur <strong>Impor CSV</strong> di menu Data Santri.</p>
+                            <ol className="list-decimal pl-5 space-y-1 text-xs mt-1">
+                                <li>Download template CSV kosong yang disediakan aplikasi.</li>
+                                <li>Copy-paste data dari Excel Anda ke template CSV tersebut.</li>
+                                <li>Upload kembali CSV yang sudah diisi.</li>
+                            </ol>
+                        </div>
+                    }
+                />
+            </FaqCategory>
+
+            {/* 6. SINKRONISASI */}
+            <FaqCategory 
+                title="Sinkronisasi & Cloud" 
+                icon="bi-cloud-arrow-up-fill" 
+                colorClass="bg-indigo-50 border-indigo-500 text-indigo-900"
+            >
+                <FaqItem 
+                    question="Apa bedanya 'Kirim Perubahan' dan 'Ambil Master'?"
+                    answer={
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Kirim Perubahan (Upload):</strong> Mengirim data yang Anda kerjakan di laptop ini ke Inbox Cloud (untuk digabung oleh Admin Pusat).</li>
+                            <li><strong>Ambil Master (Download):</strong> Mengambil data terbaru yang sudah disahkan/digabung oleh Admin Pusat. Lakukan ini setiap pagi sebelum bekerja agar data Anda sinkron.</li>
+                        </ul>
+                    }
+                />
+                <FaqItem 
+                    question="Apakah bisa dipakai banyak orang bersamaan (Realtime)?"
+                    answer="Aplikasi ini Semi-Realtime (Hub & Spoke). Tidak seperti Google Docs yang live. Staff A dan Staff B bisa bekerja offline bersamaan, tapi data mereka baru akan bertemu setelah Admin Pusat melakukan 'Merge' dan 'Publish'."
+                />
+            </FaqCategory>
+
         </div>
     );
 };

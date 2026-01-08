@@ -213,53 +213,40 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const googleAppsScriptCode = `
 /* 
    GOOGLE APPS SCRIPT FOR ESANTRI WEB 
-   (Support Upload File ke Google Drive)
+   (Support Upload & Read Data)
 */
 
 // --- KONFIGURASI ---
-// Masukkan ID Folder Google Drive tempat menyimpan file upload.
-// Buka Folder Drive > Lihat URL > Copy kode setelah /folders/
 var FOLDER_ID = "GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA"; 
 
+// --- FUNGSI MENERIMA DATA (WRITE) ---
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(30000); // Wait up to 30s
+  lock.tryLock(30000); 
 
   try {
     var doc = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = doc.getActiveSheet();
-
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var nextRow = sheet.getLastRow() + 1;
-
     var rawData = JSON.parse(e.postData.contents);
     var dataToSave = {};
 
-    // 1. PROSES FILE UPLOAD (Jika Ada)
     var folder = DriveApp.getFolderById(FOLDER_ID);
     
-    // Iterasi semua key, cari yang berisi data file
     for (var key in rawData) {
       var val = rawData[key];
-      // Cek apakah ini objek file (dari frontend eSantri)
       if (typeof val === 'object' && val !== null && val.isFile === true && val.data) {
-        // Ini adalah File! Decode dan Simpan ke Drive
-        var decoded = Utilities.base64Decode(val.data.split(',')[1]); // Hapus header data:image/...
+        var decoded = Utilities.base64Decode(val.data.split(',')[1]); 
         var blob = Utilities.newBlob(decoded, val.mime, val.name);
-        
-        // Simpan ke Drive
         var file = folder.createFile(blob);
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        
-        // Ganti data di object dengan URL File
         dataToSave[key] = file.getUrl();
       } else {
-        // Data teks biasa
         dataToSave[key] = val;
       }
     }
 
-    // 2. SETUP HEADER (Jika Sheet Kosong)
     if (sheet.getLastColumn() === 0) {
        var keys = Object.keys(dataToSave);
        keys.unshift('Timestamp'); 
@@ -267,14 +254,12 @@ function doPost(e) {
        headers = keys;
     }
 
-    // 3. MAPPING DATA KE KOLOM
     var newRowData = [];
     for (var i = 0; i < headers.length; i++) {
       var header = headers[i];
       if (header === 'Timestamp') {
         newRowData.push(new Date());
       } else {
-        // Gabungkan array (checkbox) jadi string
         var cellVal = dataToSave[header];
         if (Array.isArray(cellVal)) cellVal = cellVal.join(", ");
         newRowData.push(cellVal || '');
@@ -283,20 +268,32 @@ function doPost(e) {
 
     sheet.getRange(nextRow, 1, 1, newRowData.length).setValues([newRowData]);
 
-    return ContentService
-      .createTextOutput(JSON.stringify({ 'result': 'success', 'row': nextRow }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  catch (e) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ 'result': 'error', 'error': e.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  finally {
+    return ContentService.createTextOutput(JSON.stringify({ 'result': 'success', 'row': nextRow })).setMimeType(ContentService.MimeType.JSON);
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({ 'result': 'error', 'error': e.toString() })).setMimeType(ContentService.MimeType.JSON);
+  } finally {
     lock.releaseLock();
   }
+}
+
+// --- FUNGSI MEMBACA DATA (READ/PULL) ---
+function doGet(e) {
+  var doc = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = doc.getActiveSheet();
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var data = [];
+
+  for (var i = 1; i < rows.length; i++) {
+    var row = rows[i];
+    var record = {};
+    for (var j = 0; j < headers.length; j++) {
+      record[headers[j]] = row[j];
+    }
+    data.push(record);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }`;
 
     const generateHtml = () => {

@@ -5,13 +5,14 @@ import { TabPanduan } from './tentang/TabPanduan';
 import { TabRilis, latestVersion, latestUpdateDate } from './tentang/TabRilis';
 import { TabLisensi } from './tentang/TabLisensi';
 import { TabKontak } from './tentang/TabKontak';
+import { TabFaq } from './tentang/TabFaq';
 
 const TabButton: React.FC<{
-    tabId: 'tentang' | 'panduan' | 'rilis' | 'kontak' | 'lisensi';
+    tabId: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi';
     label: string;
     icon: string;
     isActive: boolean;
-    onClick: (id: 'tentang' | 'panduan' | 'rilis' | 'kontak' | 'lisensi') => void;
+    onClick: (id: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi') => void;
 }> = ({ tabId, label, icon, isActive, onClick }) => (
     <button
         onClick={() => onClick(tabId)}
@@ -23,7 +24,7 @@ const TabButton: React.FC<{
 );
 
 const Tentang: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'rilis' | 'kontak' | 'lisensi'>('tentang');
+    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi'>('tentang');
 
     return (
         <div>
@@ -40,7 +41,8 @@ const Tentang: React.FC = () => {
                 <div className="border-b border-gray-200">
                     <nav className="flex -mb-px overflow-x-auto">
                         <TabButton tabId="tentang" label="Tentang Aplikasi" icon="bi-info-circle" isActive={activeTab === 'tentang'} onClick={setActiveTab} />
-                        <TabButton tabId="panduan" label="Panduan Pengguna" icon="bi-question-circle" isActive={activeTab === 'panduan'} onClick={setActiveTab} />
+                        <TabButton tabId="panduan" label="Panduan Pengguna" icon="bi-book-half" isActive={activeTab === 'panduan'} onClick={setActiveTab} />
+                        <TabButton tabId="faq" label="FAQ / Tanya Jawab" icon="bi-question-circle" isActive={activeTab === 'faq'} onClick={setActiveTab} />
                         <TabButton tabId="rilis" label="Catatan Rilis" icon="bi-clock-history" isActive={activeTab === 'rilis'} onClick={setActiveTab} />
                         <TabButton tabId="lisensi" label="Lisensi" icon="bi-file-earmark-text" isActive={activeTab === 'lisensi'} onClick={setActiveTab} />
                         <TabButton tabId="kontak" label="Kontak" icon="bi-envelope" isActive={activeTab === 'kontak'} onClick={setActiveTab} />
@@ -50,6 +52,7 @@ const Tentang: React.FC = () => {
                 <div className="mt-6">
                     {activeTab === 'tentang' && <TabTentang />}
                     {activeTab === 'panduan' && <TabPanduan />}
+                    {activeTab === 'faq' && <TabFaq />}
                     {activeTab === 'rilis' && <TabRilis />}
                     {activeTab === 'lisensi' && <TabLisensi />}
                     {activeTab === 'kontak' && <TabKontak />}

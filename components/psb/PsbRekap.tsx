@@ -27,6 +27,10 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const [editingPendaftar, setEditingPendaftar] = useState<Pendaftar | null>(null);
     const [isBulkEditorOpen, setIsBulkEditorOpen] = useState(false);
 
+    // Submission method from settings
+    const method = settings.psbConfig.submissionMethod;
+    const scriptUrl = settings.psbConfig.googleScriptUrl;
+
     const filteredData = useMemo(() => {
         return pendaftarList.filter(p => {
             const matchSearch = p.namaLengkap.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -36,11 +40,11 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         });
     }, [pendaftarList, searchTerm, filterJenjang]);
 
-    const handleCloudSync = async () => {
+    const handleInternalSync = async () => {
         if (!canWrite) return;
         const config = settings.cloudSyncConfig;
         if (!config || config.provider === 'none') {
-            showAlert('Konfigurasi Cloud Belum Aktif', 'Silakan aktifkan Dropbox di menu Pengaturan untuk menggunakan fitur tarik data otomatis.');
+            showAlert('Konfigurasi Cloud Belum Aktif', 'Silakan aktifkan Dropbox di menu Pengaturan untuk menggunakan fitur tarik data antar admin.');
             return;
         }
 
@@ -65,6 +69,86 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             setIsSyncing(false);
         }
     }
+
+    const handleGoogleSync = async () => {
+        if (!canWrite) return;
+        if (!scriptUrl) {
+            showAlert('URL Script Kosong', 'Harap isi URL Google Web App di menu Desain Formulir.');
+            return;
+        }
+
+        setIsSyncing(true);
+        try {
+            const response = await fetch(scriptUrl);
+            if (!response.ok) throw new Error('Gagal menghubungi Google Script.');
+            
+            const rawData = await response.json();
+            
+            if (!Array.isArray(rawData)) throw new Error('Format data tidak valid.');
+
+            let addedCount = 0;
+            const existingNames = new Set(pendaftarList.map(p => p.namaLengkap.toLowerCase().trim()));
+
+            for (const item of rawData) {
+                // Ensure required fields exist
+                if (!item.namaLengkap) continue;
+                
+                // Avoid duplicates based on Name (Simple check, could be improved with NIK/NISN)
+                if (existingNames.has(item.namaLengkap.toString().toLowerCase().trim())) continue;
+
+                // Process Custom Data (Files)
+                const customDataObj: any = {};
+                Object.keys(item).forEach(key => {
+                    // Collect unknown keys as customData, excluding standard fields
+                    if (!['namaLengkap', 'nisn', 'nik', 'jenjangId', 'Timestamp', 'jenisKelamin'].includes(key)) {
+                        customDataObj[key] = item[key];
+                    }
+                });
+
+                const newPendaftar: Pendaftar = {
+                    id: Date.now() + Math.random(), // Ensure unique ID
+                    namaLengkap: item.namaLengkap,
+                    nisn: item.nisn || '',
+                    nik: item.nik || '',
+                    jenisKelamin: item.jenisKelamin === 'Perempuan' ? 'Perempuan' : 'Laki-laki',
+                    tempatLahir: item.tempatLahir || '',
+                    tanggalLahir: item.tanggalLahir || '',
+                    alamat: item.alamat || '',
+                    namaWali: item.namaWali || '',
+                    nomorHpWali: item.nomorHpWali || '',
+                    jenjangId: parseInt(item.jenjangId) || settings.psbConfig.targetJenjangId || 0,
+                    asalSekolah: item.asalSekolah || '',
+                    tanggalDaftar: item.tanggalDaftar || item.Timestamp || new Date().toISOString(),
+                    status: 'Baru',
+                    kewarganegaraan: 'WNI',
+                    gelombang: settings.psbConfig.activeGelombang,
+                    customData: JSON.stringify(customDataObj),
+                    
+                    // Map other fields loosely
+                    namaAyah: item.namaAyah || '',
+                    namaIbu: item.namaIbu || '',
+                    pekerjaanAyah: item.pekerjaanAyah || '',
+                    pekerjaanIbu: item.pekerjaanIbu || '',
+                };
+
+                await db.pendaftar.add(newPendaftar);
+                addedCount++;
+            }
+
+            if (addedCount > 0) {
+                onUpdateList();
+                showToast(`Berhasil menarik ${addedCount} data baru dari Google Sheet.`, 'success');
+            } else {
+                showToast('Tidak ada data baru. Semua data di Sheet sudah ada di aplikasi.', 'info');
+            }
+
+        } catch (e: any) {
+            console.error(e);
+            showAlert('Gagal Tarik Data', `Terjadi kesalahan: ${e.message}. Pastikan script sudah di-deploy sebagai Web App (Exec: Me, Access: Anyone).`);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const handleProcessWA = () => {
         if(!waInput.trim()) return;
@@ -259,14 +343,29 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     </div>
                     {canWrite && (
                         <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+                            {/* GOOGLE SYNC BUTTON (Conditional) */}
+                            {(method === 'google_sheet' || method === 'hybrid') && (
+                                <button 
+                                    onClick={handleGoogleSync}
+                                    disabled={isSyncing}
+                                    className="flex-grow lg:flex-grow-0 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center justify-center gap-2 shadow-sm disabled:bg-blue-400"
+                                >
+                                    {isSyncing ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-file-earmark-spreadsheet-fill"></i>}
+                                    Ambil dari Google Sheet
+                                </button>
+                            )}
+
+                            {/* DROPBOX SYNC (INTERNAL) */}
                             <button 
-                                onClick={handleCloudSync} 
+                                onClick={handleInternalSync} 
                                 disabled={isSyncing}
-                                className="flex-grow lg:flex-grow-0 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 flex items-center justify-center gap-2 shadow-sm disabled:bg-blue-400"
+                                className="flex-grow lg:flex-grow-0 bg-gray-100 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-200 flex items-center justify-center gap-2 shadow-sm disabled:bg-gray-100"
+                                title="Tarik data pendaftar dari sesama admin via Dropbox"
                             >
                                 {isSyncing ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-cloud-download"></i>}
-                                Tarik Data Cloud
+                                Sync Sesama Admin
                             </button>
+
                             <button onClick={() => setIsWaModalOpen(true)} className="flex-grow lg:flex-grow-0 bg-green-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-600 flex items-center justify-center gap-2">
                                 <i className="bi bi-whatsapp"></i> Impor WA
                             </button>
@@ -301,7 +400,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                         <tbody className="divide-y">
                             {filteredData.map((p, idx) => {
                                 const customData = p.customData ? JSON.parse(p.customData) : {};
-                                const files = Object.keys(customData).filter(key => customData[key]?.startsWith('data:'));
+                                const files = Object.keys(customData).filter(key => customData[key]?.startsWith('data:') || customData[key]?.startsWith('http'));
                                 
                                 return (
                                     <tr key={p.id} className="hover:bg-gray-50">

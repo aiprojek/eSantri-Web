@@ -26,6 +26,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
   const navItems = [
     { page: Page.Dashboard, icon: 'bi-grid-1x2-fill', show: true },
     { page: Page.Santri, icon: 'bi-people-fill', show: canAccess('santri') },
+    { page: Page.Akademik, icon: 'bi-mortarboard-fill', show: canAccess('akademik') }, // NEW
     { page: Page.PSB, icon: 'bi-person-plus-fill', show: canAccess('psb') }, 
     { page: Page.DataMaster, icon: 'bi-database-fill', show: canAccess('datamaster') }, 
     { page: Page.Keuangan, icon: 'bi-cash-coin', show: canAccess('keuangan') },

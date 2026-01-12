@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -19,11 +19,12 @@ export class ESantriDatabase extends Dexie {
   pendaftar!: Table<Pendaftar, number>;
   auditLogs!: Table<AuditLog, string>; 
   users!: Table<User, number>; 
-  syncHistory!: Table<SyncHistory, string>; // New table for tracking merged files
+  syncHistory!: Table<SyncHistory, string>; 
+  raporRecords!: Table<RaporRecord, number>; // New Table
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(22).stores({ // Bumped version
+    (this as any).version(24).stores({ // Bumped version to 24 for RaporRecord update
       santri: '++id, nis, namaLengkap, kamarId',
       settings: '++id',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
@@ -36,13 +37,12 @@ export class ESantriDatabase extends Dexie {
       pendaftar: '++id, namaLengkap, jenjangId, tanggalDaftar, status',
       auditLogs: 'id, table_name, operation, created_at',
       users: '++id, username, role',
-      syncHistory: 'id, fileId, mergedAt' // Track files merged by Admin
+      syncHistory: 'id, fileId, mergedAt',
+      raporRecords: '++id, santriId, [santriId+tahunAjaran+semester], rombelId' 
     }).upgrade(async (tx: any) => {
-       // Migration: Ensure multiUserMode exists if upgrading from old version
-       await tx.table('settings').toCollection().modify((s: any) => {
-            if (s.multiUserMode === undefined) {
-                s.multiUserMode = false;
-            }
+       // Migration: Ensure new fields exist if needed
+       await tx.table('raporRecords').toCollection().modify((r: any) => {
+            if (!r.customData) r.customData = '{}';
         });
     });
   }

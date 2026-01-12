@@ -68,8 +68,59 @@ export const getCloudStorageStats = async (config: CloudSyncConfig) => {
 };
 
 export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
-    // Legacy PSB folder logic, can remain or be updated to new structure if needed. Keeping as is for now.
-    return []; 
+    try {
+        // 1. List files in Inbox
+        const response = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ path: INBOX_FOLDER })
+        });
+        
+        if (!response.ok) return [];
+        const listData = await response.json();
+        
+        // 2. Get latest 10 files (Optimization to prevent heavy load)
+        const files = listData.entries
+            .filter((e: any) => e['.tag'] === 'file' && e.name.endsWith('.json'))
+            .sort((a: any, b: any) => new Date(b.client_modified).getTime() - new Date(a.client_modified).getTime())
+            .slice(0, 10);
+
+        let allPendaftar: any[] = [];
+        const seenIds = new Set();
+
+        // 3. Download & Extract
+        for (const file of files) {
+             const dlResponse = await fetch('https://content.dropboxapi.com/2/files/download', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Dropbox-API-Arg': JSON.stringify({ path: file.path_lower })
+                }
+            });
+            if (dlResponse.ok) {
+                const json = await dlResponse.json();
+                if (json.data && Array.isArray(json.data.pendaftar)) {
+                    // Avoid duplicates locally within this fetch session
+                    json.data.pendaftar.forEach((p: any) => {
+                         // We use name + phone as vague unique key if ID isn't reliable across devices
+                         const key = p.namaLengkap + (p.nomorHpWali || '');
+                         if (!seenIds.has(key)) {
+                             allPendaftar.push(p);
+                             seenIds.add(key);
+                         }
+                    });
+                }
+            }
+        }
+        
+        return allPendaftar;
+    } catch (error) {
+        console.error("Error fetching PSB from Cloud:", error);
+        throw new Error("Gagal mengambil data dari Dropbox. Cek koneksi internet.");
+    }
 };
 
 

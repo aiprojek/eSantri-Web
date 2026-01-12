@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { Pendaftar, PondokSettings, Santri, RiwayatStatus } from '../../types';
 import { db } from '../../db';
-import { fetchPsbFromDropbox } from '../../services/syncService';
+import { fetchPsbFromDropbox, getValidDropboxToken } from '../../services/syncService';
 import { PendaftarModal } from './modals/PendaftarModal';
 import { BulkPendaftarEditor } from './modals/BulkPendaftarEditor';
 
@@ -50,18 +50,30 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
         setIsSyncing(true);
         try {
-            let newItems: Omit<Pendaftar, 'id'>[] = [];
-            
-            if (config.provider === 'dropbox') {
-                newItems = await fetchPsbFromDropbox(config.dropboxToken!);
-            }
+            // Get valid token first to ensure auth
+            const token = await getValidDropboxToken(config);
+            const newItems = await fetchPsbFromDropbox(token);
 
             if (newItems.length > 0) {
-                await db.pendaftar.bulkAdd(newItems as Pendaftar[]);
-                onUpdateList();
-                showToast(`${newItems.length} data pendaftar baru ditarik dari Cloud.`, 'success');
+                // Filter existing by Name + HP (Simple de-dupe)
+                const existingKeys = new Set(pendaftarList.map(p => p.namaLengkap + (p.nomorHpWali || '')));
+                const reallyNewItems = newItems.filter((p: any) => !existingKeys.has(p.namaLengkap + (p.nomorHpWali || '')));
+
+                if (reallyNewItems.length > 0) {
+                    // Assign new local IDs
+                    const itemsWithId = reallyNewItems.map((item: any) => ({
+                        ...item,
+                        id: Date.now() + Math.random()
+                    }));
+                    
+                    await db.pendaftar.bulkAdd(itemsWithId);
+                    onUpdateList();
+                    showToast(`${itemsWithId.length} data pendaftar baru ditarik dari Cloud.`, 'success');
+                } else {
+                    showToast('Data di cloud sudah ada di lokal.', 'info');
+                }
             } else {
-                showToast('Tidak ada data pendaftaran baru di Cloud.', 'info');
+                showToast('Tidak ada data pendaftaran baru di Cloud (Folder Inbox).', 'info');
             }
         } catch (e: any) {
             showAlert('Gagal Sinkronisasi', e.message);
@@ -472,7 +484,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                             ) : '-'}
                                         </td>
                                         <td className="p-3 text-center">
-                                            <span className={`px-2 py-1 text-xs rounded-full ${p.status === 'Baru' ? 'bg-blue-100 text-blue-800' : p.status === 'Diterima' ? 'bg-green-100 text-green-800' : p.status === 'Cadangan' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                                            <span className={`px-2 py-1 text-xs rounded-full ${p.status === 'Baru' ? 'bg-blue-100 text-blue-800' : p.status === 'Diterima' ? 'bg-green-100 text-green-800' : p.status === 'Cadangan' ? 'bg-yellow-50 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
                                                 {p.status}
                                             </span>
                                         </td>

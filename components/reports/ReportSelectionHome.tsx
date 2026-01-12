@@ -38,8 +38,7 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
                 { id: ReportType.Biodata, title: 'Biodata Santri', description: "Data lengkap profil santri.", icon: 'bi-person-badge', color: 'text-teal-600' },
                 { id: ReportType.DaftarRombel, title: 'Absensi / Daftar Hadir', description: "List santri per rombel.", icon: 'bi-people', color: 'text-teal-600' },
                 { id: ReportType.LembarAbsensi, title: 'Lembar Absensi Bulanan', description: "Grid absensi tanggal 1-31.", icon: 'bi-calendar-check', color: 'text-teal-600' },
-                { id: ReportType.LembarNilai, title: 'Lembar Nilai', description: "Format kosong pengisian nilai.", icon: 'bi-card-checklist', color: 'text-teal-600' },
-                { id: ReportType.LembarRapor, title: 'Serah Terima Rapor', description: "Tanda terima pengambilan rapor.", icon: 'bi-file-earmark-check', color: 'text-teal-600' },
+                { id: ReportType.LembarNilai, title: 'Lembar Nilai (Kosong)', description: "Format kosong pengisian nilai.", icon: 'bi-card-checklist', color: 'text-teal-600' },
                 { id: ReportType.LembarPembinaan, title: 'Lembar Pembinaan', description: "Catatan prestasi & pelanggaran.", icon: 'bi-file-person', color: 'text-red-500' },
             ]
         },

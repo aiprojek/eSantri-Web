@@ -2,7 +2,7 @@
 import React from 'react';
 import { Santri, PondokSettings, ReportType, RiwayatStatus } from '../types';
 import { generateBiodataReports, generateCardReports, generateLabelReports } from '../components/reports/modules/IdentityReports';
-import { generateNilaiReports, generateTableReport } from '../components/reports/modules/AcademicReports';
+import { generateNilaiReports, generateTableReport, generateRaporLengkapReports } from '../components/reports/modules/AcademicReports';
 import { FinanceSummaryTemplate, LaporanArusKasTemplate, RekeningKoranSantriTemplate } from '../components/reports/modules/FinancialReports';
 import { DaftarWaliKelasTemplate, LaporanKontakTemplate, LaporanAsramaTemplate, LaporanMutasiTemplate, LembarPembinaanTemplate, FormulirIzinTemplate, DashboardSummaryTemplate } from '../components/reports/modules/AdministrativeReports';
 import { chunkArray } from '../components/reports/modules/Common';
@@ -38,6 +38,9 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 break;
             case ReportType.LembarNilai:
                 previews = generateNilaiReports(data, settings, options);
+                break;
+            case ReportType.RaporLengkap: // NEW CASE
+                previews = generateRaporLengkapReports(data, settings, options);
                 break;
             case ReportType.LembarAbsensi:
                 previews = generateTableReport(data, settings, options, 'Absensi');

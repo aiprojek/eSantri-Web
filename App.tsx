@@ -24,6 +24,7 @@ const BukuKas = React.lazy(() => import('./components/BukuKas'));
 const SuratMenyurat = React.lazy(() => import('./components/SuratMenyurat'));
 const PSB = React.lazy(() => import('./components/PSB'));
 const Tentang = React.lazy(() => import('./components/Tentang'));
+const Akademik = React.lazy(() => import('./components/Akademik')); // NEW
 
 // Handle Named Exports for specific components
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
@@ -269,6 +270,8 @@ const AppContent: React.FC = () => {
                             return <Dashboard navigateTo={handleNavigate} />;
                         case Page.Santri:
                             return checkAccess('santri') ? <SantriList /> : <AccessDenied />;
+                        case Page.Akademik:
+                            return checkAccess('akademik') ? <Akademik /> : <AccessDenied />;
                         case Page.DataMaster:
                             return checkAccess('datamaster') ? <DataMaster /> : <AccessDenied />;
                         case Page.Keuangan:

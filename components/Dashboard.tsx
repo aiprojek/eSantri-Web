@@ -32,7 +32,7 @@ const QuickActionButton: React.FC<{ icon: string; label: string; onClick: () => 
 );
 
 interface StatusData {
-  name: 'Aktif' | 'Hiatus' | 'Lulus' | 'Keluar/Pindah';
+  name: 'Aktif' | 'Hiatus' | 'Lulus' | 'Keluar/Pindah' | 'Masuk';
   count: number;
   percentage: number;
   color: string;
@@ -171,10 +171,11 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
     'Aktif': 'text-teal-500',
     'Hiatus': 'text-yellow-500',
     'Lulus': 'text-blue-500',
-    'Keluar/Pindah': 'text-red-500'
+    'Keluar/Pindah': 'text-red-500',
+    'Masuk': 'text-gray-500'
   };
 
-  const statusData: StatusData[] = (['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah'] as Santri['status'][]).map(status => ({
+  const statusData: StatusData[] = (['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah', 'Masuk'] as Santri['status'][]).map(status => ({
       name: status,
       count: statusCounts[status] || 0,
       percentage: totalSantri > 0 ? ((statusCounts[status] || 0) / totalSantri) * 100 : 0,

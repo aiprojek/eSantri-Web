@@ -1,8 +1,9 @@
 
-import React from 'react';
-import { Santri, PondokSettings } from '../../../types';
+import React, { useEffect, useState } from 'react';
+import { Santri, PondokSettings, RaporRecord } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
 import { ReportFooter, chunkArray, formatDate } from './Common';
+import { db } from '../../../db';
 
 // --- COMMON HEADER FOR ACADEMIC ---
 const AcademicHeader: React.FC<{ settings: PondokSettings, title: string, meta: any }> = ({ settings, title, meta }) => (
@@ -18,7 +19,157 @@ const AcademicHeader: React.FC<{ settings: PondokSettings, title: string, meta: 
     </div>
 );
 
-// --- LEMBAR NILAI ---
+// --- RAPOR LENGKAP TEMPLATE ---
+export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
+    const [raporData, setRaporData] = useState<RaporRecord | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    const waliKelas = rombel?.waliKelasId ? settings.tenagaPengajar.find(p => p.id === rombel.waliKelasId) : null;
+    const mudir = jenjang?.mudirId ? settings.tenagaPengajar.find(p => p.id === jenjang.mudirId) : null;
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                // Correctly use the compound index defined in db.ts
+                const record = await db.raporRecords
+                    .where('[santriId+tahunAjaran+semester]')
+                    .equals([santri.id, options.tahunAjaran, options.semester])
+                    .first();
+                setRaporData(record || null);
+            } catch (error) {
+                console.error("Gagal mengambil data rapor", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [santri.id, options.tahunAjaran, options.semester]);
+
+    if(loading) return <div className="p-4 text-center">Memuat Data Rapor...</div>;
+
+    if(!raporData) return (
+        <div className="font-sans text-black p-8 text-center border-2 border-dashed border-gray-300">
+            <h3 className="font-bold text-lg mb-2">Data Rapor Belum Tersedia</h3>
+            <p>Belum ada data nilai yang diimpor untuk <strong>{santri.namaLengkap}</strong></p>
+            <p className="text-xs mt-1">Periode: {options.tahunAjaran} ({options.semester})</p>
+            <p className="text-sm mt-2 text-gray-500">Silakan upload Leger Nilai di menu <strong>Akademik</strong> terlebih dahulu. Pastikan Tahun Ajaran dan Semester di menu upload sama dengan di sini.</p>
+        </div>
+    );
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt', lineHeight: '1.4' }}>
+            <div>
+                <PrintHeader settings={settings} title="LAPORAN HASIL BELAJAR SANTRI (RAPOR)" />
+                
+                <table className="w-full text-sm mb-4 font-medium">
+                    <tbody>
+                        <tr><td className="w-24">Nama</td><td>: {santri.namaLengkap}</td><td className="w-24 text-right">Tahun Ajaran</td><td className="w-32 text-right">: {options.tahunAjaran}</td></tr>
+                        <tr><td>NIS</td><td>: {santri.nis}</td><td className="text-right">Semester</td><td className="text-right">: {options.semester}</td></tr>
+                        <tr><td>Kelas/Rombel</td><td>: {kelas?.nama} / {rombel?.nama}</td><td></td><td></td></tr>
+                    </tbody>
+                </table>
+
+                {/* 1. Nilai Akademik */}
+                <h4 className="font-bold text-sm mb-1 border-b border-black">A. NILAI AKADEMIK</h4>
+                <table className="w-full border-collapse border border-black text-xs mb-4">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="border border-black p-1 w-8 text-center">No</th>
+                            <th className="border border-black p-1 text-left">Mata Pelajaran</th>
+                            <th className="border border-black p-1 w-16 text-center">KKM</th>
+                            <th className="border border-black p-1 w-16 text-center">Nilai</th>
+                            <th className="border border-black p-1 w-24 text-center">Predikat</th>
+                            <th className="border border-black p-1 text-left">Deskripsi / Keterangan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {settings.mataPelajaran.filter(m => m.jenjangId === santri.jenjangId).map((mapel, idx) => {
+                            const nilaiItem = raporData.nilai.find(n => n.mapelId === mapel.id);
+                            const val = nilaiItem ? nilaiItem.nilaiAngka : 0;
+                            let pred = "D";
+                            if(val >= 90) pred = "A"; else if(val >= 80) pred = "B"; else if(val >= 70) pred = "C";
+                            
+                            return (
+                                <tr key={mapel.id}>
+                                    <td className="border border-black p-1 text-center">{idx+1}</td>
+                                    <td className="border border-black p-1">{mapel.nama}</td>
+                                    <td className="border border-black p-1 text-center">70</td>
+                                    <td className="border border-black p-1 text-center font-bold">{val}</td>
+                                    <td className="border border-black p-1 text-center">{pred}</td>
+                                    <td className="border border-black p-1 italic text-gray-600">{val < 70 ? 'Perlu ditingkatkan' : 'Tuntas'}</td>
+                                </tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
+
+                <div className="grid grid-cols-2 gap-4 mb-4" style={{ breakInside: 'avoid' }}>
+                    {/* 2. Kepribadian */}
+                    <div>
+                        <h4 className="font-bold text-sm mb-1 border-b border-black">B. KEPRIBADIAN</h4>
+                        <table className="w-full border-collapse border border-black text-xs">
+                            <thead className="bg-gray-100"><tr><th className="border border-black p-1">Aspek</th><th className="border border-black p-1">Nilai/Keterangan</th></tr></thead>
+                            <tbody>
+                                {raporData.kepribadian.map((k, i) => (
+                                    <tr key={i}><td className="border border-black p-1">{k.aspek}</td><td className="border border-black p-1 text-center font-semibold">{k.nilai}</td></tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {/* 3. Ketidakhadiran */}
+                    <div>
+                        <h4 className="font-bold text-sm mb-1 border-b border-black">C. KETIDAKHADIRAN</h4>
+                        <table className="w-full border-collapse border border-black text-xs">
+                            <tbody>
+                                <tr><td className="border border-black p-1 w-1/2">Sakit</td><td className="border border-black p-1 text-center">{raporData.sakit} hari</td></tr>
+                                <tr><td className="border border-black p-1">Izin</td><td className="border border-black p-1 text-center">{raporData.izin} hari</td></tr>
+                                <tr><td className="border border-black p-1">Tanpa Keterangan</td><td className="border border-black p-1 text-center">{raporData.alpha} hari</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* 4. Catatan */}
+                <div className="mb-4 p-2 border border-black min-h-[60px]" style={{ breakInside: 'avoid' }}>
+                    <h4 className="font-bold text-sm underline mb-1">Catatan Wali Kelas:</h4>
+                    <p className="text-xs italic">{raporData.catatanWaliKelas || 'Tingkatkan terus prestasimu.'}</p>
+                </div>
+
+                {/* 5. Keputusan */}
+                {options.semester === 'Genap' && (
+                    <div className="mb-6 p-2 border border-black text-center font-bold bg-gray-100" style={{ breakInside: 'avoid' }}>
+                        KEPUTUSAN: {raporData.keputusan || `NAIK KE KELAS BERIKUTNYA`}
+                    </div>
+                )}
+
+                {/* Tanda Tangan */}
+                <div className="flex justify-between items-end mt-4 px-4 text-xs" style={{ breakInside: 'avoid' }}>
+                    <div className="text-center w-40">
+                        <p>Mengetahui,</p>
+                        <p>Orang Tua / Wali</p>
+                        <div className="h-16"></div>
+                        <p className="border-b border-black">.........................</p>
+                    </div>
+                    <div className="text-center w-40">
+                        <p>Mudir Marhalah</p>
+                        <div className="h-16"></div>
+                        <p className="font-bold underline">{mudir?.nama || '.........................'}</p>
+                    </div>
+                    <div className="text-center w-40">
+                        <p>Sumpiuh, {formatDate(new Date().toISOString())}</p>
+                        <p>Wali Kelas</p>
+                        <div className="h-16"></div>
+                        <p className="font-bold underline">{waliKelas?.nama || '.........................'}</p>
+                    </div>
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
 
 export const PanduanPenilaianTemplate: React.FC = () => (
     <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
@@ -115,9 +266,6 @@ export const generateNilaiReports = (data: Santri[], settings: PondokSettings, o
 
     return previews;
 };
-
-// --- ABSENSI, ROMBEL, RAPOR, KEDATANGAN ---
-// (General logic: Table with student list + empty columns)
 
 export const generateTableReport = (data: Santri[], settings: PondokSettings, options: any, type: 'Absensi' | 'Rombel' | 'Rapor' | 'Kedatangan') => {
     const rombel = settings.rombel.find(r => r.id === (data[0]?.rombelId || options.rombelId));
@@ -218,4 +366,11 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
         ),
         orientation
     }];
+};
+
+export const generateRaporLengkapReports = (data: Santri[], settings: PondokSettings, options: any) => {
+    return data.map(santri => ({
+        content: <RaporLengkapTemplate santri={santri} settings={settings} options={options} />,
+        orientation: 'portrait' as const
+    }));
 };

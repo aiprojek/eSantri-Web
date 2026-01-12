@@ -61,7 +61,7 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
     
     const [agendaKedatangan, setAgendaKedatangan] = useState<string>('');
     const [semester, setSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
-    const [tahunAjaran, setTahunAjaran] = useState<string>('1446/1447 H');
+    const [tahunAjaran, setTahunAjaran] = useState<string>('2024/2025'); // UPDATED DEFAULT
     const [izinTujuan, setIzinTujuan] = useState<string>('');
     const [izinKeperluan, setIzinKeperluan] = useState<string>('');
     const [izinTanggalBerangkat, setIzinTanggalBerangkat] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -109,7 +109,7 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
         setManualHijriDate('');
         setAgendaKedatangan('');
         setSemester('Ganjil');
-        setTahunAjaran('1446/1447 H');
+        setTahunAjaran('2024/2025');
         setIzinPrintMode('all');
         setSelectedIzinSantriIds([]);
         setIzinTujuan('');

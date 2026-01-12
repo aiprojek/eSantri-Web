@@ -1,41 +1,32 @@
 
-export type Page = 
-  | 'Dashboard' 
-  | 'Santri' 
-  | 'PSB' 
-  | 'DataMaster' 
-  | 'Keuangan' 
-  | 'Keasramaan' 
-  | 'BukuKas' 
-  | 'Surat' 
-  | 'Laporan' 
-  | 'AuditLog' 
-  | 'Pengaturan' 
-  | 'SyncAdmin' 
-  | 'Tentang';
+export interface SyncedEntity {
+  lastModified?: number;
+  deleted?: boolean;
+}
 
-export const Page = {
-  Dashboard: 'Dashboard' as Page,
-  Santri: 'Santri' as Page,
-  PSB: 'PSB' as Page,
-  DataMaster: 'DataMaster' as Page,
-  Keuangan: 'Keuangan' as Page,
-  Keasramaan: 'Keasramaan' as Page,
-  BukuKas: 'BukuKas' as Page,
-  Surat: 'Surat' as Page,
-  Laporan: 'Laporan' as Page,
-  AuditLog: 'AuditLog' as Page,
-  Pengaturan: 'Pengaturan' as Page,
-  SyncAdmin: 'SyncAdmin' as Page,
-  Tentang: 'Tentang' as Page,
-};
+export enum Page {
+  Dashboard = 'Dashboard',
+  Santri = 'Santri',
+  Akademik = 'Akademik',
+  DataMaster = 'DataMaster',
+  Keuangan = 'Keuangan',
+  Keasramaan = 'Keasramaan',
+  BukuKas = 'BukuKas',
+  Surat = 'Surat',
+  Laporan = 'Laporan',
+  AuditLog = 'AuditLog',
+  Pengaturan = 'Pengaturan',
+  SyncAdmin = 'SyncAdmin',
+  Tentang = 'Tentang',
+  PSB = 'PSB'
+}
 
-export type UserRole = 'admin' | 'staff';
 export type AccessLevel = 'none' | 'read' | 'write';
 
 export interface UserPermissions {
     santri: AccessLevel;
     psb: AccessLevel;
+    akademik: AccessLevel;
     datamaster: AccessLevel;
     keuangan: AccessLevel;
     keasramaan: AccessLevel;
@@ -44,7 +35,7 @@ export interface UserPermissions {
     laporan: AccessLevel;
     auditlog: AccessLevel;
     pengaturan: AccessLevel;
-    syncAdmin?: boolean; // New Permission: Allow staff to act as Sync Admin
+    syncAdmin: boolean;
 }
 
 export interface User {
@@ -52,37 +43,13 @@ export interface User {
     username: string;
     passwordHash: string;
     fullName: string;
-    role: UserRole;
+    role: 'admin' | 'staff';
     permissions: UserPermissions;
     securityQuestion: string;
     securityAnswerHash: string;
-    recoveryKeyHash?: string; // New field for emergency reset
+    recoveryKeyHash?: string;
     isDefaultAdmin?: boolean;
     lastLogin?: string;
-}
-
-export type SyncProvider = 'none' | 'dropbox';
-
-export interface CloudSyncConfig {
-    provider: SyncProvider;
-    lastSync: string | null;
-    autoSync?: boolean;
-    dropboxToken?: string;
-    dropboxAppKey?: string;
-    dropboxRefreshToken?: string;
-    dropboxTokenExpiresAt?: number;
-}
-
-export interface StorageStats {
-    used: number;
-    total?: number;
-    percent?: number;
-}
-
-// UPDATE: Added 'deleted' property for Soft Delete support
-export interface SyncedEntity {
-    lastModified?: number;
-    deleted?: boolean; 
 }
 
 export interface Alamat {
@@ -130,84 +97,89 @@ export interface Santri extends SyncedEntity {
     tempatLahir: string;
     tanggalLahir: string;
     kewarganegaraan: 'WNI' | 'WNA' | 'Keturunan';
-    jenisSantri?: string;
-    statusKeluarga?: string;
-    anakKe?: number;
-    jumlahSaudara?: number;
-    berkebutuhanKhusus?: string;
     
+    // Alamat
     alamat: Alamat;
     
+    // Kontak
     namaAyah?: string;
     nikAyah?: string;
     statusAyah?: string;
-    pekerjaanAyah?: string;
     pendidikanAyah?: string;
+    pekerjaanAyah?: string;
     penghasilanAyah?: string;
     teleponAyah?: string;
-    tempatLahirAyah?: string;
     tanggalLahirAyah?: string;
+    tempatLahirAyah?: string;
     alamatAyah?: Alamat;
 
     namaIbu?: string;
     nikIbu?: string;
     statusIbu?: string;
-    pekerjaanIbu?: string;
     pendidikanIbu?: string;
+    pekerjaanIbu?: string;
     penghasilanIbu?: string;
     teleponIbu?: string;
-    tempatLahirIbu?: string;
     tanggalLahirIbu?: string;
+    tempatLahirIbu?: string;
     alamatIbu?: Alamat;
 
     namaWali?: string;
-    statusWali?: string;
+    statusWali?: string; // Hubungan
     statusHidupWali?: string;
-    pekerjaanWali?: string;
     pendidikanWali?: string;
+    pekerjaanWali?: string;
     penghasilanWali?: string;
     teleponWali?: string;
-    tempatLahirWali?: string;
     tanggalLahirWali?: string;
+    tempatLahirWali?: string;
     alamatWali?: Alamat;
 
+    // Akademik
     jenjangId: number;
     kelasId: number;
     rombelId: number;
     tanggalMasuk: string;
+    status: 'Aktif' | 'Hiatus' | 'Lulus' | 'Keluar/Pindah' | 'Masuk';
+    tanggalStatus?: string;
+    
+    // Data Lain
+    fotoUrl?: string;
     sekolahAsal?: string;
     alamatSekolahAsal?: string;
-    status: 'Aktif' | 'Hiatus' | 'Lulus' | 'Keluar/Pindah';
-    tanggalStatus?: string;
-    fotoUrl?: string;
-
-    kamarId?: number;
-
+    jenisSantri?: string;
+    statusKeluarga?: string;
+    anakKe?: number;
+    jumlahSaudara?: number;
+    berkebutuhanKhusus?: string;
+    riwayatPenyakit?: string;
+    tinggiBadan?: number;
+    beratBadan?: number;
+    jarakKePondok?: string;
+    hobi?: string[];
+    
     riwayatStatus?: RiwayatStatus[];
     prestasi?: Prestasi[];
     pelanggaran?: Pelanggaran[];
-    hobi?: string[];
     
-    tinggiBadan?: number;
-    beratBadan?: number;
-    riwayatPenyakit?: string;
-    jarakKePondok?: string;
+    // Kamar
+    kamarId?: number;
 }
 
-export interface Jenjang extends SyncedEntity {
+export interface Jenjang {
     id: number;
     nama: string;
     kode?: string;
     mudirId?: number;
 }
 
-export interface Kelas extends SyncedEntity {
+export interface Kelas {
     id: number;
     nama: string;
     jenjangId: number;
 }
 
-export interface Rombel extends SyncedEntity {
+export interface Rombel {
     id: number;
     nama: string;
     kelasId: number;
@@ -221,25 +193,25 @@ export interface RiwayatJabatan {
     tanggalSelesai?: string;
 }
 
-export interface TenagaPengajar extends SyncedEntity {
+export interface TenagaPengajar {
     id: number;
     nama: string;
     riwayatJabatan: RiwayatJabatan[];
 }
 
-export interface MataPelajaran extends SyncedEntity {
+export interface MataPelajaran {
     id: number;
     nama: string;
     jenjangId: number;
 }
 
-export interface GedungAsrama extends SyncedEntity {
+export interface GedungAsrama {
     id: number;
     nama: string;
     jenis: 'Putra' | 'Putri';
 }
 
-export interface Kamar extends SyncedEntity {
+export interface Kamar {
     id: number;
     nama: string;
     gedungId: number;
@@ -247,11 +219,11 @@ export interface Kamar extends SyncedEntity {
     musyrifId?: number;
 }
 
-export interface Biaya extends SyncedEntity {
+export interface Biaya {
     id: number;
     nama: string;
-    jenis: 'Bulanan' | 'Sekali Bayar' | 'Cicilan';
     nominal: number;
+    jenis: 'Bulanan' | 'Sekali Bayar' | 'Cicilan';
     jenjangId?: number;
     tahunMasuk?: number;
     jumlahCicilan?: number;
@@ -263,10 +235,10 @@ export interface Tagihan extends SyncedEntity {
     santriId: number;
     biayaId: number;
     deskripsi: string;
+    nominal: number;
+    status: 'Lunas' | 'Belum Lunas';
     bulan: number;
     tahun: number;
-    nominal: number;
-    status: 'Belum Lunas' | 'Lunas';
     tanggalLunas?: string;
     pembayaranId?: number;
 }
@@ -290,10 +262,10 @@ export interface SaldoSantri extends SyncedEntity {
 export interface TransaksiSaldo extends SyncedEntity {
     id: number;
     santriId: number;
-    tanggal: string;
     jenis: 'Deposit' | 'Penarikan';
     jumlah: number;
-    keterangan?: string;
+    keterangan: string;
+    tanggal: string;
     saldoSetelah: number;
 }
 
@@ -305,135 +277,7 @@ export interface TransaksiKas extends SyncedEntity {
     deskripsi: string;
     jumlah: number;
     saldoSetelah: number;
-    penanggungJawab: string;
-}
-
-export interface NisJenjangConfig {
-    jenjangId: number;
-    startNumber: number;
-    padding: number;
-}
-
-export interface NisSettings {
-    generationMethod: 'custom' | 'global' | 'dob';
-    format: string;
-    jenjangConfig: NisJenjangConfig[];
-    masehiYearSource: 'auto' | 'manual';
-    manualMasehiYear: number;
-    hijriahYearSource: 'auto' | 'manual';
-    manualHijriahYear: number;
-    globalPrefix: string;
-    globalUseYearPrefix: boolean;
-    globalUseJenjangCode: boolean;
-    globalStartNumber: number;
-    globalPadding: number;
-    dobFormat: 'YYYYMMDD' | 'DDMMYY' | 'YYMMDD';
-    dobSeparator: string;
-    dobUseJenjangCode: boolean;
-    dobPadding: number;
-}
-
-export interface BackupConfig {
-    frequency: BackupFrequency;
-    lastBackup: string | null;
-}
-
-export type BackupFrequency = 'daily' | 'weekly' | 'never';
-export type PsbDesignStyle = 'classic' | 'modern' | 'bold' | 'dark' | 'ceria';
-export type PsbFieldType = 'text' | 'paragraph' | 'radio' | 'checkbox' | 'file' | 'section' | 'statement';
-export type PsbSubmissionMethod = 'whatsapp' | 'google_sheet' | 'hybrid'; 
-
-export interface PsbCustomField {
-    id: string;
-    type: PsbFieldType;
-    label: string;
-    required: boolean;
-    options?: string[];
-}
-
-export interface PsbFormTemplate {
-    id: string;
-    name: string;
-    targetJenjangId?: number;
-    designStyle: PsbDesignStyle;
-    activeFields: string[];
-    requiredDocuments: string[];
-    customFields: PsbCustomField[];
-    submissionMethod?: PsbSubmissionMethod;
-    googleScriptUrl?: string;
-}
-
-// NEW INTERFACE FOR POSTER TEMPLATES
-export interface PsbPosterTemplate {
-    id: string;
-    name: string;
-    style: PsbDesignStyle;
-    ratio: string;
-    customInfo: string;
-    details: string;
-    generatedPrompt?: string;
-}
-
-export interface PsbConfig {
-    tahunAjaranAktif: string;
-    targetKuota: number;
-    nomorHpAdmin: string;
-    pesanSukses: string;
-    activeGelombang: number;
-    biayaPendaftaran: number;
-    infoRekening: string;
-    targetJenjangId?: number;
-    activeFields: string[];
-    requiredDocuments: string[];
-    designStyle: PsbDesignStyle;
-    posterTitle?: string;
-    posterSubtitle?: string;
-    posterInfo?: string;
-    customFields?: PsbCustomField[];
-    templates?: PsbFormTemplate[];
-    posterTemplates?: PsbPosterTemplate[]; // Added this
-    enableCloudSubmit?: boolean;
-    suratPernyataan?: { aktif: boolean; judul: string; isi: string; };
-    telegramUsername?: string;
-    submissionMethod?: PsbSubmissionMethod; 
-    googleScriptUrl?: string; 
-}
-
-export interface PondokSettings extends SyncedEntity {
-    namaYayasan: string;
-    namaPonpes: string;
-    skMenteri?: string;
-    aktaNotaris?: string;
-    nspp?: string;
-    npsn?: string;
-    alamat: string;
-    telepon: string;
-    website: string;
-    email: string;
-    logoYayasanUrl?: string;
-    logoPonpesUrl?: string;
-    mudirAamId?: number;
-    
-    jenjang: Jenjang[];
-    kelas: Kelas[];
-    rombel: Rombel[];
-    tenagaPengajar: TenagaPengajar[];
-    mataPelajaran: MataPelajaran[];
-    gedungAsrama: GedungAsrama[];
-    kamar: Kamar[];
-    biaya: Biaya[];
-    
-    nisSettings: NisSettings;
-    backupConfig: BackupConfig;
-    cloudSyncConfig: CloudSyncConfig;
-    psbConfig: PsbConfig;
-    
-    multiUserMode: boolean;
-
-    suratTagihanPembuka: string;
-    suratTagihanPenutup: string;
-    suratTagihanCatatan: string;
-    pesanWaTunggakan: string;
+    penanggungJawab?: string;
 }
 
 export interface SuratSignatory {
@@ -441,7 +285,7 @@ export interface SuratSignatory {
     jabatan: string;
     nama: string;
     nip?: string;
-    signatureUrl?: string;
+    signatureUrl?: string; // Base64 or URL
 }
 
 export interface MengetahuiConfig {
@@ -452,7 +296,7 @@ export interface MengetahuiConfig {
 
 export interface TempatTanggalConfig {
     show: boolean;
-    position: 'top-right' | 'bottom-right' | 'bottom-left';
+    position: 'top-right' | 'bottom-left' | 'bottom-right';
     align: 'left' | 'center' | 'right';
 }
 
@@ -473,14 +317,14 @@ export interface SuratTemplate extends SyncedEntity {
     id: number;
     nama: string;
     kategori: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Lainnya';
-    judul: string;
-    showJudul?: boolean;
-    konten: string;
+    judul: string; // Kop Judul
+    konten: string; // HTML content with placeholders
     signatories?: SuratSignatory[];
     mengetahuiConfig?: MengetahuiConfig;
     tempatTanggalConfig?: TempatTanggalConfig;
     marginConfig?: MarginConfig;
     stampConfig?: StampConfig;
+    showJudul?: boolean;
 }
 
 export interface ArsipSurat extends SyncedEntity {
@@ -488,36 +332,174 @@ export interface ArsipSurat extends SyncedEntity {
     nomorSurat: string;
     perihal: string;
     tujuan: string;
-    isiSurat: string;
+    isiSurat: string; // Final generated HTML
     tanggalBuat: string;
-    templateId: number;
+    templateId?: number;
     tempatCetak?: string;
     tanggalCetak?: string;
+    
+    // Snapshots of configs at time of creation
+    tempatTanggalConfig?: TempatTanggalConfig;
     signatoriesSnapshot?: SuratSignatory[];
     mengetahuiSnapshot?: MengetahuiConfig;
-    tempatTanggalConfig?: TempatTanggalConfig;
     marginConfig?: MarginConfig;
     stampSnapshot?: StampConfig;
     showJudulSnapshot?: boolean;
 }
 
-export interface Pendaftar extends SyncedEntity {
+export interface NisJenjangConfig {
+    jenjangId: number;
+    startNumber: number;
+    padding: number;
+}
+
+export interface NisSettings {
+    generationMethod: 'custom' | 'global' | 'dob';
+    
+    // Custom
+    format: string;
+    jenjangConfig: NisJenjangConfig[];
+    masehiYearSource: 'auto' | 'manual';
+    manualMasehiYear: number;
+    hijriahYearSource: 'auto' | 'manual';
+    manualHijriahYear: number;
+
+    // Global
+    globalPrefix: string;
+    globalUseYearPrefix: boolean;
+    globalUseJenjangCode: boolean;
+    globalStartNumber: number;
+    globalPadding: number;
+
+    // DOB
+    dobFormat: 'YYYYMMDD' | 'DDMMYY' | 'YYMMDD';
+    dobSeparator: string;
+    dobUseJenjangCode: boolean;
+    dobPadding: number;
+}
+
+export type SyncProvider = 'none' | 'dropbox';
+
+export interface CloudSyncConfig {
+    provider: SyncProvider;
+    dropboxAppKey?: string;
+    dropboxRefreshToken?: string;
+    dropboxToken?: string;
+    dropboxTokenExpiresAt?: number;
+    lastSync: string | null;
+    autoSync: boolean;
+}
+
+export interface StorageStats {
+    used: number;
+    total: number;
+    percent: number;
+}
+
+export interface SyncFileRecord {
+    id: string;
+    name: string;
+    path_lower: string;
+    client_modified: string;
+    size: number;
+    status: 'pending' | 'merged';
+}
+
+export type BackupFrequency = 'daily' | 'weekly' | 'never';
+
+export interface BackupConfig {
+    frequency: BackupFrequency;
+    lastBackup: string | null;
+}
+
+export type PsbFieldType = 'text' | 'paragraph' | 'radio' | 'checkbox' | 'file' | 'section' | 'statement';
+
+export interface PsbCustomField {
+    id: string;
+    type: PsbFieldType;
+    label: string;
+    required: boolean;
+    options?: string[]; // for radio/checkbox
+}
+
+export type PsbDesignStyle = 'classic' | 'modern' | 'bold' | 'dark' | 'ceria';
+export type PsbSubmissionMethod = 'whatsapp' | 'google_sheet' | 'hybrid';
+
+export interface PsbFormTemplate {
+    id: string;
+    name: string;
+    targetJenjangId?: number;
+    designStyle?: PsbDesignStyle;
+    activeFields: string[];
+    requiredDocuments: string[];
+    customFields: PsbCustomField[];
+    submissionMethod?: PsbSubmissionMethod;
+    googleScriptUrl?: string;
+}
+
+export interface PsbPosterTemplate {
+    id: string;
+    name: string;
+    style: PsbDesignStyle;
+    ratio: string;
+    customInfo: string;
+    details: string;
+    generatedPrompt?: string;
+}
+
+export interface PsbConfig {
+    tahunAjaranAktif: string;
+    targetKuota: number;
+    nomorHpAdmin: string;
+    pesanSukses: string;
+    activeGelombang: number;
+    biayaPendaftaran: number;
+    infoRekening: string;
+    targetJenjangId?: number;
+    
+    // Form Builder
+    activeFields: string[];
+    requiredDocuments: string[];
+    customFields?: PsbCustomField[];
+    
+    // Submission Config
+    submissionMethod?: PsbSubmissionMethod;
+    googleScriptUrl?: string; // For Google Sheet / Hybrid
+
+    // Visuals
+    designStyle?: PsbDesignStyle;
+    posterTitle?: string;
+    posterSubtitle?: string;
+    posterInfo?: string;
+
+    // Templates
+    templates?: PsbFormTemplate[];
+    posterTemplates?: PsbPosterTemplate[];
+}
+
+export interface Pendaftar {
     id: number;
     namaLengkap: string;
-    namaHijrah?: string;
-    nisn?: string;
-    nik?: string;
+    nisn: string;
+    nik: string;
     jenisKelamin: 'Laki-laki' | 'Perempuan';
     tempatLahir: string;
     tanggalLahir: string;
-    kewarganegaraan?: 'WNI' | 'WNA' | 'Keturunan';
-    
+    kewarganegaraan?: string;
     alamat: string;
     desaKelurahan?: string;
     kecamatan?: string;
     kabupatenKota?: string;
     provinsi?: string;
     kodePos?: string;
+    
+    namaWali: string;
+    nomorHpWali: string;
+    hubunganWali?: string;
+    statusHidupWali?: string;
+    pekerjaanWali?: string;
+    pendidikanWali?: string;
+    penghasilanWali?: string;
 
     namaAyah?: string;
     nikAyah?: string;
@@ -535,29 +517,23 @@ export interface Pendaftar extends SyncedEntity {
     penghasilanIbu?: string;
     teleponIbu?: string;
 
-    namaWali?: string;
-    nomorHpWali: string;
-    hubunganWali?: string;
-    statusHidupWali?: string;
-    pekerjaanWali?: string;
-    pendidikanWali?: string;
-    penghasilanWali?: string;
-
     jenjangId: number;
     asalSekolah: string;
     alamatSekolahAsal?: string;
-    
-    tanggalDaftar: string;
+    jalurPendaftaran?: 'Reguler' | 'Prestasi' | 'Yatim/Dhuafa';
     status: 'Baru' | 'Diterima' | 'Cadangan' | 'Ditolak';
+    tanggalDaftar: string;
     catatan?: string;
-    jalurPendaftaran?: string;
     gelombang?: number;
-    customData?: string;
-
+    
+    customData?: string; // JSON string for extra fields / files
+    
+    // Fields for transfer to Santri
     statusKeluarga?: string;
     anakKe?: number;
     jumlahSaudara?: number;
     berkebutuhanKhusus?: string;
+    namaHijrah?: string;
 }
 
 export interface AuditLog {
@@ -565,24 +541,15 @@ export interface AuditLog {
     table_name: string;
     record_id: string;
     operation: 'INSERT' | 'UPDATE' | 'DELETE';
-    old_data: any;
-    new_data: any;
+    old_data?: any;
+    new_data?: any;
     changed_by: string;
-    username?: string;
+    username?: string; // Added for clarity
     created_at: string;
 }
 
-export interface SyncFileRecord {
-    id: string;
-    name: string;
-    path_lower: string;
-    client_modified: string;
-    size: number;
-    status: 'pending' | 'merged' | 'ignored';
-}
-
 export interface SyncHistory {
-    id: string;
+    id: string; // fileId
     fileId: string;
     fileName: string;
     mergedAt: string;
@@ -590,23 +557,151 @@ export interface SyncHistory {
     recordCount: number;
 }
 
+// Rapor Designer Types: Excel-like Grid Logic
+export type RaporColumnType = 'label' | 'data' | 'input' | 'formula' | 'dropdown';
+
+export interface GridCell {
+    id: string;
+    row: number;
+    col: number;
+    value: string; // The Label or Content
+    type: RaporColumnType;
+    key?: string; // $VAR name
+    colSpan?: number;
+    rowSpan?: number;
+    hidden?: boolean; // If covered by a merge
+    width?: number; // In pixels
+    align?: 'left' | 'center' | 'right';
+    // NEW: Border Control (Excel-like)
+    borders?: {
+        top?: boolean;
+        right?: boolean;
+        bottom?: boolean;
+        left?: boolean;
+    };
+    // NEW: Options for Dropdown type
+    options?: string[]; 
+}
+
+export interface RaporTemplate {
+    id: string;
+    name: string;
+    rowCount: number;
+    colCount: number;
+    cells: GridCell[][]; // 2D Array
+    lastModified: string;
+}
+
+// Legacy support if needed, but we'll try to migrate logic to GridCell
+export type RaporColumn = GridCell; 
+
+export interface NilaiMapel {
+    mapelId: number;
+    nilaiAngka: number;
+    nilaiHuruf?: string;
+    predikat?: string; // A, B, C, D
+    deskripsi?: string;
+}
+
+export interface RaporRecord extends SyncedEntity {
+    id: number;
+    santriId: number;
+    tahunAjaran: string; // "2024/2025"
+    semester: 'Ganjil' | 'Genap';
+    jenjangId: number;
+    kelasId: number;
+    rombelId: number;
+    
+    // Akademik (Standardized for Reports)
+    nilai: NilaiMapel[];
+    
+    // Absensi
+    sakit: number;
+    izin: number;
+    alpha: number;
+    
+    // Kepribadian / Akhlak (Key-Value dynamic)
+    kepribadian: { aspek: string; nilai: string }[];
+    
+    // Ekstrakurikuler
+    ekstrakurikuler: { kegiatan: string; nilai: string; keterangan?: string }[];
+    
+    // Catatan
+    catatanWaliKelas?: string;
+    keputusan?: string; // "Naik ke Kelas ..." atau "Lulus"
+    tanggalRapor: string;
+
+    // NEW: Store raw data from the custom builder form 
+    // This allows preserving data fields that don't map to standard schema
+    customData?: string; // JSON string of Record<columnKey, value>
+}
+
 export enum ReportType {
     DashboardSummary = 'DashboardSummary',
-    FinanceSummary = 'FinanceSummary',
-    LaporanArusKas = 'LaporanArusKas',
-    LaporanAsrama = 'LaporanAsrama',
-    RekeningKoranSantri = 'RekeningKoranSantri',
     Biodata = 'Biodata',
     KartuSantri = 'KartuSantri',
-    LembarPembinaan = 'LembarPembinaan',
-    LaporanMutasi = 'LaporanMutasi',
-    FormulirIzin = 'FormulirIzin',
     LabelSantri = 'LabelSantri',
     DaftarRombel = 'DaftarRombel',
-    DaftarWaliKelas = 'DaftarWaliKelas',
+    LembarAbsensi = 'LembarAbsensi',
+    LembarNilai = 'LembarNilai',
+    LembarPembinaan = 'LembarPembinaan',
     LembarKedatangan = 'LembarKedatangan',
     LembarRapor = 'LembarRapor',
-    LembarNilai = 'LembarNilai',
-    LembarAbsensi = 'LembarAbsensi',
+    FinanceSummary = 'FinanceSummary',
+    LaporanArusKas = 'LaporanArusKas',
+    RekeningKoranSantri = 'RekeningKoranSantri',
+    DaftarWaliKelas = 'DaftarWaliKelas',
     LaporanKontak = 'LaporanKontak',
+    LaporanAsrama = 'LaporanAsrama',
+    LaporanMutasi = 'LaporanMutasi',
+    FormulirIzin = 'FormulirIzin',
+    RaporLengkap = 'RaporLengkap', // NEW
+}
+
+export interface PondokSettings extends SyncedEntity {
+    id?: number;
+    namaYayasan: string;
+    namaPonpes: string;
+    nspp: string;
+    npsn: string;
+    alamat: string;
+    telepon: string;
+    website: string;
+    email: string;
+    logoYayasanUrl?: string;
+    logoPonpesUrl?: string;
+    
+    // Struktur
+    mudirAamId?: number;
+    jenjang: Jenjang[];
+    kelas: Kelas[];
+    rombel: Rombel[];
+    tenagaPengajar: TenagaPengajar[];
+    mataPelajaran: MataPelajaran[];
+    
+    // Asrama
+    gedungAsrama: GedungAsrama[];
+    kamar: Kamar[];
+    
+    // Keuangan
+    biaya: Biaya[];
+    
+    // Pengaturan Lain
+    nisSettings: NisSettings;
+    multiUserMode: boolean;
+    suratTagihanPembuka: string;
+    suratTagihanPenutup: string;
+    suratTagihanCatatan?: string;
+    pesanWaTunggakan: string;
+    
+    backupConfig: BackupConfig;
+    cloudSyncConfig: CloudSyncConfig;
+    psbConfig: PsbConfig;
+    
+    // Akademik
+    raporTemplates?: RaporTemplate[]; // NEW: Saved Templates
+    
+    // Legalitas (Optional for now)
+    skMenteri?: string;
+    aktaNotaris?: string;
 }

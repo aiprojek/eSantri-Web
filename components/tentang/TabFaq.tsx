@@ -55,152 +55,115 @@ export const TabFaq: React.FC = () => {
                 colorClass="bg-purple-50 border-purple-500 text-purple-900"
             >
                 <FaqItem 
-                    question="Apakah aplikasi ini butuh internet?"
-                    answer="Secara umum TIDAK. Aplikasi ini berkonsep 'Offline-First'. Anda bisa input data, bayar SPP, dan cetak laporan tanpa internet. Internet HANYA dibutuhkan saat Anda ingin melakukan Sinkronisasi Data (Upload/Download) ke Dropbox atau backup ke Google Drive."
+                    question="Apa manfaat mengaktifkan Mode Multi-User?"
+                    answer={
+                        <div>
+                            <p className="mb-2">Mode Multi-User memberikan 3 manfaat utama:</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                                <li><strong>Keamanan:</strong> Membatasi akses orang lain yang meminjam komputer Anda.</li>
+                                <li><strong>Pembagian Tugas (Role):</strong> Anda bisa membuat akun Staff yang hanya bisa akses menu tertentu (misal: Bendahara hanya akses Keuangan, tidak bisa hapus data Santri).</li>
+                                <li><strong>Audit Trail:</strong> Setiap perubahan data akan tercatat di menu <em>Log Aktivitas</em> beserta nama user yang melakukannya, memudahkan pelacakan jika terjadi kesalahan input.</li>
+                            </ul>
+                        </div>
+                    }
                 />
                 <FaqItem 
                     question="Saya lupa password Admin, bagaimana cara resetnya?"
                     answer={
                         <div>
-                            <p className="mb-2">Jika Anda menggunakan mode Multi-User, gunakan <strong>Kunci Pemulihan (Recovery Key)</strong>:</p>
+                            <p className="mb-2">Jika menggunakan mode Multi-User, gunakan <strong>Kunci Pemulihan (Recovery Key)</strong>:</p>
                             <ol className="list-decimal pl-5 space-y-1">
                                 <li>Di halaman login, klik "Gunakan Kunci Darurat".</li>
-                                <li>Masukkan kode unik (format: ESANTRI-XXXX-XXXX) yang diberikan saat pertama kali mengaktifkan multi-user.</li>
+                                <li>Masukkan kode unik (ESANTRI-XXXX...) yang diberikan saat setup.</li>
                                 <li>Jika kunci valid, Anda bisa membuat password baru.</li>
                             </ol>
-                            <p className="mt-2 text-xs italic text-red-600">Catatan: Jika Anda kehilangan Kunci Pemulihan, data tidak dapat dipulihkan demi keamanan.</p>
+                            <p className="mt-2 text-xs italic text-red-600">Catatan: Jika Anda juga kehilangan Kunci Pemulihan, data tidak dapat diakses (terenkripsi). Solusinya adalah melakukan Reset Aplikasi (Hapus Data).</p>
                         </div>
                     }
+                />
+                <FaqItem 
+                    question="Apakah aplikasi ini butuh internet?"
+                    answer="Secara umum TIDAK. Aplikasi ini berkonsep 'Offline-First'. Anda bisa input data, bayar SPP, dan cetak laporan tanpa internet. Internet HANYA dibutuhkan saat Anda ingin melakukan Sinkronisasi Cloud (Dropbox), menggunakan fitur AI Magic Draft, atau mengirim Formulir Online (PSB/Rapor)."
                 />
                 <FaqItem 
                     question="Apa yang terjadi jika saya 'Clear Cache' browser?"
                     answer={
                         <span className="text-red-600 font-bold">
-                            JANGAN LAKUKAN INI TANPA BACKUP! Data aplikasi tersimpan di browser. Menghapus Cache/History akan MENGHAPUS SEMUA DATA SANTRI. Pastikan Anda rutin melakukan "Unduh Cadangan Data" (file JSON) atau Sinkronisasi Cloud.
+                            BAHAYA! Menghapus Cache/History akan MENGHAPUS SEMUA DATA. Pastikan Anda rutin melakukan "Unduh Cadangan Data" (file JSON) atau Sinkronisasi Cloud agar data aman.
                         </span>
                     }
                 />
             </FaqCategory>
 
-            {/* 2. DATA SANTRI */}
+            {/* 2. PSB (Updated) */}
             <FaqCategory 
-                title="Data Santri & Akademik" 
-                icon="bi-people-fill" 
-                colorClass="bg-teal-50 border-teal-500 text-teal-900"
+                title="PSB & Formulir Online" 
+                icon="bi-person-plus-fill" 
+                colorClass="bg-orange-50 border-orange-500 text-orange-900"
             >
                 <FaqItem 
-                    question="Bagaimana cara menaikan kelas santri secara massal?"
-                    answer="Gunakan fitur 'Pindahkan Rombel Massal' di menu Data Santri. Filter santri berdasarkan kelas lama -> Centang Semua -> Klik tombol 'Pindah Kelas' di atas tabel -> Pilih kelas tujuan. Selesai."
+                    question="Apakah setiap Template Formulir butuh Web App URL (Script) berbeda?"
+                    answer="TIDAK. Fitur 'Smart Script' memungkinkan Anda menggunakan SATU Web App URL untuk semua formulir. Script akan otomatis mendeteksi nama formulir dan membuat Tab (Sheet) baru di file Spreadsheet yang sama untuk memisahkan data."
+                />
+                 <FaqItem 
+                    question="Bagaimana cara import data dari WhatsApp?"
+                    answer="Salin seluruh pesan pendaftaran dari WA (termasuk kode PSB_START...), lalu paste di menu 'Impor WA' pada dashboard PSB. Sistem akan otomatis memparsing data JSON tersebut."
                 />
                 <FaqItem 
-                    question="Santri sudah lulus/boyong, apakah datanya dihapus?"
-                    answer="Sebaiknya JANGAN dihapus agar riwayatnya tetap ada. Cukup ubah statusnya menjadi 'Lulus' atau 'Keluar/Pindah'. Data mereka akan disembunyikan dari daftar aktif tapi tetap ada di laporan alumni."
-                />
-                <FaqItem 
-                    question="Kenapa foto santri tidak muncul saat dicetak?"
-                    answer="Pastikan ukuran foto yang diupload tidak terlalu besar (maksimal 500KB). Foto yang terlalu besar bisa membuat browser kehabisan memori saat mencetak banyak kartu sekaligus."
+                    question="Apa itu Metode Hybrid?"
+                    answer="Metode Hybrid mengirim data ke Google Sheet (Cloud) untuk arsip otomatis, TETAPI juga membuat pesan WhatsApp berisi data backup. Ini paling aman: jika server error, data masih ada di chat WA Admin."
                 />
             </FaqCategory>
 
-            {/* 3. KEUANGAN (CRITICAL) */}
+            {/* 3. AKADEMIK & RAPOR */}
+            <FaqCategory 
+                title="Akademik & Rapor Digital" 
+                icon="bi-mortarboard-fill" 
+                colorClass="bg-indigo-50 border-indigo-500 text-indigo-900"
+            >
+                <FaqItem 
+                    question="Apakah Guru perlu login untuk mengisi nilai?"
+                    answer="TIDAK PERLU. Admin akan mengirimkan file HTML (Formulir Offline) kepada Guru via WhatsApp. Guru cukup membuka file tersebut di HP atau Laptop mereka, mengisi nilai, lalu klik 'Kirim'."
+                />
+                <FaqItem 
+                    question="Apakah Guru butuh internet saat mengisi nilai?"
+                    answer="TIDAK. Formulir HTML tersebut bisa dibuka dan diisi tanpa kuota internet (Offline). Internet hanya dibutuhkan sesaat ketika Guru menekan tombol 'Kirim ke WA' untuk mengirimkan hasilnya ke Admin."
+                />
+                <FaqItem 
+                    question="Apa itu kode acak saat Guru mengirim nilai via WA?"
+                    answer="Itu adalah data nilai yang sudah dienkripsi (dikodekan) agar aman dan mudah dibaca oleh sistem. Admin cukup menyalin seluruh pesan tersebut ke menu 'Import Nilai', sistem akan otomatis menerjemahkannya menjadi angka di rapor."
+                />
+            </FaqCategory>
+
+            {/* 4. KEUANGAN */}
             <FaqCategory 
                 title="Keuangan & Pembayaran" 
                 icon="bi-cash-coin" 
                 colorClass="bg-green-50 border-green-500 text-green-900"
             >
                 <FaqItem 
-                    question="Saya sudah terima uang SPP, kenapa Saldo Buku Kas tidak bertambah?"
-                    answer={
-                        <div>
-                            <p className="mb-2 font-semibold text-green-700">Ini adalah fitur keamanan (Double Entry).</p>
-                            <p className="mb-2">Saat Anda klik "Bayar" di menu santri, uang masuk ke status "Di Laci Kasir" (Pending). Agar masuk ke Buku Kas Umum, Anda harus melakukan <strong>Setoran Kas (Closing)</strong>:</p>
-                            <ol className="list-decimal pl-5 space-y-1">
-                                <li>Buka menu <strong>Keuangan &gt; Setoran Kas</strong>.</li>
-                                <li>Anda akan melihat daftar uang yang diterima hari ini.</li>
-                                <li>Centang semua, lalu klik <strong>"Setor ke Buku Kas"</strong>.</li>
-                            </ol>
-                            <p className="mt-2 text-xs">Tujuannya agar Admin Keuangan bisa memverifikasi uang fisik sebelum dicatat resmi sebagai pemasukan pondok.</p>
-                        </div>
-                    }
+                    question="Kenapa Saldo Kas tidak bertambah setelah ada pembayaran?"
+                    answer="Pembayaran santri masuk ke status 'Di Laci Kasir' (Pending). Admin Keuangan harus melakukan 'Setoran Kas' di menu Keuangan agar uang tercatat resmi masuk ke Buku Kas Umum Pondok."
                 />
-                <FaqItem 
-                    question="Bagaimana jika ada santri bayar rapel 3 bulan sekaligus?"
-                    answer="Di menu pembayaran, centang saja 3 bulan tagihan tersebut sekaligus. Sistem akan menjumlahkannya totalnya dan mencetak 1 kuitansi gabungan agar hemat kertas."
-                />
-                <FaqItem 
-                    question="Salah input nominal pembayaran, cara editnya?"
-                    answer={
-                        <ul className="list-disc pl-5 space-y-1">
-                            <li>Jika <strong>Belum Disetor</strong>: Buka Riwayat Pembayaran santri tersebut, hapus transaksinya, lalu input ulang.</li>
-                            <li>Jika <strong>Sudah Disetor</strong>: Hapus dulu transaksi "Setoran Kas" di menu Buku Kas, baru kemudian hapus pembayaran di data santri.</li>
-                        </ul>
-                    }
-                />
-                <FaqItem 
-                    question="Apakah Uang Saku bisa dipakai memotong SPP otomatis?"
-                    answer="Tidak otomatis. Anda harus melakukan 'Penarikan Uang Saku' terlebih dahulu (uang keluar dari tabungan), lalu lakukan 'Pembayaran SPP' (uang masuk ke SPP) secara terpisah."
+                 <FaqItem 
+                    question="Apa beda Uang Saku dan SPP?"
+                    answer="Uang Saku adalah tabungan pribadi santri (Deposit/Penarikan) yang dikelola pondok. SPP adalah kewajiban bayar bulanan. Saldo Uang Saku tidak otomatis memotong SPP kecuali ditarik manual."
                 />
             </FaqCategory>
 
-            {/* 4. DATA MASTER */}
+            {/* 5. SINKRONISASI */}
             <FaqCategory 
-                title="Data Master (Pengaturan)" 
-                icon="bi-database-fill" 
-                colorClass="bg-blue-50 border-blue-500 text-blue-900"
-            >
-                <FaqItem 
-                    question="Kenapa saya tidak bisa menghapus Kelas atau Jenjang?"
-                    answer="Sistem mencegah penghapusan data induk yang sedang digunakan. Jika ada Santri yang masih terdaftar di Kelas tersebut, Anda harus memindahkan santri-santri tersebut ke kelas lain dulu sebelum bisa menghapus kelasnya."
-                />
-                <FaqItem 
-                    question="Bagaimana menambah Wali Kelas baru?"
-                    answer="Pertama, tambahkan nama guru tersebut di menu 'Tenaga Pendidik'. Setelah itu, edit data Rombel di 'Struktur Pendidikan' dan pilih nama guru tersebut sebagai Wali Kelas."
-                />
-            </FaqCategory>
-
-            {/* 5. PSB & IMPORT */}
-            <FaqCategory 
-                title="PSB & Import Data" 
-                icon="bi-person-plus-fill" 
-                colorClass="bg-orange-50 border-orange-500 text-orange-900"
-            >
-                <FaqItem 
-                    question="Bagaimana cara import data dari WhatsApp?"
-                    answer="Saat calon wali santri mengisi formulir via WA (yang dihasilkan aplikasi), akan ada kode di bagian bawah pesan (diawali PSB_START...). Copy SELURUH pesan tersebut, lalu paste di menu 'Impor WA' pada dashboard PSB."
-                />
-                <FaqItem 
-                    question="Saya punya data Excel, bisa diupload?"
-                    answer={
-                        <div>
-                            <p>Bisa. Gunakan fitur <strong>Impor CSV</strong> di menu Data Santri.</p>
-                            <ol className="list-decimal pl-5 space-y-1 text-xs mt-1">
-                                <li>Download template CSV kosong yang disediakan aplikasi.</li>
-                                <li>Copy-paste data dari Excel Anda ke template CSV tersebut.</li>
-                                <li>Upload kembali CSV yang sudah diisi.</li>
-                            </ol>
-                        </div>
-                    }
-                />
-            </FaqCategory>
-
-            {/* 6. SINKRONISASI */}
-            <FaqCategory 
-                title="Sinkronisasi & Cloud" 
+                title="Sinkronisasi Tim" 
                 icon="bi-cloud-arrow-up-fill" 
-                colorClass="bg-indigo-50 border-indigo-500 text-indigo-900"
+                colorClass="bg-gray-50 border-gray-500 text-gray-900"
             >
                 <FaqItem 
                     question="Apa bedanya 'Kirim Perubahan' dan 'Ambil Master'?"
-                    answer={
-                        <ul className="list-disc pl-5 space-y-1">
-                            <li><strong>Kirim Perubahan (Upload):</strong> Mengirim data yang Anda kerjakan di laptop ini ke Inbox Cloud (untuk digabung oleh Admin Pusat).</li>
-                            <li><strong>Ambil Master (Download):</strong> Mengambil data terbaru yang sudah disahkan/digabung oleh Admin Pusat. Lakukan ini setiap pagi sebelum bekerja agar data Anda sinkron.</li>
-                        </ul>
-                    }
+                    answer="Kirim Perubahan (Upload) mengirim pekerjaan Anda ke Cloud. Ambil Master (Download) mengambil data terbaru yang sudah disahkan Admin Pusat. Staff wajib melakukan Ambil Master setiap pagi."
                 />
                 <FaqItem 
-                    question="Apakah bisa dipakai banyak orang bersamaan (Realtime)?"
-                    answer="Aplikasi ini Semi-Realtime (Hub & Spoke). Tidak seperti Google Docs yang live. Staff A dan Staff B bisa bekerja offline bersamaan, tapi data mereka baru akan bertemu setelah Admin Pusat melakukan 'Merge' dan 'Publish'."
+                    question="Apakah bisa real-time collaboration?"
+                    answer="Tidak real-time (seperti Google Docs). Sistem ini menggunakan model Hub & Spoke. Staff bekerja offline, lalu menyetor data ke Admin Pusat untuk digabungkan. Ini mencegah konflik data dan memungkinkan kerja tanpa internet."
                 />
             </FaqCategory>
 

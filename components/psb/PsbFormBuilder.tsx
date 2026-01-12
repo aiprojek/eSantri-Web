@@ -212,8 +212,8 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
 
     const googleAppsScriptCode = `
 /* 
-   GOOGLE APPS SCRIPT FOR ESANTRI WEB 
-   (Support Upload & Read Data)
+   GOOGLE APPS SCRIPT FOR ESANTRI WEB - SMART VERSION
+   (Support Multi-Tab Sheet by Template Name)
 */
 
 // --- KONFIGURASI ---
@@ -225,36 +225,69 @@ function doPost(e) {
   lock.tryLock(30000); 
 
   try {
-    var doc = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = doc.getActiveSheet();
-    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var nextRow = sheet.getLastRow() + 1;
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     var rawData = JSON.parse(e.postData.contents);
-    var dataToSave = {};
-
-    var folder = DriveApp.getFolderById(FOLDER_ID);
     
+    // 1. Tentukan Nama Sheet (Tab)
+    // Jika ada 'sheetName' di data kiriman, gunakan itu. Jika tidak, pakai "Data Pendaftar"
+    var targetSheetName = rawData.sheetName || "Data Pendaftar";
+    
+    // Bersihkan nama sheet dari karakter terlarang
+    targetSheetName = targetSheetName.replace(/[:\/\\?*\[\]]/g, "_").substring(0, 99);
+    
+    var sheet = ss.getSheetByName(targetSheetName);
+    
+    // 2. Buat Sheet Baru jika belum ada
+    if (!sheet) {
+      sheet = ss.insertSheet(targetSheetName);
+    }
+    
+    // 3. Proses File Upload (jika ada) ke Google Drive
+    var dataToSave = {};
+    var folder = null;
+    
+    if (FOLDER_ID && FOLDER_ID !== "GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA") {
+        try { folder = DriveApp.getFolderById(FOLDER_ID); } catch(err) {}
+    }
+
     for (var key in rawData) {
+      if (key === 'sheetName') continue; // Jangan simpan nama sheet di kolom
+      
       var val = rawData[key];
       if (typeof val === 'object' && val !== null && val.isFile === true && val.data) {
-        var decoded = Utilities.base64Decode(val.data.split(',')[1]); 
-        var blob = Utilities.newBlob(decoded, val.mime, val.name);
-        var file = folder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        dataToSave[key] = file.getUrl();
+        if (folder) {
+            var decoded = Utilities.base64Decode(val.data.split(',')[1]); 
+            var blob = Utilities.newBlob(decoded, val.mime, val.name);
+            var file = folder.createFile(blob);
+            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+            dataToSave[key] = file.getUrl();
+        } else {
+            dataToSave[key] = "Folder ID Salah/Tidak Ada";
+        }
       } else {
         dataToSave[key] = val;
       }
     }
 
+    // 4. Setup Header Otomatis jika Sheet Kosong
+    var headers = [];
     if (sheet.getLastColumn() === 0) {
        var keys = Object.keys(dataToSave);
-       keys.unshift('Timestamp'); 
+       // Pastikan Timestamp di depan
+       if(keys.indexOf('Timestamp') === -1) keys.unshift('Timestamp');
+       
        sheet.getRange(1, 1, 1, keys.length).setValues([keys]);
        headers = keys;
+       // Freeze header row
+       sheet.setFrozenRows(1);
+    } else {
+       headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     }
 
+    // 5. Susun Baris Data Sesuai Header
+    var nextRow = sheet.getLastRow() + 1;
     var newRowData = [];
+    
     for (var i = 0; i < headers.length; i++) {
       var header = headers[i];
       if (header === 'Timestamp') {
@@ -268,7 +301,7 @@ function doPost(e) {
 
     sheet.getRange(nextRow, 1, 1, newRowData.length).setValues([newRowData]);
 
-    return ContentService.createTextOutput(JSON.stringify({ 'result': 'success', 'row': nextRow })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ 'result': 'success', 'row': nextRow, 'sheet': targetSheetName })).setMimeType(ContentService.MimeType.JSON);
   } catch (e) {
     return ContentService.createTextOutput(JSON.stringify({ 'result': 'error', 'error': e.toString() })).setMimeType(ContentService.MimeType.JSON);
   } finally {
@@ -278,28 +311,45 @@ function doPost(e) {
 
 // --- FUNGSI MEMBACA DATA (READ/PULL) ---
 function doGet(e) {
-  var doc = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = doc.getActiveSheet();
-  var rows = sheet.getDataRange().getValues();
-  var headers = rows[0];
-  var data = [];
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  var allData = [];
 
-  for (var i = 1; i < rows.length; i++) {
-    var row = rows[i];
-    var record = {};
-    for (var j = 0; j < headers.length; j++) {
-      record[headers[j]] = row[j];
-    }
-    data.push(record);
+  // Loop semua sheet untuk menggabungkan data
+  for (var s = 0; s < sheets.length; s++) {
+      var sheet = sheets[s];
+      var rows = sheet.getDataRange().getValues();
+      if (rows.length < 2) continue; // Skip sheet kosong
+      
+      var headers = rows[0];
+      
+      // Deteksi kolom penting untuk memastikan ini data pendaftar
+      // Minimal harus ada 'namaLengkap' (case insensitive search di header)
+      // atau ambil saja semua asumsi sheet berisi data valid
+      
+      for (var i = 1; i < rows.length; i++) {
+        var row = rows[i];
+        var record = {};
+        for (var j = 0; j < headers.length; j++) {
+          record[headers[j]] = row[j];
+        }
+        // Tambahkan metadata asal sheet
+        record['_sheetName'] = sheet.getName();
+        allData.push(record);
+      }
   }
 
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(allData)).setMimeType(ContentService.MimeType.JSON);
 }`;
 
     const generateHtml = () => {
         const style = localConfig.designStyle || 'classic';
         const targetJenjang = settings.jenjang.find((j) => j.id === localConfig.targetJenjangId);
-        const jenjangName = targetJenjang ? targetJenjang.nama : 'Umum / Belum Dipilih';
+        const jenjangName = targetJenjang ? targetJenjang.nama : 'Umum';
+        
+        // Tentukan Nama Sheet (Tab)
+        // Prioritas: Nama Template -> "Pendaftar [Nama Jenjang]"
+        const targetSheetName = templateName ? templateName : `Pendaftar ${jenjangName}`;
         
         // Helper to generate inputs based on theme
         const renderInput = (label: string, name: string, type: string = 'text', placeholder: string = '', required: boolean = false) => {
@@ -514,6 +564,9 @@ function doGet(e) {
                         
                         data.tanggalDaftar = new Date().toISOString();
                         data.jenjangId = "${localConfig.targetJenjangId || ''}";
+                        
+                        // INJECT SHEET NAME
+                        data.sheetName = "${targetSheetName}";
 
                         await fetch("${googleScriptUrl}", {
                             method: 'POST',
@@ -579,6 +632,8 @@ function doGet(e) {
                         
                         data.tanggalDaftar = new Date().toISOString();
                         data.jenjangId = "${localConfig.targetJenjangId || ''}";
+                        // INJECT SHEET NAME
+                        data.sheetName = "${targetSheetName}";
 
                         // 2. Prepare Encrypted Backup (Text Only) for WA
                         // We must remove file blobs before encoding to keep URL length safe
@@ -720,7 +775,7 @@ function doGet(e) {
     useEffect(() => {
         const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
         if (iframe) { iframe.srcdoc = generateHtml(); }
-    }, [localConfig, settings, submissionMethod, googleScriptUrl]);
+    }, [localConfig, settings, submissionMethod, googleScriptUrl, templateName]);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
@@ -761,6 +816,19 @@ function doGet(e) {
                             >
                                 <i className="bi bi-hdd-network"></i> Hybrid (Cloud + WA Encrypted Backup)
                             </button>
+                        </div>
+
+                        {/* Input Nomor HP Admin (Fix Plot Hole) */}
+                        <div className="mt-2">
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Nomor HP Admin (Penerima WA)</label>
+                            <input 
+                                type="text" 
+                                value={localConfig.nomorHpAdmin} 
+                                onChange={e => setLocalConfig({...localConfig, nomorHpAdmin: e.target.value})}
+                                placeholder="08xxxxxxxxxx" 
+                                className="w-full border rounded p-1.5 text-xs font-mono"
+                            />
+                            <p className="text-[10px] text-gray-500 mt-1">Nomor WhatsApp Admin yang akan menerima data pendaftaran.</p>
                         </div>
 
                         {(submissionMethod === 'google_sheet' || submissionMethod === 'hybrid') && (
@@ -923,7 +991,7 @@ function doGet(e) {
                 <div className="bg-white p-3 border-b flex justify-between items-center shadow-sm">
                     <div className="flex flex-col">
                         <h3 className="font-bold text-gray-700"><i className="bi bi-eye mr-2"></i>Live Preview</h3>
-                        {activeTemplateId && <span className="text-[10px] text-teal-600 font-medium italic">Sedang Menyesuaikan: {templateName}</span>}
+                        {templateName && <span className="text-[10px] text-teal-600 font-medium italic">Sheet/Tab Tujuan: {templateName.replace(/[:\/\\?*\[\]]/g, "_")}</span>}
                     </div>
                     <div className="flex gap-2">
                         <button onClick={handleDownloadPdf} className="bg-gray-700 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-800 flex items-center gap-2"><i className="bi bi-file-pdf"></i> Cetak / PDF</button>

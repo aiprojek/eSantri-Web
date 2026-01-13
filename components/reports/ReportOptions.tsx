@@ -334,8 +334,30 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className="block mb-1 text-sm font-medium text-gray-700">Berlaku Hingga</label><input type="date" value={options.cardValidUntil} onChange={e => options.setCardValidUntil(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
+                    {/* Masa Berlaku Config */}
+                    <div>
+                        <label className="block mb-1 text-sm font-medium text-gray-700">Masa Berlaku Kartu</label>
+                        <div className="flex flex-col gap-2 mb-2">
+                            <label className="flex items-center gap-2">
+                                <input type="radio" name="cardValidityMode" value="date" checked={options.cardValidityMode === 'date'} onChange={() => options.setCardValidityMode('date')} className="text-teal-600" />
+                                <span className="text-sm">Tanggal Tertentu</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                                <input type="radio" name="cardValidityMode" value="forever" checked={options.cardValidityMode === 'forever'} onChange={() => options.setCardValidityMode('forever')} className="text-teal-600" />
+                                <span className="text-sm">Selama Menjadi Santri</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                                <input type="radio" name="cardValidityMode" value="none" checked={options.cardValidityMode === 'none'} onChange={() => options.setCardValidityMode('none')} className="text-teal-600" />
+                                <span className="text-sm">Sembunyikan (Tidak Ditampilkan)</span>
+                            </label>
+                        </div>
+                        
+                        {options.cardValidityMode === 'date' && (
+                            <div>
+                                <label className="block mb-1 text-xs text-gray-600">Pilih Tanggal Berakhir</label>
+                                <input type="date" value={options.cardValidUntil} onChange={e => options.setCardValidUntil(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" />
+                            </div>
+                        )}
                     </div>
                     
                     <SantriSelector title="" printMode={options.cardPrintMode} setPrintMode={options.setCardPrintMode} selectedIds={options.selectedCardSantriIds} setSelectedIds={options.setSelectedCardSantriIds} radioGroupName="card" filteredSantri={filteredSantri} />

@@ -89,7 +89,7 @@ export const generateBiodataReports = (data: Santri[], settings: PondokSettings,
 // --- KARTU SANTRI ---
 
 const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
-    const { cardDesign, cardValidUntil, cardFields, cardWidth, cardHeight } = options || {};
+    const { cardDesign, cardValidUntil, cardFields, cardWidth, cardHeight, cardValidityMode } = options || {};
     const rombel = settings.rombel.find(r => r.id === santri.rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
@@ -111,6 +111,13 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     const ayahWali = santri.namaAyah || santri.namaWali || '-';
     const alamat = santri.alamat.detail || '-';
     
+    // Logic for Validity Text
+    const validityText = cardValidityMode === 'forever' 
+        ? 'Berlaku Selama Menjadi Santri' 
+        : cardValidityMode === 'none' 
+            ? null 
+            : `Berlaku s.d. ${formatDate(cardValidUntil)}`;
+
     // Dynamic Dimensions
     const cardStyle: React.CSSProperties = {
         width: `${cardWidth}cm`,
@@ -160,9 +167,11 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     </div>
                 </div>
 
-                <div className="bg-[#D4AF37] text-[#1B4D3E] text-[5pt] text-center py-0.5 font-bold h-[12px]">
-                    Kartu ini sah selama santri masih aktif di pondok pesantren. Berlaku s.d. {formatDate(cardValidUntil)}
-                </div>
+                {validityText && (
+                    <div className="bg-[#D4AF37] text-[#1B4D3E] text-[5pt] text-center py-0.5 font-bold h-[12px]">
+                        {validityText}
+                    </div>
+                )}
             </div>
         );
     } 
@@ -202,11 +211,13 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 </div>
                 
                 {/* Footer: Validity Only */}
-                <div className="mt-auto bg-gray-50 px-3 py-1 border-t z-10 relative flex flex-col items-center justify-center text-center">
-                    <div className="text-[6pt] text-gray-500">
-                        Masa Berlaku: {formatDate(cardValidUntil)}
+                {validityText && (
+                    <div className="mt-auto bg-gray-50 px-3 py-1 border-t z-10 relative flex flex-col items-center justify-center text-center">
+                        <div className="text-[6pt] text-gray-500">
+                            {validityText}
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         );
     } 
@@ -240,9 +251,11 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     </div>
                 </div>
                 
-                <div className="w-full bg-gray-800 text-white text-[5pt] py-1 absolute bottom-0">
-                    Masa Berlaku: {formatDate(cardValidUntil)}
-                </div>
+                {validityText && (
+                    <div className="w-full bg-gray-800 text-white text-[5pt] py-1 absolute bottom-0">
+                        {validityText}
+                    </div>
+                )}
             </div>
         );
     } 
@@ -293,9 +306,11 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     </div>
                 </div>
 
-                <div className="px-3 pb-2 z-10 flex justify-between items-end">
-                    <div className="text-[5pt] text-slate-500 w-full text-center">Berlaku s.d. {formatDate(cardValidUntil)}</div>
-                </div>
+                {validityText && (
+                    <div className="px-3 pb-2 z-10 flex justify-between items-end">
+                        <div className="text-[5pt] text-slate-500 w-full text-center">{validityText}</div>
+                    </div>
+                )}
             </div>
         );
     } 
@@ -341,9 +356,11 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     </div>
                 </div>
 
-                <div className="bg-teal-50 px-3 py-1 flex justify-center items-center text-[6pt] text-teal-700 border-t border-orange-100">
-                    <div>Masa Berlaku: {formatDate(cardValidUntil)}</div>
-                </div>
+                {validityText && (
+                    <div className="bg-teal-50 px-3 py-1 flex justify-center items-center text-[6pt] text-teal-700 border-t border-orange-100">
+                        <div>{validityText}</div>
+                    </div>
+                )}
             </div>
         );
     }
@@ -376,9 +393,11 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     {showAyahWali && <div className="grid grid-cols-[35px_1fr]"><span>Wali</span><span>: {ayahWali}</span></div>}
                 </div>
             </div>
-            <div className="bg-[#D4AF37] text-[#1B4D3E] text-[5pt] text-center py-0.5 font-bold h-[12px]">
-                Berlaku s.d. {formatDate(cardValidUntil)}
-            </div>
+            {validityText && (
+                <div className="bg-[#D4AF37] text-[#1B4D3E] text-[5pt] text-center py-0.5 font-bold h-[12px]">
+                    {validityText}
+                </div>
+            )}
         </div>
     );
 };

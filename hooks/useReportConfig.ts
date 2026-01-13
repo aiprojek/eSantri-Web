@@ -50,6 +50,7 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
     // Card Configs
     const [cardDesign, setCardDesign] = useState<string>('classic'); // 'classic', 'modern', 'vertical', 'dark', 'ceria'
     const [cardTheme, setCardTheme] = useState<string>(predefinedCardThemes['Biru']); 
+    const [cardValidityMode, setCardValidityMode] = useState<'date' | 'forever' | 'none'>('date');
     const [cardValidUntil, setCardValidUntil] = useState<string>('2028-07-31');
     const [cardFields, setCardFields] = useState<string[]>(['foto', 'namaLengkap', 'nis', 'jenjang', 'rombel', 'ttl', 'alamat', 'ayahWali']);
     const [cardWidth, setCardWidth] = useState<number>(8.56);
@@ -102,6 +103,7 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
         setSelectedPembinaanSantriIds([]);
         setCardDesign('classic');
         setCardTheme(predefinedCardThemes['Biru']);
+        setCardValidityMode('date');
         setCardSignatoryTitle('Mudir Marhalah');
         setCardSignatoryId('');
         setUseHijriDate(false);
@@ -196,6 +198,7 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
             mutasiEndDate, setMutasiEndDate,
             cardDesign, setCardDesign,
             cardTheme, setCardTheme,
+            cardValidityMode, setCardValidityMode,
             cardValidUntil, setCardValidUntil,
             cardFields, setCardFields,
             cardWidth, setCardWidth,

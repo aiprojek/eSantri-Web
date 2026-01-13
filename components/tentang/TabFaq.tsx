@@ -105,7 +105,7 @@ export const TabFaq: React.FC = () => {
                     question="Bagaimana cara input banyak kelas/rombel sekaligus?"
                     answer={
                         <div>
-                            <p className="mb-1">Gunakan tombol <strong>"Tambah Banyak (Tabel)"</strong> di menu Data Master > Struktur Pendidikan.</p>
+                            <p className="mb-1">Gunakan tombol <strong>"Tambah Banyak (Tabel)"</strong> di menu Data Master &gt; Struktur Pendidikan.</p>
                             <p>Fitur ini memungkinkan Anda mengisi nama kelas seperti mengisi tabel Excel. Anda juga bisa langsung memilih Induk (misal: Rombel 1A induknya Kelas 1) tanpa perlu bolak-balik menu.</p>
                         </div>
                     }

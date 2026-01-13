@@ -133,6 +133,10 @@ export const TabFaq: React.FC = () => {
                     question="Apa itu kode acak saat Guru mengirim nilai via WA?"
                     answer="Itu adalah data nilai yang sudah dienkripsi (dikodekan) agar aman dan mudah dibaca oleh sistem. Admin cukup menyalin seluruh pesan tersebut ke menu 'Import Nilai', sistem akan otomatis menerjemahkannya menjadi angka di rapor."
                 />
+                <FaqItem 
+                    question="Bagaimana cara tahu kelas mana yang belum setor nilai?"
+                    answer="Gunakan menu Akademik > Monitoring. Di sana Anda bisa melihat persentase kelengkapan nilai per Rombel (Kelas). Jika progress bar masih merah/kuning, berarti belum semua santri dinilai."
+                />
             </FaqCategory>
 
             {/* 4. KEUANGAN */}
@@ -164,6 +168,10 @@ export const TabFaq: React.FC = () => {
                 <FaqItem 
                     question="Apakah bisa real-time collaboration?"
                     answer="Tidak real-time (seperti Google Docs). Sistem ini menggunakan model Hub & Spoke. Staff bekerja offline, lalu menyetor data ke Admin Pusat untuk digabungkan. Ini mencegah konflik data dan memungkinkan kerja tanpa internet."
+                />
+                 <FaqItem 
+                    question="Apa fungsi 'Kode Pairing' di menu Sync?"
+                    answer="Kode Pairing memungkinkan Staff terhubung ke Dropbox Admin tanpa perlu login email/password akun Dropbox tersebut. Cukup Copy-Paste kode dari Admin, laptop Staff langsung terhubung."
                 />
             </FaqCategory>
 

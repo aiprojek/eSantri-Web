@@ -24,7 +24,7 @@ export class ESantriDatabase extends Dexie {
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(24).stores({ // Bumped version to 24 for RaporRecord update
+    (this as any).version(25).stores({ // Bumped version to 25 to add index
       santri: '++id, nis, namaLengkap, kamarId',
       settings: '++id',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
@@ -38,7 +38,7 @@ export class ESantriDatabase extends Dexie {
       auditLogs: 'id, table_name, operation, created_at',
       users: '++id, username, role',
       syncHistory: 'id, fileId, mergedAt',
-      raporRecords: '++id, santriId, [santriId+tahunAjaran+semester], rombelId' 
+      raporRecords: '++id, santriId, [santriId+tahunAjaran+semester], [tahunAjaran+semester], rombelId' 
     }).upgrade(async (tx: any) => {
        // Migration: Ensure new fields exist if needed
        await tx.table('raporRecords').toCollection().modify((r: any) => {

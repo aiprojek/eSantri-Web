@@ -12,6 +12,7 @@ const PanduanLangkah: React.FC<{ number: number; title: string; children: React.
         green: 'border-green-500 bg-green-50 text-green-600',
         indigo: 'border-indigo-500 bg-indigo-50 text-indigo-600',
         gray: 'border-gray-500 bg-gray-50 text-gray-600',
+        black: 'border-gray-800 bg-gray-100 text-gray-800',
     };
     
     const lineColors: Record<string, string> = {
@@ -23,6 +24,7 @@ const PanduanLangkah: React.FC<{ number: number; title: string; children: React.
         green: 'bg-green-300',
         indigo: 'bg-indigo-300',
         gray: 'bg-gray-300',
+        black: 'bg-gray-400',
     };
 
     const activeClass = colorClasses[color] || colorClasses.teal;
@@ -132,6 +134,63 @@ export const TabPanduan: React.FC = () => {
                     </div>
                 </PanduanLangkah>
             </div>
+            
+            {/* --- SOP MULTI-ADMIN (Updated) --- */}
+            <div id="sop" className="bg-white p-6 rounded-lg border shadow-sm border-l-4 border-l-gray-800">
+                <div className="flex items-center gap-3 mb-6 border-b pb-4">
+                    <span className="bg-gray-800 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">SOP</span>
+                    <h2 className="text-lg font-bold text-gray-800">SOP Multi-Admin (Hub & Spoke)</h2>
+                </div>
+                
+                <div className="bg-yellow-50 p-3 rounded border border-yellow-200 text-sm mb-6 text-yellow-900">
+                    <i className="bi bi-info-circle-fill mr-2"></i>
+                    <strong>PENTING:</strong> Aplikasi ini <em>Offline-First</em>. Data tidak berubah secara real-time (seperti Google Docs). Anda harus mengikuti SOP ini agar data antar komputer sinkron.
+                </div>
+
+                <PanduanLangkah number={1} title="Konsep: Pusat (Hub) & Cabang (Spoke)" color="black">
+                     <ul className="list-disc pl-5 space-y-2 text-sm mt-1">
+                         <li><strong>Admin Pusat (Hub):</strong> Laptop Utama. Pemegang "Kebenaran Data". Tugasnya menerima data dari staff, menggabungkannya, dan membagikan data Master terbaru.</li>
+                         <li><strong>Staff (Spoke):</strong> Laptop Pendukung. Tugasnya input data harian (bayar SPP, input santri baru) dan menyetorkannya ke Pusat.</li>
+                     </ul>
+                </PanduanLangkah>
+
+                <PanduanLangkah number={2} title="Aktivasi & Pairing (Satu Kali Saja)" color="black">
+                    <ol className="list-decimal pl-5 space-y-2 text-sm mt-1 bg-gray-50 p-3 rounded border">
+                        <li><strong>Di Laptop Admin Pusat:</strong> Buka <em>Pengaturan &gt; Sync Cloud</em>. Login Dropbox. Buat Akun User untuk Staff di menu <em>User & Keamanan</em>.</li>
+                        <li>Klik tombol <strong>"Bagikan Akses (Pairing Code)"</strong>. Salin kode yang muncul.</li>
+                        <li><strong>Di Laptop Staff:</strong> Buka menu Sync Cloud. Paste kode tersebut di kolom <strong>"Setup Cepat"</strong>. Klik Hubungkan.</li>
+                        <li>Sistem otomatis mengunduh semua data terbaru dari Pusat. Setelah selesai, klik <strong>OK</strong> dan login menggunakan akun yang sudah dibuatkan Admin.</li>
+                    </ol>
+                </PanduanLangkah>
+
+                <PanduanLangkah number={3} title="SOP Harian: Alur Kerja Staff" color="black">
+                    <div className="space-y-3">
+                        <div className="border-l-4 border-green-500 pl-3 py-1 bg-green-50">
+                            <h4 className="font-bold text-green-800 text-sm">PAGI HARI (Sebelum Mulai Kerja)</h4>
+                            <p className="text-xs">Klik tombol <strong>Sync Cloud &gt; Ambil Master Data</strong>. Ini memastikan Anda bekerja dengan data terbaru yang sudah disahkan Admin.</p>
+                        </div>
+                        <div className="border-l-4 border-blue-500 pl-3 py-1 bg-blue-50">
+                            <h4 className="font-bold text-blue-800 text-sm">SIANG HARI (Saat Bekerja)</h4>
+                            <p className="text-xs">Lakukan input data seperti biasa (Terima Pembayaran, Input Santri). Bisa dilakukan tanpa internet.</p>
+                        </div>
+                        <div className="border-l-4 border-orange-500 pl-3 py-1 bg-orange-50">
+                            <h4 className="font-bold text-orange-800 text-sm">SORE HARI (Sebelum Pulang)</h4>
+                            <p className="text-xs">Pastikan ada internet. Klik tombol <strong>Sync Cloud &gt; Kirim Perubahan</strong>. Ini akan mengirim pekerjaan Anda hari ini ke "Inbox" Admin.</p>
+                        </div>
+                    </div>
+                </PanduanLangkah>
+
+                <PanduanLangkah number={4} title="SOP Harian: Alur Kerja Admin Pusat" color="black">
+                    <p className="text-sm mb-2">Dilakukan sore hari setelah semua staff melakukan "Kirim Perubahan".</p>
+                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 border p-3 rounded">
+                        <li>Buka menu <strong>Pusat Sync</strong> di sidebar (muncul jika login sebagai Admin).</li>
+                        <li>Klik <strong>Segarkan</strong> untuk melihat file kiriman Staff.</li>
+                        <li>Klik <strong>Gabung</strong> pada setiap file yang masuk. Sistem akan menggabungkan data staff ke database pusat secara cerdas.</li>
+                        <li>Setelah semua file digabung, klik tombol biru besar: <strong>Publikasikan Master</strong>.</li>
+                        <li>Selesai. Data Master di Cloud sudah terupdate dan siap diambil Staff besok pagi.</li>
+                    </ol>
+                </PanduanLangkah>
+            </div>
 
             {/* --- BAGIAN 2: MANAJEMEN SANTRI --- */}
             <div id="santri" className="bg-white p-6 rounded-lg border shadow-sm">
@@ -140,7 +199,7 @@ export const TabPanduan: React.FC = () => {
                     <h2 className="text-lg font-bold text-gray-800">Manajemen Santri</h2>
                 </div>
 
-                <PanduanLangkah number={3} title="Input Data Santri" color="teal">
+                <PanduanLangkah number={5} title="Input Data Santri" color="teal">
                     <p>Tiga cara memasukkan data:</p>
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li><strong>Manual:</strong> Klik "Tambah Santri" untuk input detail satu per satu lengkap dengan foto.</li>
@@ -149,7 +208,7 @@ export const TabPanduan: React.FC = () => {
                     </ul>
                 </PanduanLangkah>
 
-                <PanduanLangkah number={4} title="Kenaikan Kelas & Alumni" color="teal">
+                <PanduanLangkah number={6} title="Kenaikan Kelas & Alumni" color="teal">
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li><strong>Pindah Kelas Massal:</strong> Di menu Data Santri, filter kelas lama, centang semua (klik checkbox di header), klik tombol <strong>Pindah Kelas</strong> yang muncul di atas tabel.</li>
                         <li><strong>Kelulusan:</strong> Pilih santri, klik <strong>Ubah Status</strong>, pilih 'Lulus'. Data akan diarsipkan sebagai alumni dan tidak muncul di tagihan aktif.</li>
@@ -162,14 +221,13 @@ export const TabPanduan: React.FC = () => {
                 <div className="flex items-center gap-3 mb-6 border-b pb-4">
                     <span className="bg-indigo-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">3</span>
                     <h2 className="text-lg font-bold text-gray-800">Akademik & Rapor Digital</h2>
-                    <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded-full border border-indigo-200">Terbaru</span>
                 </div>
                 
                 <div className="bg-indigo-50 p-3 rounded mb-4 text-sm text-indigo-900 border border-indigo-200">
                     <p><strong>Konsep Unik:</strong> Admin mendesain rapor, Guru mengisi nilai lewat file HTML (bisa di HP/Offline), lalu Guru mengirim nilai kembali ke Admin via WhatsApp.</p>
                 </div>
 
-                <PanduanLangkah number={5} title="1. Desain Grid Rapor" color="indigo">
+                <PanduanLangkah number={7} title="1. Desain Grid Rapor" color="indigo">
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Buka menu <strong>Akademik &gt; Desain Grid</strong>.</li>
                         <li>Buat Template baru atau Import dari Excel.</li>
@@ -177,7 +235,7 @@ export const TabPanduan: React.FC = () => {
                     </ul>
                 </PanduanLangkah>
 
-                <PanduanLangkah number={6} title="2. Generate Formulir Guru" color="indigo">
+                <PanduanLangkah number={8} title="2. Generate Formulir Guru" color="indigo">
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Masuk ke tab <strong>Generate Formulir</strong>.</li>
                         <li>Pilih Rombel dan Template.</li>
@@ -186,7 +244,7 @@ export const TabPanduan: React.FC = () => {
                     </ul>
                 </PanduanLangkah>
 
-                <PanduanLangkah number={7} title="3. Proses Pengisian Nilai (Oleh Guru)" color="indigo">
+                <PanduanLangkah number={9} title="3. Proses Pengisian Nilai (Oleh Guru)" color="indigo">
                     <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 bg-gray-50 p-2 rounded">
                         <li>Guru membuka file HTML di browser HP/Laptop (Offline).</li>
                         <li>Guru mengisi nilai santri. Rumus rata-rata akan terhitung otomatis.</li>
@@ -195,11 +253,22 @@ export const TabPanduan: React.FC = () => {
                     </ol>
                 </PanduanLangkah>
 
-                <PanduanLangkah number={8} title="4. Import & Cetak (Oleh Admin)" color="indigo">
+                <PanduanLangkah number={10} title="4. Import & Cetak (Oleh Admin)" color="indigo">
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Admin menyalin kode pesan dari Guru (diawali <code>RAPOR_V2_START</code>).</li>
                         <li>Paste di menu <strong>Akademik &gt; Import Nilai</strong>.</li>
                         <li>Buka tab <strong>Cetak Rapor</strong> untuk mencetak rapor fisik (PDF) atau arsip.</li>
+                    </ul>
+                </PanduanLangkah>
+
+                <PanduanLangkah number={11} title="5. Monitoring Progress (Audit)" color="indigo">
+                    <p className="text-sm mb-1">Fitur ini membantu Admin memantau kelengkapan nilai:</p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                        <li>Buka menu <strong>Akademik &gt; Monitoring</strong>.</li>
+                        <li>Lihat diagram batang untuk setiap Rombel.</li>
+                        <li><span className="text-green-600 font-bold">Hijau</span> = Nilai Lengkap (Semua Santri sudah ada nilainya).</li>
+                        <li><span className="text-yellow-600 font-bold">Kuning</span> = Masih sebagian (Sedang proses input).</li>
+                        <li><span className="text-red-600 font-bold">Merah</span> = Belum ada data masuk sama sekali.</li>
                     </ul>
                 </PanduanLangkah>
             </div>
@@ -211,7 +280,7 @@ export const TabPanduan: React.FC = () => {
                     <h2 className="text-lg font-bold text-gray-800">Keuangan & Pembayaran</h2>
                 </div>
 
-                <PanduanLangkah number={9} title="Siklus Tagihan & Pembayaran" color="blue">
+                <PanduanLangkah number={12} title="Siklus Tagihan & Pembayaran" color="blue">
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li><strong>Pengaturan Biaya:</strong> Buat komponen biaya (SPP, Uang Gedung) di menu <em>Keuangan &gt; Pengaturan Biaya</em>.</li>
                         <li><strong>Generate Tagihan:</strong> Buka <em>Status Pembayaran &gt; Generate Tagihan</em>. Lakukan setiap awal bulan untuk SPP.</li>
@@ -219,7 +288,7 @@ export const TabPanduan: React.FC = () => {
                     </ul>
                 </PanduanLangkah>
 
-                <PanduanLangkah number={10} title="Uang Saku & Tabungan" color="blue">
+                <PanduanLangkah number={13} title="Uang Saku & Tabungan" color="blue">
                     <p>Fitur untuk mengelola uang jajan santri (Tabungan):</p>
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Buka tab <strong>Uang Saku</strong>.</li>
@@ -229,7 +298,7 @@ export const TabPanduan: React.FC = () => {
                     </ul>
                 </PanduanLangkah>
 
-                <PanduanLangkah number={11} title="Setoran Kas (Closing Harian)" color="blue">
+                <PanduanLangkah number={14} title="Setoran Kas (Closing Harian)" color="blue">
                     <p>Penting untuk validasi uang fisik kasir:</p>
                     <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 bg-gray-50 p-2 rounded">
                         <li>Uang yang diterima kasir (SPP/Uang Saku) masuk status "Di Laci" (Pending).</li>
@@ -247,14 +316,14 @@ export const TabPanduan: React.FC = () => {
                     <h2 className="text-lg font-bold text-gray-800">Keasramaan</h2>
                 </div>
 
-                <PanduanLangkah number={12} title="Manajemen Kamar" color="orange">
+                <PanduanLangkah number={15} title="Manajemen Kamar" color="orange">
                      <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Buka menu <strong>Keasramaan &gt; Manajemen Asrama</strong>.</li>
                         <li>Tambah Gedung (Putra/Putri) dan Kamar beserta kapasitasnya.</li>
                     </ul>
                 </PanduanLangkah>
 
-                <PanduanLangkah number={13} title="Penempatan Santri" color="orange">
+                <PanduanLangkah number={16} title="Penempatan Santri" color="orange">
                      <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Buka tab <strong>Penempatan Santri</strong>.</li>
                         <li>Pilih santri dari daftar "Tanpa Kamar" (bisa filter per kelas).</li>
@@ -270,7 +339,7 @@ export const TabPanduan: React.FC = () => {
                     <h2 className="text-lg font-bold text-gray-800">PSB & Surat Menyurat</h2>
                 </div>
 
-                 <PanduanLangkah number={14} title="Penerimaan Santri Baru (PSB)" color="green">
+                 <PanduanLangkah number={17} title="Penerimaan Santri Baru (PSB)" color="green">
                     <div className="mb-2">Gunakan menu <strong>PSB</strong> untuk mengelola pendaftaran santri baru secara online/offline.</div>
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                          <li><strong>Desain Formulir:</strong> Buat formulir pendaftaran custom di menu <em>Desain Formulir Online</em>.</li>
@@ -280,31 +349,12 @@ export const TabPanduan: React.FC = () => {
                     </ul>
                 </PanduanLangkah>
 
-                <PanduanLangkah number={15} title="Surat Menyurat & Arsip" color="green">
+                <PanduanLangkah number={18} title="Surat Menyurat & Arsip" color="green">
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li><strong>Template Editor:</strong> Buat template surat (Izin, Undangan, Keterangan) dengan editor teks lengkap. Gunakan variabel <code>{'{NAMA_SANTRI}'}</code> agar data terisi otomatis.</li>
                         <li><strong>Magic Draft (AI):</strong> Gunakan fitur AI untuk membuatkan draf bahasa surat yang sopan dan formal secara instan.</li>
                         <li><strong>Cetak Massal:</strong> Cetak surat untuk satu kelas sekaligus (Mail Merge) dengan satu klik.</li>
                     </ul>
-                </PanduanLangkah>
-            </div>
-
-            {/* --- BAGIAN 7: SINKRONISASI --- */}
-            <div id="sync" className="bg-white p-6 rounded-lg border shadow-sm">
-                <div className="flex items-center gap-3 mb-6 border-b pb-4">
-                    <span className="bg-gray-800 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">7</span>
-                    <h2 className="text-lg font-bold text-gray-800">Sinkronisasi & Data</h2>
-                </div>
-                
-                <PanduanLangkah number={16} title="Backup & Cloud Sync (Dropbox)" color="gray">
-                     <p>Aplikasi ini menyimpan data di browser (Laptop Anda). Agar data aman dan bisa diakses tim:</p>
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                         <li><strong>Backup Manual:</strong> Rutin download file cadangan (JSON) di menu <em>Pengaturan &gt; Backup</em>. Simpan di Flashdisk/Gdrive.</li>
-                         <li><strong>Cloud Sync (Dropbox):</strong> Aktifkan di Pengaturan. 
-                             <br/>- <strong>Staff:</strong> Klik tombol "Kirim Perubahan" di sidebar setiap sore setelah bekerja.
-                             <br/>- <strong>Admin Pusat:</strong> Buka menu "Pusat Sync", gabungkan data dari staff, lalu klik "Publikasikan Master" agar data terupdate ke semua orang.
-                         </li>
-                     </ul>
                 </PanduanLangkah>
             </div>
         </div>

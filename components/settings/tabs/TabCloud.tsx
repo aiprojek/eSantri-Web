@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { PondokSettings, SyncProvider, StorageStats } from '../../../types';
 import { useAppContext } from '../../../AppContext';
-import { getCloudStorageStats, exchangeCodeForToken, getValidDropboxToken } from '../../../services/syncService';
+import { getCloudStorageStats, exchangeCodeForToken, downloadAndMergeMaster, updateAccountFromCloud } from '../../../services/syncService';
 import { formatBytes } from '../../../utils/formatters';
 
 const StorageIndicator: React.FC<{ stats: StorageStats | null, isLoading: boolean }> = ({ stats, isLoading }) => {
@@ -79,10 +79,17 @@ interface TabCloudProps {
 }
 
 export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSettings, onSaveSettings }) => {
-    const { settings, showToast } = useAppContext();
+    const { settings, showToast, showConfirmation } = useAppContext();
     const [isConnectingDropbox, setIsConnectingDropbox] = useState(false);
     const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
     const [isLoadingStats, setIsLoadingStats] = useState(false);
+    
+    // Pairing States
+    const [showPairingModal, setShowPairingModal] = useState(false);
+    const [generatedCode, setGeneratedCode] = useState('');
+    const [inputPairingCode, setInputPairingCode] = useState('');
+    const [isProcessingPairing, setIsProcessingPairing] = useState(false);
+    const [pairingStep, setPairingStep] = useState(''); // 'connecting', 'downloading', 'success'
     
     const currentRedirectUri = window.location.origin + window.location.pathname;
 
@@ -172,6 +179,73 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
         window.location.href = authUrl;
     };
 
+    // --- PAIRING LOGIC ---
+
+    const handleGeneratePairingCode = () => {
+        if (!settings.cloudSyncConfig.dropboxRefreshToken || !settings.cloudSyncConfig.dropboxAppKey) {
+            showToast('Anda belum terhubung ke Dropbox. Tidak bisa generate kode.', 'error');
+            return;
+        }
+        // Encode keys to Base64 to make it easy to copy
+        const payload = JSON.stringify({
+            k: settings.cloudSyncConfig.dropboxAppKey,
+            r: settings.cloudSyncConfig.dropboxRefreshToken
+        });
+        const encoded = btoa(payload); // Simple encoding
+        setGeneratedCode(`ESANTRI-CLOUD-${encoded}`);
+        setShowPairingModal(true);
+    };
+
+    const handleConnectViaPairing = async () => {
+        if (!inputPairingCode.trim()) return;
+        
+        // Step 1: Decode & Connect
+        setPairingStep('connecting');
+        setIsProcessingPairing(true);
+        
+        try {
+            const rawCode = inputPairingCode.replace('ESANTRI-CLOUD-', '').trim();
+            const decoded = atob(rawCode);
+            const data = JSON.parse(decoded);
+
+            if (!data.k || !data.r) throw new Error("Kode tidak valid formatnya.");
+            
+            // Simpan konfigurasi koneksi dulu
+            const updatedConfig = {
+                ...settings.cloudSyncConfig,
+                provider: 'dropbox' as const,
+                dropboxAppKey: data.k,
+                dropboxRefreshToken: data.r,
+                dropboxToken: '', 
+                dropboxTokenExpiresAt: 0
+            };
+            
+            // Simpan ke DB agar fungsi sync bisa membacanya
+            await onSaveSettings({ ...settings, cloudSyncConfig: updatedConfig });
+            
+            // Step 2: Download Data Akun & Pengaturan (Config)
+            setPairingStep('downloading_account');
+            await updateAccountFromCloud(updatedConfig);
+            
+            // Step 3: Download Master Data (Santri, Transaksi, dll)
+            setPairingStep('downloading_data');
+            await downloadAndMergeMaster(updatedConfig);
+            
+            // Step 4: Success
+            setPairingStep('success');
+
+        } catch (e) {
+            showToast('Gagal Pairing: ' + (e as Error).message, 'error');
+            setIsProcessingPairing(false);
+            setPairingStep('');
+        }
+    };
+
+    const handleFinishPairing = () => {
+        // Force Reload App
+        window.location.reload();
+    };
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
             <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Konfigurasi Sinkronisasi Dropbox</h2>
@@ -213,42 +287,146 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                 )}
 
                 {localSettings.cloudSyncConfig?.provider === 'dropbox' && (
-                    <div className="col-span-2 grid grid-cols-1 gap-4 border p-4 rounded-lg bg-blue-50">
-                        <div className="p-3 bg-blue-100 border border-blue-300 rounded text-xs text-blue-900">
-                            <strong>Setup Otomatis:</strong> Masukkan <strong>App Key</strong> Anda, lalu klik tombol "Hubungkan".
-                            <br/>Pastikan URL berikut ada di <strong>Redirect URIs</strong> Dropbox App Console:
-                            <code className="block mt-1 p-1 bg-white border border-blue-200 rounded select-all font-mono text-xs break-all">{currentRedirectUri}</code>
-                        </div>
-                        <div>
-                            <label className="block mb-2 text-sm font-medium text-gray-700">App Key</label>
-                            <SensitiveInput 
-                                value={localSettings.cloudSyncConfig.dropboxAppKey || ''}
-                                onChange={(val) => handleSyncConfigChange('dropboxAppKey', val)}
-                                placeholder="Dapatkan dari Dropbox App Console"
-                            />
-                        </div>
-                        <div>
-                            <div className="flex justify-between items-center mb-2">
-                                 <label className="block text-sm font-medium text-gray-700">Status Koneksi</label>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <button 
-                                    onClick={handleConnectDropbox}
-                                    disabled={isConnectingDropbox}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2"
-                                >
-                                    {isConnectingDropbox ? 'Menghubungkan...' : <><i className="bi bi-dropbox"></i> Hubungkan ke Dropbox</>}
-                                </button>
-                                {settings.cloudSyncConfig.dropboxRefreshToken ? (
-                                    <span className="text-green-600 text-sm font-semibold flex items-center gap-1"><i className="bi bi-check-circle-fill"></i> Terhubung</span>
-                                ) : (
-                                    <span className="text-gray-500 text-sm italic">Belum terhubung</span>
+                    <div className="col-span-2 space-y-6">
+                        {/* SECTION 1: MANUAL SETUP (ADMIN) */}
+                        <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-blue-50">
+                            <div className="flex justify-between items-center">
+                                <h4 className="font-bold text-blue-800 text-sm">A. Setup Manual (Untuk Admin Utama)</h4>
+                                {settings.cloudSyncConfig.dropboxRefreshToken && (
+                                    <span className="text-green-600 text-xs font-bold bg-green-100 px-2 py-1 rounded border border-green-200">
+                                        <i className="bi bi-check-circle-fill"></i> Terhubung
+                                    </span>
                                 )}
                             </div>
+                            
+                            {!settings.cloudSyncConfig.dropboxRefreshToken ? (
+                                <>
+                                    <div className="p-3 bg-blue-100 border border-blue-300 rounded text-xs text-blue-900">
+                                        <strong>Cara Koneksi:</strong> Masukkan <strong>App Key</strong> dari Dropbox Console, lalu klik "Login Dropbox".
+                                        <br/>Pastikan URL berikut ada di <strong>Redirect URIs</strong> Dropbox:
+                                        <code className="block mt-1 p-1 bg-white border border-blue-200 rounded select-all font-mono text-xs break-all">{currentRedirectUri}</code>
+                                    </div>
+                                    <div>
+                                        <label className="block mb-2 text-sm font-medium text-gray-700">App Key</label>
+                                        <SensitiveInput 
+                                            value={localSettings.cloudSyncConfig.dropboxAppKey || ''}
+                                            onChange={(val) => handleSyncConfigChange('dropboxAppKey', val)}
+                                            placeholder="Dapatkan dari Dropbox App Console"
+                                        />
+                                    </div>
+                                    <div>
+                                        <button 
+                                            onClick={handleConnectDropbox}
+                                            disabled={isConnectingDropbox}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2"
+                                        >
+                                            {isConnectingDropbox ? 'Menghubungkan...' : <><i className="bi bi-dropbox"></i> Login Dropbox</>}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-3">Akun ini sudah terhubung. Anda bisa membagikan akses ke staff tanpa perlu login ulang.</p>
+                                    <button 
+                                        onClick={handleGeneratePairingCode}
+                                        className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm"
+                                    >
+                                        <i className="bi bi-qr-code"></i> Bagikan Akses (Pairing Code)
+                                    </button>
+                                </div>
+                            )}
                         </div>
+
+                        {/* SECTION 2: PAIRING CODE (STAFF) */}
+                        {!settings.cloudSyncConfig.dropboxRefreshToken && (
+                            <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-green-50">
+                                <h4 className="font-bold text-green-800 text-sm">B. Setup Cepat (Untuk Staff)</h4>
+                                <p className="text-xs text-green-700">
+                                    Tidak perlu login email/password Dropbox. Cukup minta <strong>Kode Pairing</strong> dari Admin Utama yang sudah login.
+                                </p>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        value={inputPairingCode}
+                                        onChange={e => setInputPairingCode(e.target.value)}
+                                        className="flex-grow bg-white border border-green-300 rounded text-sm p-2"
+                                        placeholder="Paste kode ESANTRI-CLOUD-... disini"
+                                        disabled={isProcessingPairing}
+                                    />
+                                    <button 
+                                        onClick={handleConnectViaPairing}
+                                        disabled={isProcessingPairing}
+                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-bold disabled:bg-gray-400 flex items-center gap-2"
+                                    >
+                                        {isProcessingPairing ? <span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span> : 'Hubungkan'}
+                                    </button>
+                                </div>
+                                {pairingStep === 'connecting' && <p className="text-xs text-green-700 animate-pulse">Memverifikasi kode...</p>}
+                                {pairingStep === 'downloading_account' && <p className="text-xs text-blue-700 animate-pulse">Mengunduh data akun dan pengaturan...</p>}
+                                {pairingStep === 'downloading_data' && <p className="text-xs text-indigo-700 animate-pulse">Mengunduh data master (santri, transaksi, dll)...</p>}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
+
+            {/* Modal Show Code */}
+            {showPairingModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-2">Kode Pairing Akses Cloud</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            Salin kode di bawah ini dan kirimkan ke Staff. Staff cukup menempelkan kode ini di menu "Setup Cepat" pada perangkat mereka.
+                        </p>
+                        
+                        <div className="bg-gray-100 p-3 rounded border border-gray-300 relative group">
+                            <code className="text-xs font-mono break-all text-gray-800">
+                                {generatedCode}
+                            </code>
+                            <button 
+                                onClick={() => { navigator.clipboard.writeText(generatedCode); showToast('Kode disalin!', 'success'); }}
+                                className="absolute top-2 right-2 bg-white border shadow-sm p-1.5 rounded text-gray-600 hover:text-blue-600"
+                                title="Salin"
+                            >
+                                <i className="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+
+                        <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded border border-red-200">
+                            <strong>PERHATIAN:</strong> Kode ini memberikan akses penuh ke folder data eSantri di Dropbox Anda. Jangan bagikan ke orang asing.
+                        </div>
+
+                        <div className="mt-6 flex justify-end">
+                            <button onClick={() => setShowPairingModal(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm font-medium">Tutup</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SUCCESS PAIRING MODAL (BLOCKING) */}
+            {pairingStep === 'success' && (
+                <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-8 text-center animate-fade-in-down border-t-4 border-green-500">
+                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600">
+                            <i className="bi bi-cloud-check-fill text-4xl"></i>
+                        </div>
+                        <h3 className="text-2xl font-bold text-gray-800 mb-2">Aplikasi Telah Dimutakhirkan</h3>
+                        <p className="text-gray-600 mb-6 leading-relaxed">
+                            Aplikasi telah berhasil mengunduh seluruh data terbaru dari Admin Pusat (Data Santri, Transaksi, Pengaturan, Akun Staff, dan semuanya).
+                        </p>
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 mb-6 text-left">
+                            <p className="font-bold mb-1"><i className="bi bi-info-circle"></i> Langkah Berikutnya:</p>
+                            <p>Tekan tombol OK untuk memulai menggunakan aplikasi dan kolaborasi bersama admin lain. Anda akan diarahkan ke halaman login.</p>
+                        </div>
+                        <button 
+                            onClick={handleFinishPairing} 
+                            className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-lg transition-transform hover:-translate-y-1"
+                        >
+                            OK, Mulai Sekarang
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

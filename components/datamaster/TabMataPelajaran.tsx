@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { PondokSettings, MataPelajaran } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { MapelModal } from '../settings/modals/MapelModal';
+import { BulkMasterEditor } from './modals/BulkMasterEditor';
 
 interface TabMataPelajaranProps {
     localSettings: PondokSettings;
@@ -11,12 +12,14 @@ interface TabMataPelajaranProps {
 }
 
 export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSettings, handleInputChange, canWrite }) => {
-    const { showConfirmation } = useAppContext();
+    const { showConfirmation, showToast } = useAppContext();
     const [mapelModalData, setMapelModalData] = useState<{
         mode: 'add' | 'edit';
         jenjangId: number;
         item?: MataPelajaran;
     } | null>(null);
+
+    const [isBulkOpen, setIsBulkOpen] = useState(false);
 
     const handleSaveMapel = (mapel: MataPelajaran) => {
         if (!mapelModalData) return;
@@ -32,9 +35,28 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
         setMapelModalData(null);
     };
 
+    const handleBulkSaveMapel = (data: any[]) => {
+        const list = localSettings.mataPelajaran;
+        let nextId = list.length > 0 ? Math.max(...list.map(m => m.id)) + 1 : 1;
+        
+        const newItems: MataPelajaran[] = data.map(item => ({
+            id: nextId++,
+            nama: item.nama,
+            jenjangId: item.jenjangId
+        }));
+
+        handleInputChange('mataPelajaran', [...list, ...newItems]);
+        setIsBulkOpen(false);
+        showToast(`${newItems.length} mata pelajaran berhasil ditambahkan.`, 'success');
+    };
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-            <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Mata Pelajaran per Jenjang</h2>
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 className="text-xl font-bold text-gray-700">Mata Pelajaran per Jenjang</h2>
+                {canWrite && <button onClick={() => setIsBulkOpen(true)} className="text-sm bg-teal-600 text-white hover:bg-teal-700 px-3 py-1.5 rounded flex items-center gap-2"><i className="bi bi-table"></i> Tambah Massal (Semua Jenjang)</button>}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {localSettings.jenjang.map(jenjang => {
                     const mapelList = localSettings.mataPelajaran.filter(m => m.jenjangId === jenjang.id);
@@ -61,7 +83,11 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
                                 </ul>
                             ) : <p className="text-sm text-gray-400 p-4 text-center italic">Belum ada mata pelajaran.</p>}
                         </div>
-                            {canWrite && <button onClick={() => setMapelModalData({ mode: 'add', jenjangId: jenjang.id })} className="mt-3 text-sm text-white bg-teal-600 hover:bg-teal-700 px-3 py-1.5 rounded flex items-center gap-2 transition-colors w-full justify-center"><i className="bi bi-plus-lg"></i> Tambah Mapel</button>}
+                            {canWrite && (
+                                <div className="flex gap-2 mt-3">
+                                    <button onClick={() => setMapelModalData({ mode: 'add', jenjangId: jenjang.id })} className="flex-1 text-sm text-white bg-teal-600 hover:bg-teal-700 px-3 py-1.5 rounded flex items-center justify-center gap-2 transition-colors"><i className="bi bi-plus-lg"></i> Tambah</button>
+                                </div>
+                            )}
                     </div>
                     )
                 })}
@@ -74,6 +100,14 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
             )}
             
             {mapelModalData && <MapelModal isOpen={!!mapelModalData} onClose={() => setMapelModalData(null)} onSave={handleSaveMapel} modalData={mapelModalData} />}
+            
+            <BulkMasterEditor 
+                isOpen={isBulkOpen} 
+                onClose={() => setIsBulkOpen(false)} 
+                mode="mapel"
+                settings={localSettings}
+                onSave={handleBulkSaveMapel}
+            />
         </div>
     );
 };

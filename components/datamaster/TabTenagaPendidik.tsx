@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
-import { PondokSettings, TenagaPengajar } from '../../types';
+import { PondokSettings, TenagaPengajar, RiwayatJabatan } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { TeacherModal } from '../settings/modals/TeacherModal';
+import { BulkMasterEditor } from './modals/BulkMasterEditor';
 
 interface TabTenagaPendidikProps {
     localSettings: PondokSettings;
@@ -11,11 +12,12 @@ interface TabTenagaPendidikProps {
 }
 
 export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSettings, handleInputChange, canWrite }) => {
-    const { showAlert, showConfirmation } = useAppContext();
+    const { showAlert, showConfirmation, showToast } = useAppContext();
     const [teacherModalData, setTeacherModalData] = useState<{
         mode: 'add' | 'edit';
         item?: TenagaPengajar;
     } | null>(null);
+    const [isBulkOpen, setIsBulkOpen] = useState(false);
 
     const getTeacherStatus = (teacher: TenagaPengajar) => {
         if (!teacher.riwayatJabatan || teacher.riwayatJabatan.length === 0) {
@@ -44,6 +46,31 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
             handleInputChange('tenagaPengajar', list.map(t => t.id === teacher.id ? teacher : t));
         }
         setTeacherModalData(null);
+    };
+
+    const handleBulkSave = (data: any[]) => {
+        const list = localSettings.tenagaPengajar;
+        let nextId = list.length > 0 ? Math.max(...list.map(t => t.id)) + 1 : 1;
+        
+        const newItems: TenagaPengajar[] = data.map(item => {
+            const riwayat: RiwayatJabatan[] = [];
+            if (item.jabatan) {
+                riwayat.push({
+                    id: Date.now() + Math.random(),
+                    jabatan: item.jabatan,
+                    tanggalMulai: item.tanggalMulai || new Date().toISOString().split('T')[0]
+                });
+            }
+            return {
+                id: nextId++,
+                nama: item.nama,
+                riwayatJabatan: riwayat
+            };
+        });
+
+        handleInputChange('tenagaPengajar', [...list, ...newItems]);
+        setIsBulkOpen(false);
+        showToast(`${newItems.length} tenaga pendidik berhasil ditambahkan.`, 'success');
     };
 
     const handleRemoveTeacher = (id: number) => {
@@ -103,9 +130,21 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                     </ul>
                 ) : <p className="text-sm text-gray-400 p-3 text-center">Data kosong.</p>}
             </div>
-            {canWrite && <button onClick={() => setTeacherModalData({mode: 'add'})} className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-2"><i className="bi bi-plus-circle"></i> Tambah Tenaga Pendidik</button>}
+            {canWrite && (
+                <div className="flex gap-2">
+                    <button onClick={() => setTeacherModalData({mode: 'add'})} className="text-sm text-white bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm"><i className="bi bi-plus-circle"></i> Tambah Manual</button>
+                    <button onClick={() => setIsBulkOpen(true)} className="text-sm text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 px-4 py-2 rounded-lg font-medium flex items-center gap-2"><i className="bi bi-table"></i> Tambah Banyak (Tabel)</button>
+                </div>
+            )}
             
             {teacherModalData && <TeacherModal isOpen={!!teacherModalData} onClose={() => setTeacherModalData(null)} onSave={handleSaveTeacher} modalData={teacherModalData} />}
+            <BulkMasterEditor 
+                isOpen={isBulkOpen} 
+                onClose={() => setIsBulkOpen(false)} 
+                mode="pendidik"
+                settings={localSettings}
+                onSave={handleBulkSave} 
+            />
         </div>
     );
 };

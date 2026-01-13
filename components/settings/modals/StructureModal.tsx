@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Jenjang, Kelas, Rombel, TenagaPengajar } from '../../../types';
 import { useAppContext } from '../../../AppContext';
@@ -135,7 +136,15 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
                         <div>
                             <label className="block mb-1 text-sm font-medium text-gray-700">Induk {parentList}</label>
                             <select value={parentId} onChange={(e) => setParentId(e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5">
-                                {settings[parentList].map(p => <option key={p.id} value={p.id}>{p.nama}</option>)}
+                                {settings[parentList].map(p => {
+                                    let label = p.nama;
+                                    // IMPROVEMENT: Jika sedang memilih kelas induk untuk rombel, tampilkan jenjangnya
+                                    if (listName === 'rombel') {
+                                        const parentJenjang = settings.jenjang.find(j => j.id === (p as Kelas).jenjangId);
+                                        if (parentJenjang) label = `${p.nama} (${parentJenjang.nama})`;
+                                    }
+                                    return <option key={p.id} value={p.id}>{label}</option>;
+                                })}
                             </select>
                         </div>
                     )}

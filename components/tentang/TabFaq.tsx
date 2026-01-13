@@ -95,7 +95,38 @@ export const TabFaq: React.FC = () => {
                 />
             </FaqCategory>
 
-            {/* 2. PSB (Updated) */}
+            {/* 2. DATA MASTER (NEW) */}
+            <FaqCategory 
+                title="Data Master & Akademik" 
+                icon="bi-database-fill" 
+                colorClass="bg-blue-50 border-blue-500 text-blue-900"
+            >
+                <FaqItem 
+                    question="Bagaimana cara input banyak kelas/rombel sekaligus?"
+                    answer={
+                        <div>
+                            <p className="mb-1">Gunakan tombol <strong>"Tambah Banyak (Tabel)"</strong> di menu Data Master > Struktur Pendidikan.</p>
+                            <p>Fitur ini memungkinkan Anda mengisi nama kelas seperti mengisi tabel Excel. Anda juga bisa langsung memilih Induk (misal: Rombel 1A induknya Kelas 1) tanpa perlu bolak-balik menu.</p>
+                        </div>
+                    }
+                />
+                <FaqItem 
+                    question="Apa beda Jenjang, Kelas, dan Rombel?"
+                    answer={
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Jenjang:</strong> Tingkat pendidikan utama (Misal: Salafiyah Wustho, Salafiyah Ulya).</li>
+                            <li><strong>Kelas:</strong> Tingkatan tahun dalam jenjang (Misal: Kelas 1, Kelas 2). Ini adalah induk dari Rombel.</li>
+                            <li><strong>Rombel (Rombongan Belajar):</strong> Kelas fisik tempat santri belajar (Misal: Kelas 1A Putra, Kelas 1B Putri). Santri dimasukkan ke dalam Rombel.</li>
+                        </ul>
+                    }
+                />
+                 <FaqItem 
+                    question="Bisakah saya menghapus Jenjang yang sudah ada santrinya?"
+                    answer="TIDAK BISA. Untuk menjaga integritas data, Anda tidak bisa menghapus Jenjang/Kelas/Rombel yang masih memiliki santri aktif di dalamnya. Pindahkan dulu santri ke kelas lain atau luluskan, baru hapus datanya."
+                />
+            </FaqCategory>
+
+            {/* 3. PSB */}
             <FaqCategory 
                 title="PSB & Formulir Online" 
                 icon="bi-person-plus-fill" 
@@ -115,9 +146,9 @@ export const TabFaq: React.FC = () => {
                 />
             </FaqCategory>
 
-            {/* 3. AKADEMIK & RAPOR */}
+            {/* 4. AKADEMIK & RAPOR */}
             <FaqCategory 
-                title="Akademik & Rapor Digital" 
+                title="Rapor Digital" 
                 icon="bi-mortarboard-fill" 
                 colorClass="bg-indigo-50 border-indigo-500 text-indigo-900"
             >
@@ -133,13 +164,9 @@ export const TabFaq: React.FC = () => {
                     question="Apa itu kode acak saat Guru mengirim nilai via WA?"
                     answer="Itu adalah data nilai yang sudah dienkripsi (dikodekan) agar aman dan mudah dibaca oleh sistem. Admin cukup menyalin seluruh pesan tersebut ke menu 'Import Nilai', sistem akan otomatis menerjemahkannya menjadi angka di rapor."
                 />
-                <FaqItem 
-                    question="Bagaimana cara tahu kelas mana yang belum setor nilai?"
-                    answer="Gunakan menu Akademik > Monitoring. Di sana Anda bisa melihat persentase kelengkapan nilai per Rombel (Kelas). Jika progress bar masih merah/kuning, berarti belum semua santri dinilai."
-                />
             </FaqCategory>
 
-            {/* 4. KEUANGAN */}
+            {/* 5. KEUANGAN */}
             <FaqCategory 
                 title="Keuangan & Pembayaran" 
                 icon="bi-cash-coin" 
@@ -155,7 +182,7 @@ export const TabFaq: React.FC = () => {
                 />
             </FaqCategory>
 
-            {/* 5. SINKRONISASI */}
+            {/* 6. SINKRONISASI */}
             <FaqCategory 
                 title="Sinkronisasi Tim" 
                 icon="bi-cloud-arrow-up-fill" 

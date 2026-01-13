@@ -105,10 +105,15 @@ export const TabPanduan: React.FC = () => {
                 <PanduanLangkah number={1} title="Konfigurasi Data Lembaga" color="purple">
                     <p>Lakukan langkah ini sebelum menggunakan fitur lain:</p>
                     <ol className="list-decimal pl-5 space-y-1 mt-2 bg-gray-50 p-3 rounded border border-gray-200 text-sm">
-                        <li>Buka menu <strong>Pengaturan &gt; Umum</strong>.</li>
-                        <li>Isi data lengkap yayasan dan pesantren (Nama, Alamat, Logo). Data ini akan muncul di KOP Surat, Kuitansi, dan Rapor.</li>
-                        <li>Buka menu <strong>Data Master &gt; Tenaga Pendidik</strong>. Input data semua Guru, Mudir, dan Pengurus.</li>
-                        <li>Buka menu <strong>Data Master &gt; Struktur Pendidikan</strong>. Buat Jenjang, Kelas, dan Rombel (Rombongan Belajar).</li>
+                        <li>Buka menu <strong>Pengaturan &gt; Umum</strong>. Isi data lengkap yayasan dan pesantren (Nama, Alamat, Logo).</li>
+                        <li>Buka menu <strong>Data Master &gt; Tenaga Pendidik</strong>. Gunakan tombol <strong>"Tambah Banyak (Tabel)"</strong> untuk menginput daftar guru, jabatan, dan tanggal mulai tugas secara massal.</li>
+                        <li>Buka menu <strong>Data Master &gt; Struktur Pendidikan</strong>.
+                            <ul className="list-disc pl-4 mt-1 text-xs text-gray-500">
+                                <li>Isi <strong>Jenjang</strong> terlebih dahulu (misal: Salafiyah Wustho).</li>
+                                <li>Isi <strong>Kelas</strong>. Gunakan "Tambah Banyak" untuk input Kelas 1, 2, 3 sekaligus dan memilih Jenjang Induknya di tabel.</li>
+                                <li>Isi <strong>Rombel</strong>. Gunakan "Tambah Banyak" untuk membuat kelas paralel (1A, 1B, dll) dan pilih Kelas Induk & Wali Kelasnya.</li>
+                            </ul>
+                        </li>
                     </ol>
                 </PanduanLangkah>
 
@@ -301,7 +306,7 @@ export const TabPanduan: React.FC = () => {
                 <PanduanLangkah number={14} title="Setoran Kas (Closing Harian)" color="blue">
                     <p>Penting untuk validasi uang fisik kasir:</p>
                     <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 bg-gray-50 p-2 rounded">
-                        <li>Uang yang diterima kasir (SPP/Uang Saku) masuk status "Di Laci" (Pending).</li>
+                        <li>Uang yang diterima kasir (SPP/Uang Saku) masuk status "Di Laci Kasir" (Pending).</li>
                         <li>Buka menu <strong>Setoran Kas</strong> di sore hari.</li>
                         <li>Centang semua transaksi hari itu, klik <strong>"Setor ke Buku Kas"</strong>.</li>
                         <li>Uang resmi masuk ke Saldo Pondok (Buku Kas Umum).</li>

@@ -8,6 +8,7 @@ export enum Page {
   Dashboard = 'Dashboard',
   Santri = 'Santri',
   Akademik = 'Akademik',
+  Absensi = 'Absensi', // Verified
   DataMaster = 'DataMaster',
   Keuangan = 'Keuangan',
   Keasramaan = 'Keasramaan',
@@ -27,6 +28,7 @@ export interface UserPermissions {
     santri: AccessLevel;
     psb: AccessLevel;
     akademik: AccessLevel;
+    absensi: AccessLevel; // Verified
     datamaster: AccessLevel;
     keuangan: AccessLevel;
     keasramaan: AccessLevel;
@@ -171,6 +173,7 @@ export interface Jenjang {
     nama: string;
     kode?: string;
     mudirId?: number;
+    hariLibur?: number[]; // NEW: 0 (Minggu) - 6 (Sabtu), Specific per Jenjang
 }
 
 export interface Kelas {
@@ -636,6 +639,17 @@ export interface RaporRecord extends SyncedEntity {
     customData?: string; // JSON string of Record<columnKey, value>
 }
 
+// NEW: Absensi Record
+export interface AbsensiRecord extends SyncedEntity {
+    id: number;
+    santriId: number;
+    rombelId: number;
+    tanggal: string; // YYYY-MM-DD
+    status: 'H' | 'S' | 'I' | 'A';
+    keterangan?: string;
+    recordedBy?: string; // Username of teacher
+}
+
 export enum ReportType {
     DashboardSummary = 'DashboardSummary',
     Biodata = 'Biodata',
@@ -693,6 +707,7 @@ export interface PondokSettings extends SyncedEntity {
     suratTagihanPenutup: string;
     suratTagihanCatatan?: string;
     pesanWaTunggakan: string;
+    // Removed global hariLibur in favor of Jenjang-specific holidays
     
     backupConfig: BackupConfig;
     cloudSyncConfig: CloudSyncConfig;

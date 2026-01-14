@@ -128,9 +128,6 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
 
 // 1. Staff: Upload Changes (Differential Sync)
 // Uploads ALL local data but labeled as a staff update file. 
-// Ideally we'd filter only changed data, but for simplicity & robustness in file-based sync, 
-// sending full snapshot of Staff's active data is safer to ensure Admin gets everything.
-// To avoid huge files, we can split Config vs Data.
 export const uploadStaffChanges = async (config: CloudSyncConfig, username: string) => {
     if (config.provider !== 'dropbox') throw new Error("Provider harus Dropbox");
     const token = await getValidDropboxToken(config);
@@ -150,7 +147,9 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
             arsipSurat: await db.arsipSurat.toArray(),
             pendaftar: await db.pendaftar.toArray(),
             auditLogs: await db.auditLogs.toArray(),
-            users: await db.users.toArray(), // Added: Send user changes (password updates)
+            users: await db.users.toArray(), 
+            raporRecords: await db.raporRecords.toArray(),
+            absensi: await db.absensi.toArray(), // Added Absensi
         }
     };
     
@@ -201,7 +200,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
     const masterData = await response.json();
     
     // SMART MERGE LOGIC
-    await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, async () => {
+    await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.raporRecords, db.absensi, async () => {
         
         const mergeTable = async (tableName: string, masterItems: any[]) => {
             const table = (db as any)[tableName];
@@ -212,17 +211,13 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
             
             for (const mItem of masterItems) {
                 const lItem = localMap.get(mItem.id) as any;
-                // Rule: If Local exists and is NEWER than Master, KEEP Local.
-                // Else (Local older, or doesn't exist), overwrite with Master.
                 if (lItem) {
                     const lTime = lItem.lastModified || 0;
                     const mTime = mItem.lastModified || 0;
                     if (mTime >= lTime) {
                         itemsToPut.push(mItem);
                     }
-                    // If lTime > mTime, we do NOTHING (keep local). It will be pushed in next staff upload.
                 } else {
-                    // New item from Master
                     itemsToPut.push(mItem);
                 }
             }
@@ -241,6 +236,8 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         if(masterData.suratTemplates) await mergeTable('suratTemplates', masterData.suratTemplates);
         if(masterData.arsipSurat) await mergeTable('arsipSurat', masterData.arsipSurat);
         if(masterData.pendaftar) await mergeTable('pendaftar', masterData.pendaftar);
+        if(masterData.raporRecords) await mergeTable('raporRecords', masterData.raporRecords);
+        if(masterData.absensi) await mergeTable('absensi', masterData.absensi); // Added Absensi
     });
 
     return { status: 'merged', timestamp: masterData.timestamp };
@@ -262,17 +259,16 @@ export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileR
         })
     });
     
-    if (!response.ok) return []; // Folder might not exist
+    if (!response.ok) return []; 
     
     const data = await response.json();
-    // Filter JSON files only
     return data.entries.filter((e: any) => e['.tag'] === 'file' && e.name.endsWith('.json')).map((e: any) => ({
         id: e.id,
         name: e.name,
         path_lower: e.path_lower,
         client_modified: e.client_modified,
         size: e.size,
-        status: 'pending' // Default, will be checked against DB
+        status: 'pending' 
     }));
 };
 
@@ -297,11 +293,11 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
     // Merge to Admin DB (Admin is TRUTH, but we accept incoming data as updates)
     let recordCount = 0;
 
-    await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, db.users, async () => {
+    await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, db.users, db.raporRecords, db.absensi, async () => {
         const merge = async (table: string, items: any[]) => {
             if (!items || items.length === 0) return;
             const tbl = (db as any)[table];
-            await tbl.bulkPut(items); // Admin blindly accepts Staff data for now (Simple Aggregator)
+            await tbl.bulkPut(items); 
             recordCount += items.length;
         };
         
@@ -314,6 +310,8 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         await merge('suratTemplates', data.suratTemplates);
         await merge('arsipSurat', data.arsipSurat);
         await merge('pendaftar', data.pendaftar);
+        await merge('raporRecords', data.raporRecords);
+        await merge('absensi', data.absensi); // Added Absensi
         
         // Merge Audit Logs
         if (data.auditLogs) {
@@ -322,8 +320,6 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
 
         // Merge Users (Passwords)
         if (data.users) {
-            // Only update non-admin users to prevent Staff overwriting Admin accidentally
-            // (Assuming Staff ID != Admin ID)
             const staffUpdates = data.users.filter((u: any) => !u.isDefaultAdmin);
             await db.users.bulkPut(staffUpdates);
         }
@@ -350,9 +346,11 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         suratTemplates: await db.suratTemplates.toArray(),
         arsipSurat: await db.arsipSurat.toArray(),
         pendaftar: await db.pendaftar.toArray(),
+        raporRecords: await db.raporRecords.toArray(),
+        absensi: await db.absensi.toArray(), // Added Absensi
     };
 
-    // 2. Config Master (Users & Settings) - Separate file for security/login flow
+    // 2. Config Master (Users & Settings)
     const masterConfig = {
         timestamp: new Date().toISOString(),
         users: await db.users.toArray(), // For password reset
@@ -386,8 +384,6 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
 
 // 6. User Login Helper: Update Account from Cloud
 export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
-    // This connects without user login, uses stored token.
-    // WARNING: Security risk if token is compromised, but acceptable for this specific offline-first requirement.
     const token = await getValidDropboxToken(config);
     
     const response = await fetch('https://content.dropboxapi.com/2/files/download', {

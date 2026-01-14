@@ -25,7 +25,7 @@ const SuratMenyurat = React.lazy(() => import('./components/SuratMenyurat'));
 const PSB = React.lazy(() => import('./components/PSB'));
 const Tentang = React.lazy(() => import('./components/Tentang'));
 const Akademik = React.lazy(() => import('./components/Akademik'));
-const Absensi = React.lazy(() => import('./components/Absensi')); // Import Absensi
+const Absensi = React.lazy(() => import('./components/Absensi')); // ADDED: Import Absensi
 
 // Handle Named Exports for specific components
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
@@ -258,12 +258,7 @@ const AppContent: React.FC = () => {
     const checkAccess = (permissionKey: keyof UserPermissions): boolean => {
         if (!currentUser) return false;
         if (currentUser.role === 'admin') return true;
-        // Fallback for old permissions structure
-        if (!currentUser.permissions) return false;
-        // If permission key is missing in object (e.g. old data), treat as 'write' (fail open for compatibility) or 'none'
-        // Since we are adding Absensi now, let's allow it if key is missing but role is admin/staff default
-        const access = currentUser.permissions[permissionKey];
-        return access !== undefined ? access !== 'none' : true; 
+        return currentUser.permissions[permissionKey] !== 'none';
     };
 
     // Lazy load wrapper logic for cleaner switch
@@ -276,9 +271,7 @@ const AppContent: React.FC = () => {
                             return <Dashboard navigateTo={handleNavigate} />;
                         case Page.Santri:
                             return checkAccess('santri') ? <SantriList /> : <AccessDenied />;
-                        // PENTING: Case string manual ditambahkan untuk menangkap navigasi jika Enum gagal
-                        case 'Absensi':
-                        case Page.Absensi: 
+                        case Page.Absensi: // ADDED: Absensi Route
                              return checkAccess('absensi') ? <Absensi /> : <AccessDenied />;
                         case Page.Akademik:
                             return checkAccess('akademik') ? <Akademik /> : <AccessDenied />;

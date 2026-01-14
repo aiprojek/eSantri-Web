@@ -28,7 +28,8 @@ export const generateRecoveryKey = (): string => {
 export const ADMIN_PERMISSIONS = {
     santri: 'write',
     psb: 'write',
-    akademik: 'write', // New
+    akademik: 'write', 
+    absensi: 'write', // New
     datamaster: 'write',
     keuangan: 'write',
     keasramaan: 'write',
@@ -44,7 +45,8 @@ export const ADMIN_PERMISSIONS = {
 export const DEFAULT_STAFF_PERMISSIONS = {
     santri: 'read',
     psb: 'read',
-    akademik: 'none', // New
+    akademik: 'none', 
+    absensi: 'write', // New: Teachers need write access by default
     datamaster: 'none',
     keuangan: 'none',
     keasramaan: 'read',

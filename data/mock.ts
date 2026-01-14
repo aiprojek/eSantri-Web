@@ -2,8 +2,8 @@
 import { PondokSettings, Santri, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar } from '../types';
 
 export const initialJenjang = [
-  { id: 1, nama: 'Salafiyah Wustho', kode: 'SW', mudirId: 2 },
-  { id: 2, nama: 'Salafiyah Ulya', kode: 'SU', mudirId: 3 },
+  { id: 1, nama: 'Salafiyah Wustho', kode: 'SW', mudirId: 2, hariLibur: [5] }, // Jumat Libur
+  { id: 2, nama: 'Salafiyah Ulya', kode: 'SU', mudirId: 3, hariLibur: [0] }, // Ahad Libur
 ];
 
 export const initialKelas = [ // Sebelumnya initialTingkat
@@ -161,6 +161,7 @@ export const initialSettings: PondokSettings = {
   suratTagihanPenutup: `Kami memohon kepada Bapak/Ibu untuk dapat segera menyelesaikan administrasi tersebut. Untuk pembayaran dapat dilakukan secara langsung di kantor administrasi pondok.\n\nDemikian surat pemberitahuan ini kami sampaikan. Atas perhatian dan kerjasamanya, kami ucapkan Jazakumullahu khairan.\n\nWassalamu'alaikum Warahmatullahi Wabarakatuh.`,
   suratTagihanCatatan: `Pembayaran dapat dilakukan melalui transfer ke rekening Bank Syariah Indonesia (BSI) No. Rek: 123456789 a.n. Bendahara Pondok Pesantren.`,
   pesanWaTunggakan: `Yth. Bapak/Ibu Wali dari ananda {NAMA_SANTRI},\n\nKami informasikan dari {NAMA_PONPES} bahwa terdapat tagihan yang belum diselesaikan sebesar {JUMLAH_TUNGGAKAN}.\n\nMohon untuk dapat segera melakukan pembayaran. Abaikan pesan ini jika sudah membayar.\n\nTerima kasih.\n- Bendahara {NAMA_PONPES}`,
+  // removed global hariLibur
   backupConfig: {
     frequency: 'weekly',
     lastBackup: null,

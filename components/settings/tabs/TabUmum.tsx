@@ -1,6 +1,6 @@
 
 import React, { useRef } from 'react';
-import { PondokSettings, TenagaPengajar } from '../../../types';
+import { PondokSettings, TenagaPengajar, Jenjang } from '../../../types';
 
 interface TabUmumProps {
     localSettings: PondokSettings;
@@ -78,6 +78,34 @@ const LogoUploader: React.FC<{
 };
 
 export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChange, activeTeachers }) => {
+    
+    const handleJenjangHariLiburChange = (jenjangId: number, dayIndex: number) => {
+        const updatedJenjang = localSettings.jenjang.map(j => {
+            if (j.id === jenjangId) {
+                const currentDays = j.hariLibur || [];
+                let newDays;
+                if (currentDays.includes(dayIndex)) {
+                    newDays = currentDays.filter(d => d !== dayIndex);
+                } else {
+                    newDays = [...currentDays, dayIndex];
+                }
+                return { ...j, hariLibur: newDays };
+            }
+            return j;
+        });
+        handleInputChange('jenjang', updatedJenjang);
+    };
+
+    const daysOfWeek = [
+        { val: 1, label: 'Senin' },
+        { val: 2, label: 'Selasa' },
+        { val: 3, label: 'Rabu' },
+        { val: 4, label: 'Kamis' },
+        { val: 5, label: 'Jumat' },
+        { val: 6, label: 'Sabtu' },
+        { val: 0, label: 'Ahad' },
+    ];
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
             <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Informasi Umum</h2>
@@ -121,6 +149,37 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                     <label className="block mb-1 text-sm font-medium text-gray-700">Alamat</label>
                     <textarea value={localSettings.alamat} onChange={(e) => handleInputChange('alamat', e.target.value)} rows={2} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"></textarea>
                 </div>
+
+                <div className="md:col-span-2 bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                    <label className="block mb-2 text-sm font-bold text-yellow-800">Hari Libur Mingguan (KBM)</label>
+                    <p className="text-xs text-yellow-700 mb-3">Tentukan hari libur untuk setiap jenjang pendidikan.</p>
+                    
+                    {localSettings.jenjang.length > 0 ? (
+                        <div className="space-y-4">
+                            {localSettings.jenjang.map(j => (
+                                <div key={j.id} className="border-b border-yellow-200 pb-3 last:border-0 last:pb-0">
+                                    <h4 className="text-sm font-semibold text-yellow-900 mb-2">{j.nama}</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {daysOfWeek.map(day => (
+                                            <label key={day.val} className="flex items-center gap-1.5 cursor-pointer bg-white px-2 py-1 rounded border border-yellow-300 hover:bg-yellow-100 transition-colors">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={(j.hariLibur || []).includes(day.val)} 
+                                                    onChange={() => handleJenjangHariLiburChange(j.id, day.val)}
+                                                    className="w-3.5 h-3.5 text-teal-600 rounded focus:ring-teal-500"
+                                                />
+                                                <span className="text-xs font-medium text-gray-700">{day.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-red-600 italic">Belum ada data jenjang. Silakan atur di menu Data Master.</p>
+                    )}
+                </div>
+
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t mt-6">
                     <LogoUploader 
                         label="Logo Yayasan"

@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { useAppContext } from '../../../AppContext';
+import { useFinanceContext } from '../../../contexts/FinanceContext';
 
 interface GenerateTagihanModalProps {
     isOpen: boolean;
@@ -8,7 +9,8 @@ interface GenerateTagihanModalProps {
 }
 
 export const GenerateTagihanModal: React.FC<GenerateTagihanModalProps> = ({ isOpen, onClose }) => {
-    const { onGenerateTagihanBulanan, onGenerateTagihanAwal, showAlert, showToast, triggerBackupCheck } = useAppContext();
+    const { showAlert, showToast, triggerBackupCheck } = useAppContext();
+    const { onGenerateTagihanBulanan, onGenerateTagihanAwal } = useFinanceContext();
     const [isLoading, setIsLoading] = useState(false);
     const [bulan, setBulan] = useState(new Date().getMonth() + 1);
     const [tahun, setTahun] = useState(new Date().getFullYear());

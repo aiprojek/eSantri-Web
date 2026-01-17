@@ -420,8 +420,55 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
-        id: 'akademik',
+        id: 'tahfizh',
         badge: 4,
+        badgeColor: 'green',
+        title: "Tahfizh & Mutaba'ah Qur'an",
+        steps: [
+             {
+                title: 'Rekomendasi Workflow (Halaqah Real-time)',
+                content: (
+                    <>
+                        <p className="mb-2 text-sm">Agar pencatatan hafalan efisien dan tidak menumpuk di meja admin, gunakan alur berikut:</p>
+                        <div className="bg-green-50 p-3 rounded border border-green-200">
+                            <ol className="list-decimal pl-5 space-y-2 text-sm">
+                                <li><strong>Muhaffizh Login di HP/Tablet Sendiri:</strong> Admin membuatkan akun staff untuk setiap muhaffizh.</li>
+                                <li><strong>Input Saat Menyimak:</strong> Muhaffizh membuka menu <em>Tahfizh &gt; Input Setoran</em> saat santri maju setoran.</li>
+                                <li><strong>Otomatis Lanjut Ayat:</strong> Sistem otomatis menyarankan ayat lanjutan berdasarkan setoran terakhir, sehingga input sangat cepat.</li>
+                                <li><strong>Sync Data:</strong> Setelah halaqah selesai, Muhaffizh klik tombol "Kirim Perubahan" (jika menggunakan Cloud Sync).</li>
+                            </ol>
+                        </div>
+                    </>
+                )
+            },
+            {
+                title: 'Cara Input Setoran',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Tahfizh &gt; Input Setoran</strong>.</li>
+                        <li>Pilih Nama Santri di panel kiri (gunakan fitur pencarian untuk cepat).</li>
+                        <li>Pilih Jenis Setoran: <strong>Ziyadah</strong> (Hafalan Baru), <strong>Murojaah</strong> (Mengulang), atau <strong>Tasmi'</strong> (Ujian).</li>
+                        <li>Isi detail: Juz, Surat, dan Ayat. Berikan penilaian (Predikat) dan catatan jika perlu.</li>
+                        <li>Klik <strong>Simpan Setoran</strong>.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Laporan Perkembangan & PDF',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka tab <strong>Riwayat & Laporan</strong>.</li>
+                        <li>Cari santri yang diinginkan. Anda akan melihat daftar riwayat setoran lengkap.</li>
+                        <li>Klik kartu santri untuk membuka detail.</li>
+                        <li>Tekan tombol <strong>"Cetak Laporan"</strong> (ikon printer) untuk mengunduh <strong>Laporan Mutaba'ah PDF</strong> resmi yang berisi grafik capaian, detail setoran per tanggal, dan kolom tanda tangan wali.</li>
+                    </ul>
+                )
+            }
+        ]
+    },
+    {
+        id: 'akademik',
+        badge: 5,
         badgeColor: 'indigo',
         title: 'Akademik & Rapor Digital',
         steps: [
@@ -486,7 +533,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'finance',
-        badge: 5,
+        badge: 6,
         badgeColor: 'blue',
         title: 'Keuangan & Pembayaran',
         steps: [
@@ -532,7 +579,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'asrama',
-        badge: 6,
+        badge: 7,
         badgeColor: 'orange',
         title: 'Keasramaan',
         steps: [
@@ -559,7 +606,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'admin',
-        badge: 7,
+        badge: 8,
         badgeColor: 'green',
         title: 'PSB & Surat Menyurat',
         steps: [

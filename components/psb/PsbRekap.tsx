@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
 import { Pendaftar, PondokSettings, Santri, RiwayatStatus } from '../../types';
 import { db } from '../../db';
 import { fetchPsbFromDropbox, getValidDropboxToken } from '../../services/syncService';
@@ -16,7 +17,8 @@ interface PsbRekapProps {
 }
 
 export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList, canWrite }) => {
-    const { onBulkAddSantri, showToast, showConfirmation, showAlert } = useAppContext();
+    const { showToast, showConfirmation, showAlert } = useAppContext();
+    const { onBulkAddSantri } = useSantriContext();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterJenjang, setFilterJenjang] = useState('');
     const [waInput, setWaInput] = useState('');

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Santri, RiwayatStatus, Prestasi, Pelanggaran } from '../../types';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
 import { generateNis } from '../../utils/nisGenerator';
 import { PrestasiModal } from './modals/PrestasiModal';
 import { PelanggaranModal } from './modals/PelanggaranModal';
@@ -27,7 +28,8 @@ export const SantriModal: React.FC<SantriModalProps> = ({
   santriData,
   onSwitchToBulk
 }) => {
-  const { settings, santriList, showAlert } = useAppContext();
+  const { settings, showAlert } = useAppContext();
+  const { santriList } = useSantriContext();
   const formMethods = useForm<Santri>();
   const { handleSubmit, formState: { isSubmitting }, watch, setValue, getValues, reset } = formMethods;
 

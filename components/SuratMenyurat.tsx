@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../AppContext';
+import { useSantriContext } from '../contexts/SantriContext';
 import { SuratTemplate, ArsipSurat, Santri, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig, StampConfig } from '../types';
 import { generatePdf, printToPdfNative } from '../utils/pdfGenerator';
 import { PrintHeader } from './common/PrintHeader';
@@ -254,7 +255,8 @@ const TemplateManager: React.FC<{
 };
 
 const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
-    const { suratTemplates, santriList, onSaveArsipSurat, settings, showToast } = useAppContext();
+    const { suratTemplates, onSaveArsipSurat, settings, showToast } = useAppContext();
+    const { santriList } = useSantriContext();
     
     const [selectedTemplateId, setSelectedTemplateId] = useState<number | ''>('');
     

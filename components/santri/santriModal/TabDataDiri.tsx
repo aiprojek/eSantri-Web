@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { Santri } from '../../../types';
 import { useAppContext } from '../../../AppContext';
+import { useSantriContext } from '../../../contexts/SantriContext';
 import { FormSection } from './FormSection';
 import { FormError } from './FormError';
 import { AlamatFields } from './AlamatFields';
@@ -14,9 +15,8 @@ interface TabDataDiriProps {
 }
 
 export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerateNis }) => {
-  // FIX: Get santriList from useAppContext hook at top level.
-  const { settings, santriList } = useAppContext();
-  // FIX: Destructure getValues from formMethods.
+  const { settings } = useAppContext();
+  const { santriList } = useSantriContext();
   const { register, formState: { errors }, watch, setValue, trigger, getValues } = formMethods;
 
   const watchJenjangId = watch('jenjangId');

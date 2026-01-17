@@ -9,6 +9,7 @@ export enum Page {
   Santri = 'Santri',
   Akademik = 'Akademik',
   Absensi = 'Absensi', // Verified
+  Tahfizh = 'Tahfizh', // NEW: Tahfizh Page
   DataMaster = 'DataMaster',
   Keuangan = 'Keuangan',
   Keasramaan = 'Keasramaan',
@@ -29,6 +30,7 @@ export interface UserPermissions {
     psb: AccessLevel;
     akademik: AccessLevel;
     absensi: AccessLevel; // Verified
+    tahfizh: AccessLevel; // NEW: Tahfizh Permission
     datamaster: AccessLevel;
     keuangan: AccessLevel;
     keasramaan: AccessLevel;
@@ -86,6 +88,21 @@ export interface Pelanggaran {
     deskripsi: string;
     tindakLanjut: string;
     pelapor: string;
+}
+
+// NEW: Interface Tahfizh
+export interface TahfizhRecord extends SyncedEntity {
+    id: number;
+    santriId: number;
+    tanggal: string; // YYYY-MM-DD
+    tipe: 'Ziyadah' | 'Murojaah' | 'Tasmi\'';
+    juz: number; // 1-30
+    surah: string;
+    ayatAwal: number;
+    ayatAkhir: number;
+    predikat: 'Sangat Lancar' | 'Lancar' | 'Kurang Lancar' | 'Belum Lulus';
+    catatan?: string;
+    muhaffizhId?: number; // Optional: ID TenagaPengajar
 }
 
 export interface Santri extends SyncedEntity {

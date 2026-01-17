@@ -29,7 +29,8 @@ export const ADMIN_PERMISSIONS = {
     santri: 'write',
     psb: 'write',
     akademik: 'write', 
-    absensi: 'write', // New
+    absensi: 'write', 
+    tahfizh: 'write', // New
     datamaster: 'write',
     keuangan: 'write',
     keasramaan: 'write',
@@ -46,7 +47,8 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     santri: 'read',
     psb: 'read',
     akademik: 'none', 
-    absensi: 'write', // New: Teachers need write access by default
+    absensi: 'write', 
+    tahfizh: 'read', // New: Teachers can read tahfizh progress
     datamaster: 'none',
     keuangan: 'none',
     keasramaan: 'read',

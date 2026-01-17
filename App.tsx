@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { AppProvider, useAppContext, ToastData } from './AppContext';
+import { SantriProvider } from './contexts/SantriContext';
+import { FinanceProvider } from './contexts/FinanceContext';
 import Sidebar from './components/Sidebar';
 import ConfirmModal from './components/ConfirmModal';
 import WelcomeModal from './components/WelcomeModal';
@@ -12,7 +14,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingFallback } from './components/common/LoadingFallback';
 
 // --- Lazy Load Pages ---
-// Optimasi: Halaman hanya akan didownload browser saat user mengaksesnya
+// Note: Path imports adjusted to point to ./components/ folder
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
 const SantriList = React.lazy(() => import('./components/SantriList'));
 const DataMaster = React.lazy(() => import('./components/DataMaster'));
@@ -25,9 +27,9 @@ const SuratMenyurat = React.lazy(() => import('./components/SuratMenyurat'));
 const PSB = React.lazy(() => import('./components/PSB'));
 const Tentang = React.lazy(() => import('./components/Tentang'));
 const Akademik = React.lazy(() => import('./components/Akademik'));
-const Absensi = React.lazy(() => import('./components/Absensi')); // Import Absensi
+const Absensi = React.lazy(() => import('./components/Absensi'));
+const Tahfizh = React.lazy(() => import('./components/Tahfizh'));
 
-// Handle Named Exports for specific components
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
 const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
 
@@ -74,7 +76,7 @@ const Toast: React.FC<ToastProps> = ({ id, message, type, onClose }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsExiting(true);
-    }, 4000); // Auto-close after 4 seconds
+    }, 4000); 
 
     return () => clearTimeout(timer);
   }, []);
@@ -83,7 +85,7 @@ const Toast: React.FC<ToastProps> = ({ id, message, type, onClose }) => {
     if (isExiting) {
       const timer = setTimeout(() => {
         onClose(id);
-      }, 300); // Match animation duration
+      }, 300);
       return () => clearTimeout(timer);
     }
   }, [isExiting, id, onClose]);
@@ -187,7 +189,6 @@ const AppContent: React.FC = () => {
         }
     }, [settings.multiUserMode]);
 
-    // Check backup status on load (once isLoading is false)
     useEffect(() => {
         if (!isLoading) {
             triggerBackupCheck();
@@ -197,25 +198,20 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js').then(registration => {
-                console.log('SW registered: ', registration);
-
                 registration.addEventListener('updatefound', () => {
                     const newWorker = registration.installing;
-                    console.log('SW update found, new worker is installing:', newWorker);
-
                     if (newWorker) {
                         newWorker.addEventListener('statechange', () => {
                             if (newWorker.state === 'installed') {
                                 if (registration.waiting) {
-                                    console.log('SW is installed and waiting for activation.');
                                     setWaitingWorker(registration.waiting);
                                 }
                             }
                         });
                     }
                 });
-            }).catch(registrationError => {
-                console.log('SW registration failed: ', registrationError);
+            }).catch(error => {
+                console.warn('Service Worker registration failed (likely dev env):', error);
             });
         }
         
@@ -258,15 +254,10 @@ const AppContent: React.FC = () => {
     const checkAccess = (permissionKey: keyof UserPermissions): boolean => {
         if (!currentUser) return false;
         if (currentUser.role === 'admin') return true;
-        // Fallback for old permissions structure
-        if (!currentUser.permissions) return false;
-        // If permission key is missing in object (e.g. old data), treat as 'write' (fail open for compatibility) or 'none'
-        // Since we are adding Absensi now, let's allow it if key is missing but role is admin/staff default
         const access = currentUser.permissions[permissionKey];
         return access !== undefined ? access !== 'none' : true; 
     };
 
-    // Lazy load wrapper logic for cleaner switch
     const renderContent = () => {
         return (
             <Suspense fallback={<LoadingFallback />}>
@@ -276,10 +267,12 @@ const AppContent: React.FC = () => {
                             return <Dashboard navigateTo={handleNavigate} />;
                         case Page.Santri:
                             return checkAccess('santri') ? <SantriList /> : <AccessDenied />;
-                        // PENTING: Case string manual ditambahkan untuk menangkap navigasi jika Enum gagal
                         case 'Absensi':
                         case Page.Absensi: 
                              return checkAccess('absensi') ? <Absensi /> : <AccessDenied />;
+                        case 'Tahfizh':
+                        case Page.Tahfizh: 
+                             return checkAccess('tahfizh') ? <Tahfizh /> : <AccessDenied />;
                         case Page.Akademik:
                             return checkAccess('akademik') ? <Akademik /> : <AccessDenied />;
                         case Page.DataMaster:
@@ -323,7 +316,6 @@ const AppContent: React.FC = () => {
         );
     }
 
-    // AUTH GATEWAY
     if (settings.multiUserMode && !currentUser) {
         return (
             <ErrorBoundary>
@@ -396,7 +388,11 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
         <AppProvider>
-          <AppContent />
+          <SantriProvider>
+             <FinanceProvider>
+                 <AppContent />
+             </FinanceProvider>
+          </SantriProvider>
         </AppProvider>
     </ErrorBoundary>
   );

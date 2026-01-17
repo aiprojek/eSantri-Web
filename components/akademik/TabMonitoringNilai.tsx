@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
 import { db } from '../../db';
 
 export const TabMonitoringNilai: React.FC = () => {
-    const { settings, santriList } = useAppContext();
+    const { settings } = useAppContext();
+    const { santriList } = useSantriContext();
     
     // Default Filter State
     const [filterTahun, setFilterTahun] = useState('2024/2025');

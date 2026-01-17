@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
 import { generateRaporFormHtml } from '../../services/academicService';
 
 const GOOGLE_SCRIPT_TEMPLATE = `
@@ -52,7 +53,8 @@ function doPost(e) {
 }`;
 
 export const TabGeneratorFormulir: React.FC = () => {
-    const { settings, santriList, showToast, showAlert } = useAppContext();
+    const { settings, showToast, showAlert } = useAppContext();
+    const { santriList } = useSantriContext();
     const templates = settings.raporTemplates || [];
 
     const [genTemplateId, setGenTemplateId] = useState('');

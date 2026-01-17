@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
+import { useSantriContext } from '../contexts/SantriContext';
 import { GedungAsrama, Kamar, Santri, TenagaPengajar } from '../types';
 
 // --- Modals for CRUD ---
@@ -91,7 +92,8 @@ const KamarModal: React.FC<KamarModalProps> = ({ isOpen, onClose, onSave, kamarD
 // --- Sub-Components for Asrama Feature ---
 
 const AsramaDashboard: React.FC = () => {
-    const { settings, santriList } = useAppContext();
+    const { settings } = useAppContext();
+    const { santriList } = useSantriContext();
     const { gedungAsrama, kamar } = settings;
 
     const stats = useMemo(() => {
@@ -172,7 +174,8 @@ const AsramaDashboard: React.FC = () => {
 };
 
 const ManajemenAsrama: React.FC = () => {
-    const { settings, onSaveSettings, showConfirmation, showAlert, santriList, currentUser } = useAppContext();
+    const { settings, onSaveSettings, showConfirmation, showAlert, currentUser } = useAppContext();
+    const { santriList } = useSantriContext();
     const [gedungModalData, setGedungModalData] = useState<{ mode: 'add' | 'edit', item: GedungAsrama | null } | null>(null);
     const [kamarModalData, setKamarModalData] = useState<{ mode: 'add' | 'edit', item: Kamar | null, gedungId: number } | null>(null);
 
@@ -292,7 +295,8 @@ const ManajemenAsrama: React.FC = () => {
 };
 
 const PenempatanSantri: React.FC = () => {
-     const { settings, santriList, onBulkUpdateSantri, showToast, showAlert, showConfirmation, currentUser } = useAppContext();
+     const { settings, showToast, showAlert, showConfirmation, currentUser } = useAppContext();
+     const { santriList, onBulkUpdateSantri } = useSantriContext();
     const { gedungAsrama, kamar, jenjang, kelas, rombel } = settings;
     
     // Permission Check

@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../../AppContext';
+import { useFinanceContext } from '../../../contexts/FinanceContext';
 import { Santri, Tagihan } from '../../../types';
 import { formatRupiah } from '../../../utils/formatters';
 
@@ -11,7 +12,8 @@ interface PembayaranModalProps {
 }
 
 export const PembayaranModal: React.FC<PembayaranModalProps> = ({ isOpen, onClose, santri }) => {
-    const { tagihanList, onAddPembayaran, showToast, showAlert } = useAppContext();
+    const { showToast, showAlert } = useAppContext();
+    const { tagihanList, onAddPembayaran } = useFinanceContext();
     const [selectedTagihanIds, setSelectedTagihanIds] = useState<number[]>([]);
     const [metode, setMetode] = useState<'Tunai' | 'Transfer'>('Tunai');
     const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]);

@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { PondokSettings, Jenjang, Kelas, Rombel } from '../../types';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
 import { StructureModal } from '../settings/modals/StructureModal';
 import { BulkMasterEditor } from './modals/BulkMasterEditor';
 
@@ -14,7 +15,8 @@ interface TabStrukturPendidikanProps {
 }
 
 export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ localSettings, handleInputChange, canWrite }) => {
-    const { santriList, showAlert, showConfirmation, showToast } = useAppContext();
+    const { showAlert, showConfirmation, showToast } = useAppContext();
+    const { santriList } = useSantriContext();
     const [structureModalData, setStructureModalData] = useState<{
         mode: 'add' | 'edit';
         listName: 'jenjang' | 'kelas' | 'rombel';

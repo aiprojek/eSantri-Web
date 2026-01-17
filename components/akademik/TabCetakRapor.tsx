@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
 import { db } from '../../db';
 import { RaporLengkapTemplate } from '../reports/modules/AcademicReports';
 import { printToPdfNative } from '../../utils/pdfGenerator';
@@ -74,7 +75,8 @@ const DynamicRaporPreview: React.FC<{ template: RaporTemplate, santri: Santri, r
 };
 
 export const TabCetakRapor: React.FC = () => {
-    const { settings, santriList } = useAppContext();
+    const { settings } = useAppContext();
+    const { santriList } = useSantriContext();
     const [filterTahun, setFilterTahun] = useState('2024/2025');
     const [filterSemester, setFilterSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [printRombel, setPrintRombel] = useState('');

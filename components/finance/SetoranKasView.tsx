@@ -1,6 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
+import { useFinanceContext } from '../../contexts/FinanceContext';
 import { Pembayaran, Santri } from '../../types';
 import { formatRupiah } from '../../utils/formatters';
 
@@ -9,7 +11,9 @@ interface SetoranKasViewProps {
 }
 
 export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
-    const { pembayaranList, santriList, onSetorKeKas, showToast, showConfirmation } = useAppContext();
+    const { showToast, showConfirmation } = useAppContext();
+    const { santriList } = useSantriContext();
+    const { pembayaranList, onSetorKeKas } = useFinanceContext();
     
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [filterMetode, setFilterMetode] = useState<'Semua' | 'Tunai' | 'Transfer'>('Tunai'); // Default Tunai karena prioritas kasir

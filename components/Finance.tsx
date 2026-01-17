@@ -1,20 +1,25 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
+import { useSantriContext } from '../contexts/SantriContext';
+import { useFinanceContext } from '../contexts/FinanceContext';
 import { Santri, Tagihan, Pembayaran } from '../types';
 import { FinanceDashboard } from './finance/FinanceDashboard';
 import { StatusPembayaranView } from './finance/StatusPembayaranView';
 import { UangSakuView } from './finance/UangSakuView';
 import { PengaturanBiaya } from './finance/PengaturanBiaya';
 import { PengaturanRedaksi } from './finance/PengaturanRedaksi';
-import { SetoranKasView } from './finance/SetoranKasView'; // Import New View
+import { SetoranKasView } from './finance/SetoranKasView'; 
 import { PembayaranModal } from './finance/modals/PembayaranModal';
 import { RiwayatKeuanganSantriModal } from './finance/modals/RiwayatKeuanganSantriModal';
 import { KuitansiTemplate } from './finance/print/KuitansiTemplate';
 import { SuratTagihanTemplate } from './finance/print/SuratTagihanTemplate';
 
 const Finance: React.FC = () => {
-    const { settings, santriList, tagihanList, pembayaranList, currentUser, showToast } = useAppContext();
+    const { settings, currentUser, showToast } = useAppContext();
+    const { santriList } = useSantriContext();
+    const { tagihanList, pembayaranList } = useFinanceContext();
+
     const [activeTab, setActiveTab] = useState<'dashboard' | 'status' | 'setoran' | 'uangsaku' | 'pengaturan' | 'redaksi'>('dashboard');
     
     // State for Payment Modal

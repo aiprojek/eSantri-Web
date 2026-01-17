@@ -1,6 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
+import { useFinanceContext } from '../../contexts/FinanceContext';
 import { Santri, Tagihan } from '../../types';
 import { Pagination } from '../common/Pagination';
 import { GenerateTagihanModal } from './modals/GenerateTagihanModal';
@@ -14,7 +16,9 @@ interface StatusPembayaranViewProps {
 }
 
 export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBayarClick, onHistoryClick, setPrintableSuratTagihanData, canWrite }) => {
-    const { santriList, tagihanList, settings, showConfirmation } = useAppContext();
+    const { settings, showConfirmation } = useAppContext();
+    const { santriList } = useSantriContext();
+    const { tagihanList } = useFinanceContext();
     const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
     
     const [filters, setFilters] = useState({ search: '', jenjang: '', kelas: '', rombel: '', statusTunggakan: '' });

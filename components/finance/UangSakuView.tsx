@@ -1,6 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
+import { useFinanceContext } from '../../contexts/FinanceContext';
 import { Santri, SaldoSantri } from '../../types';
 import { Pagination } from '../common/Pagination';
 import { TransaksiSaldoModal } from './modals/TransaksiSaldoModal';
@@ -8,7 +10,9 @@ import { RiwayatUangSakuModal } from './modals/RiwayatUangSakuModal';
 import { formatRupiah } from '../../utils/formatters';
 
 export const UangSakuView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
-    const { settings, santriList, saldoSantriList, onAddTransaksiSaldo, showToast, showAlert } = useAppContext();
+    const { settings, showToast, showAlert } = useAppContext();
+    const { santriList } = useSantriContext();
+    const { saldoSantriList, onAddTransaksiSaldo } = useFinanceContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalData, setModalData] = useState<{ santri: Santri, jenis: 'Deposit' | 'Penarikan' } | null>(null);
     const [historySantri, setHistorySantri] = useState<Santri | null>(null);

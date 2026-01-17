@@ -2,6 +2,8 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { ReportType, Santri } from '../types';
 import { useAppContext } from '../AppContext';
+import { useSantriContext } from '../contexts/SantriContext';
+import { useFinanceContext } from '../contexts/FinanceContext';
 import { useReportGenerator } from '../hooks/useReportGenerator';
 import { useReportConfig } from '../hooks/useReportConfig';
 import { ReportSelectionHome } from './reports/ReportSelectionHome';
@@ -9,7 +11,9 @@ import { ReportFilterPanel } from './reports/ReportFilterPanel';
 import { ReportPreviewPanel } from './reports/ReportPreviewPanel';
 
 const Reports: React.FC = () => {
-  const { santriList, settings, tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList, showToast } = useAppContext();
+  const { settings, showToast } = useAppContext();
+  const { santriList } = useSantriContext();
+  const { tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList } = useFinanceContext();
   
   // -- Navigation State --
   const [currentView, setCurrentView] = useState<'home' | 'detail'>('home');

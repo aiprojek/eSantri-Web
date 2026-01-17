@@ -1,17 +1,18 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../AppContext';
+import { useSantriContext } from '../contexts/SantriContext';
 import { AbsensiRecord } from '../types';
-import { PrintHeader } from './common/PrintHeader';
-import { ReportFooter } from './reports/modules/Common';
 import * as XLSX from 'xlsx';
-// Import jsPDF and autoTable for high-quality PDF generation
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { PrintHeader } from './common/PrintHeader';
+import { ReportFooter } from './reports/modules/Common';
 
 // --- SUB-COMPONENT: INPUT ABSENSI ---
 const AbsensiInput: React.FC = () => {
-    const { settings, santriList, absensiList, onSaveAbsensi, showToast, currentUser } = useAppContext();
+    const { settings, showToast, currentUser } = useAppContext();
+    const { santriList, absensiList, onSaveAbsensi } = useSantriContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.absensi === 'write';
 
     const [selectedJenjangId, setSelectedJenjangId] = useState<number>(0);
@@ -124,125 +125,164 @@ const AbsensiInput: React.FC = () => {
 
     if (view === 'selector') {
         return (
-            <div className="max-w-2xl mx-auto p-4 animate-fade-in">
+            <div className="max-w-4xl mx-auto p-4 animate-fade-in">
                 <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
-                    <div className="bg-teal-600 p-6 text-white">
-                        <h2 className="text-xl font-bold"><i className="bi bi-pencil-square mr-2"></i>Catat Kehadiran</h2>
-                        <p className="opacity-90 text-sm mt-1">Pilih kelas dan tanggal untuk mulai mengabsen.</p>
-                    </div>
-                    <div className="p-6 space-y-6">
+                    <div className="bg-teal-600 p-6 text-white flex flex-col md:flex-row justify-between items-center gap-4">
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Tanggal</label>
-                            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none" />
+                            <h2 className="text-xl font-bold flex items-center gap-2"><i className="bi bi-pencil-square"></i> Catat Kehadiran</h2>
+                            <p className="opacity-90 text-sm mt-1">Pilih kelas dan tanggal untuk mulai mengabsen.</p>
                         </div>
-                        <div className="space-y-4">
+                        <div className="bg-teal-700 px-4 py-2 rounded-lg border border-teal-500 shadow-sm">
+                            <label className="block text-xs font-bold text-teal-200 uppercase mb-1">Tanggal Absen</label>
+                            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="bg-transparent text-white font-bold outline-none text-sm w-full cursor-pointer focus:ring-0" />
+                        </div>
+                    </div>
+                    
+                    <div className="p-8">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Jenjang</label>
-                                <select value={selectedJenjangId} onChange={e => { setSelectedJenjangId(Number(e.target.value)); setSelectedKelasId(0); setSelectedRombelId(0); }} className="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500">
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">1. Jenjang</label>
+                                <select value={selectedJenjangId} onChange={e => { setSelectedJenjangId(Number(e.target.value)); setSelectedKelasId(0); setSelectedRombelId(0); }} className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all">
                                     <option value={0}>-- Pilih Jenjang --</option>
                                     {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Kelas</label>
-                                <select value={selectedKelasId} onChange={e => { setSelectedKelasId(Number(e.target.value)); setSelectedRombelId(0); }} disabled={!selectedJenjangId} className="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100">
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">2. Kelas</label>
+                                <select value={selectedKelasId} onChange={e => { setSelectedKelasId(Number(e.target.value)); setSelectedRombelId(0); }} disabled={!selectedJenjangId} className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100 transition-all">
                                     <option value={0}>-- Pilih Kelas --</option>
                                     {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Rombel (Wajib)</label>
-                                <select value={selectedRombelId} onChange={e => setSelectedRombelId(Number(e.target.value))} disabled={!selectedKelasId} className="w-full p-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100">
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">3. Rombel (Wajib)</label>
+                                <select value={selectedRombelId} onChange={e => setSelectedRombelId(Number(e.target.value))} disabled={!selectedKelasId} className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100 transition-all">
                                     <option value={0}>-- Pilih Rombel --</option>
                                     {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
                                 </select>
                             </div>
                         </div>
+
                         {selectedRombelId !== 0 && (
-                            <div className={`p-4 rounded-lg border ${existingRecords.length > 0 ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
-                                <div className="flex items-start gap-3">
-                                    <i className={`bi ${existingRecords.length > 0 ? 'bi-check-circle-fill text-green-600' : 'bi-exclamation-circle-fill text-yellow-600'} text-xl mt-0.5`}></i>
+                            <div className={`p-4 rounded-lg border flex items-center justify-between gap-4 animate-fade-in ${existingRecords.length > 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${existingRecords.length > 0 ? 'bg-green-100' : 'bg-yellow-100'}`}>
+                                        <i className={`bi ${existingRecords.length > 0 ? 'bi-check-circle-fill text-green-600' : 'bi-exclamation-circle-fill text-yellow-600'}`}></i>
+                                    </div>
                                     <div>
-                                        <h4 className={`font-bold ${existingRecords.length > 0 ? 'text-green-800' : 'text-yellow-800'}`}>{existingRecords.length > 0 ? 'Sudah Diabsen' : 'Belum Diabsen'}</h4>
-                                        <p className="text-sm text-gray-600 mt-1">{existingRecords.length > 0 ? `Terakhir oleh ${existingRecords[0].recordedBy || '...'}. Klik Lanjut untuk edit.` : 'Klik Lanjut untuk mulai mengisi.'}</p>
+                                        <h4 className="font-bold text-sm">{existingRecords.length > 0 ? 'Absensi Sudah Tercatat' : 'Belum Ada Absensi'}</h4>
+                                        <p className="text-xs opacity-80">{existingRecords.length > 0 ? `Terakhir oleh: ${existingRecords[0].recordedBy || '...'}` : 'Klik Lanjut untuk mulai mengisi.'}</p>
                                     </div>
                                 </div>
+                                <button onClick={handleStartInput} className="px-6 py-2.5 bg-teal-600 text-white font-bold rounded-lg shadow hover:bg-teal-700 transition-transform active:scale-95 flex items-center gap-2">
+                                    Lanjut <i className="bi bi-arrow-right"></i>
+                                </button>
                             </div>
                         )}
-                        <button onClick={handleStartInput} disabled={!selectedRombelId} className="w-full py-4 bg-teal-600 text-white font-bold rounded-xl shadow-md hover:bg-teal-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2">Lanjut <i className="bi bi-arrow-right"></i></button>
+                        {!selectedRombelId && (
+                            <div className="text-center py-8 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                                <i className="bi bi-arrow-up-circle text-2xl mb-2 block"></i>
+                                Silakan pilih rombel di atas.
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
         );
     }
 
+    // --- GRID VIEW (INPUT MODE) ---
     return (
-        <div className="pb-24 animate-fade-in relative">
-            <div className="sticky top-0 z-30 bg-white border-b shadow-sm px-4 py-3 flex items-center justify-between">
-                <div>
-                    <h2 className="font-bold text-gray-800">{settings.rombel.find(r => r.id === selectedRombelId)?.nama}</h2>
-                    <p className="text-xs text-gray-500">{new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        <div className="flex flex-col h-[calc(100vh-80px)] pb-2 bg-gray-50">
+            {/* Header Sticky */}
+            <div className="bg-white border-b shadow-sm px-4 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 z-30">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => setView('selector')} className="text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 p-2 rounded-lg transition-colors">
+                        <i className="bi bi-arrow-left text-lg"></i>
+                    </button>
+                    <div>
+                        <h2 className="font-bold text-gray-800 text-lg leading-tight">{settings.rombel.find(r => r.id === selectedRombelId)?.nama}</h2>
+                        <p className="text-xs text-gray-500 font-medium">{new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })} • {targetSantri.length} Santri</p>
+                    </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={handleMarkAllPresent} className="hidden sm:flex text-teal-600 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg text-xs font-bold items-center gap-1 border border-teal-200 transition-colors">
-                        <i className="bi bi-check-all text-sm"></i> Semua Hadir
+                    <button onClick={handleMarkAllPresent} className="bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all">
+                        <i className="bi bi-check-all text-lg"></i> <span className="hidden sm:inline">Semua Hadir</span>
                     </button>
-                    <button onClick={() => setView('selector')} className="text-gray-500 hover:text-gray-700 bg-gray-100 p-2 rounded-lg"><i className="bi bi-x-lg"></i></button>
                 </div>
             </div>
-            
-            {/* Mobile Mark All Button (Only visible on small screens) */}
-            <div className="sm:hidden px-4 pt-3">
-                 <button onClick={handleMarkAllPresent} className="w-full text-teal-600 bg-teal-50 hover:bg-teal-100 px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-teal-200 transition-colors">
-                    <i className="bi bi-check-all text-sm"></i> Tandai Semua Hadir
-                </button>
-            </div>
 
-            <div className="p-4 space-y-3 max-w-3xl mx-auto">
-                {targetSantri.map(santri => {
-                    const status = attendanceMap[santri.id];
-                    return (
-                        <div key={santri.id} className={`bg-white p-4 rounded-xl border-2 transition-all ${status === 'A' ? 'border-red-100' : 'border-transparent'} shadow-sm`}>
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden shrink-0">
-                                        {santri.fotoUrl && !santri.fotoUrl.includes('text=Foto') ? <img src={santri.fotoUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">{santri.namaLengkap.substring(0,2).toUpperCase()}</div>}
+            {/* Scrollable Grid Content */}
+            <div className="flex-grow overflow-y-auto p-4 custom-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-w-screen-2xl mx-auto">
+                    {targetSantri.map(santri => {
+                        const status = attendanceMap[santri.id];
+                        return (
+                            <div key={santri.id} className={`bg-white p-4 rounded-xl border-2 transition-all duration-200 ${status === 'A' ? 'border-red-100 shadow-red-50' : status !== 'H' ? 'border-yellow-100 shadow-yellow-50' : 'border-transparent hover:border-gray-200'} shadow-sm hover:shadow-md flex flex-col`}>
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-gray-100 overflow-hidden shrink-0 border border-gray-200">
+                                            {santri.fotoUrl && !santri.fotoUrl.includes('text=Foto') ? (
+                                                <img src={santri.fotoUrl} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-xs">{santri.namaLengkap.substring(0,2).toUpperCase()}</div>
+                                            )}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-gray-800 text-sm leading-tight truncate" title={santri.namaLengkap}>{santri.namaLengkap}</p>
+                                            <p className="text-[10px] text-gray-500 font-mono mt-0.5">{santri.nis}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="font-bold text-gray-800 leading-tight">{santri.namaLengkap}</p>
-                                        <p className="text-xs text-gray-500">{santri.nis}</p>
+                                    <div className={`px-2 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wider ${getStatusColor(status)}`}>
+                                        {status === 'H' ? 'Hadir' : status === 'S' ? 'Sakit' : status === 'I' ? 'Izin' : 'Alpha'}
                                     </div>
                                 </div>
-                                <div className={`px-3 py-1 rounded-full text-xs font-bold border ${getStatusColor(status)}`}>{status === 'H' ? 'Hadir' : status === 'S' ? 'Sakit' : status === 'I' ? 'Izin' : 'Alpha'}</div>
-                            </div>
-                            
-                            <div className="space-y-3">
-                                <div className="grid grid-cols-4 gap-2">
-                                    {(['H', 'S', 'I', 'A'] as const).map(opt => (
-                                        <button key={opt} onClick={() => handleStatusChange(santri.id, opt)} className={`py-3 rounded-lg font-bold text-sm transition-all border ${status === opt ? (opt === 'H' ? 'bg-green-600 text-white border-green-600 ring-2 ring-green-200' : opt === 'S' ? 'bg-yellow-500 text-white border-yellow-500 ring-2 ring-yellow-200' : opt === 'I' ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200' : 'bg-red-600 text-white border-red-600 ring-2 ring-red-200') : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>{opt}</button>
-                                    ))}
-                                </div>
-                                {(status === 'S' || status === 'I' || status === 'A' || notesMap[santri.id]) && (
-                                    <div className="animate-fade-in">
+                                
+                                <div className="mt-auto space-y-3">
+                                    <div className="grid grid-cols-4 gap-1 p-1 bg-gray-50 rounded-lg">
+                                        {(['H', 'S', 'I', 'A'] as const).map(opt => (
+                                            <button 
+                                                key={opt} 
+                                                onClick={() => handleStatusChange(santri.id, opt)} 
+                                                className={`py-1.5 rounded-md text-xs font-bold transition-all ${
+                                                    status === opt 
+                                                    ? (opt === 'H' ? 'bg-white text-green-600 shadow-sm ring-1 ring-green-200' : opt === 'S' ? 'bg-white text-yellow-600 shadow-sm ring-1 ring-yellow-200' : opt === 'I' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-blue-200' : 'bg-white text-red-600 shadow-sm ring-1 ring-red-200') 
+                                                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                {opt}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="relative">
                                         <input 
                                             type="text" 
-                                            placeholder={status === 'S' ? "Sakit apa?" : status === 'I' ? "Izin kenapa?" : "Keterangan tambahan..."}
+                                            placeholder={status === 'S' ? "Sakit apa?" : status === 'I' ? "Izin kenapa?" : "Keterangan..."}
                                             value={notesMap[santri.id] || ''}
                                             onChange={(e) => handleNoteChange(santri.id, e.target.value)}
-                                            className="w-full text-sm border-b border-gray-300 focus:border-teal-500 outline-none py-1 bg-transparent placeholder-gray-400"
+                                            className={`w-full text-xs border-b border-gray-200 focus:border-teal-500 outline-none py-1.5 bg-transparent placeholder-gray-400 transition-colors ${status !== 'H' && !notesMap[santri.id] ? 'border-red-200' : ''}`}
                                         />
+                                        {status !== 'H' && !notesMap[santri.id] && (
+                                            <div className="absolute right-0 top-1.5 text-red-400 text-[10px] pointer-events-none animate-pulse">Wajib isi</div>
+                                        )}
                                     </div>
-                                )}
+                                </div>
                             </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
             </div>
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-30 md:pl-72">
-                <div className="max-w-3xl mx-auto flex justify-between items-center gap-4">
-                    <div className="text-xs text-gray-500 hidden sm:block">Pastikan data sudah benar.</div>
-                    <button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 transition-transform hover:-translate-y-1 active:translate-y-0 disabled:bg-gray-400">
-                        {isSaving ? <span className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-cloud-upload-fill"></i>} Simpan Absensi
+
+            {/* Floating Save Button */}
+            <div className="bg-white border-t p-4 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] z-40 shrink-0">
+                <div className="max-w-screen-2xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div className="text-xs text-gray-500 flex items-center gap-2">
+                        <i className="bi bi-info-circle"></i>
+                        <span>Pastikan keterangan diisi untuk status S, I, atau A.</span>
+                    </div>
+                    <button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-teal-200 flex items-center justify-center gap-2 transition-transform hover:-translate-y-1 active:translate-y-0 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none">
+                        {isSaving ? <span className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-cloud-upload-fill"></i>} 
+                        Simpan Data Absensi
                     </button>
                 </div>
             </div>
@@ -252,7 +292,8 @@ const AbsensiInput: React.FC = () => {
 
 // --- SUB-COMPONENT: REKAP & LAPORAN ---
 const AbsensiRekap: React.FC = () => {
-    const { settings, santriList, absensiList, showToast } = useAppContext();
+    const { settings } = useAppContext();
+    const { santriList, absensiList } = useSantriContext();
     
     const now = new Date();
     const [bulan, setBulan] = useState(now.getMonth() + 1);
@@ -280,14 +321,6 @@ const AbsensiRekap: React.FC = () => {
 
     const selectedRombel = useMemo(() => settings.rombel.find(r => r.id === rombelId), [rombelId, settings.rombel]);
     
-    // Get holidays based on the JENJANG of the selected rombel
-    const holidays = useMemo(() => {
-        if (!selectedRombel) return [0]; // Default Sunday if no rombel
-        const kelas = settings.kelas.find(k => k.id === selectedRombel.kelasId);
-        const jenjang = settings.jenjang.find(j => j.id === kelas?.jenjangId);
-        return jenjang?.hariLibur || [0];
-    }, [selectedRombel, settings.kelas, settings.jenjang]);
-
     const santriInRombel = useMemo(() => santriList.filter(s => s.rombelId === rombelId && s.status === 'Aktif').sort((a,b) => a.namaLengkap.localeCompare(b.namaLengkap)), [santriList, rombelId]);
     const daysInMonth = useMemo(() => new Date(tahun, bulan, 0).getDate(), [tahun, bulan]);
 
@@ -318,19 +351,6 @@ const AbsensiRekap: React.FC = () => {
         return { matrix, stats };
     }, [absensiList, rombelId, bulan, tahun, santriInRombel]);
 
-    // Calculate effective working days (estimated) or use total recorded days
-    // Simple approach: Total days with records in this class
-    const recordedDaysCount = useMemo(() => {
-        const uniqueDays = new Set<string>();
-        absensiList.forEach(a => {
-            const d = new Date(a.tanggal);
-            if (a.rombelId === rombelId && d.getMonth() + 1 === bulan && d.getFullYear() === tahun) {
-                uniqueDays.add(a.tanggal);
-            }
-        });
-        return uniqueDays.size || 1; // Avoid divide by zero
-    }, [absensiList, rombelId, bulan, tahun]);
-
     // Total Stats for the whole class this month
     const classStats = useMemo(() => {
         const total = { H: 0, S: 0, I: 0, A: 0 };
@@ -345,13 +365,12 @@ const AbsensiRekap: React.FC = () => {
         window.print();
     };
 
-    const handleExport = (format: 'xlsx' | 'ods' | 'csv' | 'pdf') => {
+    const handleExport = (format: 'xlsx' | 'pdf') => {
         setIsExportMenuOpen(false);
         const fileName = `Rekap_Absensi_${selectedRombel?.nama.replace(/\s+/g, '_')}_${bulan}_${tahun}`;
         const periodeName = new Date(tahun, bulan - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
         if (format === 'pdf') {
-            // Updated to use jsPDF + autoTable for vectorized PDF (not screenshot)
             try {
                 const doc = new jsPDF('l', 'mm', 'a4'); // Landscape, mm, A4
                 
@@ -393,372 +412,275 @@ const AbsensiRekap: React.FC = () => {
                 // Add Date Columns to Header
                 for(let i=1; i<=daysInMonth; i++) {
                     headRow1.push({ content: i.toString(), styles: { halign: 'center', fontSize: 7 } });
-                    colStyles[colIdx] = { cellWidth: 5 };
+                    colStyles[colIdx] = { cellWidth: 5, halign: 'center' };
                     colIdx++;
                 }
                 
-                // Add Summary Columns to Header (Spanning on top? No, just end columns)
-                // Let's make Summary separate columns at end
+                // Add Summary Columns to Header
                  headRow1.push({ content: 'S', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [254, 243, 199] } }); // Yellow
-                 colStyles[colIdx] = { cellWidth: 8 };
+                 colStyles[colIdx] = { cellWidth: 8, halign: 'center' };
                  colIdx++;
 
                  headRow1.push({ content: 'I', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [219, 234, 254] } }); // Blue
-                 colStyles[colIdx] = { cellWidth: 8 };
+                 colStyles[colIdx] = { cellWidth: 8, halign: 'center' };
                  colIdx++;
 
                  headRow1.push({ content: 'A', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [254, 226, 226] } }); // Red
-                 colStyles[colIdx] = { cellWidth: 8 };
+                 colStyles[colIdx] = { cellWidth: 8, halign: 'center' };
                  colIdx++;
 
                  headRow1.push({ content: 'H', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [220, 252, 231] } }); // Green
-                 colStyles[colIdx] = { cellWidth: 8 };
+                 colStyles[colIdx] = { cellWidth: 8, halign: 'center' };
                  colIdx++;
 
-                 headRow1.push({ content: '%', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } });
-                 colStyles[colIdx] = { cellWidth: 10 };
-                 colIdx++;
-
-                // Construct Body Data
+                // Body Data
                 const bodyData = santriInRombel.map((s, idx) => {
-                    const row = [ (idx + 1).toString(), s.namaLengkap ];
-                    const stat = attendanceMatrix.stats[s.id] as { H: number; S: number; I: number; A: number };
-                    
-                    // Fill Date Columns
+                    const row: any[] = [idx + 1, s.namaLengkap];
+                    // Dates
                     for(let i=1; i<=daysInMonth; i++) {
-                        const status = attendanceMatrix.matrix[s.id][i] || '';
-                        row.push(status);
+                        row.push(attendanceMatrix.matrix[s.id][i] || '');
                     }
-                    
-                    // Fill Summary
-                    row.push(stat.S.toString());
-                    row.push(stat.I.toString());
-                    row.push(stat.A.toString());
-                    row.push(stat.H.toString());
-                    
-                    const percent = recordedDaysCount > 0 ? Math.round((stat.H / recordedDaysCount) * 100) : 0;
-                    row.push(`${percent}%`);
-                    
+                    // Stats
+                    row.push(attendanceMatrix.stats[s.id].S);
+                    row.push(attendanceMatrix.stats[s.id].I);
+                    row.push(attendanceMatrix.stats[s.id].A);
+                    row.push(attendanceMatrix.stats[s.id].H);
                     return row;
                 });
 
-                // Styling for Date Columns (Holidays)
-                const didParseCell = (data: any) => {
-                    // Check if column index corresponds to a date (0=No, 1=Nama, 2=Date1 ... )
-                    if (data.section === 'head' && data.row.index === 0) {
-                         // Main Header Style handled by autoTable theme
-                    }
-                    
-                    if (data.section === 'body') {
-                        const colIdx = data.column.index;
-                        // Date columns are from index 2 to (2 + daysInMonth - 1)
-                        if (colIdx >= 2 && colIdx < 2 + daysInMonth) {
-                             const dayNum = colIdx - 1; // 2 -> 1st, 3 -> 2nd
-                             const dateVal = new Date(tahun, bulan - 1, dayNum);
-                             const isHoliday = holidays.includes(dateVal.getDay());
-                             
-                             const cellVal = data.cell.raw;
-                             
-                             if (isHoliday) {
-                                 data.cell.styles.fillColor = [254, 226, 226]; // Light Red Background for Holidays
-                             }
-                             
-                             if (cellVal === 'A') {
-                                 data.cell.styles.textColor = [220, 38, 38]; // Red Text
-                                 data.cell.styles.fontStyle = 'bold';
-                             } else if (cellVal === 'H') {
-                                 data.cell.styles.textColor = [22, 163, 74]; // Green Text
-                             }
-                        }
-                    }
-                };
-
+                // Generate Table
                 autoTable(doc, {
                     startY: 42,
                     head: [headRow1],
                     body: bodyData,
-                    theme: 'grid',
-                    styles: {
-                        fontSize: 8,
-                        cellPadding: 1,
-                        lineWidth: 0.1,
-                        lineColor: [0, 0, 0]
-                    },
-                    headStyles: {
-                        fillColor: [243, 244, 246], // Gray-100
-                        textColor: [0, 0, 0],
-                        fontStyle: 'bold',
-                        lineWidth: 0.1,
-                        lineColor: [0, 0, 0]
-                    },
                     columnStyles: colStyles,
-                    didParseCell: didParseCell
+                    styles: { fontSize: 8, cellPadding: 1, lineWidth: 0.1, lineColor: [0, 0, 0] },
+                    headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
+                    theme: 'grid'
                 });
 
-                // Footer (Tanda Tangan)
-                const finalY = (doc as any).lastAutoTable.finalY || 200;
-                
-                // Check if page break needed for footer
-                if (finalY > 170) {
-                    doc.addPage();
-                    doc.text(`Sumpiuh, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, 220, 20);
-                } else {
-                    doc.text(`Sumpiuh, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, 220, finalY + 15);
-                }
-                
-                // Position depends on page break logic above, simplified here
-                const sigY = finalY > 170 ? 25 : finalY + 20;
-                
-                doc.text("Wali Kelas", 220, sigY);
-                doc.text("( ..................................... )", 220, sigY + 25);
-
                 doc.save(`${fileName}.pdf`);
-                showToast('PDF berhasil diunduh.', 'success');
+
             } catch (error) {
                 console.error(error);
-                showToast('Gagal membuat PDF. Coba lagi.', 'error');
+                alert("Gagal membuat PDF. Cek konsol.");
             }
-            return;
-        }
-
-        // Prepare Data for SheetJS
-        // Header Row
-        const headers = ["No", "Nama Santri"];
-        for (let i = 1; i <= daysInMonth; i++) headers.push(i.toString());
-        headers.push("Sakit", "Izin", "Alpha", "Presentase");
-
-        // Data Rows
-        const dataRows = santriInRombel.map((s, idx) => {
-            const row: (string | number)[] = [idx + 1, s.namaLengkap];
-            const stat = attendanceMatrix.stats[s.id] as { H: number; S: number; I: number; A: number };
+        } else if (format === 'xlsx') {
+            const wb = XLSX.utils.book_new();
+            const wsData: any[][] = [];
             
-            for (let i = 1; i <= daysInMonth; i++) {
-                row.push(attendanceMatrix.matrix[s.id][i] || "");
-            }
-            
-            // Calculate percentage based on recorded days (estimated)
-            // Or simple H count. Using visual % logic from UI
-            // Simple logic: H / (H+S+I+A) or H / TotalDays? 
-            // The UI uses a complex `recordedDaysCount` logic, let's simplify for export to just H count or basic stats
-            row.push(stat.S, stat.I, stat.A, stat.H); 
-            return row;
-        });
+            // Header
+            wsData.push([settings.namaPonpes]);
+            wsData.push([`REKAP ABSENSI KELAS ${selectedRombel?.nama}`]);
+            wsData.push([`PERIODE: ${periodeName}`]);
+            wsData.push([]); // Empty Row
 
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-        XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi");
-        
-        try {
-            XLSX.writeFile(wb, `${fileName}.${format}`);
-            showToast(`Berhasil export ke ${format.toUpperCase()}`, 'success');
-        } catch (error) {
-            showToast('Gagal export file.', 'error');
+            // Table Header
+            const headerRow1 = ['No', 'Nama Santri'];
+            for(let i=1; i<=daysInMonth; i++) headerRow1.push(i.toString());
+            headerRow1.push('S', 'I', 'A', 'H');
+            wsData.push(headerRow1);
+
+            // Table Body
+            santriInRombel.forEach((s, idx) => {
+                const row = [idx + 1, s.namaLengkap];
+                for(let i=1; i<=daysInMonth; i++) row.push(attendanceMatrix.matrix[s.id][i] || '');
+                row.push(attendanceMatrix.stats[s.id].S);
+                row.push(attendanceMatrix.stats[s.id].I);
+                row.push(attendanceMatrix.stats[s.id].A);
+                row.push(attendanceMatrix.stats[s.id].H);
+                wsData.push(row);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            
+            // Adjust col widths
+            const wscols = [{wch: 5}, {wch: 30}];
+            for(let i=0; i<daysInMonth; i++) wscols.push({wch: 3}); // Date cols
+            wscols.push({wch: 5}, {wch: 5}, {wch: 5}, {wch: 5}); // Summary cols
+            ws['!cols'] = wscols;
+
+            XLSX.utils.book_append_sheet(wb, ws, "Absensi");
+            XLSX.writeFile(wb, `${fileName}.xlsx`);
         }
     };
 
     return (
-        <div className="p-4 space-y-6">
-            {/* Filter Bar (No Print) */}
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-wrap gap-4 items-end no-print">
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Rombel</label>
-                    <select value={rombelId} onChange={e => setRombelId(Number(e.target.value))} className="border rounded p-2 text-sm bg-gray-50 w-48">
-                        {settings.rombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
-                    <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="border rounded p-2 text-sm bg-gray-50 w-32">
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                            <option key={m} value={m}>{new Date(2024, m - 1).toLocaleDateString('id-ID', { month: 'long' })}</option>
-                        ))}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tahun</label>
-                    <input type="number" value={tahun} onChange={e => setTahun(Number(e.target.value))} className="border rounded p-2 text-sm bg-gray-50 w-24" />
-                </div>
-                
-                <div className="ml-auto flex gap-2">
-                     <div className="relative" ref={exportMenuRef}>
-                        <button 
-                            onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
-                            className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 flex items-center gap-2 transition-colors"
-                        >
-                            <span>Export</span>
-                            <i className="bi bi-chevron-down"></i>
-                        </button>
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-lg shadow-md no-print">
+                <div className="flex flex-col xl:flex-row justify-between items-end gap-4 mb-6">
+                    <div>
+                        <h2 className="text-lg font-bold text-gray-800">Rekap & Laporan Absensi</h2>
+                        <p className="text-sm text-gray-500">Lihat statistik kehadiran bulanan per kelas.</p>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+                        <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="border rounded-lg p-2 text-sm flex-grow sm:flex-grow-0">
+                            {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>)}
+                        </select>
+                        <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="border rounded-lg p-2 text-sm flex-grow sm:flex-grow-0">
+                            {Array.from({length: 5}, (_, i) => <option key={i} value={now.getFullYear() - 2 + i}>{now.getFullYear() - 2 + i}</option>)}
+                        </select>
+                        <select value={rombelId} onChange={e => setRombelId(Number(e.target.value))} className="border rounded-lg p-2 text-sm max-w-[200px] flex-grow sm:flex-grow-0">
+                            {settings.rombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                        </select>
                         
-                        {isExportMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200 animate-fade-in-down">
-                                <button onClick={() => handleExport('xlsx')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
-                                    <i className="bi bi-file-earmark-spreadsheet text-green-600"></i> Excel (.xlsx)
-                                </button>
-                                <button onClick={() => handleExport('ods')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
-                                    <i className="bi bi-file-earmark-spreadsheet text-blue-600"></i> ODS (OpenDoc)
-                                </button>
-                                <button onClick={() => handleExport('csv')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
-                                    <i className="bi bi-file-earmark-text text-gray-500"></i> CSV
-                                </button>
-                                <div className="border-t my-1"></div>
-                                <button onClick={() => handleExport('pdf')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
-                                    <i className="bi bi-file-earmark-pdf text-red-600"></i> Download PDF
-                                </button>
-                            </div>
-                        )}
-                     </div>
-
-                     <button onClick={handlePrint} className="bg-gray-700 text-white px-4 py-2 rounded text-sm hover:bg-gray-800 flex items-center gap-2 transition-colors">
-                        <i className="bi bi-printer-fill"></i> Cetak Laporan
-                    </button>
-                </div>
-            </div>
-
-            {/* Class Summary Stats */}
-            <div className="grid grid-cols-4 gap-4 no-print">
-                <div className="bg-green-50 p-3 rounded-lg border border-green-100 text-center">
-                    <span className="block text-2xl font-bold text-green-700">{classStats.H}</span>
-                    <span className="text-xs text-green-600 uppercase font-bold">Total Hadir</span>
-                </div>
-                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100 text-center">
-                    <span className="block text-2xl font-bold text-yellow-700">{classStats.S}</span>
-                    <span className="text-xs text-yellow-600 uppercase font-bold">Total Sakit</span>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-center">
-                    <span className="block text-2xl font-bold text-blue-700">{classStats.I}</span>
-                    <span className="text-xs text-blue-600 uppercase font-bold">Total Izin</span>
-                </div>
-                <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
-                    <span className="block text-2xl font-bold text-red-700">{classStats.A}</span>
-                    <span className="text-xs text-red-600 uppercase font-bold">Total Alpha</span>
-                </div>
-            </div>
-
-            {/* Printable Area */}
-            {/* Added container ID for PDF generator and proper structure for html2canvas */}
-            <div id="absensi-export-root">
-                <div className="printable-content-wrapper">
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden print-landscape" style={{ minHeight: '210mm' }}>
-                        <div className="p-4 hidden print:block">
-                             <PrintHeader settings={settings} title={`REKAP ABSENSI KELAS ${selectedRombel?.nama.toUpperCase()}`} />
-                             <p className="text-center font-bold uppercase mb-4">
-                                PERIODE: {new Date(tahun, bulan - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
-                             </p>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-xs border-collapse">
-                                <thead>
-                                    <tr className="bg-gray-100 text-gray-700">
-                                        <th rowSpan={2} className="border p-2 w-8 text-center sticky left-0 bg-gray-100">No</th>
-                                        <th rowSpan={2} className="border p-2 text-left sticky left-8 bg-gray-100" style={{minWidth: '200px'}}>Nama Santri</th>
-                                        <th colSpan={daysInMonth} className="border p-1 text-center">Tanggal</th>
-                                        <th colSpan={5} className="border p-1 text-center bg-gray-200">Rekapitulasi</th>
-                                    </tr>
-                                    <tr className="bg-gray-50">
-                                        {Array.from({ length: daysInMonth }, (_, i) => {
-                                            // Highlight Holidays based on Jenjang Settings
-                                            const d = new Date(tahun, bulan - 1, i + 1);
-                                            const dayOfWeek = d.getDay();
-                                            const isHoliday = holidays.includes(dayOfWeek);
-                                            
-                                            return (
-                                                <th key={i} className={`border p-1 text-center w-6 font-normal text-[10px] ${isHoliday ? 'bg-red-50 text-red-600' : ''}`}>
-                                                    {i + 1}
-                                                </th>
-                                            );
-                                        })}
-                                        <th className="border p-1 w-8 bg-green-50 text-green-800">H</th>
-                                        <th className="border p-1 w-8 bg-yellow-50 text-yellow-800">S</th>
-                                        <th className="border p-1 w-8 bg-blue-50 text-blue-800">I</th>
-                                        <th className="border p-1 w-8 bg-red-50 text-red-800">A</th>
-                                        <th className="border p-1 w-12 bg-gray-100">%</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {santriInRombel.map((s, idx) => {
-                                        const stat = attendanceMatrix.stats[s.id] as { H: number; S: number; I: number; A: number };
-                                        const percent = recordedDaysCount > 0 ? Math.round((stat.H / recordedDaysCount) * 100) : 0;
-                                        const isLow = percent < 75; // Alert if below 75%
-                                        
-                                        return (
-                                            <tr key={s.id} className="hover:bg-gray-50">
-                                                <td className="border p-1 text-center bg-white sticky left-0">{idx + 1}</td>
-                                                <td className="border p-1 bg-white sticky left-8 whitespace-nowrap">{s.namaLengkap}</td>
-                                                {Array.from({ length: daysInMonth }, (_, i) => {
-                                                    const d = new Date(tahun, bulan - 1, i + 1);
-                                                    const dayOfWeek = d.getDay();
-                                                    const isHoliday = holidays.includes(dayOfWeek);
-                                                    
-                                                    const status = attendanceMatrix.matrix[s.id][i + 1];
-                                                    let color = '';
-                                                    
-                                                    if (status === 'H') color = 'text-green-600 font-bold';
-                                                    else if (status === 'S') color = 'bg-yellow-100 text-yellow-800';
-                                                    else if (status === 'I') color = 'bg-blue-100 text-blue-800';
-                                                    else if (status === 'A') color = 'bg-red-100 text-red-800';
-                                                    
-                                                    if (isHoliday && !status) color = 'bg-red-50'; // Highlight Holiday background if no status
-                                                    
-                                                    return (
-                                                        <td key={i} className={`border p-1 text-center ${color}`}>
-                                                            {status || ''}
-                                                        </td>
-                                                    );
-                                                })}
-                                                <td className="border p-1 text-center font-bold">{stat.H}</td>
-                                                <td className="border p-1 text-center">{stat.S}</td>
-                                                <td className="border p-1 text-center">{stat.I}</td>
-                                                <td className="border p-1 text-center font-bold text-red-600">{stat.A}</td>
-                                                <td className={`border p-1 text-center font-bold ${isLow ? 'text-red-600 bg-red-50' : 'text-gray-700'}`}>{percent}%</td>
-                                            </tr>
-                                        );
-                                    })}
-                                    {santriInRombel.length === 0 && (
-                                        <tr><td colSpan={daysInMonth + 7} className="p-8 text-center text-gray-500">Tidak ada santri di rombel ini.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                        
-                        <div className="hidden print:block mt-8">
-                             <ReportFooter />
+                        <div className="relative" ref={exportMenuRef}>
+                            <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 flex items-center gap-2">
+                                <i className="bi bi-download"></i> Export
+                            </button>
+                            {isExportMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
+                                    <button onClick={() => handleExport('pdf')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
+                                        <i className="bi bi-file-earmark-pdf text-red-500"></i> Download PDF
+                                    </button>
+                                    <button onClick={() => handleExport('xlsx')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
+                                        <i className="bi bi-file-earmark-spreadsheet text-green-500"></i> Download Excel
+                                    </button>
+                                    <button onClick={handlePrint} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-t">
+                                        <i className="bi bi-printer"></i> Cetak Langsung
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-green-50 p-3 rounded-lg border border-green-100 text-center">
+                        <div className="text-xs font-bold text-green-600 uppercase">Hadir</div>
+                        <div className="text-xl font-bold text-green-800">{classStats.H}</div>
+                    </div>
+                    <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100 text-center">
+                        <div className="text-xs font-bold text-yellow-600 uppercase">Sakit</div>
+                        <div className="text-xl font-bold text-yellow-800">{classStats.S}</div>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-center">
+                        <div className="text-xs font-bold text-blue-600 uppercase">Izin</div>
+                        <div className="text-xl font-bold text-blue-800">{classStats.I}</div>
+                    </div>
+                    <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
+                        <div className="text-xs font-bold text-red-600 uppercase">Alpha</div>
+                        <div className="text-xl font-bold text-red-800">{classStats.A}</div>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto border rounded-lg bg-white">
+                    <table className="w-full text-xs text-center border-collapse">
+                        <thead className="bg-gray-100 text-gray-600">
+                            <tr>
+                                <th rowSpan={2} className="p-2 border w-8">No</th>
+                                <th rowSpan={2} className="p-2 border text-left min-w-[150px] sticky left-0 bg-gray-100 z-10 shadow-sm">Nama Santri</th>
+                                <th colSpan={daysInMonth} className="p-1 border">Tanggal</th>
+                                <th colSpan={4} className="p-1 border bg-gray-200">Total</th>
+                            </tr>
+                            <tr>
+                                {Array.from({length: daysInMonth}, (_, i) => (
+                                    <th key={i} className="p-1 border w-8 font-normal bg-white min-w-[24px]">{i+1}</th>
+                                ))}
+                                <th className="p-1 border w-8 bg-green-100 text-green-800">H</th>
+                                <th className="p-1 border w-8 bg-yellow-100 text-yellow-800">S</th>
+                                <th className="p-1 border w-8 bg-blue-100 text-blue-800">I</th>
+                                <th className="p-1 border w-8 bg-red-100 text-red-800">A</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {santriInRombel.map((s, idx) => (
+                                <tr key={s.id} className="hover:bg-gray-50">
+                                    <td className="p-1 border">{idx+1}</td>
+                                    <td className="p-1 border text-left px-2 font-medium sticky left-0 bg-white shadow-sm whitespace-nowrap">{s.namaLengkap}</td>
+                                    {Array.from({length: daysInMonth}, (_, i) => {
+                                        const status = attendanceMatrix.matrix[s.id][i+1];
+                                        let bgClass = "";
+                                        if (status === 'H') bgClass = "bg-green-50 text-green-700";
+                                        else if (status === 'S') bgClass = "bg-yellow-50 text-yellow-700";
+                                        else if (status === 'I') bgClass = "bg-blue-50 text-blue-700";
+                                        else if (status === 'A') bgClass = "bg-red-50 text-red-700";
+                                        
+                                        return <td key={i} className={`p-1 border ${bgClass} text-center`}>{status || ''}</td>;
+                                    })}
+                                    <td className="p-1 border font-bold bg-green-50">{attendanceMatrix.stats[s.id].H}</td>
+                                    <td className="p-1 border font-bold bg-yellow-50">{attendanceMatrix.stats[s.id].S}</td>
+                                    <td className="p-1 border font-bold bg-blue-50">{attendanceMatrix.stats[s.id].I}</td>
+                                    <td className="p-1 border font-bold bg-red-50">{attendanceMatrix.stats[s.id].A}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Hidden Print Area */}
+            <div className="hidden print:block">
+                 <PrintHeader settings={settings} title={`REKAPITULASI ABSENSI KELAS ${selectedRombel?.nama.toUpperCase()}`} />
+                 <p className="text-center text-sm mb-4">PERIODE: {new Date(tahun, bulan-1).toLocaleDateString('id-ID', {month: 'long', year: 'numeric'}).toUpperCase()}</p>
+                 <table className="w-full text-xs text-center border-collapse border border-black">
+                        <thead>
+                            <tr>
+                                <th rowSpan={2} className="p-1 border border-black w-8">No</th>
+                                <th rowSpan={2} className="p-1 border border-black text-left w-48">Nama Santri</th>
+                                <th colSpan={daysInMonth} className="p-1 border border-black">Tanggal</th>
+                                <th colSpan={4} className="p-1 border border-black bg-gray-200">Total</th>
+                            </tr>
+                            <tr>
+                                {Array.from({length: daysInMonth}, (_, i) => (
+                                    <th key={i} className="p-0 border border-black w-4 font-normal" style={{fontSize: '8px'}}>{i+1}</th>
+                                ))}
+                                <th className="p-1 border border-black w-6">H</th>
+                                <th className="p-1 border border-black w-6">S</th>
+                                <th className="p-1 border border-black w-6">I</th>
+                                <th className="p-1 border border-black w-6">A</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {santriInRombel.map((s, idx) => (
+                                <tr key={s.id}>
+                                    <td className="p-1 border border-black">{idx+1}</td>
+                                    <td className="p-1 border border-black text-left px-2 font-medium">{s.namaLengkap}</td>
+                                    {Array.from({length: daysInMonth}, (_, i) => (
+                                        <td key={i} className="p-0 border border-black" style={{fontSize: '9px'}}>{attendanceMatrix.matrix[s.id][i+1] || ''}</td>
+                                    ))}
+                                    <td className="p-1 border border-black">{attendanceMatrix.stats[s.id].H}</td>
+                                    <td className="p-1 border border-black">{attendanceMatrix.stats[s.id].S}</td>
+                                    <td className="p-1 border border-black">{attendanceMatrix.stats[s.id].I}</td>
+                                    <td className="p-1 border border-black">{attendanceMatrix.stats[s.id].A}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <ReportFooter />
             </div>
         </div>
     );
 };
 
-
-// --- MAIN COMPONENT: ABSENSI (WRAPPER) ---
-export const Absensi: React.FC = () => {
+const Absensi: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input');
-
+    
     return (
-        <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Absensi Santri</h1>
+        <div className="flex flex-col h-[calc(100vh-80px)]">
+            <h1 className="text-3xl font-bold text-gray-800 mb-4 shrink-0">Manajemen Absensi</h1>
             
-            <div className="mb-6 border-b border-gray-200">
-                <nav className="flex -mb-px overflow-x-auto gap-4">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 sticky top-0 z-40 shrink-0">
+                <nav className="flex -mb-px">
                     <button 
                         onClick={() => setActiveTab('input')} 
-                        className={`py-3 px-4 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'input' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        className={`flex-1 py-3 px-1 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeTab === 'input' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                     >
-                        <i className="bi bi-pencil-square"></i> Input Kehadiran
+                        <i className="bi bi-pencil-square text-lg"></i> Input Harian
                     </button>
                     <button 
                         onClick={() => setActiveTab('rekap')} 
-                        className={`py-3 px-4 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'rekap' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        className={`flex-1 py-3 px-1 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeTab === 'rekap' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                     >
-                        <i className="bi bi-table"></i> Rekap & Laporan Bulanan
+                        <i className="bi bi-table text-lg"></i> Rekap & Laporan
                     </button>
                 </nav>
             </div>
 
-            {activeTab === 'input' && <AbsensiInput />}
-            {activeTab === 'rekap' && <AbsensiRekap />}
+            <div className="flex-grow min-h-0">
+                {activeTab === 'input' ? <AbsensiInput /> : <AbsensiRekap />}
+            </div>
         </div>
     );
 };

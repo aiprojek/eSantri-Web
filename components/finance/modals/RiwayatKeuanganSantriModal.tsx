@@ -1,5 +1,7 @@
+
 import React, { useMemo } from 'react';
 import { useAppContext } from '../../../AppContext';
+import { useFinanceContext } from '../../../contexts/FinanceContext';
 import { Santri, Tagihan, Pembayaran } from '../../../types';
 import { formatRupiah } from '../../../utils/formatters';
 
@@ -11,7 +13,7 @@ interface RiwayatKeuanganSantriModalProps {
 }
 
 export const RiwayatKeuanganSantriModal: React.FC<RiwayatKeuanganSantriModalProps> = ({ isOpen, onClose, santri, onPrint }) => {
-    const { tagihanList, pembayaranList } = useAppContext();
+    const { tagihanList, pembayaranList } = useFinanceContext();
 
     const riwayatPembayaran = useMemo(() => {
         return pembayaranList.filter(p => p.santriId === santri.id)

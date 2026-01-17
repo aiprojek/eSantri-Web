@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporRecord } from '../../types';
 import { db } from '../../db';
 
 export const TabDataNilai: React.FC = () => {
-    const { settings, santriList, showConfirmation, showToast, currentUser } = useAppContext();
+    const { settings, showConfirmation, showToast, currentUser } = useAppContext();
+    const { santriList } = useSantriContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
 
     const [filterTahun, setFilterTahun] = useState<string>('');

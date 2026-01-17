@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppContext } from '../../../AppContext';
+import { useFinanceContext } from '../../../contexts/FinanceContext';
 import { Santri } from '../../../types';
 import { formatRupiah } from '../../../utils/formatters';
 import { UangSakuPrintTemplate } from '../print/UangSakuPrintTemplate';
@@ -12,7 +13,8 @@ interface RiwayatUangSakuModalProps {
 }
 
 export const RiwayatUangSakuModal: React.FC<RiwayatUangSakuModalProps> = ({ isOpen, onClose, santri }) => {
-    const { transaksiSaldoList, saldoSantriList, settings } = useAppContext();
+    const { settings } = useAppContext();
+    const { transaksiSaldoList, saldoSantriList } = useFinanceContext();
     const [printableData, setPrintableData] = useState<{ santri: Santri; riwayat: any[] } | null>(null);
 
     const riwayatTransaksi = useMemo(() => {

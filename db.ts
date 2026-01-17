@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -21,11 +21,12 @@ export class ESantriDatabase extends Dexie {
   users!: Table<User, number>; 
   syncHistory!: Table<SyncHistory, string>; 
   raporRecords!: Table<RaporRecord, number>;
-  absensi!: Table<AbsensiRecord, number>; // NEW
+  absensi!: Table<AbsensiRecord, number>;
+  tahfizh!: Table<TahfizhRecord, number>; // NEW
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(26).stores({ // Bumped version to 26
+    (this as any).version(27).stores({ // Bumped version to 27
       santri: '++id, nis, namaLengkap, kamarId',
       settings: '++id',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
@@ -40,7 +41,8 @@ export class ESantriDatabase extends Dexie {
       users: '++id, username, role',
       syncHistory: 'id, fileId, mergedAt',
       raporRecords: '++id, santriId, [santriId+tahunAjaran+semester], [tahunAjaran+semester], rombelId',
-      absensi: '++id, santriId, [rombelId+tanggal], tanggal' // NEW TABLE
+      absensi: '++id, santriId, [rombelId+tanggal], tanggal',
+      tahfizh: '++id, santriId, tanggal, tipe' // NEW TABLE
     }).upgrade(async (tx: any) => {
        // Migration
        // Nothing specific needed for new table creation

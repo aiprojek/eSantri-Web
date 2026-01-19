@@ -49,7 +49,7 @@ export const LoginScreen: React.FC = () => {
 
     const handleUpdateFromCloud = async () => {
         if (settings.cloudSyncConfig.provider !== 'dropbox') {
-            showToast('Fitur ini hanya tersedia untuk metode sync Dropbox.', 'error');
+            showToast('Fitur Cloud belum aktif. Hubungi Admin untuk mengaktifkan.', 'error');
             return;
         }
         if (!confirm('Apakah Anda ingin memperbarui data akun (password) dari Cloud? Ini berguna jika Admin telah mereset password Anda.')) return;

@@ -30,7 +30,9 @@ export const ADMIN_PERMISSIONS = {
     psb: 'write',
     akademik: 'write', 
     absensi: 'write', 
-    tahfizh: 'write', // New
+    tahfizh: 'write',
+    sarpras: 'write', 
+    kalender: 'write', // NEW
     datamaster: 'write',
     keuangan: 'write',
     keasramaan: 'write',
@@ -48,7 +50,9 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     psb: 'read',
     akademik: 'none', 
     absensi: 'write', 
-    tahfizh: 'read', // New: Teachers can read tahfizh progress
+    tahfizh: 'read',
+    sarpras: 'read', 
+    kalender: 'read', // Default Read for Staff
     datamaster: 'none',
     keuangan: 'none',
     keasramaan: 'read',

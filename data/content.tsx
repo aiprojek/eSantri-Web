@@ -214,6 +214,25 @@ export const faqData: FaqCategoryData[] = [
                 answer: "Kode Pairing memungkinkan Staff terhubung ke Dropbox Admin tanpa perlu login email/password akun Dropbox tersebut. Cukup Copy-Paste kode dari Admin, laptop Staff langsung terhubung."
             }
         ]
+    },
+    {
+        title: "Kalender & Sarpras",
+        icon: "bi-calendar-range-fill",
+        colorClass: "bg-yellow-50 border-yellow-500 text-yellow-900",
+        items: [
+            {
+                question: "Apakah Kalender bisa dicetak?",
+                answer: "Tentu. Anda bisa mencetak Kalender Akademik dalam berbagai layout (1 lembar, 3 lembar, 4 lembar) dan memilih penanggalan utama (Masehi atau Hijriah). Klik tombol 'Cetak / Export' di menu Kalender."
+            },
+            {
+                question: "Bagaimana cara menghitung nilai aset di Sarpras?",
+                answer: "Sistem otomatis menjumlahkan 'Harga Perolehan' dari semua barang yang Anda input. Pastikan Anda mengisi estimasi harga saat menambah data aset agar laporan valuasi akurat."
+            },
+            {
+                question: "Bisakah saya import data agenda kalender dari Excel?",
+                answer: "Saat ini fitur import Excel untuk kalender belum tersedia. Namun, Anda bisa menggunakan fitur 'Tambah Massal' (tombol tabel) untuk menginput banyak kegiatan sekaligus dalam satu layar."
+            }
+        ]
     }
 ];
 
@@ -291,6 +310,35 @@ export const panduanData: PanduanSectionData[] = [
                             </div>
                         </div>
                     </>
+                )
+            },
+            {
+                title: 'Manajemen User & Lupa Password',
+                content: (
+                    <div className="space-y-3">
+                        <div className="border-l-4 border-indigo-500 pl-3 py-1 bg-indigo-50">
+                            <h4 className="font-bold text-indigo-800 text-sm">Menambah User Staff</h4>
+                            <p className="text-xs">Gunakan tombol <strong>"Ambil dari Data Guru"</strong> di menu Pengaturan Akun. Username akan dibuat otomatis. <br/><strong>Password Default:</strong> <code>123456</code> (Bisa diubah di tabel).</p>
+                        </div>
+                        <div className="border-l-4 border-red-500 pl-3 py-1 bg-red-50">
+                            <h4 className="font-bold text-red-800 text-sm">Fitur Lupa Password Staff (Mandiri)</h4>
+                            <p className="text-xs mb-1">Jika staff lupa password, klik <strong>"Lupa Password?"</strong> di halaman login.</p>
+                            <ul className="list-disc pl-4 text-xs text-red-700">
+                                <li>Untuk user yang dibuat manual, jawab pertanyaan keamanan yang diset saat pembuatan.</li>
+                                <li>Untuk user dari "Data Guru" (Bulk), Pertanyaan default: <strong>"Apa nama aplikasi ini?"</strong>, Jawaban: <strong>"esantri"</strong>.</li>
+                            </ul>
+                        </div>
+                        <div className="border-l-4 border-orange-500 pl-3 py-1 bg-orange-50">
+                            <h4 className="font-bold text-orange-800 text-sm">SOP Reset Password Manual (Oleh Admin)</h4>
+                            <p className="text-xs mb-1">Jika staff lupa jawaban keamanan dan Admin mereset password secara manual, ikuti urutan wajib ini agar password baru bisa dipakai staff:</p>
+                            <ol className="list-decimal pl-4 text-xs text-orange-900 space-y-1">
+                                <li><strong>Admin:</strong> Ubah password di menu <em>Pengaturan &gt; Akun</em>.</li>
+                                <li><strong>Admin:</strong> Buka menu <em>Pusat Sync</em> (atau klik tombol Sync Cloud) &gt; Klik <strong>"Publikasikan Master"</strong>. (Langkah ini wajib agar konfigurasi user baru terkirim ke Cloud).</li>
+                                <li><strong>Staff:</strong> Di halaman login laptop staff, klik tombol <strong>"Update Data Akun dari Cloud"</strong>.</li>
+                                <li><strong>Staff:</strong> Login dengan password baru.</li>
+                            </ol>
+                        </div>
+                    </div>
                 )
             }
         ]
@@ -653,6 +701,65 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Template Editor:</strong> Buat template surat (Izin, Undangan, Keterangan) dengan editor teks lengkap. Gunakan variabel <code>{'{NAMA_SANTRI}'}</code> agar data terisi otomatis.</li>
                         <li><strong>Magic Draft (AI):</strong> Gunakan fitur AI untuk membuatkan draf bahasa surat yang sopan dan formal secara instan.</li>
                         <li><strong>Cetak Massal:</strong> Cetak surat untuk satu kelas sekaligus (Mail Merge) dengan satu klik.</li>
+                    </ul>
+                )
+            }
+        ]
+    },
+    {
+        id: 'kalender',
+        badge: 9,
+        badgeColor: 'yellow',
+        title: 'Kalender Akademik',
+        steps: [
+            {
+                title: 'Input Agenda Kegiatan',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Kalender</strong>.</li>
+                        <li>Klik <strong>Tambah Agenda</strong> untuk memasukkan kegiatan secara manual satu per satu.</li>
+                        <li>Gunakan tombol <strong>Tambah Massal</strong> (ikon tabel) untuk memasukkan banyak agenda sekaligus (seperti Jadwal Ujian, Libur Semester, PHBI) dalam format tabel yang cepat.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Cetak Kalender Dinding (Custom)',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 bg-gray-50 p-2 rounded">
+                        <li>Klik tombol <strong>Cetak / Export</strong>.</li>
+                        <li>Pilih <strong>Tema Desain</strong> (Classic, Modern, Ceria, dll) sesuai selera.</li>
+                        <li>Pilih <strong>Layout</strong>: 1 Lembar (untuk dinding kantor), 3 Lembar (Triwulan), atau 4 Lembar (Caturwulan).</li>
+                        <li><strong>Penanggalan:</strong> Pilih apakah angka utama adalah Masehi atau Hijriah.</li>
+                        <li>Anda juga bisa mengupload foto gedung pondok sebagai banner atau watermark.</li>
+                        <li>Klik Cetak untuk menghasilkan PDF siap print.</li>
+                    </ol>
+                )
+            }
+        ]
+    },
+    {
+        id: 'sarpras',
+        badge: 10,
+        badgeColor: 'blue',
+        title: 'Manajemen Aset (Sarpras)',
+        steps: [
+            {
+                title: 'Inventarisasi Aset',
+                content: (
+                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Sarpras</strong>.</li>
+                        <li>Pilih kategori: <strong>Aset Bergerak</strong> (Kursi, Laptop, Lemari) atau <strong>Aset Tetap</strong> (Tanah, Gedung).</li>
+                        <li>Klik <strong>Tambah Aset</strong>. Isi detail seperti Nama Barang, Kode Inventaris, Lokasi, Kondisi, dan Harga Perolehan.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Monitoring & Laporan Valuasi',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Lihat <strong>Dashboard Sarpras</strong> untuk melihat total nilai aset pondok secara real-time.</li>
+                        <li>Gunakan filter "Kondisi" untuk memantau barang yang Rusak Ringan/Berat dan butuh perbaikan.</li>
+                        <li>Klik <strong>Cetak Laporan</strong> untuk mengunduh daftar inventaris lengkap beserta nilai asetnya untuk laporan yayasan.</li>
                     </ul>
                 )
             }

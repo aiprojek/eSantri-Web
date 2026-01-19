@@ -27,9 +27,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
     { page: Page.Dashboard, icon: 'bi-grid-1x2-fill', show: true },
     { page: Page.Santri, icon: 'bi-people-fill', show: canAccess('santri') },
     { page: Page.Absensi, icon: 'bi-calendar-check-fill', show: canAccess('absensi') }, 
-    { page: Page.Tahfizh, icon: 'bi-journal-richtext', show: canAccess('tahfizh') }, // New
+    { page: Page.Tahfizh, icon: 'bi-journal-richtext', show: canAccess('tahfizh') }, 
     { page: Page.Akademik, icon: 'bi-mortarboard-fill', show: canAccess('akademik') }, 
+    { page: Page.Kalender, icon: 'bi-calendar-event-fill', show: canAccess('kalender') }, // NEW: Kalender Menu
     { page: Page.PSB, icon: 'bi-person-plus-fill', show: canAccess('psb') }, 
+    { page: Page.Sarpras, icon: 'bi-box-seam-fill', show: canAccess('sarpras') }, 
     { page: Page.DataMaster, icon: 'bi-database-fill', show: canAccess('datamaster') }, 
     { page: Page.Keuangan, icon: 'bi-cash-coin', show: canAccess('keuangan') },
     { page: Page.Keasramaan, icon: 'bi-building-fill', show: canAccess('keasramaan') },
@@ -38,14 +40,27 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
     { page: Page.Laporan, icon: 'bi-printer-fill', show: canAccess('laporan') },
     { page: Page.AuditLog, icon: 'bi-activity', show: canAccess('auditlog') }, 
     { page: Page.Pengaturan, icon: 'bi-gear-fill', show: canAccess('pengaturan') },
-    { page: Page.SyncAdmin, icon: 'bi-cloud-check-fill', show: canManageSync && settings.cloudSyncConfig?.provider === 'dropbox' },
+    // Show SyncAdmin if user has permission, regardless of cloud status (for demo/setup visibility)
+    { page: Page.SyncAdmin, icon: 'bi-cloud-check-fill', show: canManageSync },
     { page: Page.Tentang, icon: 'bi-info-circle-fill', show: true },
   ];
+
+  const handleNavClick = (item: typeof navItems[0]) => {
+      if (item.page === Page.SyncAdmin) {
+          const config = settings.cloudSyncConfig;
+          if (!config || config.provider === 'none') {
+              showToast('Fitur Cloud belum aktif. Silakan hubungkan Dropbox di menu Pengaturan.', 'error');
+              setPage(Page.Pengaturan); // Redirect to settings to help user setup
+              return;
+          }
+      }
+      setPage(item.page);
+  };
 
   const handleSyncClick = () => {
       const config = settings.cloudSyncConfig;
       if (!config || config.provider === 'none') {
-          showToast('Sinkronisasi belum dikonfigurasi. Silakan atur di menu Pengaturan.', 'info');
+          showToast('Fitur Cloud belum aktif. Silakan hubungkan Dropbox di menu Pengaturan.', 'error');
           setPage(Page.Pengaturan);
           return;
       }
@@ -100,7 +115,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
         <ul className="space-y-2 font-medium">
           {navItems.filter(item => item.show).map((item) => (
             <li key={item.page}>
-              <a href="#" onClick={(e) => { e.preventDefault(); setPage(item.page); }} className={`flex items-center p-2 rounded-lg hover:bg-teal-700 group ${currentPage === item.page ? 'bg-teal-900' : ''}`}>
+              <a 
+                href="#" 
+                onClick={(e) => { 
+                    e.preventDefault(); 
+                    handleNavClick(item);
+                }} 
+                className={`flex items-center p-2 rounded-lg hover:bg-teal-700 group ${currentPage === item.page ? 'bg-teal-900' : ''}`}
+              >
                 <i className={`${item.icon} text-xl text-gray-300 group-hover:text-white transition duration-75`}></i>
                 <span className="ms-3">{item.page === 'SyncAdmin' ? 'Pusat Sync' : item.page}</span>
               </a>

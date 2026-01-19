@@ -5,6 +5,7 @@ import { useAppContext } from '../../../AppContext';
 import { db } from '../../../db';
 import { hashString, ADMIN_PERMISSIONS, generateRecoveryKey } from '../../../services/authService';
 import { UserModal } from '../modals/UserModal';
+import { BulkUserFromTeacherModal } from '../modals/BulkUserFromTeacherModal';
 
 interface TabAkunProps {
     localSettings: PondokSettings;
@@ -17,6 +18,9 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+    
+    // New State for Bulk Modal
+    const [isBulkTeacherModalOpen, setIsBulkTeacherModalOpen] = useState(false);
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -81,6 +85,17 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
             showToast('User baru ditambahkan', 'success');
         }
         setIsUserModalOpen(false);
+    };
+
+    const handleBulkSaveUsers = async (newUsers: User[]) => {
+        try {
+            await db.users.bulkAdd(newUsers);
+            setUsers(prev => [...prev, ...newUsers]);
+            showToast(`${newUsers.length} user berhasil ditambahkan dari data guru.`, 'success');
+        } catch (error) {
+            console.error(error);
+            showToast('Gagal menyimpan data bulk user.', 'error');
+        }
     };
 
     const handleDeleteUser = (id: number) => {
@@ -182,14 +197,22 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
                     )}
 
                     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div className="flex justify-between items-center mb-3">
+                        <div className="flex flex-wrap justify-between items-center mb-3 gap-2">
                             <h3 className="font-bold text-gray-800 text-sm">Daftar Pengguna</h3>
-                            <button 
-                                onClick={() => { setEditingUser(null); setIsUserModalOpen(true); }}
-                                className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded hover:bg-teal-700 flex items-center gap-1"
-                            >
-                                <i className="bi bi-person-plus-fill"></i> Tambah User
-                            </button>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => setIsBulkTeacherModalOpen(true)}
+                                    className="text-xs bg-white text-teal-700 border border-teal-600 px-3 py-1.5 rounded hover:bg-teal-50 flex items-center gap-1"
+                                >
+                                    <i className="bi bi-people-fill"></i> Ambil dari Data Guru
+                                </button>
+                                <button 
+                                    onClick={() => { setEditingUser(null); setIsUserModalOpen(true); }}
+                                    className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded hover:bg-teal-700 flex items-center gap-1"
+                                >
+                                    <i className="bi bi-person-plus-fill"></i> Tambah Manual
+                                </button>
+                            </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
@@ -228,6 +251,13 @@ export const TabAkun: React.FC<TabAkunProps> = ({ localSettings, handleInputChan
                 onClose={() => setIsUserModalOpen(false)} 
                 onSave={handleSaveUser} 
                 userData={editingUser} 
+            />
+            <BulkUserFromTeacherModal 
+                isOpen={isBulkTeacherModalOpen}
+                onClose={() => setIsBulkTeacherModalOpen(false)}
+                onSave={handleBulkSaveUsers}
+                teachers={localSettings.tenagaPengajar}
+                existingUsers={users}
             />
         </div>
     );

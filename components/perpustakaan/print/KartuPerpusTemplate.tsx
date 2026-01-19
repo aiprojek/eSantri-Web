@@ -7,7 +7,7 @@ import { formatDate } from '../../../utils/formatters';
 interface KartuPerpusTemplateProps {
     santri: Santri;
     settings: PondokSettings;
-    theme: 'classic' | 'modern' | 'bold' | 'dark' | 'ceria';
+    theme: 'classic' | 'modern' | 'bold' | 'dark' | 'ceria' | 'vertical';
 }
 
 export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({ santri, settings, theme }) => {
@@ -109,9 +109,7 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({ santri
     } 
     
     // --- Design 3: Vertical ID ---
-    else if (theme === 'vertical') { // Reused ID `vertical` but mapped to Bold/Vertical logic
-         // NOTE: The user requested "5 themes". In the original Kartu Santri, 'bold' was mapped to a specific landscape design, 
-         // but 'vertical' was the ID used for the portrait one. I will use the Vertical layout here as requested.
+    else if (theme === 'vertical') { 
         return (
             <div className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border shadow-sm items-center text-center" style={cardStyle}>
                 <div className="w-full h-24 bg-red-700 absolute top-0 rounded-b-[50%] scale-x-150 z-0"></div>

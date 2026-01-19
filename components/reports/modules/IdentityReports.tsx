@@ -31,11 +31,12 @@ const BiodataTemplate: React.FC<{ santri: Santri; settings: PondokSettings; useH
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
     const mudir = jenjang?.mudirId ? settings.tenagaPengajar.find(p => p.id === jenjang.mudirId) : undefined;
+    const hijriAdjustment = settings.hijriAdjustment || 0;
 
     const gregorianDateString = formatDate(new Date().toISOString());
     let hijriDateString = '';
     if (useHijriDate) {
-        hijriDateString = hijriDateMode === 'auto' ? toHijri(new Date()) : manualHijriDate;
+        hijriDateString = hijriDateMode === 'auto' ? toHijri(new Date(), hijriAdjustment) : manualHijriDate;
     }
 
     return (

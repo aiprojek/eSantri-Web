@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Santri } from '../../../types';
+import { getHijriDate } from '../../../utils/formatters';
 
 // --- Utility Functions ---
 
@@ -39,12 +40,13 @@ export const formatDateTime = (dateString?: string | Date) => {
     } catch (e) { return ''; }
 }
 
-export const toHijri = (date: Date): string => {
+export const toHijri = (date: Date, adjustment: number = 0): string => {
     try {
-        return new Intl.DateTimeFormat('id-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+        const h = getHijriDate(date, adjustment);
+        return h.full;
     } catch (e) {
-        console.error("Hijri conversion with 'id' locale failed, falling back.", e);
-        return new Intl.DateTimeFormat('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+        console.error("Hijri conversion failed", e);
+        return '';
     }
 };
 

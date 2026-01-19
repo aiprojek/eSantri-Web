@@ -29,7 +29,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
     { page: Page.Absensi, icon: 'bi-calendar-check-fill', show: canAccess('absensi') }, 
     { page: Page.Tahfizh, icon: 'bi-journal-richtext', show: canAccess('tahfizh') }, 
     { page: Page.Akademik, icon: 'bi-mortarboard-fill', show: canAccess('akademik') }, 
-    { page: Page.Kalender, icon: 'bi-calendar-event-fill', show: canAccess('kalender') }, // NEW: Kalender Menu
+    { page: Page.Perpustakaan, icon: 'bi-book-half', show: canAccess('perpustakaan') }, // NEW: Perpustakaan
+    { page: Page.Kalender, icon: 'bi-calendar-event-fill', show: canAccess('kalender') }, 
     { page: Page.PSB, icon: 'bi-person-plus-fill', show: canAccess('psb') }, 
     { page: Page.Sarpras, icon: 'bi-box-seam-fill', show: canAccess('sarpras') }, 
     { page: Page.DataMaster, icon: 'bi-database-fill', show: canAccess('datamaster') }, 

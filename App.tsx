@@ -30,7 +30,8 @@ const Akademik = React.lazy(() => import('./components/Akademik'));
 const Absensi = React.lazy(() => import('./components/Absensi'));
 const Tahfizh = React.lazy(() => import('./components/Tahfizh'));
 const Sarpras = React.lazy(() => import('./components/Sarpras'));
-const Kalender = React.lazy(() => import('./components/Kalender')); // NEW
+const Kalender = React.lazy(() => import('./components/Kalender'));
+const Perpustakaan = React.lazy(() => import('./components/Perpustakaan')); // NEW
 
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
 const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
@@ -279,8 +280,10 @@ const AppContent: React.FC = () => {
                             return checkAccess('akademik') ? <Akademik /> : <AccessDenied />;
                         case Page.Sarpras: 
                             return checkAccess('sarpras') ? <Sarpras /> : <AccessDenied />;
-                        case Page.Kalender: // NEW Route
+                        case Page.Kalender: 
                             return checkAccess('kalender') ? <Kalender /> : <AccessDenied />;
+                        case Page.Perpustakaan: // NEW
+                            return checkAccess('perpustakaan') ? <Perpustakaan /> : <AccessDenied />;
                         case Page.DataMaster:
                             return checkAccess('datamaster') ? <DataMaster /> : <AccessDenied />;
                         case Page.Keuangan:

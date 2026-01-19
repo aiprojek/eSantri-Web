@@ -384,6 +384,7 @@ const Kalender: React.FC = () => {
     } | null>(null);
 
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.kalender === 'write';
+    const hijriAdjustment = settings.hijriAdjustment || 0;
 
     // Reset Anchor ketika ganti mode agar sinkron
     useEffect(() => {
@@ -393,9 +394,9 @@ const Kalender: React.FC = () => {
             setAnchorDate(new Date(now.getFullYear(), now.getMonth(), 1));
         } else {
             // Set ke tanggal 1 bulan Hijriah saat ini
-            setAnchorDate(findStartOfHijriMonth(new Date()));
+            setAnchorDate(findStartOfHijriMonth(new Date(), hijriAdjustment));
         }
-    }, [primarySystem]);
+    }, [primarySystem, hijriAdjustment]);
 
     // ... (Existing logic for grid generation, header, navigation, event handling remains unchanged)
     
@@ -411,7 +412,7 @@ const Kalender: React.FC = () => {
             
             for (let i = 1; i <= daysInMonth; i++) {
                 const d = new Date(year, month, i);
-                const h = getHijriDate(d);
+                const h = getHijriDate(d, hijriAdjustment);
                 days.push({
                     dateObj: d,
                     masehi: i,
@@ -421,12 +422,12 @@ const Kalender: React.FC = () => {
             }
         } else {
             // Logic Hijriah (Custom Grid)
-            const startHijri = getHijriDate(anchorDate);
+            const startHijri = getHijriDate(anchorDate, hijriAdjustment);
             const targetHijriMonth = startHijri.month;
             
             let d = new Date(anchorDate);
             for (let i = 0; i < 30; i++) {
-                const currentHijri = getHijriDate(d);
+                const currentHijri = getHijriDate(d, hijriAdjustment);
                 if (currentHijri.month !== targetHijriMonth) break; 
 
                 days.push({
@@ -439,7 +440,7 @@ const Kalender: React.FC = () => {
             }
         }
         return days;
-    }, [anchorDate, primarySystem]);
+    }, [anchorDate, primarySystem, hijriAdjustment]);
 
      const headerInfo = useMemo(() => {
         if (calendarDays.length === 0) return { main: '', sub: '' };
@@ -450,8 +451,8 @@ const Kalender: React.FC = () => {
         if (primarySystem === 'Masehi') {
             const masehiMonth = firstDay.dateObj.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
             
-            const startHijri = getHijriDate(firstDay.dateObj);
-            const endHijri = getHijriDate(lastDay.dateObj);
+            const startHijri = getHijriDate(firstDay.dateObj, hijriAdjustment);
+            const endHijri = getHijriDate(lastDay.dateObj, hijriAdjustment);
             
             const hijriStr = startHijri.month === endHijri.month 
                 ? `${startHijri.month} ${startHijri.year}` 
@@ -459,7 +460,7 @@ const Kalender: React.FC = () => {
                 
             return { main: masehiMonth.toUpperCase(), sub: `${hijriStr} H` };
         } else {
-            const hijriMonth = getHijriDate(firstDay.dateObj);
+            const hijriMonth = getHijriDate(firstDay.dateObj, hijriAdjustment);
             
             const startMasehi = firstDay.dateObj.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
             const endMasehi = lastDay.dateObj.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
@@ -470,7 +471,7 @@ const Kalender: React.FC = () => {
 
             return { main: `${hijriMonth.month} ${hijriMonth.year}`.toUpperCase(), sub: masehiStr };
         }
-    }, [calendarDays, primarySystem]);
+    }, [calendarDays, primarySystem, hijriAdjustment]);
 
     const handlePrev = () => {
         if (primarySystem === 'Masehi') {
@@ -478,7 +479,7 @@ const Kalender: React.FC = () => {
         } else {
             const lastDayPrevMonth = new Date(anchorDate);
             lastDayPrevMonth.setDate(lastDayPrevMonth.getDate() - 1);
-            setAnchorDate(findStartOfHijriMonth(lastDayPrevMonth));
+            setAnchorDate(findStartOfHijriMonth(lastDayPrevMonth, hijriAdjustment));
         }
     };
 

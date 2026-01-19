@@ -32,7 +32,8 @@ export const ADMIN_PERMISSIONS = {
     absensi: 'write', 
     tahfizh: 'write',
     sarpras: 'write', 
-    kalender: 'write', // NEW
+    kalender: 'write', 
+    perpustakaan: 'write', // NEW
     datamaster: 'write',
     keuangan: 'write',
     keasramaan: 'write',
@@ -52,7 +53,8 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     absensi: 'write', 
     tahfizh: 'read',
     sarpras: 'read', 
-    kalender: 'read', // Default Read for Staff
+    kalender: 'read',
+    perpustakaan: 'read', // Default Read for Staff
     datamaster: 'none',
     keuangan: 'none',
     keasramaan: 'read',

@@ -32,6 +32,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
     customImage, imagePosition = 'none' 
 }) => {
     const dayNames = ["Ah", "Sn", "Sl", "Rb", "Km", "Jm", "Sb"];
+    const hijriAdjustment = settings.hijriAdjustment || 0;
 
     // Theme Styles
     const themes = {
@@ -102,8 +103,8 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
             const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
             
             // Hitung rentang Hijriah untuk Header (Masehi Mode)
-            const startH = getHijriDate(new Date(year, 0, 1));
-            const endH = getHijriDate(new Date(year, 11, 31));
+            const startH = getHijriDate(new Date(year, 0, 1), hijriAdjustment);
+            const endH = getHijriDate(new Date(year, 11, 31), hijriAdjustment);
             const hijriRange = startH.year === endH.year ? `${startH.year} H` : `${startH.year} - ${endH.year} H`;
 
             for (let i = 0; i < 12; i++) {
@@ -117,8 +118,8 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
 
                 const start = new Date(year, i, 1);
                 const end = new Date(year, i + 1, 0);
-                const hStart = getHijriDate(start);
-                const hEnd = getHijriDate(end);
+                const hStart = getHijriDate(start, hijriAdjustment);
+                const hEnd = getHijriDate(end, hijriAdjustment);
                 
                 // Masehi: 1 Bulan Utama, Hijriah: Range
                 const titleMain = monthNames[i].toUpperCase();
@@ -137,7 +138,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
             
             // 1. Tentukan Tahun Hijriah Target (Berdasarkan 1 Januari tahun yang dipilih)
             const refDate = new Date(year, 0, 1);
-            const refHijri = getHijriDate(refDate);
+            const refHijri = getHijriDate(refDate, hijriAdjustment);
             const targetHijriYear = parseInt(refHijri.year); // misal 1446
 
             // 2. Cari tanggal Masehi untuk 1 Muharram tahun tersebut
@@ -146,7 +147,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
             // Safety: cari mundur maksimal 360 hari
             let foundStart = false;
             for(let k=0; k<360; k++) {
-                const h = getHijriDate(cursorDate);
+                const h = getHijriDate(cursorDate, hijriAdjustment);
                 if (h.month === 'Muharram' && h.day === '1' && parseInt(h.year) === targetHijriYear) {
                     foundStart = true;
                     break;
@@ -172,7 +173,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
             // 3. Generate 12 Bulan Hijriah
             for (let i = 0; i < 12; i++) {
                 const currentMonthStart = new Date(cursorDate);
-                const hStart = getHijriDate(currentMonthStart);
+                const hStart = getHijriDate(currentMonthStart, hijriAdjustment);
                 const targetMonthName = hStart.month;
 
                 const days: (Date | null)[] = [];
@@ -186,7 +187,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                 // Loop hari dalam bulan Hijriah ini
                 // Loop sampai bulan berubah
                 while (true) {
-                    const hCheck = getHijriDate(tempD);
+                    const hCheck = getHijriDate(tempD, hijriAdjustment);
                     if (hCheck.month !== targetMonthName) break;
                     
                     currentMonthDays.push(new Date(tempD));
@@ -224,7 +225,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
             }
         }
         return results;
-    }, [year, primarySystem]);
+    }, [year, primarySystem, hijriAdjustment]);
 
 
     // Calculate chunks based on layout
@@ -332,7 +333,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                                     <div className="grid grid-cols-7 text-center">
                                         {monthData.days.map((date, idx) => {
                                             if (!date) return <div key={idx} className="p-1"></div>;
-                                            const hijri = getHijriDate(date);
+                                            const hijri = getHijriDate(date, hijriAdjustment);
                                             
                                             // Determine Main vs Sub Numbers
                                             const mainNum = primarySystem === 'Masehi' ? date.getDate() : hijri.day;

@@ -76,6 +76,25 @@ export const faqData: FaqCategoryData[] = [
         ]
     },
     {
+        title: "Perpustakaan",
+        icon: "bi-book-half",
+        colorClass: "bg-teal-50 border-teal-500 text-teal-900",
+        items: [
+            {
+                question: "Bagaimana cara mencetak label punggung buku?",
+                answer: "Masuk ke menu Perpustakaan > Cetak Kartu. Pilih tab 'Label', lalu pilih buku yang ingin dicetak labelnya. Label ini memuat kode panggil (Call Number) dan informasi Rak untuk ditempel di punggung buku."
+            },
+            {
+                question: "Apakah stok buku berkurang otomatis saat dipinjam?",
+                answer: "Ya. Saat Anda mencatat peminjaman di menu Sirkulasi, stok buku di Katalog akan berkurang otomatis. Stok akan kembali bertambah saat buku dikembalikan."
+            },
+            {
+                question: "Apakah bisa input buku secara massal?",
+                answer: "Tentu. Gunakan tombol 'Tambah Massal' di menu Katalog Buku. Anda bisa menginput Judul, Penulis, Penerbit, dll dalam format tabel."
+            }
+        ]
+    },
+    {
         title: "Absensi & Kehadiran",
         icon: "bi-calendar-check-fill",
         colorClass: "bg-teal-50 border-teal-500 text-teal-900",
@@ -738,28 +757,38 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
-        id: 'sarpras',
-        badge: 10,
-        badgeColor: 'blue',
-        title: 'Manajemen Aset (Sarpras)',
+        id: 'library',
+        badge: 11,
+        badgeColor: 'teal',
+        title: 'Perpustakaan Digital',
         steps: [
             {
-                title: 'Inventarisasi Aset',
+                title: 'Manajemen Katalog Buku',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Sarpras</strong>.</li>
-                        <li>Pilih kategori: <strong>Aset Bergerak</strong> (Kursi, Laptop, Lemari) atau <strong>Aset Tetap</strong> (Tanah, Gedung).</li>
-                        <li>Klik <strong>Tambah Aset</strong>. Isi detail seperti Nama Barang, Kode Inventaris, Lokasi, Kondisi, dan Harga Perolehan.</li>
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Perpustakaan &gt; Katalog Buku</strong>.</li>
+                        <li>Klik <strong>Tambah Buku</strong> untuk input satu per satu, atau <strong>Tambah Massal</strong> untuk input cepat menggunakan tabel.</li>
+                        <li>Isi data lengkap seperti Judul, Penulis, Penerbit, dan Lokasi Rak untuk memudahkan pencarian.</li>
                     </ul>
                 )
             },
             {
-                title: 'Monitoring & Laporan Valuasi',
+                title: 'Sirkulasi (Peminjaman & Pengembalian)',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Lihat <strong>Dashboard Sarpras</strong> untuk melihat total nilai aset pondok secara real-time.</li>
-                        <li>Gunakan filter "Kondisi" untuk memantau barang yang Rusak Ringan/Berat dan butuh perbaikan.</li>
-                        <li>Klik <strong>Cetak Laporan</strong> untuk mengunduh daftar inventaris lengkap beserta nilai asetnya untuk laporan yayasan.</li>
+                        <li><strong>Peminjaman:</strong> Di tab Sirkulasi, cari nama santri dan judul buku. Tentukan durasi pinjam, lalu klik "Proses Peminjaman".</li>
+                        <li><strong>Pengembalian:</strong> Masuk ke sub-menu "Pengembalian". Cari nama peminjam. Sistem otomatis menghitung denda jika terlambat. Klik "Kembalikan" untuk menyelesaikan.</li>
+                    </ul>
+                )
+            },
+             {
+                title: 'Cetak Kartu & Label',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka tab <strong>Cetak Kartu</strong>.</li>
+                        <li><strong>Kartu Anggota:</strong> Pilih santri untuk mencetak kartu perpustakaan dengan barcode.</li>
+                        <li><strong>Slip Buku:</strong> Cetak slip tanggal kembali untuk ditempel di belakang buku.</li>
+                        <li><strong>Label Punggung:</strong> Cetak label kode buku (Call Number) untuk ditempel di punggung buku (spine) agar mudah disusun di rak.</li>
                     </ul>
                 )
             }

@@ -26,9 +26,20 @@ export const formatDateTime = (dateString?: string | Date) => {
     } catch (e) { return ''; }
 };
 
-// Mendapatkan detail Hijriah dari tanggal Masehi
-export const getHijriDate = (date: Date) => {
+// Mendapatkan detail Hijriah dari tanggal Masehi dengan opsi Adjustment (Koreksi)
+export const getHijriDate = (date: Date, adjustment: number = 0) => {
     try {
+        // Adjust tanggal Masehi SEBELUM konversi
+        // Jika adjustment = -1, kita mundur 1 hari. 
+        // Logika: Jika 1 Muharram harusnya besok, tapi user set +1, maka hari ini dianggap 2 Muharram? 
+        // Standar aplikasi Muslim: Jika "Official" lebih lambat 1 hari, adjustment = -1.
+        // Artinya input date dikurangi 1 hari? TIDAK. 
+        // Adjustment +1 artinya Tanggal Hijriah "Maju" 1 hari. 
+        // Jadi kita menambah hari ke tanggal Masehi yang diumpankan ke converter.
+        
+        const adjustedDate = new Date(date);
+        adjustedDate.setDate(adjustedDate.getDate() + adjustment);
+
         // Menggunakan islamic-umalqura yang umum digunakan
         const formatter = new Intl.DateTimeFormat('id-ID-u-ca-islamic-umalqura', {
             day: 'numeric',
@@ -36,7 +47,7 @@ export const getHijriDate = (date: Date) => {
             year: 'numeric'
         });
         
-        const parts = formatter.formatToParts(date);
+        const parts = formatter.formatToParts(adjustedDate);
         const day = parts.find(p => p.type === 'day')?.value || '';
         const month = parts.find(p => p.type === 'month')?.value || '';
         const year = parts.find(p => p.type === 'year')?.value || '';
@@ -48,16 +59,16 @@ export const getHijriDate = (date: Date) => {
 };
 
 // Helper untuk mencari tanggal 1 bulan Hijriah dari sebuah tanggal referensi
-export const findStartOfHijriMonth = (referenceDate: Date): Date => {
+export const findStartOfHijriMonth = (referenceDate: Date, adjustment: number = 0): Date => {
     let d = new Date(referenceDate);
-    const targetHijriMonth = getHijriDate(d).month;
+    const targetHijriMonth = getHijriDate(d, adjustment).month;
     
     // Mundur ke belakang untuk mencari tanggal 1
     // Batas aman 35 hari untuk mencegah infinite loop
     for (let i = 0; i < 35; i++) {
         const prevDate = new Date(d);
         prevDate.setDate(d.getDate() - 1);
-        const prevHijri = getHijriDate(prevDate);
+        const prevHijri = getHijriDate(prevDate, adjustment);
         
         if (prevHijri.month !== targetHijriMonth) {
             return d; // d adalah tanggal 1

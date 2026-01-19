@@ -151,33 +151,55 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                 </div>
 
                 <div className="md:col-span-2 bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                    <label className="block mb-2 text-sm font-bold text-yellow-800">Hari Libur Mingguan (KBM)</label>
-                    <p className="text-xs text-yellow-700 mb-3">Tentukan hari libur untuk setiap jenjang pendidikan.</p>
-                    
-                    {localSettings.jenjang.length > 0 ? (
-                        <div className="space-y-4">
-                            {localSettings.jenjang.map(j => (
-                                <div key={j.id} className="border-b border-yellow-200 pb-3 last:border-0 last:pb-0">
-                                    <h4 className="text-sm font-semibold text-yellow-900 mb-2">{j.nama}</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        {daysOfWeek.map(day => (
-                                            <label key={day.val} className="flex items-center gap-1.5 cursor-pointer bg-white px-2 py-1 rounded border border-yellow-300 hover:bg-yellow-100 transition-colors">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={(j.hariLibur || []).includes(day.val)} 
-                                                    onChange={() => handleJenjangHariLiburChange(j.id, day.val)}
-                                                    className="w-3.5 h-3.5 text-teal-600 rounded focus:ring-teal-500"
-                                                />
-                                                <span className="text-xs font-medium text-gray-700">{day.label}</span>
-                                            </label>
-                                        ))}
-                                    </div>
+                    <div className="flex flex-col md:flex-row justify-between gap-6">
+                        <div className="flex-1">
+                             <label className="block mb-2 text-sm font-bold text-yellow-800">Hari Libur Mingguan (KBM)</label>
+                             <p className="text-xs text-yellow-700 mb-3">Tentukan hari libur untuk setiap jenjang pendidikan.</p>
+                             {localSettings.jenjang.length > 0 ? (
+                                <div className="space-y-4">
+                                    {localSettings.jenjang.map(j => (
+                                        <div key={j.id} className="border-b border-yellow-200 pb-3 last:border-0 last:pb-0">
+                                            <h4 className="text-sm font-semibold text-yellow-900 mb-2">{j.nama}</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {daysOfWeek.map(day => (
+                                                    <label key={day.val} className="flex items-center gap-1.5 cursor-pointer bg-white px-2 py-1 rounded border border-yellow-300 hover:bg-yellow-100 transition-colors">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={(j.hariLibur || []).includes(day.val)} 
+                                                            onChange={() => handleJenjangHariLiburChange(j.id, day.val)}
+                                                            className="w-3.5 h-3.5 text-teal-600 rounded focus:ring-teal-500"
+                                                        />
+                                                        <span className="text-xs font-medium text-gray-700">{day.label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                            ) : (
+                                <p className="text-xs text-red-600 italic">Belum ada data jenjang.</p>
+                            )}
                         </div>
-                    ) : (
-                        <p className="text-xs text-red-600 italic">Belum ada data jenjang. Silakan atur di menu Data Master.</p>
-                    )}
+                        
+                        <div className="w-full md:w-1/3 border-l md:border-l-yellow-200 pl-0 md:pl-6">
+                             <label className="block mb-2 text-sm font-bold text-yellow-800">Koreksi Tanggal Hijriah</label>
+                             <p className="text-xs text-yellow-700 mb-3">Gunakan opsi ini jika tanggal Hijriah di aplikasi berbeda 1-2 hari dengan ketetapan pemerintah.</p>
+                             <select 
+                                value={localSettings.hijriAdjustment || 0}
+                                onChange={(e) => handleInputChange('hijriAdjustment', parseInt(e.target.value))}
+                                className="bg-white border border-yellow-400 text-gray-800 text-sm rounded-lg focus:ring-yellow-500 focus:border-yellow-500 block w-full p-2.5"
+                            >
+                                <option value="-2">-2 Hari (Mundur 2 hari)</option>
+                                <option value="-1">-1 Hari (Mundur 1 hari)</option>
+                                <option value="0">0 Hari (Sesuai Browser)</option>
+                                <option value="1">+1 Hari (Maju 1 hari)</option>
+                                <option value="2">+2 Hari (Maju 2 hari)</option>
+                            </select>
+                             <div className="mt-2 text-xs bg-white p-2 rounded border border-yellow-300 text-gray-600">
+                                 <strong>Contoh:</strong> Jika browser menampilkan <em>1 Ramadhan</em>, tetapi pemerintah menetapkan sudah <em>2 Ramadhan</em>, pilih <strong>+1 Hari</strong>.
+                             </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t mt-6">

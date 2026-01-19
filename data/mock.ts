@@ -127,6 +127,7 @@ export const initialSettings: PondokSettings = {
   mataPelajaran: initialMataPelajaran,
   gedungAsrama: initialGedungAsrama,
   kamar: initialKamar,
+  hijriAdjustment: 0,
   biaya: [
     { id: 1, nama: 'SPP Salafiyah Wustho', nominal: 150000, jenis: 'Bulanan', jenjangId: 1 },
     { id: 2, nama: 'SPP Salafiyah Ulya', nominal: 200000, jenis: 'Bulanan', jenjangId: 2 },

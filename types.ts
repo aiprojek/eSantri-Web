@@ -11,7 +11,8 @@ export enum Page {
   Absensi = 'Absensi', // Verified
   Tahfizh = 'Tahfizh', // Verified
   Sarpras = 'Sarpras', // Verified
-  Kalender = 'Kalender', // NEW: Kalender Page
+  Kalender = 'Kalender', // Verified
+  Perpustakaan = 'Perpustakaan', // NEW: Perpustakaan
   DataMaster = 'DataMaster',
   Keuangan = 'Keuangan',
   Keasramaan = 'Keasramaan',
@@ -34,7 +35,8 @@ export interface UserPermissions {
     absensi: AccessLevel; 
     tahfizh: AccessLevel; 
     sarpras: AccessLevel; 
-    kalender: AccessLevel; // NEW
+    kalender: AccessLevel; 
+    perpustakaan: AccessLevel; // NEW
     datamaster: AccessLevel;
     keuangan: AccessLevel;
     keasramaan: AccessLevel;
@@ -60,7 +62,7 @@ export interface User {
     lastLogin?: string;
 }
 
-// ... (Existing types: Alamat, RiwayatStatus, Prestasi, Pelanggaran, TahfizhRecord, Inventaris, Santri, Jenjang, Kelas, Rombel, RiwayatJabatan, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar, Biaya, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig, StampConfig, SuratTemplate, ArsipSurat, NisJenjangConfig, NisSettings, SyncProvider, CloudSyncConfig, StorageStats, SyncFileRecord, BackupFrequency, BackupConfig, PsbFieldType, PsbCustomField, PsbDesignStyle, PsbSubmissionMethod, PsbFormTemplate, PsbPosterTemplate, PsbConfig, Pendaftar, AuditLog, SyncHistory, GridCell, RaporTemplate, RaporColumn, NilaiMapel, RaporRecord, AbsensiRecord, ReportType, PondokSettings remain unchanged) ...
+// ... (Existing types: Alamat, RiwayatStatus, Prestasi, Pelanggaran, TahfizhRecord, Inventaris, CalendarEvent, Santri, Jenjang, Kelas, Rombel, RiwayatJabatan, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar, Biaya, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig, StampConfig, SuratTemplate, ArsipSurat, NisJenjangConfig, NisSettings, SyncProvider, CloudSyncConfig, StorageStats, SyncFileRecord, BackupFrequency, BackupConfig, PsbFieldType, PsbCustomField, PsbDesignStyle, PsbSubmissionMethod, PsbFormTemplate, PsbPosterTemplate, PsbConfig, Pendaftar, AuditLog, SyncHistory, GridCell, RaporTemplate, RaporColumn, NilaiMapel, RaporRecord, AbsensiRecord, ReportType, PondokSettings remain unchanged) ...
 
 export interface Alamat {
     detail: string;
@@ -129,18 +131,42 @@ export interface Inventaris extends SyncedEntity {
     fotoUrl?: string;
 }
 
-// NEW: Calendar Event
 export interface CalendarEvent extends SyncedEntity {
     id: number;
     title: string;
-    startDate: string; // YYYY-MM-DD
-    endDate: string; // YYYY-MM-DD
+    startDate: string; 
+    endDate: string; 
     description?: string;
     category: 'Libur' | 'Ujian' | 'Kegiatan' | 'Rapat' | 'Lainnya';
-    color: string; // Hex color code or Tailwind class reference
+    color: string; 
 }
 
-// ... (Rest of existing types Santri, Jenjang, etc. pasted below for context continuity, omitting unchanged parts for brevity in XML block, assuming standard TypeScript module merge) ...
+// NEW: Perpustakaan Types
+export interface Buku extends SyncedEntity {
+    id: number;
+    kodeBuku: string;
+    judul: string;
+    penulis?: string;
+    penerbit?: string;
+    tahunTerbit?: number;
+    kategori: 'Kitab Kuning' | 'Buku Pelajaran' | 'Umum' | 'Referensi';
+    stok: number;
+    lokasiRak?: string;
+}
+
+export interface Sirkulasi extends SyncedEntity {
+    id: number;
+    santriId: number;
+    bukuId: number;
+    tanggalPinjam: string;
+    tanggalKembaliSeharusnya: string;
+    tanggalDikembalikan?: string;
+    status: 'Dipinjam' | 'Kembali' | 'Hilang';
+    denda: number;
+    catatan?: string;
+    kondisiPinjam?: string;
+    kondisiKembali?: string;
+}
 
 export interface Santri extends SyncedEntity {
     id: number;
@@ -255,4 +281,4 @@ export interface NilaiMapel { mapelId: number; nilaiAngka: number; nilaiHuruf?: 
 export interface RaporRecord extends SyncedEntity { id: number; santriId: number; tahunAjaran: string; semester: 'Ganjil' | 'Genap'; jenjangId: number; kelasId: number; rombelId: number; nilai: NilaiMapel[]; sakit: number; izin: number; alpha: number; kepribadian: { aspek: string; nilai: string }[]; ekstrakurikuler: { kegiatan: string; nilai: string; keterangan?: string }[]; catatanWaliKelas?: string; keputusan?: string; tanggalRapor: string; customData?: string; }
 export interface AbsensiRecord extends SyncedEntity { id: number; santriId: number; rombelId: number; tanggal: string; status: 'H' | 'S' | 'I' | 'A'; keterangan?: string; recordedBy?: string; }
 export enum ReportType { DashboardSummary = 'DashboardSummary', Biodata = 'Biodata', KartuSantri = 'KartuSantri', LabelSantri = 'LabelSantri', DaftarRombel = 'DaftarRombel', LembarAbsensi = 'LembarAbsensi', LembarNilai = 'LembarNilai', LembarPembinaan = 'LembarPembinaan', LembarKedatangan = 'LembarKedatangan', LembarRapor = 'LembarRapor', FinanceSummary = 'FinanceSummary', LaporanArusKas = 'LaporanArusKas', RekeningKoranSantri = 'RekeningKoranSantri', DaftarWaliKelas = 'DaftarWaliKelas', LaporanKontak = 'LaporanKontak', LaporanAsrama = 'LaporanAsrama', LaporanMutasi = 'LaporanMutasi', FormulirIzin = 'FormulirIzin', RaporLengkap = 'RaporLengkap', }
-export interface PondokSettings extends SyncedEntity { id?: number; namaYayasan: string; namaPonpes: string; nspp: string; npsn: string; alamat: string; telepon: string; website: string; email: string; logoYayasanUrl?: string; logoPonpesUrl?: string; mudirAamId?: number; jenjang: Jenjang[]; kelas: Kelas[]; rombel: Rombel[]; tenagaPengajar: TenagaPengajar[]; mataPelajaran: MataPelajaran[]; gedungAsrama: GedungAsrama[]; kamar: Kamar[]; biaya: Biaya[]; nisSettings: NisSettings; multiUserMode: boolean; suratTagihanPembuka: string; suratTagihanPenutup: string; suratTagihanCatatan?: string; pesanWaTunggakan: string; backupConfig: BackupConfig; cloudSyncConfig: CloudSyncConfig; psbConfig: PsbConfig; raporTemplates?: RaporTemplate[]; skMenteri?: string; aktaNotaris?: string; }
+export interface PondokSettings extends SyncedEntity { id?: number; namaYayasan: string; namaPonpes: string; nspp: string; npsn: string; alamat: string; telepon: string; website: string; email: string; logoYayasanUrl?: string; logoPonpesUrl?: string; mudirAamId?: number; jenjang: Jenjang[]; kelas: Kelas[]; rombel: Rombel[]; tenagaPengajar: TenagaPengajar[]; mataPelajaran: MataPelajaran[]; gedungAsrama: GedungAsrama[]; kamar: Kamar[]; biaya: Biaya[]; nisSettings: NisSettings; multiUserMode: boolean; suratTagihanPembuka: string; suratTagihanPenutup: string; suratTagihanCatatan?: string; pesanWaTunggakan: string; backupConfig: BackupConfig; cloudSyncConfig: CloudSyncConfig; psbConfig: PsbConfig; raporTemplates?: RaporTemplate[]; skMenteri?: string; aktaNotaris?: string; hijriAdjustment?: number; }

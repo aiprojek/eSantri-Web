@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
 import { PondokSettings, SuratTemplate, ArsipSurat, AuditLog, User } from './types';
@@ -118,8 +119,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const settings = settingsList[0] || initialSettings as PondokSettingsWithId;
     
     // Use filter because 'deleted' is not indexed
-    const suratTemplates = useLiveQuery(() => db.suratTemplates.filter(t => !t.deleted).toArray(), []) || [];
-    const arsipSuratList = useLiveQuery(() => db.arsipSurat.filter(a => !a.deleted).toArray(), []) || [];
+    const suratTemplates = useLiveQuery(() => db.suratTemplates.filter((t: SuratTemplate) => !t.deleted).toArray(), []) || [];
+    const arsipSuratList = useLiveQuery(() => db.arsipSurat.filter((a: ArsipSurat) => !a.deleted).toArray(), []) || [];
     
     // Auth State
     const [currentUser, setCurrentUser] = useState<User | null>(null);

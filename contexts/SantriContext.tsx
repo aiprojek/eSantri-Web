@@ -25,7 +25,7 @@ export const SantriProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   
   // Live Queries for Reactivity
   // Use filter because 'deleted' is not indexed
-  const santriList = useLiveQuery(() => db.santri.filter(s => !s.deleted).toArray(), []) || [];
+  const santriList = useLiveQuery(() => db.santri.filter((s: Santri) => !s.deleted).toArray(), []) || [];
   const pendaftarList = useLiveQuery(() => db.pendaftar.toArray(), []) || [];
   const absensiList = useLiveQuery(() => db.absensi.toArray(), []) || [];
   const tahfizhList = useLiveQuery(() => db.tahfizh.toArray(), []) || []; // New

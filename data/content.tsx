@@ -227,6 +227,28 @@ export const panduanData: PanduanSectionData[] = [
         title: 'Persiapan & Keamanan Sistem',
         steps: [
             {
+                title: 'Pemberitahuan Penting: Konsep & Rekomendasi',
+                content: (
+                    <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500 text-sm text-gray-700 space-y-3">
+                        <p>
+                            <strong>Asal Usul & Evolusi:</strong> Aplikasi ini awalnya didesain untuk penggunaan <em>Admin Sentris</em> (terpusat pada satu komputer). 
+                            Namun, untuk mempermudah pekerjaan Admin tanpa menambah biaya server yang mahal, kami menghadirkan fitur <strong>Sinkronisasi Cloud (Hub & Spoke)</strong>.
+                        </p>
+                        <div className="border-t border-yellow-200 pt-2">
+                            <strong>Saran Penggunaan:</strong>
+                            <ul className="list-disc pl-5 mt-1 space-y-1">
+                                <li>
+                                    <strong>Pahami Alurnya Dulu:</strong> Sebelum penerapan penuh di pondok, sangat disarankan untuk mencoba aplikasi ini dalam <strong>tim kecil</strong> (misal: 1 Admin + 1 Guru) untuk memahami cara kerja kirim/terima data.
+                                </li>
+                                <li>
+                                    <strong>Gunakan Fitur Kolaborasi:</strong> Untuk menunjang pekerjaan Admin agar tidak menumpuk, sangat disarankan mengaktifkan fitur <strong>Multi-User</strong> dan dukungan <strong>Cloud Sync</strong>. Biarkan Guru/Musyrif mengisi data (Absensi/Tahfizh) dari perangkat mereka sendiri.
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                )
+            },
+            {
                 title: 'Konfigurasi Data Lembaga',
                 content: (
                     <>

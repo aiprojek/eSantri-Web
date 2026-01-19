@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
 import { Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas } from '../types';
@@ -26,8 +27,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Live Queries - Only run when this component is mounted
   // Fix: Use filter instead of where('deleted') because 'deleted' field is not indexed in db.ts
-  const tagihanList = useLiveQuery(() => db.tagihan.filter(t => !t.deleted).toArray(), []) || [];
-  const pembayaranList = useLiveQuery(() => db.pembayaran.filter(p => !p.deleted).toArray(), []) || [];
+  const tagihanList = useLiveQuery(() => db.tagihan.filter((t: Tagihan) => !t.deleted).toArray(), []) || [];
+  const pembayaranList = useLiveQuery(() => db.pembayaran.filter((p: Pembayaran) => !p.deleted).toArray(), []) || [];
   const saldoSantriList = useLiveQuery(() => db.saldoSantri.toArray(), []) || [];
   const transaksiSaldoList = useLiveQuery(() => db.transaksiSaldo.toArray(), []) || [];
   const transaksiKasList = useLiveQuery(() => db.transaksiKas.toArray(), []) || [];
@@ -37,7 +38,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const onGenerateTagihanBulanan = async (tahun: number, bulan: number) => {
     // Fetch santri directly from DB to avoid context dependency
-    const santriList = await db.santri.filter(s => !s.deleted).toArray();
+    const santriList = await db.santri.filter((s: any) => !s.deleted).toArray();
     const { result, newTagihan } = await generateTagihanBulanan(db, settings, santriList, tahun, bulan);
     const withTs = newTagihan.map(t => addTimestamp({ ...t, id: generateUniqueId() }));
     await db.tagihan.bulkPut(withTs);
@@ -46,7 +47,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const onGenerateTagihanAwal = async () => {
     // Fetch santri directly from DB to avoid context dependency
-    const santriList = await db.santri.filter(s => !s.deleted).toArray();
+    const santriList = await db.santri.filter((s: any) => !s.deleted).toArray();
     const { result, newTagihan } = await generateTagihanAwal(db, settings, santriList);
     const withTs = newTagihan.map(t => addTimestamp({ ...t, id: generateUniqueId() }));
     await db.tagihan.bulkPut(withTs);

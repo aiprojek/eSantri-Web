@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -25,12 +25,14 @@ export class ESantriDatabase extends Dexie {
   tahfizh!: Table<TahfizhRecord, number>; 
   inventaris!: Table<Inventaris, number>; 
   calendarEvents!: Table<CalendarEvent, number>;
-  buku!: Table<Buku, number>; // NEW
-  sirkulasi!: Table<Sirkulasi, number>; // NEW
+  buku!: Table<Buku, number>; 
+  sirkulasi!: Table<Sirkulasi, number>;
+  obat!: Table<Obat, number>; // NEW
+  kesehatanRecords!: Table<KesehatanRecord, number>; // NEW
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(30).stores({ // Bumped to 30 for Perpustakaan
+    (this as any).version(31).stores({ // Bumped to 31 for Kesehatan
       santri: '++id, nis, namaLengkap, kamarId',
       settings: '++id',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
@@ -49,8 +51,10 @@ export class ESantriDatabase extends Dexie {
       tahfizh: '++id, santriId, tanggal, tipe',
       inventaris: '++id, kode, nama, jenis, kategori, lokasi',
       calendarEvents: '++id, startDate, endDate, category',
-      buku: '++id, kodeBuku, judul, kategori', // NEW TABLE
-      sirkulasi: '++id, santriId, bukuId, status, tanggalPinjam' // NEW TABLE
+      buku: '++id, kodeBuku, judul, kategori',
+      sirkulasi: '++id, santriId, bukuId, status, tanggalPinjam',
+      obat: '++id, nama, jenis', // NEW
+      kesehatanRecords: '++id, santriId, tanggal, status' // NEW
     }).upgrade(async (tx: any) => {
        // Migration handled by Dexie
     });

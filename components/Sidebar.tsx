@@ -59,6 +59,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
               { page: Page.Santri, icon: 'bi-people-fill', show: canAccess('santri') },
               { page: Page.Tahfizh, icon: 'bi-journal-richtext', show: canAccess('tahfizh') },
               { page: Page.Absensi, icon: 'bi-calendar-check-fill', show: canAccess('absensi') },
+              { page: Page.Kesehatan, icon: 'bi-heart-pulse-fill', show: canAccess('kesehatan') }, // NEW
               { page: Page.Keasramaan, icon: 'bi-building-fill', show: canAccess('keasramaan') },
           ]
       },

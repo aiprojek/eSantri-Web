@@ -14,7 +14,6 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingFallback } from './components/common/LoadingFallback';
 
 // --- Lazy Load Pages ---
-// Note: Path imports adjusted to point to ./components/ folder
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
 const SantriList = React.lazy(() => import('./components/SantriList'));
 const DataMaster = React.lazy(() => import('./components/DataMaster'));
@@ -31,7 +30,8 @@ const Absensi = React.lazy(() => import('./components/Absensi'));
 const Tahfizh = React.lazy(() => import('./components/Tahfizh'));
 const Sarpras = React.lazy(() => import('./components/Sarpras'));
 const Kalender = React.lazy(() => import('./components/Kalender'));
-const Perpustakaan = React.lazy(() => import('./components/Perpustakaan')); // NEW
+const Perpustakaan = React.lazy(() => import('./components/Perpustakaan')); 
+const Kesehatan = React.lazy(() => import('./components/Kesehatan')); // NEW
 
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
 const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
@@ -282,8 +282,10 @@ const AppContent: React.FC = () => {
                             return checkAccess('sarpras') ? <Sarpras /> : <AccessDenied />;
                         case Page.Kalender: 
                             return checkAccess('kalender') ? <Kalender /> : <AccessDenied />;
-                        case Page.Perpustakaan: // NEW
+                        case Page.Perpustakaan:
                             return checkAccess('perpustakaan') ? <Perpustakaan /> : <AccessDenied />;
+                        case Page.Kesehatan: // NEW
+                            return checkAccess('kesehatan') ? <Kesehatan /> : <AccessDenied />;
                         case Page.DataMaster:
                             return checkAccess('datamaster') ? <DataMaster /> : <AccessDenied />;
                         case Page.Keuangan:

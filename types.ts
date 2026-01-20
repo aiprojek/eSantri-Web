@@ -8,11 +8,12 @@ export enum Page {
   Dashboard = 'Dashboard',
   Santri = 'Santri',
   Akademik = 'Akademik',
-  Absensi = 'Absensi', // Verified
-  Tahfizh = 'Tahfizh', // Verified
-  Sarpras = 'Sarpras', // Verified
-  Kalender = 'Kalender', // Verified
-  Perpustakaan = 'Perpustakaan', // NEW: Perpustakaan
+  Absensi = 'Absensi', 
+  Tahfizh = 'Tahfizh', 
+  Sarpras = 'Sarpras', 
+  Kalender = 'Kalender', 
+  Perpustakaan = 'Perpustakaan',
+  Kesehatan = 'Kesehatan', // NEW
   DataMaster = 'DataMaster',
   Keuangan = 'Keuangan',
   Keasramaan = 'Keasramaan',
@@ -36,7 +37,8 @@ export interface UserPermissions {
     tahfizh: AccessLevel; 
     sarpras: AccessLevel; 
     kalender: AccessLevel; 
-    perpustakaan: AccessLevel; // NEW
+    perpustakaan: AccessLevel;
+    kesehatan: AccessLevel; // NEW
     datamaster: AccessLevel;
     keuangan: AccessLevel;
     keasramaan: AccessLevel;
@@ -62,8 +64,37 @@ export interface User {
     lastLogin?: string;
 }
 
-// ... (Existing types: Alamat, RiwayatStatus, Prestasi, Pelanggaran, TahfizhRecord, Inventaris, CalendarEvent, Santri, Jenjang, Kelas, Rombel, RiwayatJabatan, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar, Biaya, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig, StampConfig, SuratTemplate, ArsipSurat, NisJenjangConfig, NisSettings, SyncProvider, CloudSyncConfig, StorageStats, SyncFileRecord, BackupFrequency, BackupConfig, PsbFieldType, PsbCustomField, PsbDesignStyle, PsbSubmissionMethod, PsbFormTemplate, PsbPosterTemplate, PsbConfig, Pendaftar, AuditLog, SyncHistory, GridCell, RaporTemplate, RaporColumn, NilaiMapel, RaporRecord, AbsensiRecord, ReportType, PondokSettings remain unchanged) ...
+// NEW: Kesehatan Types
+export interface Obat extends SyncedEntity {
+    id: number;
+    nama: string;
+    jenis: 'Tablet' | 'Sirup' | 'Salep' | 'Alat' | 'Lainnya';
+    stok: number;
+    satuan: string; // strip, botol, pcs
+    keterangan?: string;
+}
 
+export interface ResepItem {
+    obatId: number;
+    namaObat: string;
+    jumlah: number;
+    dosis: string;
+}
+
+export interface KesehatanRecord extends SyncedEntity {
+    id: number;
+    santriId: number;
+    tanggal: string;
+    keluhan: string;
+    diagnosa: string;
+    tindakan: string; // Obat yang diberikan atau tindakan fisik
+    resep?: ResepItem[]; // NEW: Structured medicine usage
+    status: 'Rawat Jalan' | 'Rawat Inap (Pondok)' | 'Rujuk RS/Klinik' | 'Sembuh';
+    pemeriksa: string; // Nama petugas
+    catatan?: string;
+}
+
+// ... (Existing types remain below)
 export interface Alamat {
     detail: string;
     desaKelurahan?: string;
@@ -141,7 +172,6 @@ export interface CalendarEvent extends SyncedEntity {
     color: string; 
 }
 
-// NEW: Perpustakaan Types
 export interface Buku extends SyncedEntity {
     id: number;
     kodeBuku: string;

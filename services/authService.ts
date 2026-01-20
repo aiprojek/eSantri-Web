@@ -33,7 +33,8 @@ export const ADMIN_PERMISSIONS = {
     tahfizh: 'write',
     sarpras: 'write', 
     kalender: 'write', 
-    perpustakaan: 'write', // NEW
+    perpustakaan: 'write',
+    kesehatan: 'write', // NEW
     datamaster: 'write',
     keuangan: 'write',
     keasramaan: 'write',
@@ -54,7 +55,8 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     tahfizh: 'read',
     sarpras: 'read', 
     kalender: 'read',
-    perpustakaan: 'read', // Default Read for Staff
+    perpustakaan: 'read',
+    kesehatan: 'read', // Default Read for Staff
     datamaster: 'none',
     keuangan: 'none',
     keasramaan: 'read',

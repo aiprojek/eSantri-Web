@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserPermissions, AccessLevel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
-import { hashString, DEFAULT_STAFF_PERMISSIONS } from '../../../services/authService';
+import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS } from '../../../services/authService';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -103,12 +103,21 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     const modules = [
         { key: 'santri', label: 'Data Santri' },
         { key: 'psb', label: 'PSB Online' },
+        { key: 'akademik', label: 'Akademik & Rapor' },
+        { key: 'absensi', label: 'Absensi' },
+        { key: 'tahfizh', label: 'Tahfizh Al-Qur\'an' },
+        { key: 'kesehatan', label: 'Kesehatan (Poskestren)' }, // NEW
+        { key: 'perpustakaan', label: 'Perpustakaan' },
+        { key: 'sarpras', label: 'Sarana Prasarana (Aset)' },
+        { key: 'kalender', label: 'Kalender Akademik' },
         { key: 'keuangan', label: 'Keuangan & SPP' },
         { key: 'bukukas', label: 'Buku Kas Umum' },
         { key: 'keasramaan', label: 'Keasramaan' },
         { key: 'surat', label: 'Surat Menyurat' },
         { key: 'laporan', label: 'Laporan & Cetak' },
-        { key: 'datamaster', label: 'Data Master (Akademik)' },
+        { key: 'datamaster', label: 'Data Master (Struktur)' },
+        { key: 'auditlog', label: 'Log Aktivitas' },
+        { key: 'pengaturan', label: 'Pengaturan Sistem' },
     ];
 
     const commonQuestions = [

@@ -95,6 +95,25 @@ export const faqData: FaqCategoryData[] = [
         ]
     },
     {
+        title: "Kesehatan & Poskestren",
+        icon: "bi-heart-pulse-fill",
+        colorClass: "bg-red-50 border-red-500 text-red-900",
+        items: [
+            {
+                question: "Apakah stok obat berkurang otomatis?",
+                answer: "Ya. Saat Anda mencatat pemeriksaan dan menambahkan 'Resep Obat' di formulir, stok obat di gudang akan otomatis berkurang sesuai jumlah yang diberikan."
+            },
+            {
+                question: "Bagaimana jika santri sakit (Rawat Inap)?",
+                answer: "Sistem terintegrasi otomatis. Jika Anda memilih status 'Rawat Inap' atau 'Rujuk' di menu Kesehatan, maka di menu Absensi, santri tersebut akan otomatis tercatat 'S' (Sakit) pada tanggal tersebut."
+            },
+            {
+                question: "Bisakah saya mencetak Surat Keterangan Sakit?",
+                answer: "Bisa. Di tabel Riwayat Kesehatan, klik ikon Printer di sebelah kanan data pemeriksaan. Surat akan ter-generate otomatis berisi diagnosa dan tanda tangan pemeriksa."
+            }
+        ]
+    },
+    {
         title: "Absensi & Kehadiran",
         icon: "bi-calendar-check-fill",
         colorClass: "bg-teal-50 border-teal-500 text-teal-900",
@@ -317,7 +336,7 @@ export const panduanData: PanduanSectionData[] = [
                             </div>
                             <div className="bg-green-50 p-3 rounded border border-green-100">
                                 <h4 className="font-bold text-green-800 mb-1"><i className="bi bi-person-fill-lock"></i> Pembagian Tugas</h4>
-                                <p>Buat akun khusus Staff (misal: Bendahara) yang hanya bisa akses menu Keuangan, tapi tidak bisa hapus data Santri.</p>
+                                <p>Buat akun khusus Staff (misal: Bendahara hanya akses Keuangan, tidak bisa hapus data Santri).</p>
                             </div>
                             <div className="bg-orange-50 p-3 rounded border border-orange-100">
                                 <h4 className="font-bold text-orange-800 mb-1"><i className="bi bi-activity"></i> Audit Trail</h4>
@@ -460,8 +479,50 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
-        id: 'absensi',
+        id: 'kesehatan',
         badge: 3,
+        badgeColor: 'red',
+        title: "Poskestren & Kesehatan",
+        steps: [
+            {
+                title: 'Setup Stok & Data Obat',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Kesehatan &gt; Stok Obat</strong>.</li>
+                        <li>Klik <strong>Tambah Obat</strong> untuk menginput database obat (Nama, Jenis, Stok Awal).</li>
+                        <li>Stok akan otomatis berkurang saat obat diresepkan kepada santri.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Alur Pemeriksaan Ideal (Beban Kerja Terbagi)',
+                content: (
+                     <>
+                        <div className="bg-red-50 p-3 rounded border border-red-200 text-sm mb-2 text-red-900">
+                            <strong>REKOMENDASI:</strong> Jangan biarkan Admin Kantor mengerjakan semuanya. Delegasikan input kesehatan ke Petugas Poskestren.
+                        </div>
+                        <ol className="list-decimal pl-5 space-y-2 text-sm mt-1">
+                            <li><strong>Buat Akun Petugas:</strong> Admin membuat user baru dengan role 'Staff' dan akses hanya ke modul 'Kesehatan'.</li>
+                            <li><strong>Input di Klinik:</strong> Petugas Poskestren login di laptop klinik. Saat ada santri sakit, input data di menu <strong>Rekam Medis</strong>.</li>
+                            <li><strong>Sync Data:</strong> Sore hari, Petugas klik "Kirim Perubahan". Admin pusat akan menerima data rekam medis tersebut.</li>
+                        </ol>
+                    </>
+                )
+            },
+            {
+                title: 'Integrasi Absensi & Cetak Surat',
+                content: (
+                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li><strong>Absensi Otomatis:</strong> Jika status pemeriksaan adalah 'Rawat Inap' atau 'Rujuk', sistem otomatis menandai santri tersebut 'Sakit' (S) di menu Absensi pada tanggal tersebut.</li>
+                        <li><strong>Cetak Surat:</strong> Klik ikon printer pada tabel rekam medis untuk mencetak Surat Keterangan Sakit resmi untuk izin sekolah/kamar.</li>
+                    </ul>
+                )
+            }
+        ]
+    },
+    {
+        id: 'absensi',
+        badge: 4,
         badgeColor: 'teal',
         title: 'Manajemen Absensi',
         steps: [
@@ -510,7 +571,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'tahfizh',
-        badge: 4,
+        badge: 5,
         badgeColor: 'green',
         title: "Tahfizh & Mutaba'ah Qur'an",
         steps: [
@@ -557,7 +618,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'akademik',
-        badge: 5,
+        badge: 6,
         badgeColor: 'indigo',
         title: 'Akademik & Rapor Digital',
         steps: [
@@ -622,7 +683,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'finance',
-        badge: 6,
+        badge: 7,
         badgeColor: 'blue',
         title: 'Keuangan & Pembayaran',
         steps: [
@@ -668,7 +729,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'asrama',
-        badge: 7,
+        badge: 8,
         badgeColor: 'orange',
         title: 'Keasramaan',
         steps: [
@@ -695,7 +756,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'admin',
-        badge: 8,
+        badge: 9,
         badgeColor: 'green',
         title: 'PSB & Surat Menyurat',
         steps: [
@@ -727,7 +788,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'kalender',
-        badge: 9,
+        badge: 10,
         badgeColor: 'yellow',
         title: 'Kalender Akademik',
         steps: [

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
-import { listInboxFiles, processInboxFile, publishMasterData, getValidDropboxToken } from '../services/syncService';
+import { listInboxFiles, processInboxFile, publishMasterData, deleteInboxFile, deleteMultipleInboxFiles } from '../services/syncService';
 import { SyncFileRecord } from '../types';
 import { db } from '../db';
 import { formatBytes } from '../utils/formatters';
@@ -102,15 +102,7 @@ export const AdminSyncDashboard: React.FC = () => {
             `File "${file.name}" akan dihapus permanen dari Cloud.`,
             async () => {
                 try {
-                    const token = await getValidDropboxToken(config);
-                    await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ path: file.path_lower })
-                    });
+                    await deleteInboxFile(config, file.path_lower);
                     setFiles(prev => prev.filter(f => f.id !== file.id));
                     showToast('File dihapus.', 'success');
                 } catch(e) {
@@ -118,6 +110,33 @@ export const AdminSyncDashboard: React.FC = () => {
                 }
             },
             { confirmColor: 'red', confirmText: 'Hapus' }
+        );
+    }
+
+    const handleDeleteMerged = async () => {
+        const mergedFiles = files.filter(f => f.status === 'merged');
+        if (mergedFiles.length === 0) {
+            showToast('Tidak ada file yang statusnya "Sudah Digabung" untuk dihapus.', 'info');
+            return;
+        }
+
+        showConfirmation(
+            'Bersihkan Inbox?',
+            `Anda akan menghapus ${mergedFiles.length} file yang sudah digabungkan dari Cloud. Ini tidak akan menghapus data di database lokal. Lanjutkan?`,
+            async () => {
+                setIsLoading(true);
+                try {
+                    const paths = mergedFiles.map(f => f.path_lower);
+                    await deleteMultipleInboxFiles(config, paths);
+                    setFiles(prev => prev.filter(f => f.status !== 'merged'));
+                    showToast('Inbox berhasil dibersihkan.', 'success');
+                } catch (e) {
+                    showToast('Gagal membersihkan inbox.', 'error');
+                } finally {
+                    setIsLoading(false);
+                }
+            },
+            { confirmColor: 'red', confirmText: 'Ya, Bersihkan' }
         );
     }
 
@@ -147,8 +166,15 @@ export const AdminSyncDashboard: React.FC = () => {
 
             <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b bg-gray-50 flex justify-between items-center">
-                    <h3 className="font-bold text-gray-700">Inbox: Update dari Staff</h3>
-                    <span className="text-xs text-gray-500">Total File: {files.length}</span>
+                    <div>
+                        <h3 className="font-bold text-gray-700">Inbox: Update dari Staff</h3>
+                        <span className="text-xs text-gray-500">Total File: {files.length}</span>
+                    </div>
+                    {files.some(f => f.status === 'merged') && (
+                        <button onClick={handleDeleteMerged} disabled={isLoading} className="text-red-600 hover:bg-red-50 px-3 py-1.5 rounded text-xs font-bold border border-red-200 flex items-center gap-1 transition-colors">
+                            <i className="bi bi-trash-fill"></i> Bersihkan yang Sudah Digabung
+                        </button>
+                    )}
                 </div>
                 <table className="w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-500 border-b">
@@ -205,6 +231,7 @@ export const AdminSyncDashboard: React.FC = () => {
                     <li>Klik "Segarkan" untuk melihat file kiriman staff.</li>
                     <li>Klik "Gabung" pada file baru untuk memasukkan data staff ke database Admin (Merge Cerdas: Data baru ditambah, Data lama diperbarui jika timestamp lebih baru).</li>
                     <li>Setelah semua file digabung, klik "Publikasikan Master" agar seluruh staff bisa mendownload data gabungan terbaru.</li>
+                    <li>Gunakan tombol "Bersihkan" untuk menghapus file yang sudah tidak diperlukan dari Cloud agar penyimpanan tidak penuh.</li>
                 </ol>
             </div>
         </div>

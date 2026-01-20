@@ -12,6 +12,12 @@ export const TahfizhInput: React.FC = () => {
     // --- STATE ---
     const [santriId, setSantriId] = useState<number>(0);
     const [searchSantri, setSearchSantri] = useState('');
+    
+    // Filters
+    const [filterJenjang, setFilterJenjang] = useState<number>(0);
+    const [filterKelas, setFilterKelas] = useState<number>(0);
+    const [filterRombel, setFilterRombel] = useState<number>(0);
+
     const [tipe, setTipe] = useState<TahfizhRecord['tipe']>('Ziyadah');
     const [juz, setJuz] = useState<number>(30); // Default Juz 30
     const [surahIndex, setSurahIndex] = useState<number>(77); // Default An-Naba (Index 77 in 0-based array is 78-AnNaba)
@@ -22,17 +28,38 @@ export const TahfizhInput: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
 
     // --- DERIVED DATA ---
-    const activeSantri = useMemo(() => {
-        return santriList
-            .filter(s => s.status === 'Aktif')
-            .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap));
-    }, [santriList]);
+    // Filter Cascading Options
+    const availableKelas = useMemo(() => {
+        if (!filterJenjang) return [];
+        return settings.kelas.filter(k => k.jenjangId === filterJenjang);
+    }, [filterJenjang, settings.kelas]);
+
+    const availableRombel = useMemo(() => {
+        if (!filterKelas) return [];
+        return settings.rombel.filter(r => r.kelasId === filterKelas);
+    }, [filterKelas, settings.rombel]);
 
     const filteredSantri = useMemo(() => {
-        if (!searchSantri) return activeSantri; 
-        const lower = searchSantri.toLowerCase();
-        return activeSantri.filter(s => s.namaLengkap.toLowerCase().includes(lower) || s.nis.includes(lower));
-    }, [activeSantri, searchSantri]);
+        return santriList
+            .filter(s => {
+                // Status Filter
+                if (s.status !== 'Aktif') return false;
+                
+                // Search Filter
+                if (searchSantri) {
+                    const lower = searchSantri.toLowerCase();
+                    if (!s.namaLengkap.toLowerCase().includes(lower) && !s.nis.includes(lower)) return false;
+                }
+
+                // Dropdown Filters
+                if (filterJenjang && s.jenjangId !== filterJenjang) return false;
+                if (filterKelas && s.kelasId !== filterKelas) return false;
+                if (filterRombel && s.rombelId !== filterRombel) return false;
+
+                return true;
+            })
+            .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap));
+    }, [santriList, searchSantri, filterJenjang, filterKelas, filterRombel]);
 
     const selectedSantri = useMemo(() => santriList.find(s => s.id === santriId), [santriList, santriId]);
 
@@ -105,24 +132,56 @@ export const TahfizhInput: React.FC = () => {
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full pb-24 lg:pb-0">
             {/* LEFT COLUMN: SANTRI SELECTION */}
-            <div className="lg:col-span-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col h-[500px] lg:h-auto">
-                <div className="mb-4">
-                    <h3 className="font-bold text-gray-700 mb-2 flex items-center gap-2">
+            <div className="lg:col-span-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col h-auto lg:h-[calc(100vh-140px)]">
+                <div className="mb-4 space-y-3">
+                    <h3 className="font-bold text-gray-700 flex items-center gap-2">
                         <i className="bi bi-people-fill text-teal-600"></i> Pilih Santri
                     </h3>
+                    
+                    {/* Filters */}
+                    <div className="grid grid-cols-2 gap-2">
+                        <select 
+                            value={filterJenjang} 
+                            onChange={(e) => { setFilterJenjang(Number(e.target.value)); setFilterKelas(0); setFilterRombel(0); }} 
+                            className="bg-gray-50 border border-gray-300 text-xs rounded-lg p-2"
+                        >
+                            <option value={0}>Semua Jenjang</option>
+                            {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                        </select>
+                        <select 
+                            value={filterKelas} 
+                            onChange={(e) => { setFilterKelas(Number(e.target.value)); setFilterRombel(0); }} 
+                            disabled={!filterJenjang}
+                            className="bg-gray-50 border border-gray-300 text-xs rounded-lg p-2 disabled:bg-gray-100"
+                        >
+                            <option value={0}>Semua Kelas</option>
+                            {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                        </select>
+                    </div>
+                    <select 
+                        value={filterRombel} 
+                        onChange={(e) => setFilterRombel(Number(e.target.value))} 
+                        disabled={!filterKelas}
+                        className="w-full bg-gray-50 border border-gray-300 text-xs rounded-lg p-2 disabled:bg-gray-100"
+                    >
+                        <option value={0}>Semua Rombel</option>
+                        {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                    </select>
+
                     <div className="relative">
                         <input
                             type="text"
                             placeholder="Cari nama / NIS..."
                             value={searchSantri}
                             onChange={(e) => setSearchSantri(e.target.value)}
-                            className="w-full p-2.5 pl-9 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm"
+                            className="w-full p-2 pl-9 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm"
                         />
-                        <i className="bi bi-search absolute left-3 top-3 text-gray-400"></i>
+                        <i className="bi bi-search absolute left-3 top-2.5 text-gray-400"></i>
                     </div>
                 </div>
                 
-                <div className="flex-grow overflow-y-auto border rounded-lg bg-gray-50">
+                {/* Scrollable List */}
+                <div className="flex-grow overflow-y-auto border rounded-lg bg-gray-50 custom-scrollbar max-h-[300px] lg:max-h-none">
                     {filteredSantri.length > 0 ? (
                         <div className="divide-y">
                             {filteredSantri.map(s => (
@@ -131,18 +190,21 @@ export const TahfizhInput: React.FC = () => {
                                     onClick={() => setSantriId(s.id)}
                                     className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors ${santriId === s.id ? 'bg-teal-100 border-l-4 border-teal-600' : 'hover:bg-white'}`}
                                 >
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border ${santriId === s.id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-500 border-gray-300'}`}>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border shrink-0 ${santriId === s.id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-500 border-gray-300'}`}>
                                         {s.namaLengkap.charAt(0)}
                                     </div>
-                                    <div>
-                                        <p className={`font-bold text-sm ${santriId === s.id ? 'text-teal-900' : 'text-gray-700'}`}>{s.namaLengkap}</p>
-                                        <p className="text-xs text-gray-500">{settings.rombel.find(r=>r.id === s.rombelId)?.nama || 'Tanpa Kelas'}</p>
+                                    <div className="min-w-0">
+                                        <p className={`font-bold text-sm truncate ${santriId === s.id ? 'text-teal-900' : 'text-gray-700'}`}>{s.namaLengkap}</p>
+                                        <p className="text-xs text-gray-500 truncate">{settings.rombel.find(r=>r.id === s.rombelId)?.nama || 'Tanpa Kelas'}</p>
                                     </div>
                                 </button>
                             ))}
                         </div>
                     ) : (
-                        <div className="p-8 text-center text-gray-500 text-sm">Tidak ditemukan</div>
+                        <div className="p-8 text-center text-gray-500 text-sm">
+                            <i className="bi bi-search text-2xl mb-2 block opacity-50"></i>
+                            Tidak ada data
+                        </div>
                     )}
                 </div>
             </div>
@@ -151,7 +213,7 @@ export const TahfizhInput: React.FC = () => {
             <div className="lg:col-span-8 flex flex-col gap-4">
                  {/* Selected Santri Info Banner (Mobile mainly, but nice on desktop too) */}
                  {selectedSantri ? (
-                    <div className="bg-teal-600 text-white p-4 rounded-xl shadow-md flex justify-between items-center">
+                    <div className="bg-teal-600 text-white p-4 rounded-xl shadow-md flex justify-between items-center animate-fade-in-down">
                         <div className="flex items-center gap-3">
                             <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-xl font-bold border border-white/30">
                                 {selectedSantri.namaLengkap.charAt(0)}

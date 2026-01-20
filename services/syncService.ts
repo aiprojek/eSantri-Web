@@ -403,3 +403,43 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
     }
     return true;
 };
+
+// 7. Delete File from Inbox (Single)
+export const deleteInboxFile = async (config: CloudSyncConfig, path: string) => {
+    const token = await getValidDropboxToken(config);
+    await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ path })
+    });
+};
+
+// 8. Bulk Delete (Batch)
+export const deleteMultipleInboxFiles = async (config: CloudSyncConfig, paths: string[]) => {
+    if (paths.length === 0) return;
+    const token = await getValidDropboxToken(config);
+    
+    // Dropbox API v2 delete_batch
+    const entries = paths.map(path => ({ path }));
+    
+    const launchResponse = await fetch('https://api.dropboxapi.com/2/files/delete_batch', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ entries })
+    });
+
+    if (!launchResponse.ok) {
+        throw new Error("Gagal memulai proses hapus massal.");
+    }
+    
+    // Note: delete_batch is async, but for < 1000 files it's usually fast. 
+    // We treat it as fire-and-forget for UI responsiveness in this context, 
+    // or we could poll check_job_status if needed strictly.
+    // For simplicity in this app scale, we assume success or user can refresh.
+};

@@ -103,10 +103,12 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     const modules = [
         { key: 'santri', label: 'Data Santri' },
         { key: 'psb', label: 'PSB Online' },
+        { key: 'bukutamu', label: 'Buku Tamu (Security)' }, // NEW
         { key: 'akademik', label: 'Akademik & Rapor' },
         { key: 'absensi', label: 'Absensi' },
         { key: 'tahfizh', label: 'Tahfizh Al-Qur\'an' },
-        { key: 'kesehatan', label: 'Kesehatan (Poskestren)' }, // NEW
+        { key: 'kesehatan', label: 'Kesehatan (Poskestren)' },
+        { key: 'bk', label: 'Bimbingan Konseling' },
         { key: 'perpustakaan', label: 'Perpustakaan' },
         { key: 'sarpras', label: 'Sarana Prasarana (Aset)' },
         { key: 'kalender', label: 'Kalender Akademik' },
@@ -205,7 +207,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                                 <span className="font-semibold text-sm text-gray-700">Hak Akses Modul</span>
                             </div>
                             
-                            {/* NEW: Delegate Sync Admin */}
+                            {/* Delegate Sync Admin */}
                             <div className="p-3 bg-purple-50 border-b flex items-center gap-3">
                                 <input 
                                     type="checkbox" 

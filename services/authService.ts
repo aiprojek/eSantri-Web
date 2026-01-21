@@ -34,7 +34,9 @@ export const ADMIN_PERMISSIONS = {
     sarpras: 'write', 
     kalender: 'write', 
     perpustakaan: 'write',
-    kesehatan: 'write', // NEW
+    kesehatan: 'write',
+    bk: 'write', 
+    bukutamu: 'write', // NEW
     datamaster: 'write',
     keuangan: 'write',
     keasramaan: 'write',
@@ -56,7 +58,9 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     sarpras: 'read', 
     kalender: 'read',
     perpustakaan: 'read',
-    kesehatan: 'read', // Default Read for Staff
+    kesehatan: 'read', 
+    bk: 'none', 
+    bukutamu: 'write', // Staff usually handles guests
     datamaster: 'none',
     keuangan: 'none',
     keasramaan: 'read',

@@ -132,11 +132,12 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
     if (config.provider !== 'dropbox') throw new Error("Provider harus Dropbox");
     const token = await getValidDropboxToken(config);
     
-    // Gather Data
+    // Gather Data (UPDATED to include ALL new modules)
     const payload = {
         sender: username,
         timestamp: new Date().toISOString(),
         data: {
+            // Core
             santri: await db.santri.toArray(),
             tagihan: await db.tagihan.toArray(),
             pembayaran: await db.pembayaran.toArray(),
@@ -149,7 +150,20 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
             auditLogs: await db.auditLogs.toArray(),
             users: await db.users.toArray(), 
             raporRecords: await db.raporRecords.toArray(),
-            absensi: await db.absensi.toArray(), // Added Absensi
+            absensi: await db.absensi.toArray(),
+            
+            // New Modules (Complete)
+            tahfizh: await db.tahfizh.toArray(),
+            buku: await db.buku.toArray(),
+            sirkulasi: await db.sirkulasi.toArray(),
+            obat: await db.obat.toArray(),
+            kesehatanRecords: await db.kesehatanRecords.toArray(),
+            bkSessions: await db.bkSessions.toArray(),
+            bukuTamu: await db.bukuTamu.toArray(), // New Feature
+            
+            // Other settings (ADDED)
+            inventaris: await db.inventaris.toArray(),
+            calendarEvents: await db.calendarEvents.toArray()
         }
     };
     
@@ -199,10 +213,18 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
 
     const masterData = await response.json();
     
-    // SMART MERGE LOGIC
-    await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.raporRecords, db.absensi, async () => {
+    // SMART MERGE LOGIC (UPDATED with new tables)
+    const tablesToMerge = [
+        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 
+        'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
+        'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
+        'inventaris', 'calendarEvents' // ADDED
+    ];
+
+    await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
         
         const mergeTable = async (tableName: string, masterItems: any[]) => {
+            if (!masterItems) return; // Skip if master doesn't have this table yet
             const table = (db as any)[tableName];
             const localItems = await table.toArray();
             const localMap = new Map(localItems.map((i: any) => [i.id, i]));
@@ -227,17 +249,9 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
             }
         };
 
-        if(masterData.santri) await mergeTable('santri', masterData.santri);
-        if(masterData.tagihan) await mergeTable('tagihan', masterData.tagihan);
-        if(masterData.pembayaran) await mergeTable('pembayaran', masterData.pembayaran);
-        if(masterData.saldoSantri) await mergeTable('saldoSantri', masterData.saldoSantri);
-        if(masterData.transaksiSaldo) await mergeTable('transaksiSaldo', masterData.transaksiSaldo);
-        if(masterData.transaksiKas) await mergeTable('transaksiKas', masterData.transaksiKas);
-        if(masterData.suratTemplates) await mergeTable('suratTemplates', masterData.suratTemplates);
-        if(masterData.arsipSurat) await mergeTable('arsipSurat', masterData.arsipSurat);
-        if(masterData.pendaftar) await mergeTable('pendaftar', masterData.pendaftar);
-        if(masterData.raporRecords) await mergeTable('raporRecords', masterData.raporRecords);
-        if(masterData.absensi) await mergeTable('absensi', masterData.absensi); // Added Absensi
+        for (const tableName of tablesToMerge) {
+            await mergeTable(tableName, masterData[tableName]);
+        }
     });
 
     return { status: 'merged', timestamp: masterData.timestamp };
@@ -272,7 +286,7 @@ export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileR
     }));
 };
 
-// 4. Admin Only: Fetch & Merge Specific File
+// 4. Admin Only: Fetch & Merge Specific File (Merge from Staff Inbox)
 export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord) => {
     const token = await getValidDropboxToken(config);
     
@@ -293,7 +307,14 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
     // Merge to Admin DB (Admin is TRUTH, but we accept incoming data as updates)
     let recordCount = 0;
 
-    await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, db.users, db.raporRecords, db.absensi, async () => {
+    const tablesToMerge = [
+        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 
+        'suratTemplates', 'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi',
+        'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
+        'inventaris', 'calendarEvents' // ADDED
+    ];
+
+    await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
         const merge = async (table: string, items: any[]) => {
             if (!items || items.length === 0) return;
             const tbl = (db as any)[table];
@@ -301,27 +322,14 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
             recordCount += items.length;
         };
         
-        await merge('santri', data.santri);
-        await merge('tagihan', data.tagihan);
-        await merge('pembayaran', data.pembayaran);
-        await merge('saldoSantri', data.saldoSantri);
-        await merge('transaksiSaldo', data.transaksiSaldo);
-        await merge('transaksiKas', data.transaksiKas);
-        await merge('suratTemplates', data.suratTemplates);
-        await merge('arsipSurat', data.arsipSurat);
-        await merge('pendaftar', data.pendaftar);
-        await merge('raporRecords', data.raporRecords);
-        await merge('absensi', data.absensi); // Added Absensi
-        
-        // Merge Audit Logs
-        if (data.auditLogs) {
-            await db.auditLogs.bulkPut(data.auditLogs);
-        }
-
-        // Merge Users (Passwords)
-        if (data.users) {
-            const staffUpdates = data.users.filter((u: any) => !u.isDefaultAdmin);
-            await db.users.bulkPut(staffUpdates);
+        for (const tableName of tablesToMerge) {
+            // Special handling for users (don't overwrite default admin)
+            if (tableName === 'users' && data.users) {
+                const staffUpdates = data.users.filter((u: any) => !u.isDefaultAdmin);
+                await merge('users', staffUpdates);
+            } else {
+                await merge(tableName, data[tableName]);
+            }
         }
     });
 
@@ -337,6 +345,7 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
     // 1. Data Master (Transactional Data)
     const masterData = {
         timestamp: new Date().toISOString(),
+        // Core
         santri: await db.santri.toArray(),
         tagihan: await db.tagihan.toArray(),
         pembayaran: await db.pembayaran.toArray(),
@@ -347,13 +356,26 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         arsipSurat: await db.arsipSurat.toArray(),
         pendaftar: await db.pendaftar.toArray(),
         raporRecords: await db.raporRecords.toArray(),
-        absensi: await db.absensi.toArray(), // Added Absensi
+        absensi: await db.absensi.toArray(),
+        
+        // New Modules (Complete)
+        tahfizh: await db.tahfizh.toArray(),
+        buku: await db.buku.toArray(),
+        sirkulasi: await db.sirkulasi.toArray(),
+        obat: await db.obat.toArray(),
+        kesehatanRecords: await db.kesehatanRecords.toArray(),
+        bkSessions: await db.bkSessions.toArray(),
+        bukuTamu: await db.bukuTamu.toArray(), // New Feature
+        
+        // Other (ADDED)
+        inventaris: await db.inventaris.toArray(),
+        calendarEvents: await db.calendarEvents.toArray()
     };
 
     // 2. Config Master (Users & Settings)
     const masterConfig = {
         timestamp: new Date().toISOString(),
-        users: await db.users.toArray(), // For password reset
+        users: await db.users.toArray(), // For password reset syncing
         settings: await db.settings.toArray()
     };
 
@@ -422,7 +444,6 @@ export const deleteMultipleInboxFiles = async (config: CloudSyncConfig, paths: s
     if (paths.length === 0) return;
     const token = await getValidDropboxToken(config);
     
-    // Dropbox API v2 delete_batch
     const entries = paths.map(path => ({ path }));
     
     const launchResponse = await fetch('https://api.dropboxapi.com/2/files/delete_batch', {
@@ -437,9 +458,4 @@ export const deleteMultipleInboxFiles = async (config: CloudSyncConfig, paths: s
     if (!launchResponse.ok) {
         throw new Error("Gagal memulai proses hapus massal.");
     }
-    
-    // Note: delete_batch is async, but for < 1000 files it's usually fast. 
-    // We treat it as fire-and-forget for UI responsiveness in this context, 
-    // or we could poll check_job_status if needed strictly.
-    // For simplicity in this app scale, we assume success or user can refresh.
 };

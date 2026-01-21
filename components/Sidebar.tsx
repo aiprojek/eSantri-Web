@@ -59,8 +59,19 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
               { page: Page.Santri, icon: 'bi-people-fill', show: canAccess('santri') },
               { page: Page.Tahfizh, icon: 'bi-journal-richtext', show: canAccess('tahfizh') },
               { page: Page.Absensi, icon: 'bi-calendar-check-fill', show: canAccess('absensi') },
-              { page: Page.Kesehatan, icon: 'bi-heart-pulse-fill', show: canAccess('kesehatan') }, // NEW
+              { page: Page.Kesehatan, icon: 'bi-heart-pulse-fill', show: canAccess('kesehatan') },
+              { page: Page.BK, icon: 'bi-person-heart', show: canAccess('bk'), label: 'Bimbingan Konseling' }, 
               { page: Page.Keasramaan, icon: 'bi-building-fill', show: canAccess('keasramaan') },
+          ]
+      },
+      {
+          title: "Administrasi & Umum",
+          key: "administrasi",
+          items: [
+              { page: Page.BukuTamu, icon: 'bi-person-rolodex', show: canAccess('bukutamu'), label: 'Buku Tamu' }, // NEW
+              { page: Page.PSB, icon: 'bi-person-plus-fill', show: canAccess('psb') },
+              { page: Page.Surat, icon: 'bi-envelope-paper-fill', show: canAccess('surat') },
+              { page: Page.Laporan, icon: 'bi-printer-fill', show: canAccess('laporan') },
           ]
       },
       {
@@ -80,15 +91,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
               { page: Page.Keuangan, icon: 'bi-cash-coin', show: canAccess('keuangan') },
               { page: Page.BukuKas, icon: 'bi-journal-album', show: canAccess('bukukas') },
               { page: Page.Sarpras, icon: 'bi-box-seam-fill', show: canAccess('sarpras') },
-          ]
-      },
-      {
-          title: "Administrasi",
-          key: "administrasi",
-          items: [
-              { page: Page.PSB, icon: 'bi-person-plus-fill', show: canAccess('psb') },
-              { page: Page.Surat, icon: 'bi-envelope-paper-fill', show: canAccess('surat') },
-              { page: Page.Laporan, icon: 'bi-printer-fill', show: canAccess('laporan') },
           ]
       },
       {
@@ -197,7 +199,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
         <div className="flex-grow overflow-y-auto custom-scrollbar py-2">
             <ul className="space-y-1 px-2">
                 {navStructure.map((group) => {
-                    // Cek apakah group ini memiliki item yang boleh ditampilkan
                     const visibleItems = group.items.filter(i => i.show);
                     if (visibleItems.length === 0) return null;
 
@@ -207,7 +208,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
                     return (
                         <li key={group.key} className="mb-1">
                             {group.key === 'utama' ? (
-                                // Group Utama (Dashboard) biasanya tanpa accordion
                                 visibleItems.map(item => (
                                     <a 
                                         key={item.page}
@@ -220,7 +220,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
                                     </a>
                                 ))
                             ) : (
-                                // Group Lainnya (Accordion)
                                 <>
                                     <button 
                                         onClick={() => toggleGroup(group.key)}

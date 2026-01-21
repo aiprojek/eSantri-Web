@@ -13,7 +13,9 @@ export enum Page {
   Sarpras = 'Sarpras', 
   Kalender = 'Kalender', 
   Perpustakaan = 'Perpustakaan',
-  Kesehatan = 'Kesehatan', // NEW
+  Kesehatan = 'Kesehatan',
+  BK = 'BK',
+  BukuTamu = 'BukuTamu', // NEW
   DataMaster = 'DataMaster',
   Keuangan = 'Keuangan',
   Keasramaan = 'Keasramaan',
@@ -38,7 +40,9 @@ export interface UserPermissions {
     sarpras: AccessLevel; 
     kalender: AccessLevel; 
     perpustakaan: AccessLevel;
-    kesehatan: AccessLevel; // NEW
+    kesehatan: AccessLevel;
+    bk: AccessLevel;
+    bukutamu: AccessLevel; // NEW
     datamaster: AccessLevel;
     keuangan: AccessLevel;
     keasramaan: AccessLevel;
@@ -64,13 +68,44 @@ export interface User {
     lastLogin?: string;
 }
 
-// NEW: Kesehatan Types
+// NEW: Buku Tamu Types
+export interface BukuTamu extends SyncedEntity {
+    id: number;
+    tanggal: string; // YYYY-MM-DD
+    jamMasuk: string; // ISO Timestamp
+    jamKeluar?: string; // ISO Timestamp
+    namaTamu: string;
+    noHp?: string;
+    kategori: 'Wali Santri' | 'Tamu Dinas' | 'Vendor/Paket' | 'Alumni' | 'Lainnya';
+    santriId?: number; // Jika Wali Santri
+    bertemuDengan?: string; // Jika bukan wali santri (misal: "Ust. Ahmad")
+    keperluan: string;
+    kendaraan?: string; // Mobil/Motor
+    platNomor?: string;
+    status: 'Bertamu' | 'Selesai';
+    petugas: string; // User yang input
+}
+
+// ... (Existing types below remain unchanged)
+export interface BkSession extends SyncedEntity {
+    id: number;
+    santriId: number;
+    tanggal: string;
+    kategori: 'Pribadi' | 'Sosial' | 'Belajar' | 'Keluarga' | 'Karir' | 'Ibadah' | 'Lainnya';
+    keluhan: string; 
+    penanganan: string; 
+    hasil: string; 
+    status: 'Baru' | 'Proses' | 'Pemantauan' | 'Selesai';
+    konselor: string; 
+    privasi: 'Rahasia' | 'Sangat Rahasia' | 'Biasa';
+}
+
 export interface Obat extends SyncedEntity {
     id: number;
     nama: string;
     jenis: 'Tablet' | 'Sirup' | 'Salep' | 'Alat' | 'Lainnya';
     stok: number;
-    satuan: string; // strip, botol, pcs
+    satuan: string; 
     keterangan?: string;
 }
 
@@ -87,14 +122,13 @@ export interface KesehatanRecord extends SyncedEntity {
     tanggal: string;
     keluhan: string;
     diagnosa: string;
-    tindakan: string; // Obat yang diberikan atau tindakan fisik
-    resep?: ResepItem[]; // NEW: Structured medicine usage
+    tindakan: string; 
+    resep?: ResepItem[]; 
     status: 'Rawat Jalan' | 'Rawat Inap (Pondok)' | 'Rujuk RS/Klinik' | 'Sembuh';
-    pemeriksa: string; // Nama petugas
+    pemeriksa: string; 
     catatan?: string;
 }
 
-// ... (Existing types remain below)
 export interface Alamat {
     detail: string;
     desaKelurahan?: string;

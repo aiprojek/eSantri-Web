@@ -42,11 +42,11 @@ export const faqData: FaqCategoryData[] = [
                 question: "Apa manfaat mengaktifkan Mode Multi-User?",
                 answer: (
                     <div>
-                        <p className="mb-2">Mode Multi-User sangat disarankan, terutama jika Anda menggunakan fitur <strong>Absensi</strong> dan <strong>Keuangan</strong>. Manfaat utamanya:</p>
+                        <p className="mb-2">Mode Multi-User sangat disarankan, terutama jika Anda menggunakan fitur <strong>Absensi</strong>, <strong>Keuangan</strong>, dan <strong>Keamanan</strong>. Manfaat utamanya:</p>
                         <ul className="list-disc pl-5 space-y-1">
-                            <li><strong>Akuntabilitas Absensi:</strong> Sistem akan mencatat siapa petugas yang melakukan absensi (misal: 'Ust. Ahmad' atau 'Petugas Piket').</li>
+                            <li><strong>Akuntabilitas:</strong> Sistem akan mencatat siapa petugas yang melakukan entri data (misal: 'Pak Satpam' di Buku Tamu atau 'Ust. Ahmad' di Absensi).</li>
                             <li><strong>Keamanan:</strong> Membatasi akses orang lain yang meminjam komputer Anda.</li>
-                            <li><strong>Pembagian Tugas (Role):</strong> Anda bisa membuat akun Staff yang hanya bisa akses menu tertentu (misal: Bendahara hanya akses Keuangan, tidak bisa hapus data Santri).</li>
+                            <li><strong>Pembagian Tugas (Role):</strong> Anda bisa membuat akun Staff yang hanya bisa akses menu tertentu (misal: Satpam hanya akses Buku Tamu, tidak bisa lihat Keuangan).</li>
                         </ul>
                     </div>
                 )
@@ -76,6 +76,25 @@ export const faqData: FaqCategoryData[] = [
         ]
     },
     {
+        title: "Buku Tamu & Keamanan",
+        icon: "bi-shield-check",
+        colorClass: "bg-gray-50 border-gray-500 text-gray-900",
+        items: [
+            {
+                question: "Apakah data tamu bisa dihapus?",
+                answer: "Hanya Admin yang bisa menghapus data tamu. Petugas biasa (Staff) hanya bisa melakukan 'Check-In' dan 'Check-Out' untuk menjaga integritas data kunjungan."
+            },
+            {
+                question: "Apa fungsi tombol Check-Out?",
+                answer: "Tombol Check-Out menandakan tamu sudah pulang/meninggalkan area pondok. Ini penting agar sistem bisa menampilkan daftar 'Tamu Aktif' (yang masih berada di dalam area) secara akurat di Dashboard Keamanan."
+            },
+            {
+                question: "Bisakah mencatat plat nomor kendaraan?",
+                answer: "Bisa. Saat Check-In, ada kolom opsional untuk mencatat jenis kendaraan dan plat nomor. Ini berguna untuk pengawasan parkir."
+            }
+        ]
+    },
+    {
         title: "Perpustakaan",
         icon: "bi-book-half",
         colorClass: "bg-teal-50 border-teal-500 text-teal-900",
@@ -95,10 +114,23 @@ export const faqData: FaqCategoryData[] = [
         ]
     },
     {
-        title: "Kesehatan & Poskestren",
+        title: "Kesehatan & BK",
         icon: "bi-heart-pulse-fill",
         colorClass: "bg-red-50 border-red-500 text-red-900",
         items: [
+             {
+                question: "Apa perbedaan fitur BK dan Pelanggaran?",
+                answer: (
+                    <ul className="list-disc pl-5 space-y-1">
+                        <li><strong>Pelanggaran:</strong> Bersifat publik/administratif (hukuman, poin). Data ini bisa muncul di rapor santri atau surat panggilan wali.</li>
+                        <li><strong>BK (Bimbingan Konseling):</strong> Bersifat personal/privat (curhat, masalah keluarga, motivasi). Data ini <strong>RAHASIA</strong> dan tidak muncul di laporan umum.</li>
+                    </ul>
+                )
+            },
+            {
+                question: "Siapa yang bisa melihat data BK?",
+                answer: "Hanya user dengan role 'Admin' atau user 'Staff' yang diberikan izin khusus akses modul BK. Staff biasa (misal bagian dapur atau keamanan) tidak akan melihat menu BK sama sekali jika tidak diberi akses."
+            },
             {
                 question: "Apakah stok obat berkurang otomatis?",
                 answer: "Ya. Saat Anda mencatat pemeriksaan dan menambahkan 'Resep Obat' di formulir, stok obat di gudang akan otomatis berkurang sesuai jumlah yang diberikan."
@@ -106,10 +138,6 @@ export const faqData: FaqCategoryData[] = [
             {
                 question: "Bagaimana jika santri sakit (Rawat Inap)?",
                 answer: "Sistem terintegrasi otomatis. Jika Anda memilih status 'Rawat Inap' atau 'Rujuk' di menu Kesehatan, maka di menu Absensi, santri tersebut akan otomatis tercatat 'S' (Sakit) pada tanggal tersebut."
-            },
-            {
-                question: "Bisakah saya mencetak Surat Keterangan Sakit?",
-                answer: "Bisa. Di tabel Riwayat Kesehatan, klik ikon Printer di sebelah kanan data pemeriksaan. Surat akan ter-generate otomatis berisi diagnosa dan tanda tangan pemeriksa."
             }
         ]
     },
@@ -521,8 +549,85 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
-        id: 'absensi',
+        id: 'bukutamu',
         badge: 4,
+        badgeColor: 'gray',
+        title: 'Buku Tamu (Satpam)',
+        steps: [
+             {
+                title: 'Check-In & Check-Out',
+                content: (
+                    <>
+                        <p className="mb-2 text-sm">Gunakan fitur ini di pos keamanan atau resepsionis.</p>
+                        <ol className="list-decimal pl-5 space-y-1 text-sm">
+                            <li><strong>Check-In:</strong> Klik "Check-In Baru" saat tamu datang. Pilih kategori (Wali/Dinas). Jika Wali Santri, pilih nama santri yang dikunjungi.</li>
+                            <li><strong>Check-Out:</strong> Klik tombol "Check-Out" pada kartu tamu saat mereka pulang. Ini akan mencatat jam keluar dan mengubah status menjadi selesai.</li>
+                        </ol>
+                    </>
+                )
+            },
+            {
+                title: 'Desentralisasi Input (Rekomendasi)',
+                color: 'teal',
+                content: (
+                    <div className="bg-gray-100 p-3 rounded border border-gray-300 text-sm">
+                        Agar tidak membebani Admin Kantor, <strong>buatkan akun khusus untuk Satpam</strong> dengan akses hanya ke modul 'Buku Tamu'.
+                        <br/>Satpam bisa menggunakan HP/Laptop di pos jaga. Pastikan melakukan <strong>Sync Cloud</strong> (Kirim Perubahan) saat pergantian shift.
+                    </div>
+                )
+            }
+        ]
+    },
+    {
+        id: 'bk',
+        badge: 5,
+        badgeColor: 'indigo',
+        title: 'Bimbingan Konseling (BK)',
+        steps: [
+             {
+                title: 'Penting: Privasi Data (Confidential)',
+                color: 'red',
+                content: (
+                    <div className="bg-indigo-50 p-3 border border-indigo-200 rounded text-sm text-indigo-900">
+                        <i className="bi bi-shield-lock-fill mr-1"></i> Data BK bersifat <strong>Sangat Rahasia</strong>.
+                        Pastikan Anda mengaktifkan <strong>Multi-User Mode</strong> di Pengaturan. 
+                        Buat akun khusus untuk Konselor/Guru BK. Staff biasa yang tidak memiliki izin akses 'BK' <strong>TIDAK AKAN BISA</strong> melihat menu ini.
+                    </div>
+                )
+            },
+             {
+                title: 'Cara Aman Menggunakan (Desentralisasi)',
+                color: 'teal',
+                content: (
+                    <>
+                        <p className="mb-2 text-sm">Agar kerahasiaan terjaga dan tidak terekspos di komputer admin pusat yang ramai, gunakan metode ini:</p>
+                        <div className="bg-teal-50 p-3 rounded border border-teal-200">
+                            <ol className="list-decimal pl-5 space-y-2 text-sm">
+                                <li><strong>Konselor Pakai Laptop Sendiri:</strong> Jangan mencatat BK di komputer utama kantor.</li>
+                                <li><strong>Gunakan Cloud Sync:</strong> Hubungkan laptop Konselor ke Dropbox pondok.</li>
+                                <li><strong>Input & Kirim:</strong> Konselor mencatat sesi di laptopnya (offline/online), lalu klik "Kirim Perubahan". Data akan terenkripsi dan aman sampai ke Admin Pusat.</li>
+                            </ol>
+                        </div>
+                    </>
+                )
+            },
+            {
+                title: 'Mencatat Sesi Konseling',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Bimbingan Konseling</strong> di Sidebar.</li>
+                        <li>Klik <strong>"Catat Sesi Baru"</strong>.</li>
+                        <li>Pilih Nama Santri dan Kategori Masalah (Pribadi, Belajar, Keluarga, dll).</li>
+                        <li>Tulis keluhan santri dan saran/penanganan.</li>
+                        <li><strong>Privasi:</strong> Pilih tingkat kerahasiaan (Biasa/Rahasia/Sangat Rahasia).</li>
+                    </ol>
+                )
+            }
+        ]
+    },
+    {
+        id: 'absensi',
+        badge: 6,
         badgeColor: 'teal',
         title: 'Manajemen Absensi',
         steps: [
@@ -571,7 +676,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'tahfizh',
-        badge: 5,
+        badge: 7,
         badgeColor: 'green',
         title: "Tahfizh & Mutaba'ah Qur'an",
         steps: [
@@ -618,7 +723,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'akademik',
-        badge: 6,
+        badge: 8,
         badgeColor: 'indigo',
         title: 'Akademik & Rapor Digital',
         steps: [
@@ -683,7 +788,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'finance',
-        badge: 7,
+        badge: 9,
         badgeColor: 'blue',
         title: 'Keuangan & Pembayaran',
         steps: [
@@ -729,7 +834,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'asrama',
-        badge: 8,
+        badge: 10,
         badgeColor: 'orange',
         title: 'Keasramaan',
         steps: [
@@ -756,7 +861,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'admin',
-        badge: 9,
+        badge: 11,
         badgeColor: 'green',
         title: 'PSB & Surat Menyurat',
         steps: [
@@ -788,7 +893,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'kalender',
-        badge: 10,
+        badge: 12,
         badgeColor: 'yellow',
         title: 'Kalender Akademik',
         steps: [
@@ -819,7 +924,7 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'library',
-        badge: 11,
+        badge: 13,
         badgeColor: 'teal',
         title: 'Perpustakaan Digital',
         steps: [

@@ -1,124 +1,190 @@
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 
-const FeatureItem: React.FC<{ icon: string; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (
-    <div className="flex items-start gap-4 p-4 bg-white rounded-lg border border-gray-200 transition-shadow hover:shadow-md">
-        <div className="flex-shrink-0 bg-teal-100 text-teal-600 rounded-md w-12 h-12 flex items-center justify-center">
-            <i className={`bi ${icon} text-2xl`}></i>
+// --- DATA STRUKTUR FITUR ---
+
+type FeatureItemData = {
+    title: string;
+    desc: string;
+    icon: string;
+};
+
+type FeatureCategory = {
+    id: string;
+    title: string;
+    color: string;
+    icon: string;
+    items: FeatureItemData[];
+};
+
+const FEATURE_DATA: FeatureCategory[] = [
+    {
+        id: 'core',
+        title: 'Sistem Inti & Teknologi',
+        color: 'text-indigo-600',
+        icon: 'bi-cpu-fill',
+        items: [
+            { icon: 'bi-grid-1x2-fill', title: 'Dashboard Interaktif', desc: 'Ringkasan visual data santri dan keuangan secara cepat dan mudah dipahami.' },
+            { icon: 'bi-person-badge-fill', title: 'Sistem Multi-User', desc: 'Hak akses berbeda untuk Admin dan Staff (Read/Write/Block) demi keamanan data.' },
+            { icon: 'bi-cloud-arrow-up-fill', title: 'Sinkronisasi Tim (Hub & Spoke)', desc: 'Kolaborasi antar laptop via Dropbox. Admin Pusat menggabungkan data dari banyak Staff.' },
+            { icon: 'bi-wifi-off', title: 'Offline-First', desc: 'Aplikasi berjalan lancar dan data aman tersimpan lokal meski tanpa koneksi internet.' },
+            { icon: 'bi-activity', title: 'Audit Log Aktivitas', desc: 'Pantau jejak perubahan data. Ketahui siapa yang menambah atau mengubah data.' },
+            { icon: 'bi-magic', title: 'AI Integration', desc: 'Fitur kecerdasan buatan untuk membuat draf surat dan prompt poster promosi.' },
+        ]
+    },
+    {
+        id: 'kesiswaan',
+        title: 'Kesiswaan & Administrasi',
+        color: 'text-teal-600',
+        icon: 'bi-people-fill',
+        items: [
+            { icon: 'bi-database-fill', title: 'Database Santri Terpusat', desc: 'Kelola biodata, orang tua/wali, prestasi, dan pelanggaran di satu tempat.' },
+            { icon: 'bi-person-heart', title: 'Bimbingan Konseling (BK)', desc: 'Catat sesi konseling, curhat santri, dan solusi penanganan secara rahasia (Confidential).' },
+            { icon: 'bi-journal-text', title: 'Penerimaan Santri Baru (PSB)', desc: 'Formulir online, manajemen pendaftar, seleksi, hingga konversi otomatis ke santri aktif.' },
+            { icon: 'bi-shield-check', title: 'Buku Tamu & Keamanan', desc: 'Catat check-in/out tamu dan wali santri, plat nomor kendaraan, dan monitoring tamu aktif.' },
+            { icon: 'bi-heart-pulse-fill', title: 'Poskestren (Kesehatan)', desc: 'Rekam medis santri, stok obat, dan surat sakit. Terintegrasi dengan Absensi.' },
+            { icon: 'bi-calendar-check-fill', title: 'Absensi Digital', desc: 'Pencatatan kehadiran harian dengan rekapitulasi bulanan otomatis.' },
+            { icon: 'bi-building-check', title: 'Manajemen Asrama', desc: 'Pengaturan gedung, kamar, dan penempatan santri.' },
+            { icon: 'bi-envelope-paper-fill', title: 'Surat Menyurat', desc: 'Template surat resmi, editor teks, dan cetak massal (Mail Merge).' },
+        ]
+    },
+    {
+        id: 'akademik',
+        title: 'Pendidikan & Akademik',
+        color: 'text-blue-600',
+        icon: 'bi-mortarboard-fill',
+        items: [
+            { icon: 'bi-mortarboard-fill', title: 'Rapor Digital', desc: 'Manajemen nilai, input offline via HTML untuk guru, dan cetak rapor custom.' },
+            { icon: 'bi-journal-bookmark-fill', title: 'Tahfizh & Al-Qur\'an', desc: 'Mutaba\'ah setoran hafalan, monitoring capaian, dan laporan perkembangan.' },
+            { icon: 'bi-book-half', title: 'Perpustakaan Digital', desc: 'Katalog buku, sirkulasi peminjaman, dan cetak kartu anggota/label buku.' },
+            { icon: 'bi-calendar-event-fill', title: 'Kalender Akademik', desc: 'Agenda kegiatan pondok dan cetak kalender dinding custom.' },
+        ]
+    },
+    {
+        id: 'keuangan',
+        title: 'Keuangan & Aset',
+        color: 'text-green-600',
+        icon: 'bi-cash-coin',
+        items: [
+            { icon: 'bi-cash-coin', title: 'Manajemen SPP & Tagihan', desc: 'Tagihan massal bulanan/bebas, pencatatan pembayaran, dan kuitansi.' },
+            { icon: 'bi-wallet2', title: 'Tabungan (Uang Saku)', desc: 'Manajemen deposit dan penarikan uang saku santri (Mini Bank).' },
+            { icon: 'bi-journal-album', title: 'Buku Kas Umum', desc: 'Pencatatan arus kas masuk dan keluar yayasan/pondok.' },
+            { icon: 'bi-box-seam-fill', title: 'Sarana Prasarana (Aset)', desc: 'Inventarisasi aset barang bergerak, tanah, dan bangunan.' },
+        ]
+    },
+    {
+        id: 'tools',
+        title: 'Laporan & Utilitas',
+        color: 'text-gray-600',
+        icon: 'bi-tools',
+        items: [
+            { icon: 'bi-printer-fill', title: 'Cetak Dokumen Lengkap', desc: 'Cetak Biodata, Kartu Santri, Label, Kuitansi, dan Laporan PDF.' },
+            { icon: 'bi-file-earmark-spreadsheet-fill', title: 'Ekspor Excel', desc: 'Unduh semua laporan data dalam format Excel (.xlsx) yang rapi.' },
+            { icon: 'bi-file-earmark-arrow-up-fill', title: 'Editor Massal & Impor', desc: 'Edit banyak data sekaligus dan impor migrasi dari CSV/Excel.' },
+            { icon: 'bi-sliders', title: 'Pengaturan Fleksibel', desc: 'Kustomisasi kop surat, logo, tahun ajaran, dan struktur pendidikan.' },
+        ]
+    }
+];
+
+const FeatureCard: React.FC<{ item: FeatureItemData }> = ({ item }) => (
+    <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-100 shadow-sm hover:shadow-md transition-all hover:border-teal-200 h-full">
+        <div className="flex-shrink-0 bg-gray-50 text-teal-600 rounded-md w-10 h-10 flex items-center justify-center">
+            <i className={`bi ${item.icon} text-lg`}></i>
         </div>
         <div>
-            <h4 className="font-semibold text-gray-800 text-base">{title}</h4>
-            <p className="text-gray-600 text-sm mt-1">{children}</p>
+            <h4 className="font-semibold text-gray-800 text-sm leading-tight mb-1">{item.title}</h4>
+            <p className="text-gray-500 text-xs leading-relaxed">{item.desc}</p>
         </div>
     </div>
 );
 
 export const TabTentang: React.FC = () => {
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredGroups = useMemo(() => {
+        if (!searchTerm) return FEATURE_DATA;
+
+        const lowerSearch = searchTerm.toLowerCase();
+        return FEATURE_DATA.map(group => {
+            // Filter items inside the group
+            const filteredItems = group.items.filter(item => 
+                item.title.toLowerCase().includes(lowerSearch) || 
+                item.desc.toLowerCase().includes(lowerSearch)
+            );
+            
+            // Return group only if it has matching items (or if group title matches)
+            if (filteredItems.length > 0) {
+                return { ...group, items: filteredItems };
+            }
+            return null;
+        }).filter(group => group !== null) as FeatureCategory[];
+    }, [searchTerm]);
+
     return (
         <div className="space-y-8">
-            <div className="p-6 bg-teal-50 border border-teal-200 rounded-lg text-center">
-                {/* Logo SVG */}
-                <svg className="w-16 h-16 mb-3 mx-auto" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="64" height="64" rx="12" fill="#0f766e"/>
-                    <path style={{fill: '#ffffff', strokeWidth: '0.132335'}} d="m 26.304352,41.152506 c 1.307859,-0.12717 3.241691,-0.626444 3.685692,-0.951566 0.177834,-0.130221 0.280781,-0.550095 0.430086,-1.754181 0.280533,-2.262324 0.318787,-2.155054 -0.541805,-1.519296 -1.483007,1.095563 -3.264503,1.690917 -4.539903,1.517186 -0.4996,-0.06805 -0.78621,-0.01075 -1.57337,0.314614 -0.52937,0.218803 -1.60128,0.556625 -2.38202,0.750715 -0.78074,0.194089 -1.43375,0.364958 -1.45113,0.379707 -0.0174,0.01475 0.21492,0.165374 0.51624,0.334722 1.20403,0.510842 2.20341,0.830915 2.95606,0.979692 0.489,0.09629 1.57855,0.07691 2.90015,-0.05159 z m 12.38447,-0.336369 c 1.055266,-0.319093 1.594897,-0.625065 2.399755,-1.360661 1.613411,-1.474567 1.995601,-3.726883 0.97899,-5.769426 -0.183416,-0.368517 -0.741626,-1.114753 -1.240467,-1.658302 l -0.906985,-0.98827 -1.508905,0.703734 c -0.829893,0.387055 -1.561038,0.752903 -1.624762,0.812997 -0.06395,0.06031 0.39373,0.62462 1.021492,1.259487 1.31295,1.327811 1.807226,2.185704 1.807226,3.136742 0,1.449522 -1.080984,2.352339 -2.83266,2.365783 -1.692966,0.013 -2.898289,-0.700527 -3.613504,-2.139108 -0.233721,-0.470103 -0.448882,-0.914285 -0.478136,-0.987069 -0.116891,-0.290814 -0.200722,0.06466 -0.343292,1.455679 -0.08206,0.800623 -0.183673,1.704103 -0.225804,2.196123 -0.07851,0.5657 -0.05503,0.618734 0.371528,0.839314 0.250433,0.129504 1.022439,0.362267 1.715565,0.517254 1.500515,0.335516 3.830431,0.295752 5.096151,-0.08698 z m -25.45487,-1.364466 c 0.93301,-0.457248 1.87821,-0.760644 2.72644,-0.875142 l 0.62858,-0.08485 v -1.37202 -1.372019 l -0.76092,-0.150409 c -1.1567,-0.228639 -1.61383,-0.386514 -2.49361,-0.86118 l -0.80636,-0.435051 -1.0876,0.707478 c -1.7125205,1.113979 -4.4737803,2.082778 -5.0529103,1.772836 -0.37206,-0.199121 -0.71946,0.108306 -0.58853,0.520817 0.115,0.362332 0.72882,0.388328 0.82127,0.03479 0.0568,-0.217219 0.26544,-0.254305 1.8612198,-0.330836 0.98848,-0.04741 2.1954505,-0.08619 2.6821505,-0.08619 0.72383,0 0.92956,-0.04935 1.13024,-0.27109 0.5934,-0.655698 1.68599,0.120869 1.20432,0.855981 -0.30385,0.46374 -0.71833,0.514445 -1.0984,0.134374 -0.32073,-0.320731 -0.33497,-0.322227 -2.9960205,-0.314975 l -2.6737598,0.0073 0.9462,0.248046 c 1.3576098,0.355898 2.7727603,0.97431 3.7575203,1.642008 0.46988,0.318591 0.89288,0.586114 0.94,0.594493 0.0471,0.0084 0.43419,-0.155572 0.86017,-0.364335 z m 4.68467,-0.249019 c 0.003,-0.05459 0.0184,-1.022283 0.0331,-2.150434 l 0.0268,-2.051184 h -0.33083 -0.33084 l -0.0368,1.979203 c -0.0202,1.08856 -0.007,2.056256 0.0289,2.150434 0.0691,0.180159 0.59882,0.242698 0.60965,0.07198 z m 3.65835,-0.574409 c 3.0847,-0.784059 4.3689,-1.36122 14.597498,-6.560614 4.28789,-2.179617 6.635935,-3.051997 10.086804,-3.7476 3.636686,-0.733057 7.837085,-0.596342 10.867503,0.353716 0.570889,0.178977 1.064204,0.299191 1.096252,0.267139 0.130911,-0.130911 -2.904302,-1.024182 -4.383914,-1.290194 -1.996054,-0.358861 -5.21532,-0.480661 -7.088973,-0.268211 -4.215428,0.477982 -7.569808,1.515628 -13.092024,4.0499 -3.489827,1.60156 -6.879436,2.837056 -9.395746,3.424707 -1.69284,0.39534 -3.96393,0.739453 -4.88027,0.739453 h -0.67778 v 1.791074 1.791073 l 0.69476,-0.08699 c 0.38212,-0.04784 1.36127,-0.256397 2.17589,-0.463455 z m -0.10861,-4.029945 c 4.34182,-0.630466 7.276739,-1.83952 9.019947,-3.715798 0.769184,-0.827904 1.110178,-1.396927 1.372676,-2.29062 0.620767,-2.113468 -0.266098,-4.009021 -2.237069,-4.781421 -0.663099,-0.25986 -1.034005,-0.311072 -2.249684,-0.310618 -2.56763,9.39e-4 -4.16567,0.70118 -6.15355,2.696349 -1.32346,1.328311 -2.06801,2.436512 -2.69958,4.018119 -0.3897,0.975922 -0.74112,2.585487 -0.74112,3.394509 0,0.426759 0.0504,0.516006 0.33138,0.586519 0.18225,0.04574 0.40501,0.201076 0.495,0.345183 0.20571,0.329396 0.89555,0.343323 2.862,0.05778 z m 0.11816,-1.45905 c -0.11099,-0.110993 0.16145,-1.565003 0.5066,-2.703751 0.89895,-2.965867 2.8918,-5.028708 4.85807,-5.028708 1.488576,0 2.128809,1.136692 1.614909,2.867184 -0.413016,1.390771 -1.806659,2.666315 -4.103229,3.755501 -1.46343,0.694058 -2.78296,1.203168 -2.87635,1.109774 z m 14.804219,-3.661671 1.341112,-0.577624 -0.441486,-0.596022 c -0.242813,-0.327813 -0.5141,-0.867521 -0.602851,-1.199355 -0.147845,-0.552783 -0.13452,-0.656915 0.159047,-1.242882 0.783436,-1.563747 3.160654,-1.663469 4.629901,-0.194221 0.353158,0.353155 0.680797,0.796275 0.728092,0.984714 0.105859,0.421779 0.294357,0.44384 0.3833,0.04486 0.06507,-0.291898 0.468002,-3.036365 0.468002,-3.187693 0,-0.145749 -1.728025,-0.610339 -2.603914,-0.700076 -1.491442,-0.0773 -2.024052,-0.16772 -3.267158,0.150242 -1.61687,0.421141 -2.840775,1.370544 -3.410741,2.645767 -0.532611,1.191638 -0.357352,3.003822 0.412542,4.265726 0.223681,0.366631 0.304308,0.410539 0.562091,0.306105 0.165522,-0.06706 0.904448,-0.381852 1.642063,-0.699544 z" fill="white" />
-                </svg>
-                <h2 className="text-2xl font-bold text-teal-800">eSantri Web: Membantu Manajemen Data Santri</h2>
-                <p className="mt-2 text-base text-teal-700 max-w-3xl mx-auto">
-                    eSantri Web adalah aplikasi yang dibuat untuk membantu administrasi Pondok Pesantren dalam mengelola data santri.
-                </p>
+            {/* Header Section */}
+            <div className="p-6 bg-gradient-to-br from-teal-50 to-white border border-teal-100 rounded-lg text-center relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-teal-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 -translate-y-1/2 translate-x-1/2"></div>
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 translate-y-1/2 -translate-x-1/2"></div>
+                
+                <div className="relative z-10">
+                    <svg className="w-16 h-16 mb-3 mx-auto shadow-sm rounded-xl" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="64" height="64" rx="12" fill="#0f766e"/>
+                        <path style={{fill: '#ffffff', strokeWidth: '0.132335'}} d="m 26.304352,41.152506 c 1.307859,-0.12717 3.241691,-0.626444 3.685692,-0.951566 0.177834,-0.130221 0.280781,-0.550095 0.430086,-1.754181 0.280533,-2.262324 0.318787,-2.155054 -0.541805,-1.519296 -1.483007,1.095563 -3.264503,1.690917 -4.539903,1.517186 -0.4996,-0.06805 -0.78621,-0.01075 -1.57337,0.314614 -0.52937,0.218803 -1.60128,0.556625 -2.38202,0.750715 -0.78074,0.194089 -1.43375,0.364958 -1.45113,0.379707 -0.0174,0.01475 0.21492,0.165374 0.51624,0.334722 1.20403,0.510842 2.20341,0.830915 2.95606,0.979692 0.489,0.09629 1.57855,0.07691 2.90015,-0.05159 z m 12.38447,-0.336369 c 1.055266,-0.319093 1.594897,-0.625065 2.399755,-1.360661 1.613411,-1.474567 1.995601,-3.726883 0.97899,-5.769426 -0.183416,-0.368517 -0.741626,-1.114753 -1.240467,-1.658302 l -0.906985,-0.98827 -1.508905,0.703734 c -0.829893,0.387055 -1.561038,0.752903 -1.624762,0.812997 -0.06995,0.06597 0.430674,0.683228 1.117339,1.377665 1.436145,1.452401 1.9768,2.390791 1.9768,3.431066 0,1.585532 -1.182413,2.573061 -3.098451,2.587767 -1.851819,0.01422 -3.170239,-0.766259 -3.952563,-2.339823 -0.255652,-0.514213 -0.491001,-1.000073 -0.523,-1.079687 -0.127859,-0.318101 -0.219556,0.07073 -0.375503,1.592268 -0.08976,0.875745 -0.200907,1.864 -0.246991,2.196123 -0.07851,0.5657 -0.05503,0.618734 0.371528,0.839314 0.250433,0.129504 1.022439,0.362267 1.715565,0.517254 1.500515,0.335516 3.830431,0.295752 5.096151,-0.08698 z m -25.45487,-1.364466 c 0.93301,-0.457248 1.87821,-0.760644 2.72644,-0.875142 l 0.62858,-0.08485 v -1.37202 -1.372019 l -0.76092,-0.150409 c -1.1567,-0.228639 -1.61383,-0.386514 -2.49361,-0.86118 l -0.80636,-0.435051 -1.0876,0.707478 c -1.7125205,1.113979 -4.4737803,2.082778 -5.0529103,1.772836 -0.37206,-0.199121 -0.71946,0.108306 -0.58853,0.520817 0.115,0.362332 0.72882,0.388328 0.82127,0.03479 0.0568,-0.217219 0.26544,-0.254305 1.8612198,-0.330836 0.98848,-0.04741 2.1954505,-0.08619 2.6821505,-0.08619 0.72383,0 0.92956,-0.04935 1.13024,-0.27109 0.5934,-0.655698 1.68599,0.120869 1.20432,0.855981 -0.30385,0.46374 -0.71833,0.514445 -1.0984,0.134374 -0.32073,-0.320731 -0.33497,-0.322227 -2.9960205,-0.314975 l -2.6737598,0.0073 0.9462,0.248046 c 1.3576098,0.355898 2.7727603,0.97431 3.7575203,1.642008 0.46988,0.318591 0.89288,0.586114 0.94,0.594493 0.0471,0.0084 0.43419,-0.155572 0.86017,-0.364335 z m 4.68467,-0.249019 c 0.003,-0.05459 0.0184,-1.022283 0.0331,-2.150434 l 0.0268,-2.051184 h -0.33083 -0.33084 l -0.0368,1.979203 c -0.0202,1.08856 -0.007,2.056256 0.0289,2.150434 0.0691,0.180159 0.59882,0.242698 0.60965,0.07198 z m 3.65835,-0.574409 c 3.0847,-0.784059 4.3689,-1.36122 14.597498,-6.560614 4.28789,-2.179617 6.635935,-3.051997 10.086804,-3.7476 3.636686,-0.733057 7.837085,-0.596342 11.887212,0.386905 0.624457,0.19577 1.16406,0.327264 1.199115,0.292205 0.143194,-0.143195 -3.176816,-1.120282 -4.795262,-1.411255 -2.183345,-0.392533 -5.704678,-0.525761 -7.754138,-0.293377 -4.610966,0.522832 -8.280091,1.657841 -14.320462,4.429906 -3.817281,1.751836 -7.52494,3.103261 -10.277358,3.746051 -1.851681,0.432435 -4.33587,0.808837 -5.338191,0.808837 h -0.741377 v 1.959132 1.959131 l 0.759951,-0.09515 c 0.417973,-0.05232 1.488998,-0.280454 2.380055,-0.506941 z m -0.118801,-4.40808 c 4.749218,-0.689623 7.959523,-2.012124 9.866298,-4.064455 0.841357,-0.905587 1.214347,-1.528001 1.501476,-2.505551 0.679014,-2.311777 -0.291066,-4.385192 -2.446976,-5.230066 -0.725318,-0.284243 -1.131027,-0.34026 -2.460774,-0.339764 -2.808553,0.001 -4.556539,0.766973 -6.730944,2.94935 -1.447641,1.452948 -2.262053,2.665132 -2.952885,4.395143 -0.426266,1.067494 -0.81066,2.828086 -0.81066,3.71302 0,0.466802 0.05513,0.564423 0.362475,0.641552 0.19935,0.05003 0.443012,0.219943 0.541446,0.377572 0.225012,0.360303 0.97958,0.375537 3.130544,0.0632 z m 0.129247,-1.595953 c -0.121405,-0.121408 0.176599,-1.71185 0.554135,-2.957448 0.9833,-3.244156 3.16314,-5.500556 5.313908,-5.500556 1.62825,0 2.328557,1.243349 1.766437,3.136215 -0.451769,1.521269 -1.976179,2.916498 -4.488239,4.107883 -1.600745,0.759182 -3.044088,1.316063 -3.146241,1.213906 z m 16.193314,-4.00525 1.466951,-0.631823 -0.482912,-0.651947 c -0.265596,-0.358572 -0.562338,-0.948922 -0.659417,-1.311892 -0.161717,-0.604651 -0.147142,-0.718554 0.17397,-1.359502 0.856947,-1.710476 3.457222,-1.819555 5.06433,-0.212446 0.386295,0.386292 0.744677,0.87099 0.79641,1.077111 0.115791,0.461354 0.321976,0.485485 0.419264,0.04907 0.07118,-0.319288 0.511916,-3.32127 0.511916,-3.486797 0,-0.159425 -1.890167,-0.667608 -2.848242,-0.765765 -1.631386,-0.08456 -2.213971,-0.183458 -3.573718,0.164339 -1.768583,0.460657 -3.107329,1.499143 -3.730775,2.894023 -0.582587,1.30345 -0.390883,3.285673 0.451251,4.665983 0.244669,0.401032 0.332862,0.181053,-0.07335 0.989313,-0.417681 1.796139,-0.765182 z" fill="white" />
+                    </svg>
+                    <h2 className="text-2xl font-bold text-teal-800">eSantri Web</h2>
+                    <p className="mt-2 text-base text-teal-700 max-w-xl mx-auto">
+                        Sistem Manajemen Pondok Pesantren Modern & Gratis. <br/>
+                        Aman, Cepat, Offline-First.
+                    </p>
+                </div>
             </div>
-            
-            <div className="bg-gray-50/80 p-5 rounded-lg border">
-                <h3 className="flex items-center gap-3 text-xl font-semibold text-gray-800 mb-4">
-                    <i className="bi bi-stars text-teal-600"></i>
-                    <span>Fitur Unggulan</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FeatureItem icon="bi-grid-1x2-fill" title="Dashboard Interaktif">
-                        Ringkasan visual data santri dan keuangan secara cepat dan mudah dipahami.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-heart-pulse-fill" title="Poskestren Digital">
-                         Manajemen rekam medis santri, stok obat, resep, dan cetak surat keterangan sakit. Terintegrasi otomatis dengan Absensi.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-journal-bookmark-fill" title="Tahfizh & Al-Qur'an">
-                        Modul khusus mutaba'ah setoran hafalan (Ziyadah/Murojaah), monitoring capaian per juz, dan cetak laporan perkembangan santri.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-book-half" title="Perpustakaan Digital">
-                        Manajemen katalog buku, sirkulasi peminjaman & pengembalian otomatis, serta cetak kartu anggota dan label buku (spine label).
-                    </FeatureItem>
-                    <FeatureItem icon="bi-calendar-event-fill" title="Kalender Akademik">
-                         Kelola agenda kegiatan pondok, hari libur, jadwal ujian, dan cetak kalender dinding custom (Masehi/Hijriah).
-                    </FeatureItem>
-                    <FeatureItem icon="bi-box-seam-fill" title="Manajemen Aset (Sarpras)">
-                         Inventarisasi aset pondok, tanah, bangunan, dan barang bergerak beserta kondisi dan nilainya.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-calendar-check-fill" title="Absensi Digital">
-                        Pencatatan kehadiran harian santri per rombel dengan rekapitulasi bulanan otomatis dan laporan persentase kehadiran.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-mortarboard-fill" title="Akademik & Rapor Digital">
-                        Desain rapor kustom, manajemen nilai, formulir input nilai offline (HTML) untuk guru, dan cetak rapor lengkap.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-journal-text" title="Penerimaan Santri Baru (PSB)">
-                        Sistem lengkap mulai dari desain formulir online, manajemen pendaftar, seleksi, hingga integrasi data ke database utama.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-person-badge-fill" title="Sistem Multi-User & Hak Akses">
-                        Dukungan login dengan username/password. Atur hak akses berbeda untuk Admin dan Staff (Read/Write/Block) demi keamanan data.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-cloud-arrow-up-fill" title="Sinkronisasi Tim (Hub & Spoke)">
-                        Kolaborasi antar laptop via Dropbox. Admin Pusat (Pengepul) menggabungkan data dari banyak Staff secara aman dan offline-first.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-activity" title="Audit Log Aktivitas">
-                        Pantau jejak perubahan data secara detail. Ketahui siapa yang menambah, mengubah, atau menghapus data dan kapan waktunya.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-magic" title="Poster & Surat AI">
-                        Buat draf surat dan prompt poster promosi secara instan menggunakan kecerdasan buatan (AI).
-                    </FeatureItem>
-                    <FeatureItem icon="bi-database-fill" title="Database Santri Terpusat">
-                        Kelola data lengkap santri, orang tua/wali, prestasi, hingga pelanggaran di satu tempat.
-                    </FeatureItem>
-                     <FeatureItem icon="bi-cash-coin" title="Manajemen Keuangan Terintegrasi">
-                        Mulai dari pembuatan tagihan massal, pencatatan pembayaran, hingga notifikasi tunggakan.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-building-check" title="Manajemen Keasramaan">
-                        Kelola data gedung, kamar, musyrif/ah, dan penempatan santri di asrama dengan mudah.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-journal-album" title="Buku Kas Umum">
-                        Catat semua pemasukan dan pengeluaran umum pondok untuk laporan arus kas yang transparan.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-sliders" title="Pengaturan Fleksibel">
-                        Sesuaikan struktur pendidikan, biaya, format NIS, hingga redaksi surat dan pesan WhatsApp.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-envelope-paper-fill" title="Surat Menyurat">
-                        Buat, kelola template, dan arsipkan surat resmi pondok dengan mudah. Dilengkapi editor teks kaya dan mail merge.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-person-badge-fill" title="Generator NIS Otomatis">
-                        Buat Nomor Induk Santri secara otomatis dengan tiga metode yang dapat diatur.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-printer-fill" title="Fitur Laporan & Cetak Lengkap">
-                        Cetak berbagai dokumen penting seperti biodata, kuitansi, kartu santri, dan laporan lainnya.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-file-earmark-arrow-up-fill" title="Editor Massal & Impor Data">
-                        Edit data banyak santri sekaligus seperti di Excel atau impor dari file CSV.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-file-earmark-spreadsheet-fill" title="Ekspor Excel (SheetJS)">
-                        Unduh laporan data santri, keuangan, arus kas, dan rekapitulasi dalam format Excel (.xlsx) yang rapi.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-file-pdf-fill" title="Ekspor PDF">
-                        Unduh laporan dan surat dalam format PDF sesuai dengan tampilan layar (WYSIWYG).
-                    </FeatureItem>
-                    <FeatureItem icon="bi-filetype-html" title="Ekspor Laporan HTML">
-                        Unduh laporan dalam format HTML untuk arsip digital yang ringan atau untuk dibuka kembali di browser tanpa koneksi internet.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-person-lines-fill" title="Ekspor Kontak HP">
-                        Unduh data kontak wali santri dalam format CSV yang kompatibel dengan Google Contacts / HP.
-                    </FeatureItem>
-                    <FeatureItem icon="bi-wifi-off" title="Fungsi Offline">
-                        Aplikasi tetap berjalan lancar dan semua data aman meski tanpa koneksi internet.
-                    </FeatureItem>
+
+            {/* Feature List */}
+            <div className="bg-gray-50/80 p-5 rounded-lg border border-gray-200">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <h3 className="flex items-center gap-3 text-xl font-semibold text-gray-800">
+                        <i className="bi bi-stars text-teal-600"></i>
+                        <span>Fitur Unggulan</span>
+                    </h3>
+                    
+                    {/* Search Input */}
+                    <div className="relative w-full md:w-64">
+                        <input
+                            type="text"
+                            placeholder="Cari fitur..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-teal-500 focus:border-teal-500 bg-white"
+                        />
+                        <i className="bi bi-search absolute left-3 top-2.5 text-gray-400"></i>
+                    </div>
+                </div>
+
+                <div className="space-y-6">
+                    {filteredGroups.map(group => (
+                        <div key={group.id} className="animate-fade-in">
+                            <h4 className={`text-base font-bold mb-3 flex items-center gap-2 ${group.color} border-b pb-2`}>
+                                <i className={`bi ${group.icon}`}></i> {group.title}
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {group.items.map((item, idx) => (
+                                    <FeatureCard key={idx} item={item} />
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    
+                    {filteredGroups.length === 0 && (
+                        <div className="text-center py-12 text-gray-400">
+                            <i className="bi bi-search text-3xl mb-2 block"></i>
+                            <p>Tidak ada fitur yang cocok dengan pencarian "{searchTerm}"</p>
+                        </div>
+                    )}
                 </div>
             </div>
             
-            <div className="p-6 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="p-6 bg-white border border-gray-200 rounded-lg">
                 <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
                     <a href="https://lynk.id/aiprojek/s/bvBJvdA" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
                         <i className="bi bi-cup-hot-fill"></i>

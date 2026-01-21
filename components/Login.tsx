@@ -48,7 +48,7 @@ export const LoginScreen: React.FC = () => {
     };
 
     const handleUpdateFromCloud = async () => {
-        if (settings.cloudSyncConfig.provider !== 'dropbox') {
+        if (!settings.cloudSyncConfig || settings.cloudSyncConfig.provider === 'none') {
             showToast('Fitur Cloud belum aktif. Hubungi Admin untuk mengaktifkan.', 'error');
             return;
         }

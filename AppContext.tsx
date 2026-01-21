@@ -193,7 +193,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [showToast]);
 
     useEffect(() => {
-        if (settings.cloudSyncConfig?.autoSync && settings.cloudSyncConfig.provider === 'dropbox') {
+        if (settings.cloudSyncConfig?.autoSync && settings.cloudSyncConfig.provider !== 'none') {
             if (pullSyncIntervalRef.current) clearInterval(pullSyncIntervalRef.current);
             pullSyncIntervalRef.current = setInterval(() => {
                 triggerManualSync('down');
@@ -252,7 +252,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const triggerManualSync = async (action: 'up' | 'down' | 'admin_publish') => {
         const config = settings.cloudSyncConfig;
-        if (config.provider !== 'dropbox') return;
+        if (!config || config.provider === 'none') return; // Fixed: Allow if provider is not 'none'
 
         setSyncStatus('syncing');
         try {

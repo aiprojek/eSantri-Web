@@ -15,7 +15,7 @@ export const AdminSyncDashboard: React.FC = () => {
     const config = settings.cloudSyncConfig;
 
     const fetchFiles = async () => {
-        if (config.provider !== 'dropbox') return;
+        if (!config || config.provider === 'none') return;
         setIsLoading(true);
         try {
             const fileList = await listInboxFiles(config);
@@ -140,19 +140,26 @@ export const AdminSyncDashboard: React.FC = () => {
         );
     }
 
-    if (config.provider !== 'dropbox') {
+    if (!config || config.provider === 'none') {
         return (
             <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border border-gray-200">
                 <i className="bi bi-cloud-slash text-4xl text-gray-400 mb-2"></i>
-                <p className="text-gray-500">Fitur ini hanya tersedia untuk metode sinkronisasi Dropbox.</p>
+                <p className="text-gray-500">Fitur sinkronisasi cloud belum diaktifkan.</p>
+                <p className="text-xs text-gray-400 mt-1">Silakan atur di menu Pengaturan &gt; Sync Cloud.</p>
             </div>
         );
     }
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-gray-800">Pusat Sinkronisasi (Pengepul)</h1>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                        {config.provider === 'webdav' ? <i className="bi bi-hdd-network text-orange-600"></i> : <i className="bi bi-dropbox text-blue-600"></i>}
+                        Pusat Sinkronisasi ({config.provider === 'webdav' ? 'WebDAV' : 'Dropbox'})
+                    </h1>
+                    <p className="text-sm text-gray-500">Kelola data masuk dari staff dan perbarui data master.</p>
+                </div>
                 <div className="flex gap-2">
                     <button onClick={fetchFiles} className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 text-sm">
                         <i className="bi bi-arrow-repeat"></i> Segarkan
@@ -191,7 +198,7 @@ export const AdminSyncDashboard: React.FC = () => {
                             <tr key={file.id} className="hover:bg-gray-50">
                                 <td className="px-6 py-4 font-medium text-gray-900 flex items-center gap-2">
                                     <i className="bi bi-file-earmark-code text-blue-500"></i>
-                                    {file.name}
+                                    <span className="truncate max-w-[200px]" title={file.name}>{file.name}</span>
                                 </td>
                                 <td className="px-6 py-4 text-gray-500 font-mono text-xs">{formatBytes(file.size)}</td>
                                 <td className="px-6 py-4 text-gray-500">

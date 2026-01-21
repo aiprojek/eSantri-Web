@@ -321,8 +321,22 @@ export interface SuratTemplate extends SyncedEntity { id: number; nama: string; 
 export interface ArsipSurat extends SyncedEntity { id: number; nomorSurat: string; perihal: string; tujuan: string; isiSurat: string; tanggalBuat: string; templateId?: number; tempatCetak?: string; tanggalCetak?: string; tempatTanggalConfig?: TempatTanggalConfig; signatoriesSnapshot?: SuratSignatory[]; mengetahuiSnapshot?: MengetahuiConfig; marginConfig?: MarginConfig; stampSnapshot?: StampConfig; showJudulSnapshot?: boolean; }
 export interface NisJenjangConfig { jenjangId: number; startNumber: number; padding: number; }
 export interface NisSettings { generationMethod: 'custom' | 'global' | 'dob'; format: string; jenjangConfig: NisJenjangConfig[]; masehiYearSource: 'auto' | 'manual'; manualMasehiYear: number; hijriahYearSource: 'auto' | 'manual'; manualHijriahYear: number; globalPrefix: string; globalUseYearPrefix: boolean; globalUseJenjangCode: boolean; globalStartNumber: number; globalPadding: number; dobFormat: 'YYYYMMDD' | 'DDMMYY' | 'YYMMDD'; dobSeparator: string; dobUseJenjangCode: boolean; dobPadding: number; }
-export type SyncProvider = 'none' | 'dropbox';
-export interface CloudSyncConfig { provider: SyncProvider; dropboxAppKey?: string; dropboxRefreshToken?: string; dropboxToken?: string; dropboxTokenExpiresAt?: number; lastSync: string | null; autoSync: boolean; }
+export type SyncProvider = 'none' | 'dropbox' | 'webdav';
+export interface CloudSyncConfig { 
+    provider: SyncProvider; 
+    // Dropbox Specific
+    dropboxAppKey?: string; 
+    dropboxRefreshToken?: string; 
+    dropboxToken?: string; 
+    dropboxTokenExpiresAt?: number; 
+    // WebDAV Specific
+    webdavUrl?: string;
+    webdavUsername?: string;
+    webdavPassword?: string;
+    
+    lastSync: string | null; 
+    autoSync: boolean; 
+}
 export interface StorageStats { used: number; total: number; percent: number; }
 export interface SyncFileRecord { id: string; name: string; path_lower: string; client_modified: string; size: number; status: 'pending' | 'merged'; }
 export type BackupFrequency = 'daily' | 'weekly' | 'never';

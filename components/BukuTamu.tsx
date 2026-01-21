@@ -5,18 +5,18 @@ import { useForm } from 'react-hook-form';
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
-import { BukuTamu } from '../types';
+import { BukuTamu as BukuTamuType } from '../types';
 
 interface BukuTamuModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (data: Omit<BukuTamu, 'id'>) => Promise<void>;
+    onSave: (data: Omit<BukuTamuType, 'id'>) => Promise<void>;
 }
 
 const BukuTamuModal: React.FC<BukuTamuModalProps> = ({ isOpen, onClose, onSave }) => {
     const { santriList } = useSantriContext();
     const { currentUser } = useAppContext();
-    const { register, handleSubmit, reset, watch, setValue } = useForm<BukuTamu>();
+    const { register, handleSubmit, reset, watch, setValue } = useForm<BukuTamuType>();
     
     const [searchSantri, setSearchSantri] = useState('');
     const [selectedSantriId, setSelectedSantriId] = useState<number | null>(null);
@@ -46,7 +46,7 @@ const BukuTamuModal: React.FC<BukuTamuModalProps> = ({ isOpen, onClose, onSave }
         }
     };
 
-    const onSubmit = async (data: BukuTamu) => {
+    const onSubmit = async (data: BukuTamuType) => {
         const now = new Date();
         const finalData = {
             ...data,
@@ -55,7 +55,7 @@ const BukuTamuModal: React.FC<BukuTamuModalProps> = ({ isOpen, onClose, onSave }
             jamMasuk: now.toISOString(),
             status: 'Bertamu',
             petugas: currentUser?.fullName || 'Petugas'
-        } as BukuTamu; // Cast to bypass optional fields
+        } as BukuTamuType; // Cast to bypass optional fields
 
         await onSave(finalData);
         reset();
@@ -182,13 +182,13 @@ const BukuTamu: React.FC = () => {
 
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.bukutamu === 'write';
 
-    const handleAddGuest = async (data: Omit<BukuTamu, 'id'>) => {
+    const handleAddGuest = async (data: Omit<BukuTamuType, 'id'>) => {
         if (!canWrite) return;
-        await db.bukuTamu.add({ ...data, lastModified: Date.now() } as BukuTamu);
+        await db.bukuTamu.add({ ...data, lastModified: Date.now() } as BukuTamuType);
         showToast('Tamu berhasil check-in', 'success');
     };
 
-    const handleCheckOut = (guest: BukuTamu) => {
+    const handleCheckOut = (guest: BukuTamuType) => {
         if (!canWrite) return;
         showConfirmation(
             'Check-Out Tamu?',

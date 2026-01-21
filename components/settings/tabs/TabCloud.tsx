@@ -83,13 +83,14 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     const [isConnectingDropbox, setIsConnectingDropbox] = useState(false);
     const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
     const [isLoadingStats, setIsLoadingStats] = useState(false);
+    const [isTestingWebDav, setIsTestingWebDav] = useState(false);
     
     // Pairing States
     const [showPairingModal, setShowPairingModal] = useState(false);
     const [generatedCode, setGeneratedCode] = useState('');
     const [inputPairingCode, setInputPairingCode] = useState('');
     const [isProcessingPairing, setIsProcessingPairing] = useState(false);
-    const [pairingStep, setPairingStep] = useState(''); // 'connecting', 'downloading', 'success'
+    const [pairingStep, setPairingStep] = useState(''); 
     
     const currentRedirectUri = window.location.origin + window.location.pathname;
 
@@ -106,10 +107,12 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                 if (config.provider === 'dropbox' && config.dropboxToken) {
                     const stats = await getCloudStorageStats(config);
                     setStorageStats(stats);
+                } else if (config.provider === 'webdav' && config.webdavUrl) {
+                    const stats = await getCloudStorageStats(config);
+                    setStorageStats(stats);
                 }
             } catch (error) {
-                // Now showing user-facing error for configuration issues in the UI
-                showToast(`Gagal memuat status Dropbox: ${(error as Error).message}`, 'error');
+                showToast(`Gagal memuat status cloud: ${(error as Error).message}`, 'error');
             } finally {
                 setIsLoadingStats(false);
             }
@@ -179,19 +182,56 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
         window.location.href = authUrl;
     };
 
-    // --- PAIRING LOGIC ---
-
-    const handleGeneratePairingCode = () => {
-        if (!settings.cloudSyncConfig.dropboxRefreshToken || !settings.cloudSyncConfig.dropboxAppKey) {
-            showToast('Anda belum terhubung ke Dropbox. Tidak bisa generate kode.', 'error');
+    const handleTestWebDav = async () => {
+        const { webdavUrl, webdavUsername, webdavPassword } = localSettings.cloudSyncConfig;
+        if (!webdavUrl || !webdavUsername || !webdavPassword) {
+            showToast('Harap lengkapi URL, Username, dan Password WebDAV.', 'error');
             return;
         }
-        // Encode keys to Base64 to make it easy to copy
-        const payload = JSON.stringify({
-            k: settings.cloudSyncConfig.dropboxAppKey,
-            r: settings.cloudSyncConfig.dropboxRefreshToken
-        });
-        const encoded = btoa(payload); // Simple encoding
+        setIsTestingWebDav(true);
+        try {
+            // Test connection by listing root directory
+            const stats = await getCloudStorageStats(localSettings.cloudSyncConfig);
+            if (stats) setStorageStats(stats);
+            showToast('Koneksi WebDAV Berhasil!', 'success');
+            await onSaveSettings(localSettings);
+        } catch (e) {
+            showToast(`Gagal koneksi WebDAV: ${(e as Error).message}. Pastikan CORS diaktifkan di server Anda.`, 'error');
+        } finally {
+            setIsTestingWebDav(false);
+        }
+    };
+
+    // --- PAIRING LOGIC (Universal for Dropbox & WebDAV) ---
+
+    const handleGeneratePairingCode = () => {
+        const config = settings.cloudSyncConfig;
+        let payloadString = '';
+
+        if (config.provider === 'dropbox') {
+             if (!config.dropboxRefreshToken || !config.dropboxAppKey) {
+                showToast('Anda belum terhubung ke Dropbox. Tidak bisa generate kode.', 'error');
+                return;
+            }
+            payloadString = JSON.stringify({
+                p: 'dropbox',
+                k: config.dropboxAppKey,
+                r: config.dropboxRefreshToken
+            });
+        } else if (config.provider === 'webdav') {
+            if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
+                showToast('Konfigurasi WebDAV belum lengkap.', 'error');
+                return;
+            }
+             payloadString = JSON.stringify({
+                p: 'webdav',
+                u: config.webdavUrl,
+                n: config.webdavUsername,
+                w: config.webdavPassword
+            });
+        }
+        
+        const encoded = btoa(payloadString); 
         setGeneratedCode(`ESANTRI-CLOUD-${encoded}`);
         setShowPairingModal(true);
     };
@@ -199,7 +239,6 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     const handleConnectViaPairing = async () => {
         if (!inputPairingCode.trim()) return;
         
-        // Step 1: Decode & Connect
         setPairingStep('connecting');
         setIsProcessingPairing(true);
         
@@ -208,17 +247,40 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             const decoded = atob(rawCode);
             const data = JSON.parse(decoded);
 
-            if (!data.k || !data.r) throw new Error("Kode tidak valid formatnya.");
-            
-            // Simpan konfigurasi koneksi dulu
-            const updatedConfig = {
-                ...settings.cloudSyncConfig,
-                provider: 'dropbox' as const,
-                dropboxAppKey: data.k,
-                dropboxRefreshToken: data.r,
-                dropboxToken: '', 
-                dropboxTokenExpiresAt: 0
-            };
+            let updatedConfig = { ...settings.cloudSyncConfig };
+
+            if (data.p === 'dropbox') {
+                 updatedConfig = {
+                    ...updatedConfig,
+                    provider: 'dropbox',
+                    dropboxAppKey: data.k,
+                    dropboxRefreshToken: data.r,
+                    dropboxToken: '', 
+                    dropboxTokenExpiresAt: 0
+                };
+            } else if (data.p === 'webdav') {
+                updatedConfig = {
+                    ...updatedConfig,
+                    provider: 'webdav',
+                    webdavUrl: data.u,
+                    webdavUsername: data.n,
+                    webdavPassword: data.w
+                };
+            } else {
+                 // Backward compatibility for old dropbox-only codes
+                 if (data.k && data.r) {
+                      updatedConfig = {
+                        ...updatedConfig,
+                        provider: 'dropbox',
+                        dropboxAppKey: data.k,
+                        dropboxRefreshToken: data.r,
+                        dropboxToken: '', 
+                        dropboxTokenExpiresAt: 0
+                    };
+                 } else {
+                     throw new Error("Kode tidak dikenali.");
+                 }
+            }
             
             // Simpan ke DB agar fungsi sync bisa membacanya
             await onSaveSettings({ ...settings, cloudSyncConfig: updatedConfig });
@@ -242,15 +304,14 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     };
 
     const handleFinishPairing = () => {
-        // Force Reload App
         window.location.reload();
     };
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-            <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Konfigurasi Sinkronisasi Dropbox</h2>
+            <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Konfigurasi Sinkronisasi Cloud</h2>
             <p className="text-sm text-gray-600 mb-4">
-                Hubungkan aplikasi ke Dropbox untuk backup otomatis dan kolaborasi tim (Hub & Spoke).
+                Pilih layanan penyimpanan untuk backup data dan sinkronisasi antar perangkat.
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -262,7 +323,8 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
                     >
                         <option value="none">Tidak Aktif</option>
-                        <option value="dropbox">Dropbox</option>
+                        <option value="dropbox">Dropbox (Mudah & Gratis)</option>
+                        <option value="webdav">WebDAV / Nextcloud (Self-Hosted/CasaOS)</option>
                     </select>
                     <StorageIndicator stats={storageStats} isLoading={isLoadingStats} />
                 </div>
@@ -279,19 +341,19 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                                 />
                                 <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                                 <span className="ms-3 text-sm font-medium text-gray-900">
-                                    Auto Sync (Push & Pull)
+                                    Auto Sync (Otomatis Tiap 5 Menit)
                                 </span>
                             </label>
                         </div>
                     </div>
                 )}
 
+                {/* --- DROPBOX UI --- */}
                 {localSettings.cloudSyncConfig?.provider === 'dropbox' && (
                     <div className="col-span-2 space-y-6">
-                        {/* SECTION 1: MANUAL SETUP (ADMIN) */}
                         <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-blue-50">
                             <div className="flex justify-between items-center">
-                                <h4 className="font-bold text-blue-800 text-sm">A. Setup Manual (Untuk Admin Utama)</h4>
+                                <h4 className="font-bold text-blue-800 text-sm">A. Setup Dropbox (Admin)</h4>
                                 {settings.cloudSyncConfig.dropboxRefreshToken && (
                                     <span className="text-green-600 text-xs font-bold bg-green-100 px-2 py-1 rounded border border-green-200">
                                         <i className="bi bi-check-circle-fill"></i> Terhubung
@@ -302,70 +364,115 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                             {!settings.cloudSyncConfig.dropboxRefreshToken ? (
                                 <>
                                     <div className="p-3 bg-blue-100 border border-blue-300 rounded text-xs text-blue-900">
-                                        <strong>Cara Koneksi:</strong> Masukkan <strong>App Key</strong> dari Dropbox Console, lalu klik "Login Dropbox".
-                                        <br/>Pastikan URL berikut ada di <strong>Redirect URIs</strong> Dropbox:
-                                        <code className="block mt-1 p-1 bg-white border border-blue-200 rounded select-all font-mono text-xs break-all">{currentRedirectUri}</code>
+                                        <strong>Cara Koneksi:</strong> Buat App di Dropbox Console, dapatkan <strong>App Key</strong>, lalu login.
+                                        <br/>Redirect URI Wajib: <code className="select-all font-mono">{currentRedirectUri}</code>
                                     </div>
                                     <div>
                                         <label className="block mb-2 text-sm font-medium text-gray-700">App Key</label>
                                         <SensitiveInput 
                                             value={localSettings.cloudSyncConfig.dropboxAppKey || ''}
                                             onChange={(val) => handleSyncConfigChange('dropboxAppKey', val)}
-                                            placeholder="Dapatkan dari Dropbox App Console"
+                                            placeholder="Masukkan App Key Dropbox"
                                         />
                                     </div>
                                     <div>
-                                        <button 
-                                            onClick={handleConnectDropbox}
-                                            disabled={isConnectingDropbox}
-                                            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2"
-                                        >
+                                        <button onClick={handleConnectDropbox} disabled={isConnectingDropbox} className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2">
                                             {isConnectingDropbox ? 'Menghubungkan...' : <><i className="bi bi-dropbox"></i> Login Dropbox</>}
                                         </button>
                                     </div>
                                 </>
                             ) : (
                                 <div>
-                                    <p className="text-sm text-gray-600 mb-3">Akun ini sudah terhubung. Anda bisa membagikan akses ke staff tanpa perlu login ulang.</p>
-                                    <button 
-                                        onClick={handleGeneratePairingCode}
-                                        className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm"
-                                    >
+                                    <button onClick={handleGeneratePairingCode} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm">
                                         <i className="bi bi-qr-code"></i> Bagikan Akses (Pairing Code)
                                     </button>
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
 
-                        {/* SECTION 2: PAIRING CODE (STAFF) */}
-                        {!settings.cloudSyncConfig.dropboxRefreshToken && (
-                            <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-green-50">
-                                <h4 className="font-bold text-green-800 text-sm">B. Setup Cepat (Untuk Staff)</h4>
-                                <p className="text-xs text-green-700">
-                                    Tidak perlu login email/password Dropbox. Cukup minta <strong>Kode Pairing</strong> dari Admin Utama yang sudah login.
-                                </p>
-                                <div className="flex gap-2">
+                {/* --- WEBDAV UI --- */}
+                {localSettings.cloudSyncConfig?.provider === 'webdav' && (
+                    <div className="col-span-2 space-y-6">
+                        <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-orange-50">
+                             <div className="flex justify-between items-center">
+                                <h4 className="font-bold text-orange-800 text-sm">A. Setup WebDAV (Nextcloud/CasaOS)</h4>
+                                <a href="https://github.com/aiprojek/eSantri-Web/wiki/CORS-Setup" target="_blank" className="text-xs text-orange-600 hover:underline"><i className="bi bi-info-circle"></i> Info CORS</a>
+                            </div>
+                            <p className="text-xs text-orange-800 bg-orange-100 p-2 rounded">
+                                <strong>PENTING:</strong> Pastikan server WebDAV/Nextcloud Anda mengizinkan <strong>CORS</strong> dari domain aplikasi ini. Jika tidak, koneksi akan ditolak oleh browser.
+                            </p>
+
+                            <div>
+                                <label className="block mb-2 text-sm font-medium text-gray-700">WebDAV URL</label>
+                                <input 
+                                    type="text" 
+                                    value={localSettings.cloudSyncConfig.webdavUrl || ''} 
+                                    onChange={(e) => handleSyncConfigChange('webdavUrl', e.target.value)}
+                                    placeholder="https://nextcloud.domain.com/remote.php/dav/files/user/" 
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block mb-2 text-sm font-medium text-gray-700">Username</label>
                                     <input 
                                         type="text" 
-                                        value={inputPairingCode}
-                                        onChange={e => setInputPairingCode(e.target.value)}
-                                        className="flex-grow bg-white border border-green-300 rounded text-sm p-2"
-                                        placeholder="Paste kode ESANTRI-CLOUD-... disini"
-                                        disabled={isProcessingPairing}
+                                        value={localSettings.cloudSyncConfig.webdavUsername || ''} 
+                                        onChange={(e) => handleSyncConfigChange('webdavUsername', e.target.value)}
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
                                     />
-                                    <button 
-                                        onClick={handleConnectViaPairing}
-                                        disabled={isProcessingPairing}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-bold disabled:bg-gray-400 flex items-center gap-2"
-                                    >
-                                        {isProcessingPairing ? <span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span> : 'Hubungkan'}
-                                    </button>
                                 </div>
-                                {pairingStep === 'connecting' && <p className="text-xs text-green-700 animate-pulse">Memverifikasi kode...</p>}
-                                {pairingStep === 'downloading_account' && <p className="text-xs text-blue-700 animate-pulse">Mengunduh data akun dan pengaturan...</p>}
-                                {pairingStep === 'downloading_data' && <p className="text-xs text-indigo-700 animate-pulse">Mengunduh data master (santri, transaksi, dll)...</p>}
+                                <div>
+                                    <label className="block mb-2 text-sm font-medium text-gray-700">Password / App Password</label>
+                                    <SensitiveInput 
+                                        value={localSettings.cloudSyncConfig.webdavPassword || ''}
+                                        onChange={(val) => handleSyncConfigChange('webdavPassword', val)}
+                                    />
+                                </div>
                             </div>
-                        )}
+                            <div className="flex gap-2">
+                                <button onClick={handleTestWebDav} disabled={isTestingWebDav} className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2">
+                                    {isTestingWebDav ? 'Menghubungi...' : <><i className="bi bi-hdd-network"></i> Test Koneksi & Simpan</>}
+                                </button>
+                                {storageStats && (
+                                    <button onClick={handleGeneratePairingCode} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm">
+                                        <i className="bi bi-qr-code"></i> Bagikan Akses
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                 {/* --- PAIRING SECTION (COMMON) --- */}
+                 {(!settings.cloudSyncConfig.provider || settings.cloudSyncConfig.provider === 'none' || (settings.cloudSyncConfig.provider === 'dropbox' && !settings.cloudSyncConfig.dropboxRefreshToken)) && (
+                    <div className="col-span-2 grid grid-cols-1 gap-4 border p-4 rounded-lg bg-green-50">
+                        <h4 className="font-bold text-green-800 text-sm">B. Setup Cepat (Untuk Staff)</h4>
+                        <p className="text-xs text-green-700">
+                            Punya kode dari Admin? Paste di sini untuk langsung terhubung.
+                        </p>
+                        <div className="flex gap-2">
+                            <input 
+                                type="text" 
+                                value={inputPairingCode}
+                                onChange={e => setInputPairingCode(e.target.value)}
+                                className="flex-grow bg-white border border-green-300 rounded text-sm p-2"
+                                placeholder="Paste kode ESANTRI-CLOUD-... disini"
+                                disabled={isProcessingPairing}
+                            />
+                            <button 
+                                onClick={handleConnectViaPairing}
+                                disabled={isProcessingPairing}
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-bold disabled:bg-gray-400 flex items-center gap-2"
+                            >
+                                {isProcessingPairing ? <span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span> : 'Hubungkan'}
+                            </button>
+                        </div>
+                        {pairingStep === 'connecting' && <p className="text-xs text-green-700 animate-pulse">Memverifikasi kode...</p>}
+                        {pairingStep === 'downloading_account' && <p className="text-xs text-blue-700 animate-pulse">Mengunduh data akun...</p>}
+                        {pairingStep === 'downloading_data' && <p className="text-xs text-indigo-700 animate-pulse">Mengunduh data master...</p>}
                     </div>
                 )}
             </div>
@@ -376,7 +483,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
                         <h3 className="text-lg font-bold text-gray-800 mb-2">Kode Pairing Akses Cloud</h3>
                         <p className="text-sm text-gray-600 mb-4">
-                            Salin kode di bawah ini dan kirimkan ke Staff. Staff cukup menempelkan kode ini di menu "Setup Cepat" pada perangkat mereka.
+                            Berikan kode ini kepada Staff untuk akses cepat tanpa login manual.
                         </p>
                         
                         <div className="bg-gray-100 p-3 rounded border border-gray-300 relative group">
@@ -393,7 +500,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         </div>
 
                         <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded border border-red-200">
-                            <strong>PERHATIAN:</strong> Kode ini memberikan akses penuh ke folder data eSantri di Dropbox Anda. Jangan bagikan ke orang asing.
+                            <strong>PERHATIAN:</strong> Kode ini memberikan akses penuh ke penyimpanan data eSantri Anda (Dropbox/WebDAV). Jangan bagikan sembarangan.
                         </div>
 
                         <div className="mt-6 flex justify-end">
@@ -402,27 +509,23 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     </div>
                 </div>
             )}
-
-            {/* SUCCESS PAIRING MODAL (BLOCKING) */}
+            
+            {/* SUCCESS PAIRING MODAL */}
             {pairingStep === 'success' && (
                 <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-8 text-center animate-fade-in-down border-t-4 border-green-500">
                         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600">
                             <i className="bi bi-cloud-check-fill text-4xl"></i>
                         </div>
-                        <h3 className="text-2xl font-bold text-gray-800 mb-2">Aplikasi Telah Dimutakhirkan</h3>
+                        <h3 className="text-2xl font-bold text-gray-800 mb-2">Sinkronisasi Berhasil</h3>
                         <p className="text-gray-600 mb-6 leading-relaxed">
-                            Aplikasi telah berhasil mengunduh seluruh data terbaru dari Admin Pusat (Data Santri, Transaksi, Pengaturan, Akun Staff, dan semuanya).
+                            Aplikasi telah berhasil terhubung dan mengunduh data terbaru dari server.
                         </p>
-                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 mb-6 text-left">
-                            <p className="font-bold mb-1"><i className="bi bi-info-circle"></i> Langkah Berikutnya:</p>
-                            <p>Tekan tombol OK untuk memulai menggunakan aplikasi dan kolaborasi bersama admin lain. Anda akan diarahkan ke halaman login.</p>
-                        </div>
                         <button 
                             onClick={handleFinishPairing} 
                             className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-lg transition-transform hover:-translate-y-1"
                         >
-                            OK, Mulai Sekarang
+                            Mulai Sekarang
                         </button>
                     </div>
                 </div>

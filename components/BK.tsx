@@ -34,7 +34,14 @@ const BkModal: React.FC<BkModalProps> = ({ isOpen, onClose, onSave, onUpdate, in
     useEffect(() => {
         if (isOpen) {
             if (initialData) {
-                reset(initialData);
+                // Ensure default values are merged for legacy data that might miss new fields
+                reset({
+                    ...initialData,
+                    status: initialData.status || 'Baru',
+                    privasi: initialData.privasi || 'Rahasia',
+                    konselor: initialData.konselor || currentUser?.fullName || '',
+                    kategori: initialData.kategori || 'Lainnya'
+                });
                 setSelectedSantriId(initialData.santriId);
                 const s = santriList.find(s => s.id === initialData.santriId);
                 setSearchSantri(s ? s.namaLengkap : '');

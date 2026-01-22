@@ -279,11 +279,9 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     const [tempatSurat, setTempatSurat] = useState(settings.alamat.split(',')[1]?.trim() || 'Tempat');
     const [tanggalSurat, setTanggalSurat] = useState(new Date().toISOString().split('T')[0]);
 
-    // Configs
+    // Configs - WITH DEFAULT VALUES (Safety for legacy templates)
     const [tempatTanggalConfig, setTempatTanggalConfig] = useState<TempatTanggalConfig>({
-        show: true,
-        position: 'bottom-right', 
-        align: 'right'
+        show: true, position: 'bottom-right', align: 'right'
     });
     
     const [marginConfig, setMarginConfig] = useState<MarginConfig>({ top: 2, right: 2, bottom: 2, left: 2 });
@@ -293,15 +291,11 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     
     // Mengetahui Config State
     const [mengetahui, setMengetahui] = useState<MengetahuiConfig>({
-        show: false,
-        jabatan: 'Mengetahui,',
-        align: 'center'
+        show: false, jabatan: 'Mengetahui,', align: 'center'
     });
 
     const [stampConfig, setStampConfig] = useState<StampConfig>({
-        show: false,
-        stampUrl: undefined,
-        placementSignatoryId: undefined,
+        show: false, stampUrl: undefined, placementSignatoryId: undefined,
     });
 
     // Zoom & Preview State
@@ -381,36 +375,27 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     useEffect(() => {
         if (template) {
             setCustomContent(template.konten);
-            // Initialize signatories
+            
+            // ROBUST INIT FOR LEGACY TEMPLATES (Prevent undefined access)
+            
+            // Signatories
             if (template.signatories && template.signatories.length > 0) {
                 setActiveSignatories(template.signatories);
             } else {
                 setActiveSignatories([{ id: 'default', jabatan: 'Ketua Panitia', nama: '...................................' }]);
             }
-            // Initialize Mengetahui
-            if (template.mengetahuiConfig) {
-                setMengetahui(template.mengetahuiConfig);
-            } else {
-                setMengetahui({ show: false, jabatan: 'Mengetahui,', align: 'center' });
-            }
-             // Initialize Tempat Tanggal
-             if (template.tempatTanggalConfig) {
-                setTempatTanggalConfig(template.tempatTanggalConfig);
-            } else {
-                setTempatTanggalConfig({ show: true, position: 'bottom-right', align: 'right' });
-            }
-             // Initialize Margin
-             if (template.marginConfig) {
-                 setMarginConfig(template.marginConfig);
-             } else {
-                 setMarginConfig({ top: 2, right: 2, bottom: 2, left: 2 });
-             }
-             // Initialize Stamp
-             if (template.stampConfig) {
-                 setStampConfig(template.stampConfig);
-             } else {
-                 setStampConfig({ show: false, stampUrl: undefined, placementSignatoryId: undefined });
-             }
+            
+            // Mengetahui
+            setMengetahui(template.mengetahuiConfig || { show: false, jabatan: 'Mengetahui,', align: 'center' });
+            
+            // Tempat Tanggal
+            setTempatTanggalConfig(template.tempatTanggalConfig || { show: true, position: 'bottom-right', align: 'right' });
+             
+            // Margin
+            setMarginConfig(template.marginConfig || { top: 2, right: 2, bottom: 2, left: 2 });
+             
+            // Stamp
+            setStampConfig(template.stampConfig || { show: false, stampUrl: undefined, placementSignatoryId: undefined });
         }
     }, [template]);
 
@@ -465,7 +450,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
             // Legacy TTL support
             content = content.replace(/{TTL}/g, `${santri.tempatLahir}, ${new Date(santri.tanggalLahir).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`);
 
-            // Data Pendidikan
+            // Data Pendidikan (Safe Access)
             content = content.replace(/{JENJANG}/g, settings.jenjang.find(j => j.id === santri.jenjangId)?.nama || '');
             content = content.replace(/{KELAS}/g, settings.kelas.find(k => k.id === santri.kelasId)?.nama || '');
             content = content.replace(/{ROMBEL}/g, settings.rombel.find(r => r.id === santri.rombelId)?.nama || '');

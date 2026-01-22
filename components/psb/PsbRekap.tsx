@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
@@ -110,7 +111,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 'alamat', 'desaKelurahan', 'kecamatan', 'kabupatenKota', 'provinsi', 'kodePos',
                 'namaAyah', 'nikAyah', 'statusAyah', 'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'teleponAyah',
                 'namaIbu', 'nikIbu', 'statusIbu', 'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'teleponIbu',
-                'namaWali', 'nomorHpWali', 'jenjangId', 'asalSekolah', 'tanggalDaftar', 'Timestamp'
+                'namaWali', 'nomorHpWali', 'jenjangId', 'asalSekolah', 'tanggalDaftar', 'Timestamp',
+                'catatan', 'jalurPendaftaran'
             ];
 
             for (const item of rawData) {
@@ -153,6 +155,10 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     kewarganegaraan: 'WNI',
                     gelombang: settings.psbConfig.activeGelombang,
                     
+                    // Fix: Add missing fields required by Pendaftar type
+                    catatan: item.catatan || '',
+                    jalurPendaftaran: item.jalurPendaftaran || 'Reguler',
+
                     // Store extra fields (including Google Drive Links) here
                     customData: JSON.stringify(customDataObj),
                     
@@ -272,6 +278,9 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 jenisKelamin: pendaftar.jenisKelamin,
                 kewarganegaraan: (pendaftar.kewarganegaraan as 'WNI' | 'WNA' | 'Keturunan') || 'WNI',
                 fotoUrl: 'https://placehold.co/150x200/e2e8f0/334155?text=Foto', // Default Placeholder
+                
+                // Fix: Add missing property required by Santri type
+                jenisSantri: 'Mondok - Baru', // Default
                 
                 // Address Mapping
                 alamat: { 

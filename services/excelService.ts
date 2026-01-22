@@ -167,3 +167,51 @@ export const exportFinanceSummaryToExcel = (santriList: Santri[], tagihanList: T
     XLSX.utils.book_append_sheet(workbook, worksheet, "Tunggakan Santri");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
 };
+
+/**
+ * Ekspor Format EMIS (Data Pokok Santri)
+ * Kolom disesuaikan dengan kebutuhan umum template EMIS/Dapodik
+ */
+export const exportEmisTemplate = (santriList: Santri[], settings: PondokSettings, fileName: string = 'Format_EMIS') => {
+    const data = santriList.map((s, index) => {
+        const rombel = settings.rombel.find(r => r.id === s.rombelId)?.nama || '-';
+        const jenjang = settings.jenjang.find(j => j.id === s.jenjangId)?.nama || '-';
+        
+        return {
+            'NO': index + 1,
+            'NAMA LENGKAP': s.namaLengkap?.toUpperCase(),
+            'NIS LOKAL': s.nis,
+            'NISN': s.nisn || '',
+            'NIK': s.nik || '',
+            'TEMPAT LAHIR': s.tempatLahir,
+            'TANGGAL LAHIR': s.tanggalLahir, // YYYY-MM-DD
+            'JENIS KELAMIN': s.jenisKelamin === 'Laki-laki' ? 'L' : 'P',
+            'NAMA IBU KANDUNG': s.namaIbu?.toUpperCase(),
+            'NAMA AYAH KANDUNG': s.namaAyah?.toUpperCase(),
+            'JENJANG': jenjang,
+            'KELAS/ROMBEL': rombel,
+            'ALAMAT JALAN': s.alamat.detail,
+            'DESA/KELURAHAN': s.alamat.desaKelurahan,
+            'KECAMATAN': s.alamat.kecamatan,
+            'KABUPATEN/KOTA': s.alamat.kabupatenKota,
+            'PROVINSI': s.alamat.provinsi,
+            'KODE POS': s.alamat.kodePos,
+            'JENIS TEMPAT TINGGAL': 'Pesantren', // Default
+            'KK': '', // Placeholder
+            'ANAK KE': s.anakKe || '',
+            'JUMLAH SAUDARA': s.jumlahSaudara || '',
+            'HOBBY': s.hobi ? s.hobi.join(', ') : '',
+            'CITA-CITA': '', // Placeholder
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    
+    // Auto-width hint
+    const wscols = Object.keys(data[0] || {}).map(() => ({ wch: 20 }));
+    worksheet['!cols'] = wscols;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "EMIS_Data");
+    XLSX.writeFile(workbook, `${fileName}.xlsx`);
+};

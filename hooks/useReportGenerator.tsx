@@ -39,7 +39,7 @@ export const useReportGenerator = (settings: PondokSettings) => {
             case ReportType.LembarNilai:
                 previews = generateNilaiReports(data, settings, options);
                 break;
-            case ReportType.RaporLengkap: // NEW CASE
+            case ReportType.RaporLengkap:
                 previews = generateRaporLengkapReports(data, settings, options);
                 break;
             case ReportType.LembarAbsensi:
@@ -95,6 +95,20 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 break;
             case ReportType.FormulirIzin:
                 data.forEach(santri => previews.push({ content: <FormulirIzinTemplate santri={santri} settings={settings} options={options} />, orientation: 'portrait' }));
+                break;
+            case ReportType.LaporanEMIS:
+                // No visual preview for EMIS export, just a placeholder. The download button will handle it.
+                previews.push({
+                    content: (
+                        <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                            <div className="text-green-600 text-6xl mb-4"><i className="bi bi-file-earmark-spreadsheet-fill"></i></div>
+                            <h3 className="text-xl font-bold text-gray-800">Siap Diekspor</h3>
+                            <p className="text-gray-600 mt-2">Data telah disiapkan dalam format Excel yang kompatibel dengan EMIS.</p>
+                            <p className="text-sm text-gray-500 mt-4">Silakan klik tombol <strong>Unduh > Excel (.xlsx)</strong> di pojok kanan atas.</p>
+                        </div>
+                    ),
+                    orientation: 'landscape'
+                });
                 break;
             default:
                 break;

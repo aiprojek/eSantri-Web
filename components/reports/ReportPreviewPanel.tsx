@@ -4,7 +4,7 @@ import { ReportType } from '../../types';
 import { generatePdf, printToPdfNative } from '../../utils/pdfGenerator';
 import { exportReportToSvg } from '../../utils/svgExporter';
 import { generateContactCsv } from '../../services/csvService';
-import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel } from '../../services/excelService';
+import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel, exportEmisTemplate } from '../../services/excelService';
 
 interface ReportPreviewPanelProps {
     previewContent: React.ReactNode | null;
@@ -95,6 +95,9 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
             else if (activeReport === ReportType.FinanceSummary && excelData?.tagihanList) {
                 exportFinanceSummaryToExcel(filteredSantri, excelData.tagihanList, settings, fileName);
             }
+            else if (activeReport === ReportType.LaporanEMIS) {
+                exportEmisTemplate(filteredSantri, settings, `EMIS_Export_${new Date().toISOString().slice(0,10)}`);
+            }
             else {
                 // Default: Export Santri Data (for Biodata, Rombel, etc)
                 exportSantriToExcel(filteredSantri, settings, fileName);
@@ -123,8 +126,9 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         ReportType.LaporanKontak, 
         ReportType.DaftarRombel,
         ReportType.Biodata,
-        ReportType.LaporanArusKas, // New
-        ReportType.FinanceSummary // New
+        ReportType.LaporanArusKas,
+        ReportType.FinanceSummary,
+        ReportType.LaporanEMIS // Add EMIS here
     ].includes(activeReport);
 
     if (!previewContent && !isLoading) {

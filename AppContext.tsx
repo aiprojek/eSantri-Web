@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
 import { PondokSettings, SuratTemplate, ArsipSurat, AuditLog, User } from './types';
 import { db, PondokSettingsWithId } from './db';
@@ -116,7 +116,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Core Data - Loaded via LiveQuery for reactivity
     const settingsList = useLiveQuery(() => db.settings.toArray(), []) || [];
-    const settings = settingsList[0] || initialSettings as PondokSettingsWithId;
+    
+    // DATA MIGRATION LOGIC (SELF-HEALING)
+    // Ensures compatibility with older databases by deeply merging defaults
+    const settings = useMemo(() => {
+        const rawSettings = settingsList[0];
+        // If no settings at all, return initial defaults
+        if (!rawSettings) return initialSettings as PondokSettingsWithId;
+        
+        // If settings exist, merge them on top of defaults to fill any missing new fields
+        return {
+            ...initialSettings, // 1. Start with fresh defaults
+            ...rawSettings,     // 2. Overwrite with user data
+            
+            // 3. Force deep merge for nested config objects (Crucial for new features)
+            psbConfig: { 
+                ...initialSettings.psbConfig, 
+                ...(rawSettings.psbConfig || {}) 
+            },
+            cloudSyncConfig: { 
+                ...initialSettings.cloudSyncConfig, 
+                ...(rawSettings.cloudSyncConfig || {}) 
+            },
+            backupConfig: { 
+                ...initialSettings.backupConfig, 
+                ...(rawSettings.backupConfig || {}) 
+            },
+            nisSettings: { 
+                ...initialSettings.nisSettings, 
+                ...(rawSettings.nisSettings || {}),
+                // Deep merge array inside object if needed, but for jenjangConfig usually replace is safer or manual handle
+                // For safety, fallback to empty array if missing
+                jenjangConfig: rawSettings.nisSettings?.jenjangConfig || initialSettings.nisSettings.jenjangConfig
+            },
+            
+            // 4. Ensure arrays are never undefined
+            jenjang: rawSettings.jenjang || [],
+            kelas: rawSettings.kelas || [],
+            rombel: rawSettings.rombel || [],
+            tenagaPengajar: rawSettings.tenagaPengajar || [],
+            mataPelajaran: rawSettings.mataPelajaran || [],
+            biaya: rawSettings.biaya || [],
+            
+        } as PondokSettingsWithId;
+    }, [settingsList]);
     
     // Use filter because 'deleted' is not indexed
     const suratTemplates = useLiveQuery(() => db.suratTemplates.filter((t: SuratTemplate) => !t.deleted).toArray(), []) || [];
@@ -252,7 +295,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const triggerManualSync = async (action: 'up' | 'down' | 'admin_publish') => {
         const config = settings.cloudSyncConfig;
-        if (!config || config.provider === 'none') return; // Fixed: Allow if provider is not 'none'
+        if (!config || config.provider === 'none') return;
 
         setSyncStatus('syncing');
         try {

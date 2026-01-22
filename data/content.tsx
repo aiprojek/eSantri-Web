@@ -104,7 +104,7 @@ export const faqData: FaqCategoryData[] = [
                 answer: "Masuk ke menu Perpustakaan > Cetak Kartu. Pilih tab 'Label', lalu pilih buku yang ingin dicetak labelnya. Label ini memuat kode panggil (Call Number) dan informasi Rak untuk ditempel di punggung buku."
             },
             {
-                question: "Apakah stok buku berkurang otomatis saat dipinjam?",
+                question: "Apakah stok buku berkurang otomatis?",
                 answer: "Ya. Saat Anda mencatat peminjaman di menu Sirkulasi, stok buku di Katalog akan berkurang otomatis. Stok akan kembali bertambah saat buku dikembalikan."
             },
             {
@@ -184,6 +184,15 @@ export const faqData: FaqCategoryData[] = [
         icon: "bi-database-fill",
         colorClass: "bg-blue-50 border-blue-500 text-blue-900",
         items: [
+            {
+                question: "Apakah aplikasi ini terhubung langsung dengan EMIS Kemenag?",
+                answer: (
+                    <div>
+                        <p>Tidak secara langsung (API), karena akses API EMIS tertutup untuk umum.</p>
+                        <p>Namun, eSantri Web menyediakan fitur <strong>Ekspor Format EMIS</strong> di menu Laporan. Fitur ini akan mengunduh data santri ke dalam format Excel yang kolom-kolomnya sudah disesuaikan dengan template upload EMIS, sehingga Anda tidak perlu mengetik ulang data satu per satu.</p>
+                    </div>
+                )
+            },
             {
                 question: "Bagaimana cara input banyak kelas/rombel sekaligus?",
                 answer: (
@@ -364,7 +373,7 @@ export const panduanData: PanduanSectionData[] = [
                             </div>
                             <div className="bg-green-50 p-3 rounded border border-green-100">
                                 <h4 className="font-bold text-green-800 mb-1"><i className="bi bi-person-fill-lock"></i> Pembagian Tugas</h4>
-                                <p>Buat akun khusus Staff (misal: Bendahara hanya akses Keuangan, tidak bisa hapus data Santri).</p>
+                                <p>Buat akun khusus Staff (misal: Bendahara hanya akses Keuangan, tidak bisa lihat Keuangan). Pembagian tugas yang jelas akan meningkatkan efisiensi.</p>
                             </div>
                             <div className="bg-orange-50 p-3 rounded border border-orange-100">
                                 <h4 className="font-bold text-orange-800 mb-1"><i className="bi bi-activity"></i> Audit Trail</h4>
@@ -502,6 +511,23 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Pindah Kelas Massal:</strong> Di menu Data Santri, filter kelas lama, centang semua (klik checkbox di header), klik tombol <strong>Pindah Kelas</strong> yang muncul di atas tabel.</li>
                         <li><strong>Kelulusan:</strong> Pilih santri, klik <strong>Ubah Status</strong>, pilih 'Lulus'. Data akan diarsipkan sebagai alumni dan tidak muncul di tagihan aktif.</li>
                     </ul>
+                )
+            },
+            {
+                title: 'Ekspor Data EMIS (Penting)',
+                color: 'green',
+                content: (
+                    <div className="bg-green-50 p-3 rounded border border-green-200">
+                        <p className="text-sm mb-2 text-green-900">
+                            Fitur ini membantu Anda menyiapkan file Excel untuk upload ke EMIS Kemenag tanpa input ulang manual.
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-1 text-sm text-green-800">
+                            <li>Pastikan data NIK, Nama Ibu Kandung, dan Tempat/Tgl Lahir santri sudah lengkap.</li>
+                            <li>Buka menu <strong>Laporan</strong>.</li>
+                            <li>Pilih kategori <strong>Penunjang & Lainnya</strong>, lalu klik tombol <strong>Ekspor Format EMIS</strong>.</li>
+                            <li>File Excel akan terunduh. Kolom-kolomnya sudah disesuaikan agar mudah dicopy ke template EMIS.</li>
+                        </ol>
+                    </div>
                 )
             }
         ]

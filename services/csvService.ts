@@ -1,4 +1,5 @@
 
+
 import { Santri, PondokSettings, Pendaftar } from '../types';
 
 // This is an internal helper and doesn't need to be exported.
@@ -328,8 +329,16 @@ export const parsePendaftarCsv = (csvText: string): Omit<Pendaftar, 'id'>[] => {
             provinsi: (data as any)['provinsi'] || '',
             kodePos: (data as any)['kodePos'] || '',
             
+            // Fix: Added missing required fields for Pendaftar interface
             namaAyah: (data as any)['namaAyah'] || '',
+            nikAyah: (data as any)['nikAyah'] || '',
+            pekerjaanAyah: (data as any)['pekerjaanAyah'] || '',
+            teleponAyah: (data as any)['teleponAyah'] || '',
+
             namaIbu: (data as any)['namaIbu'] || '',
+            nikIbu: (data as any)['nikIbu'] || '',
+            pekerjaanIbu: (data as any)['pekerjaanIbu'] || '',
+            teleponIbu: (data as any)['teleponIbu'] || '',
         };
         
         result.push(pendaftar);

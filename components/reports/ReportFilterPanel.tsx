@@ -36,11 +36,26 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
     const isSummaryReport = activeReport === ReportType.DashboardSummary || activeReport === ReportType.FinanceSummary || activeReport === ReportType.DaftarWaliKelas;
     const isFinancialReport = activeReport === ReportType.LaporanArusKas || activeReport === ReportType.RekeningKoranSantri;
     const isAsramaReport = activeReport === ReportType.LaporanAsrama;
+    const isEmisReport = activeReport === ReportType.LaporanEMIS;
 
     return (
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex-1 min-h-0 flex flex-col">
             <div className="flex-grow overflow-y-auto space-y-6 custom-scrollbar pr-2">
                 
+                {/* --- KHUSUS EMIS --- */}
+                {isEmisReport && (
+                    <div className="bg-green-50 p-3 rounded-lg border border-green-200 text-sm text-green-900">
+                        <h4 className="font-bold flex items-center gap-2 mb-2"><i className="bi bi-cloud-upload-fill"></i> Ekspor Format EMIS</h4>
+                        <p className="mb-2 text-xs">
+                            Fitur ini akan menghasilkan file Excel berisi data pokok seluruh santri yang sesuai filter. 
+                            Kolom data disesuaikan untuk memudahkan Copy-Paste ke template upload EMIS Kemenag.
+                        </p>
+                        <p className="text-xs italic">
+                            *Pastikan data NIK, Nama Ibu Kandung, dan Tempat/Tgl Lahir sudah lengkap di database santri.
+                        </p>
+                    </div>
+                )}
+
                 {/* --- SEKSI 1: FILTER DATA UTAMA --- */}
                 {!isSummaryReport && !isFinancialReport && (
                     <div className="space-y-4">
@@ -126,6 +141,7 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                 )}
 
                 {/* --- SEKSI 3: KONFIGURASI LAPORAN SPESIFIK --- */}
+                {!isEmisReport && (
                 <div className="space-y-3">
                     <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b pb-2">Opsi Laporan</h4>
                     
@@ -147,6 +163,7 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
 
                     <ReportOptions config={reportConfig} filteredSantri={filteredSantri} settings={settings} selectedJenjangId={filters.jenjangId} />
                 </div>
+                )}
 
             </div>
 
@@ -155,7 +172,7 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                 <button 
                     onClick={onGenerate} 
                     disabled={!canGenerate || isGenerating} 
-                    className="w-full bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-bold text-sm flex items-center justify-center gap-2 shadow-md transition-all hover:-translate-y-0.5"
+                    className={`w-full text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed font-bold text-sm flex items-center justify-center gap-2 shadow-md transition-all hover:-translate-y-0.5 ${isEmisReport ? 'bg-green-600 hover:bg-green-700' : 'bg-teal-600 hover:bg-teal-700'}`}
                 >
                     {isGenerating ? (
                         <>
@@ -164,7 +181,7 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                         </>
                     ) : (
                         <>
-                            <i className="bi bi-eye-fill"></i> Tampilkan Preview
+                            <i className={`bi ${isEmisReport ? 'bi-file-earmark-spreadsheet-fill' : 'bi-eye-fill'}`}></i> {isEmisReport ? 'Siapkan Data Ekspor' : 'Tampilkan Preview'}
                         </>
                     )}
                 </button>

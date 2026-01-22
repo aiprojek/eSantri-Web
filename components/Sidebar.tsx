@@ -36,8 +36,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
   const canAccess = (feature: keyof UserPermissions): boolean => {
       if (!currentUser) return false;
       if (currentUser.role === 'admin') return true;
+      // Safe check: permissions object might be missing or feature key might be missing in legacy user data
       if (!currentUser.permissions) return false;
-      return currentUser.permissions[feature] !== 'none';
+      return (currentUser.permissions[feature] || 'none') !== 'none';
   };
 
   // Fix: Ensure boolean return for strict type checking
@@ -121,7 +122,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
       if (item.page === Page.SyncAdmin) {
           const config = settings.cloudSyncConfig;
           if (!config || config.provider === 'none') {
-              showToast('Fitur Cloud belum aktif. Silakan hubungkan Dropbox di menu Pengaturan.', 'error');
+              showToast('Fitur Cloud belum aktif. Silakan hubungkan Cloud Storage di menu Pengaturan.', 'error');
               setPage(Page.Pengaturan); 
               return;
           }
@@ -132,7 +133,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
   const handleSyncClick = () => {
       const config = settings.cloudSyncConfig;
       if (!config || config.provider === 'none') {
-          showToast('Fitur Cloud belum aktif. Silakan hubungkan Dropbox di menu Pengaturan.', 'error');
+          showToast('Fitur Cloud belum aktif. Silakan hubungkan Cloud Storage di menu Pengaturan.', 'error');
           setPage(Page.Pengaturan);
           return;
       }

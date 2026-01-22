@@ -60,6 +60,7 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
             bg: "bg-gray-50",
             border: "border-gray-200",
             items: [
+                { id: ReportType.LaporanEMIS, title: 'Ekspor Format EMIS', description: "Excel data pokok untuk upload EMIS.", icon: 'bi-cloud-upload-fill', color: 'text-green-700' },
                 { id: ReportType.LaporanAsrama, title: 'Data Keasramaan', description: "Penghuni kamar & gedung.", icon: 'bi-building', color: 'text-gray-600' },
                 { id: ReportType.FormulirIzin, title: 'Surat Izin Pulang', description: "Formulir perizinan resmi.", icon: 'bi-box-arrow-right', color: 'text-gray-600' },
                 { id: ReportType.DaftarWaliKelas, title: 'Daftar Wali Kelas', description: "Rekap pengajar wali kelas.", icon: 'bi-person-lines-fill', color: 'text-gray-600' },

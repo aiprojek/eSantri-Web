@@ -89,7 +89,7 @@ export const getCloudStorageStats = async (config: CloudSyncConfig) => {
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         try {
-            const quota = await client.getQuota();
+            const quota = await client.getQuota() as any;
             if (quota) {
                  const used = typeof quota.used === 'number' ? quota.used : 0;
                  const available = typeof quota.available === 'number' ? quota.available : 0;

@@ -130,6 +130,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
             id: 0, nis: '', namaLengkap: '', jenisKelamin: 'Laki-laki', tempatLahir: '', tanggalLahir: '', kewarganegaraan: 'WNI', tanggalMasuk: new Date().toISOString().split('T')[0],
             alamat: { detail: '' }, namaAyah: '', namaIbu: '', teleponWali: '', jenjangId: defaultJenjangId, kelasId: defaultKelas?.id || 0, rombelId: defaultRombel?.id || 0,
             status: 'Aktif', prestasi: [], pelanggaran: [], hobi: [], riwayatStatus: [],
+            jenisSantri: 'Mondok - Baru' // Fix TS error
       });
     }
     setModalOpen(true);
@@ -188,7 +189,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
             const text = e.target?.result as string;
             const preview = parseSantriCsv(text, mode, santriList);
             setImportPreview(preview);
-        } catch (error) { showAlert(`Gagal Memproses File`, `Error: ${(error as Error).message}`); } finally { if (fileInputUpdateRef.current) fileInputUpdateRef.current.value = ''; if (fileInputAddRef.current) fileInputAddRef.current.value = ''; setImportModalOpen(false); }
+        } catch (error) { showAlert(`Gagal Memproses File`, `Error: ${(error as Error).message}`); } finally { if (fileInputUpdateRef.current) fileInputUpdateRef.current!.value = ''; if (fileInputAddRef.current) fileInputAddRef.current.value = ''; setImportModalOpen(false); }
     };
     reader.readAsText(file);
   };

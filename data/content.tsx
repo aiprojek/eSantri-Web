@@ -119,9 +119,22 @@ export const panduanData: PanduanSection[] = [
         ]
     },
     {
-        id: 'sync',
-        title: '4. Sinkronisasi Data',
+        id: 'jadwal',
+        title: '4. Manajemen Jadwal Pelajaran (Admin)',
         badge: '4',
+        badgeColor: 'indigo',
+        steps: [
+            { title: 'Konsep Admin-Centric', content: 'Fitur jadwal pelajaran dirancang untuk dikelola terpusat oleh Admin/Bagian Kurikulum. Hal ini untuk mencegah bentrok jadwal dan memastikan pembagian beban jam mengajar yang adil.' },
+            { title: 'Langkah 1: Setup Jam', content: 'Masuk menu Akademik > Jadwal Pelajaran. Pilih Jenjang. Atur "Pengaturan Jam" di panel kiri (Jam ke-1 mulai jam berapa, dst). Simpan.' },
+            { title: 'Langkah 2: Input Jadwal', content: 'Pilih Kelas dan Rombel di filter atas. Klik pada kotak kosong di tabel jadwal untuk mengisi Mata Pelajaran dan Guru. Sistem otomatis mendeteksi jika guru bentrok di jam yang sama.' },
+            { title: 'Langkah 3: Salin Jadwal', content: 'Gunakan fitur "Salin Jadwal Dari..." untuk menyalin jadwal dari kelas lain (misal 7A ke 7B) agar tidak perlu input ulang satu per satu.' },
+            { title: 'Cetak & Rekap', content: 'Cetak jadwal per kelas atau gabungan satu jenjang. Gunakan tombol "Rekap Jam" untuk melihat total Jam Tatap Muka (JTM) setiap guru.' },
+        ]
+    },
+    {
+        id: 'sync',
+        title: '5. Sinkronisasi Data',
+        badge: '5',
         badgeColor: 'purple',
         steps: [
             { title: 'Konfigurasi Cloud', content: 'Di Pengaturan > Sync Cloud, hubungkan aplikasi dengan Dropbox atau WebDAV (Nextcloud).' },
@@ -155,6 +168,16 @@ export const faqData: FaqCategory[] = [
         ]
     },
     {
+        title: "Data Master & Akademik",
+        icon: "bi-database",
+        colorClass: "bg-indigo-100 text-indigo-600",
+        items: [
+            { question: "Bagaimana cara menyalin jadwal pelajaran?", answer: "Masuk menu 'Jadwal Pelajaran', pilih kelas tujuan (kosong). Klik tombol 'Salin Jadwal Dari...' di panel kiri bawah, lalu pilih kelas sumber yang sudah ada jadwalnya." },
+            { question: "Apakah guru bisa mengisi jadwal sendiri?", answer: "Tidak. Penyusunan jadwal dilakukan terpusat oleh Admin/Kurikulum untuk menghindari konflik jadwal antar kelas." },
+            { question: "Bagaimana melihat total jam mengajar guru?", answer: "Di menu Jadwal Pelajaran, klik tombol 'Rekap Jam'. Sistem akan menampilkan tabel total jam tatap muka setiap guru." },
+        ]
+    },
+    {
         title: "Keuangan & Pembayaran",
         icon: "bi-wallet2",
         colorClass: "bg-green-100 text-green-600",
@@ -166,7 +189,7 @@ export const faqData: FaqCategory[] = [
     {
         title: "Akademik & Rapor",
         icon: "bi-mortarboard",
-        colorClass: "bg-indigo-100 text-indigo-600",
+        colorClass: "bg-blue-100 text-blue-600",
         items: [
             { question: "Guru tidak bisa membuka file input nilai di HP?", answer: "Pastikan guru menggunakan browser Chrome atau browser modern lainnya. File HTML input nilai dirancang agar ringan dan kompatibel dengan mobile browser." },
             { question: "Rumus Ranking tidak muncul?", answer: "Pastikan Anda menggunakan formula =RANK($NA) di kolom ranking pada Desain Rapor. Aplikasi akan otomatis menghitung peringkat berdasarkan nilai tersebut saat input nilai." },

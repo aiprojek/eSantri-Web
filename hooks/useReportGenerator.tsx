@@ -104,7 +104,7 @@ export const useReportGenerator = (settings: PondokSettings) => {
                             <div className="text-green-600 text-6xl mb-4"><i className="bi bi-file-earmark-spreadsheet-fill"></i></div>
                             <h3 className="text-xl font-bold text-gray-800">Siap Diekspor</h3>
                             <p className="text-gray-600 mt-2">Data telah disiapkan dalam format Excel yang kompatibel dengan EMIS.</p>
-                            <p className="text-sm text-gray-500 mt-4">Silakan klik tombol <strong>Unduh > Excel (.xlsx)</strong> di pojok kanan atas.</p>
+                            <p className="text-sm text-gray-500 mt-4">Silakan klik tombol <strong>Unduh &gt; Excel (.xlsx)</strong> di pojok kanan atas.</p>
                         </div>
                     ),
                     orientation: 'landscape'

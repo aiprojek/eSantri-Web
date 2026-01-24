@@ -192,7 +192,9 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
             bkSessions: await db.bkSessions.toArray(),
             bukuTamu: await db.bukuTamu.toArray(),
             inventaris: await db.inventaris.toArray(),
-            calendarEvents: await db.calendarEvents.toArray()
+            calendarEvents: await db.calendarEvents.toArray(),
+            jadwalPelajaran: await db.jadwalPelajaran.toArray(), 
+            arsipJadwal: await db.arsipJadwal.toArray() // NEW
         }
     };
     
@@ -262,7 +264,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 
         'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-        'inventaris', 'calendarEvents'
+        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal' // NEW
     ];
 
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
@@ -375,7 +377,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 
         'suratTemplates', 'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-        'inventaris', 'calendarEvents'
+        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal' // NEW
     ];
 
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
@@ -424,7 +426,9 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         bkSessions: await db.bkSessions.toArray(),
         bukuTamu: await db.bukuTamu.toArray(),
         inventaris: await db.inventaris.toArray(),
-        calendarEvents: await db.calendarEvents.toArray()
+        calendarEvents: await db.calendarEvents.toArray(),
+        jadwalPelajaran: await db.jadwalPelajaran.toArray(),
+        arsipJadwal: await db.arsipJadwal.toArray() // NEW
     };
 
     // 2. Config Master

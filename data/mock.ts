@@ -1,5 +1,5 @@
 
-import { PondokSettings, Santri, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar } from '../types';
+import { PondokSettings, Santri, TenagaPengajar, MataPelajaran, GedungAsrama, Kamar, JamPelajaran } from '../types';
 
 export const initialJenjang = [
   { id: 1, nama: 'Salafiyah Wustho', kode: 'SW', mudirId: 2, hariLibur: [5] }, // Jumat Libur
@@ -50,21 +50,27 @@ export const initialTenagaPengajar: TenagaPengajar[] = [
       nama: 'Dr. Ahmad Fauzi, M.Pd.I', 
       riwayatJabatan: [
         { id: 1, jabatan: 'Mudir Aam', tanggalMulai: '2020-01-15' }
-      ] 
+      ],
+      hariMasuk: [], // All days
+      kompetensiMapelIds: [1, 5] // Aqidah, Tafsir
     },
     { 
       id: 2, 
       nama: 'Karsiman', 
       riwayatJabatan: [
         { id: 1, jabatan: 'Mudir Marhalah Wustho', tanggalMulai: '2021-07-01' }
-      ] 
+      ],
+      hariMasuk: [1, 2, 3, 4], // Senin - Kamis
+      kompetensiMapelIds: [3] // Bahasa Arab
     },
     { 
       id: 3, 
       nama: 'Ust. Hasan Basri, S.Pd.', 
       riwayatJabatan: [
         { id: 1, jabatan: 'Mudir Marhalah Ulya', tanggalMulai: '2021-07-01' }
-      ] 
+      ],
+      hariMasuk: [5, 6, 0], // Jumat, Sabtu, Ahad
+      kompetensiMapelIds: [6, 7] // Ushul Fiqih, Musthalah
     },
     { 
       id: 4, 
@@ -72,7 +78,8 @@ export const initialTenagaPengajar: TenagaPengajar[] = [
       riwayatJabatan: [
         { id: 1, jabatan: 'Wali Kelas', tanggalMulai: '2022-07-15' },
         { id: 2, jabatan: 'Musyrif Asrama', tanggalMulai: '2022-07-15' }
-      ] 
+      ],
+      kompetensiMapelIds: [2] // Fiqih
     },
     { 
       id: 5, 
@@ -80,14 +87,16 @@ export const initialTenagaPengajar: TenagaPengajar[] = [
       riwayatJabatan: [
         { id: 1, jabatan: 'Wali Kelas', tanggalMulai: '2022-08-01' },
         { id: 2, jabatan: 'Musyrifah Asrama', tanggalMulai: '2022-08-01' }
-      ] 
+      ],
+      kompetensiMapelIds: [4] // Hadits
     },
     { 
       id: 6, 
       nama: 'Ust. Sulaiman Al-Hafidz', 
       riwayatJabatan: [
         { id: 1, jabatan: 'Guru Tahfidz', tanggalMulai: '2019-05-20', tanggalSelesai: '2023-12-31' }
-      ] 
+      ],
+      kompetensiMapelIds: [] 
     },
 ];
 
@@ -103,6 +112,25 @@ export const initialKamar: Kamar[] = [
   // Gedung Putri
   { id: 3, nama: 'Kamar A1', gedungId: 2, kapasitas: 6, musyrifId: 5 },
   { id: 4, nama: 'Kamar A2', gedungId: 2, kapasitas: 6 },
+];
+
+// Initial Jam Pelajaran (Default)
+const defaultJamWustho: JamPelajaran[] = [
+    { id: 1, urutan: 1, jamMulai: '07:00', jamSelesai: '07:40', jenis: 'KBM', jenjangId: 1 },
+    { id: 2, urutan: 2, jamMulai: '07:40', jamSelesai: '08:20', jenis: 'KBM', jenjangId: 1 },
+    { id: 3, urutan: 3, jamMulai: '08:20', jamSelesai: '09:00', jenis: 'KBM', jenjangId: 1 },
+    { id: 4, urutan: 4, jamMulai: '09:00', jamSelesai: '09:30', jenis: 'Istirahat', jenjangId: 1 },
+    { id: 5, urutan: 5, jamMulai: '09:30', jamSelesai: '10:10', jenis: 'KBM', jenjangId: 1 },
+    { id: 6, urutan: 6, jamMulai: '10:10', jamSelesai: '10:50', jenis: 'KBM', jenjangId: 1 },
+];
+
+const defaultJamUlya: JamPelajaran[] = [
+    { id: 7, urutan: 1, jamMulai: '07:00', jamSelesai: '07:45', jenis: 'KBM', jenjangId: 2 },
+    { id: 8, urutan: 2, jamMulai: '07:45', jamSelesai: '08:30', jenis: 'KBM', jenjangId: 2 },
+    { id: 9, urutan: 3, jamMulai: '08:30', jamSelesai: '09:15', jenis: 'KBM', jenjangId: 2 },
+    { id: 10, urutan: 4, jamMulai: '09:15', jamSelesai: '09:45', jenis: 'Istirahat', jenjangId: 2 },
+    { id: 11, urutan: 5, jamMulai: '09:45', jamSelesai: '10:30', jenis: 'KBM', jenjangId: 2 },
+    { id: 12, urutan: 6, jamMulai: '10:30', jamSelesai: '11:15', jenis: 'KBM', jenjangId: 2 },
 ];
 
 
@@ -127,6 +155,7 @@ export const initialSettings: PondokSettings = {
   mataPelajaran: initialMataPelajaran,
   gedungAsrama: initialGedungAsrama,
   kamar: initialKamar,
+  jamPelajaran: [...defaultJamWustho, ...defaultJamUlya], // NEW
   hijriAdjustment: 0,
   biaya: [
     { id: 1, nama: 'SPP Salafiyah Wustho', nominal: 150000, jenis: 'Bulanan', jenjangId: 1 },
@@ -186,7 +215,7 @@ export const initialSettings: PondokSettings = {
         designStyle: 'classic',
         posterTitle: 'Penerimaan Santri Baru',
         posterSubtitle: 'Tahun Ajaran 2025/2026',
-        posterInfo: 'Segera Daftarkan Putra/Putri Anda!',
+        posterInfo: 'Segera Daftar Putra/Putri Anda!',
         customFields: [
             { id: 'sec_1', type: 'section', label: 'SURAT PERNYATAAN', required: false },
             { id: 'stmt_1', type: 'statement', label: 'Dengan ini saya menyatakan sanggup menaati segala peraturan pondok.', required: false },

@@ -79,6 +79,7 @@ export const TabCetakRapor: React.FC = () => {
     const { santriList } = useSantriContext();
     const [filterTahun, setFilterTahun] = useState('2024/2025');
     const [filterSemester, setFilterSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
+    const [filterJenjang, setFilterJenjang] = useState('');
     const [printRombel, setPrintRombel] = useState('');
     const [selectedTemplateId, setSelectedTemplateId] = useState(''); // Empty = Standard K13
     const [availableYears, setAvailableYears] = useState<string[]>([]);
@@ -117,12 +118,37 @@ export const TabCetakRapor: React.FC = () => {
 
     const selectedTemplate = useMemo(() => settings.raporTemplates?.find(t => t.id === selectedTemplateId), [selectedTemplateId, settings.raporTemplates]);
 
+    // Derived Available Rombels based on Jenjang
+    const availableRombels = useMemo(() => {
+        if (!filterJenjang) return settings.rombel;
+        const kelasInJenjang = settings.kelas.filter(k => k.jenjangId === parseInt(filterJenjang)).map(k => k.id);
+        return settings.rombel.filter(r => kelasInJenjang.includes(r.kelasId));
+    }, [filterJenjang, settings]);
+
+    // Filtered Santri for List
+    const filteredSantriList = useMemo(() => {
+        return santriList
+            .filter(s => {
+                if (s.status !== 'Aktif') return false;
+                if (filterJenjang && s.jenjangId !== parseInt(filterJenjang)) return false;
+                if (printRombel && s.rombelId !== parseInt(printRombel)) return false;
+                return true;
+            })
+            .sort((a,b) => {
+                // Sort by Rombel first if "All Rombels" selected, then Name
+                if (!printRombel) {
+                    if (a.rombelId !== b.rombelId) return a.rombelId - b.rombelId;
+                }
+                return a.namaLengkap.localeCompare(b.namaLengkap);
+            });
+    }, [santriList, filterJenjang, printRombel]);
+
     return (
         <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Cetak Rapor</h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                      <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1">Tahun Ajaran</label>
                         {availableYears.length > 0 ? (
@@ -132,7 +158,6 @@ export const TabCetakRapor: React.FC = () => {
                         ) : (
                              <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border rounded p-2 text-sm bg-gray-50" placeholder="2024/2025" />
                         )}
-                        {availableYears.length === 0 && <p className="text-[10px] text-gray-400 mt-1 italic">Belum ada data nilai tersimpan.</p>}
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1">Semester</label>
@@ -141,10 +166,17 @@ export const TabCetakRapor: React.FC = () => {
                         </select>
                     </div>
                     <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Pilih Jenjang</label>
+                        <select value={filterJenjang} onChange={e => { setFilterJenjang(e.target.value); setPrintRombel(''); }} className="w-full border rounded p-2 text-sm bg-white">
+                            <option value="">-- Semua Jenjang --</option>
+                            {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                        </select>
+                    </div>
+                    <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1">Pilih Rombel</label>
                         <select value={printRombel} onChange={e => setPrintRombel(e.target.value)} className="w-full border rounded p-2 text-sm bg-yellow-50 focus:ring-2 focus:ring-yellow-400">
-                            <option value="">-- Pilih Rombel --</option>
-                            {settings.rombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                            <option value="">-- Semua Rombel --</option>
+                            {availableRombels.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
                         </select>
                     </div>
                     <div>
@@ -156,32 +188,34 @@ export const TabCetakRapor: React.FC = () => {
                     </div>
                 </div>
 
-                {printRombel ? (
-                    <div className="border rounded-lg overflow-hidden">
-                        <div className="bg-gray-100 px-4 py-2 text-xs font-bold text-gray-600 uppercase">Daftar Siswa</div>
-                        <div className="divide-y max-h-[500px] overflow-y-auto">
-                            {santriList
-                                .filter(s => s.rombelId === parseInt(printRombel) && s.status === 'Aktif')
-                                .sort((a,b) => a.namaLengkap.localeCompare(b.namaLengkap))
-                                .map((santri, idx) => (
-                                    <div key={santri.id} className="flex justify-between items-center p-3 hover:bg-gray-50">
-                                        <div className="flex items-center gap-3">
-                                            <span className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-xs font-bold">{idx + 1}</span>
-                                            <div>
-                                                <div className="font-medium text-sm text-gray-800">{santri.namaLengkap}</div>
-                                                <div className="text-xs text-gray-500">{santri.nis}</div>
+                <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-gray-100 px-4 py-2 text-xs font-bold text-gray-600 uppercase flex justify-between items-center">
+                        <span>Daftar Siswa ({filteredSantriList.length})</span>
+                        {!printRombel && filterJenjang && <span className="text-teal-600">Menampilkan Seluruh Kelas di Jenjang Ini</span>}
+                    </div>
+                    <div className="divide-y max-h-[500px] overflow-y-auto">
+                        {filteredSantriList.map((santri, idx) => (
+                                <div key={santri.id} className="flex justify-between items-center p-3 hover:bg-gray-50">
+                                    <div className="flex items-center gap-3">
+                                        <span className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-xs font-bold">{idx + 1}</span>
+                                        <div>
+                                            <div className="font-medium text-sm text-gray-800">{santri.namaLengkap}</div>
+                                            <div className="text-xs text-gray-500 flex gap-2">
+                                                <span>{santri.nis}</span>
+                                                <span>•</span>
+                                                <span className="text-teal-600 font-semibold">{settings.rombel.find(r=>r.id===santri.rombelId)?.nama}</span>
                                             </div>
                                         </div>
-                                        <button onClick={() => handlePrintPreview(santri.id)} className="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 bg-blue-600 text-white hover:bg-blue-700">
-                                            <i className="bi bi-printer"></i> Preview
-                                        </button>
                                     </div>
-                                ))
-                            }
-                            {santriList.filter(s => s.rombelId === parseInt(printRombel)).length === 0 && <div className="p-8 text-center text-gray-500 italic">Tidak ada santri aktif.</div>}
-                        </div>
+                                    <button onClick={() => handlePrintPreview(santri.id)} className="px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 bg-blue-600 text-white hover:bg-blue-700">
+                                        <i className="bi bi-printer"></i> Preview
+                                    </button>
+                                </div>
+                            ))
+                        }
+                        {filteredSantriList.length === 0 && <div className="p-8 text-center text-gray-500 italic">Tidak ada santri aktif sesuai filter.</div>}
                     </div>
-                ) : <div className="p-8 text-center bg-gray-50 rounded border border-dashed border-gray-300 text-gray-500">Pilih Rombel terlebih dahulu.</div>}
+                </div>
             </div>
 
             {/* PREVIEW MODAL */}

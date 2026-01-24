@@ -73,8 +73,9 @@ export const TabGeneratorFormulir: React.FC = () => {
     const availableRombel = useMemo(() => genKelasId ? settings.rombel.filter(r => r.kelasId === genKelasId) : [], [genKelasId, settings.rombel]);
 
     const handleGenerate = () => {
-        if (!genTemplateId || !genRombelId) {
-            showToast('Pilih template dan rombel terlebih dahulu', 'error');
+        // Validasi: Rombel harus dipilih ATAU (Jenjang dipilih AND Rombel = 0 yang berarti "Semua")
+        if (!genTemplateId || (!genRombelId && !genJenjangId)) {
+            showToast('Pilih template dan target (Jenjang/Rombel) terlebih dahulu', 'error');
             return;
         }
         const tpl = templates.find(t => t.id === genTemplateId);
@@ -83,6 +84,7 @@ export const TabGeneratorFormulir: React.FC = () => {
         try {
             const html = generateRaporFormHtml(santriList, settings, {
                 rombelId: genRombelId,
+                jenjangId: genJenjangId,
                 semester: genSemester,
                 tahunAjaran: genTahunAjaran,
                 template: tpl,
@@ -94,7 +96,15 @@ export const TabGeneratorFormulir: React.FC = () => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Form_Nilai_${settings.rombel.find(r=>r.id===genRombelId)?.nama}.html`;
+            
+            let filename = `Form_Nilai_`;
+            if (genRombelId > 0) {
+                 filename += settings.rombel.find(r=>r.id===genRombelId)?.nama;
+            } else if (genJenjangId > 0) {
+                 filename += `Jenjang_${settings.jenjang.find(j=>j.id===genJenjangId)?.nama}_ALL`;
+            }
+            
+            a.download = `${filename}.html`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -138,18 +148,22 @@ export const TabGeneratorFormulir: React.FC = () => {
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Kelas</label>
                             <select value={genKelasId} onChange={e => {setGenKelasId(Number(e.target.value)); setGenRombelId(0)}} disabled={!genJenjangId} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 bg-gray-50 focus:bg-white transition-colors">
-                                <option value={0}>Pilih...</option>
+                                <option value={0}>Semua Kelas</option>
                                 {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Rombel</label>
-                            <select value={genRombelId} onChange={e => setGenRombelId(Number(e.target.value))} disabled={!genKelasId} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 bg-gray-50 focus:bg-white transition-colors">
-                                <option value={0}>Pilih...</option>
+                            <select value={genRombelId} onChange={e => setGenRombelId(Number(e.target.value))} disabled={!genJenjangId} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 bg-gray-50 focus:bg-white transition-colors">
+                                <option value={0}>-- Semua Rombel (1 File) --</option>
                                 {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
                             </select>
                         </div>
                     </div>
+                    <div className="mt-2 text-[10px] text-gray-500 italic bg-gray-50 p-2 rounded border border-dashed">
+                        Tips: Pilih "Semua Rombel" untuk men-generate satu file HTML gabungan berisi seluruh santri dalam Jenjang tersebut.
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-4 mt-4">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Tahun Ajaran</label>
@@ -220,7 +234,7 @@ export const TabGeneratorFormulir: React.FC = () => {
                 </div>
 
                 <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                    <button onClick={handleGenerate} disabled={!genTemplateId || !genRombelId} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
+                    <button onClick={handleGenerate} disabled={!genTemplateId || !genJenjangId} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
                         <i className="bi bi-cloud-download-fill text-xl"></i> 
                         <span>Download Formulir HTML</span>
                     </button>

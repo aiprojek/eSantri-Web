@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -30,11 +30,13 @@ export class ESantriDatabase extends Dexie {
   obat!: Table<Obat, number>; 
   kesehatanRecords!: Table<KesehatanRecord, number>;
   bkSessions!: Table<BkSession, number>; 
-  bukuTamu!: Table<BukuTamu, number>; // NEW
+  bukuTamu!: Table<BukuTamu, number>; 
+  jadwalPelajaran!: Table<JadwalPelajaran, number>;
+  arsipJadwal!: Table<ArsipJadwal, number>; // NEW
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(33).stores({ // Bumped to 33 for BukuTamu
+    (this as any).version(35).stores({ // Bumped to 35 for Arsip Jadwal
       santri: '++id, nis, namaLengkap, kamarId',
       settings: '++id',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
@@ -58,7 +60,9 @@ export class ESantriDatabase extends Dexie {
       obat: '++id, nama, jenis',
       kesehatanRecords: '++id, santriId, tanggal, status',
       bkSessions: '++id, santriId, tanggal, status, kategori',
-      bukuTamu: '++id, tanggal, status, namaTamu' // NEW
+      bukuTamu: '++id, tanggal, status, namaTamu',
+      jadwalPelajaran: '++id, rombelId, [rombelId+hari+jamKe], guruId',
+      arsipJadwal: '++id, tahunAjaran, semester, jenjangId' // NEW
     }).upgrade(async (tx: any) => {
        // Migration handled by Dexie
     });

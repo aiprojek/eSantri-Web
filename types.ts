@@ -187,6 +187,8 @@ export interface TenagaPengajar {
     id: number;
     nama: string;
     riwayatJabatan: RiwayatJabatan[];
+    hariMasuk?: number[]; // NEW: 0 (Ahad) - 6 (Sabtu). If undefined/empty = All Days
+    kompetensiMapelIds?: number[]; // NEW: List of Mapel IDs this teacher can teach
 }
 
 export interface Jenjang {
@@ -214,6 +216,39 @@ export interface MataPelajaran {
     id: number;
     nama: string;
     jenjangId: number;
+}
+
+// NEW: Jadwal Pelajaran Types
+export interface JamPelajaran {
+    id: number;
+    urutan: number;
+    jamMulai: string; // "07:00"
+    jamSelesai: string; // "07:45"
+    jenis: 'KBM' | 'Istirahat' | 'Sholat' | 'Lainnya';
+    jenjangId: number; // Config per jenjang
+}
+
+export interface JadwalPelajaran {
+    id: number;
+    rombelId: number;
+    hari: number; // 0 (Ahad) - 6 (Sabtu)
+    jamKe: number; // Reference to JamPelajaran.urutan
+    mapelId?: number; // Optional if Istirahat
+    guruId?: number;
+    keterangan?: string; // e.g., "Istirahat", "Upacara"
+    lastModified?: number;
+}
+
+// NEW: Arsip Jadwal
+export interface ArsipJadwal {
+    id: number;
+    judul: string;
+    tahunAjaran: string;
+    semester: 'Ganjil' | 'Genap';
+    jenjangId: number; // Arsip per jenjang
+    tanggalArsip: string;
+    dataJSON: string; // Serialized JadwalPelajaran[]
+    lastModified?: number;
 }
 
 export interface GedungAsrama {
@@ -403,6 +438,9 @@ export interface PondokSettings {
   kamar: Kamar[];
   biaya: Biaya[];
   
+  // NEW: Config Jam Pelajaran (per Jenjang)
+  jamPelajaran?: JamPelajaran[];
+
   hijriAdjustment: number;
   
   nisSettings: NisSettings;

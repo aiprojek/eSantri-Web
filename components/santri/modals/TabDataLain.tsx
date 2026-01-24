@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { Santri, Prestasi, Pelanggaran } from '../../../types';
-import { FormSection } from './FormSection';
+import { FormSection } from '../santriModal/FormSection';
 
 interface TabDataLainProps {
   formMethods: UseFormReturn<Santri>;

@@ -11,7 +11,7 @@ import { MutasiModal } from './modals/MutasiModal';
 import { TabDataDiri } from './santriModal/TabDataDiri';
 import { TabDataOrangTua } from './santriModal/TabDataOrangTua';
 import { TabRiwayatStatus } from './santriModal/TabRiwayatStatus';
-import { TabDataLain } from './santriModal/TabDataLain';
+import { TabDataLain } from './modals/TabDataLain';
 
 interface SantriModalProps {
   isOpen: boolean;

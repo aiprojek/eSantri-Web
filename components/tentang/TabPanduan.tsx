@@ -192,11 +192,7 @@ export const TabPanduan: React.FC = () => {
                                                 <strong>PENTING:</strong> Aplikasi ini <em>Offline-First</em>. Data tidak berubah secara real-time (seperti Google Docs). Anda harus mengikuti SOP ini agar data antar komputer sinkron.
                                             </div>
                                         )}
-                                        {section.id === 'akademik' && (
-                                            <div className="bg-indigo-50 p-3 rounded mb-4 text-sm text-indigo-900 border border-indigo-200 animate-fade-in">
-                                                <p><strong>Konsep Unik:</strong> Admin mendesain rapor, Guru mengisi nilai lewat file HTML (bisa di HP/Offline), lalu Guru mengirim nilai kembali ke Admin via WhatsApp.</p>
-                                            </div>
-                                        )}
+                                        
                                         {section.id === 'absensi' && (
                                             <div className="bg-teal-50 p-3 rounded mb-4 text-sm text-teal-900 border border-teal-200 flex items-start gap-2 animate-fade-in">
                                                 <i className="bi bi-cloud-check-fill mt-1 text-lg"></i>

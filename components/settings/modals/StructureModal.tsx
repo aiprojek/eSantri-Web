@@ -103,10 +103,14 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
             nama: nama.trim(),
         };
 
-        if (listName === 'kelas') newItem = { ...baseItem, jenjangId: parseInt(parentId, 10) };
-        else if (listName === 'rombel') newItem = { ...baseItem, kelasId: parseInt(parentId, 10), waliKelasId: assignmentId ? parseInt(assignmentId) : undefined };
-        else if (listName === 'jenjang') newItem = { ...baseItem, kode: kode.trim(), mudirId: assignmentId ? parseInt(assignmentId) : undefined };
-        else newItem = baseItem;
+        if (listName === 'kelas') {
+            newItem = { ...baseItem, jenjangId: parseInt(parentId, 10) };
+        } else if (listName === 'rombel') {
+            newItem = { ...baseItem, kelasId: parseInt(parentId, 10), waliKelasId: assignmentId ? parseInt(assignmentId) : undefined };
+        } else {
+            // listName === 'jenjang'
+            newItem = { ...baseItem, kode: kode.trim(), mudirId: assignmentId ? parseInt(assignmentId) : undefined };
+        }
         
         onSave(newItem);
     };

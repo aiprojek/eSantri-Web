@@ -1,4 +1,6 @@
 
+
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { Santri, PondokSettings, Page } from '../types';
 import { useAppContext } from '../AppContext';
@@ -35,7 +37,7 @@ const QuickActionButton: React.FC<{ icon: string; label: string; onClick: () => 
 
 // ... (Existing Charts & InfoCard components are fine to reuse from previous file, just omitting them for brevity in this response but they should exist) ...
 interface StatusData {
-  name: 'Aktif' | 'Hiatus' | 'Lulus' | 'Keluar/Pindah' | 'Masuk';
+  name: Santri['status'];
   count: number;
   percentage: number;
   color: string;
@@ -117,7 +119,17 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
       return acc;
   }, {} as Record<Santri['status'], number>);
   
-  const statusColors: Record<Santri['status'], string> = { 'Aktif': 'text-teal-500', 'Hiatus': 'text-yellow-500', 'Lulus': 'text-blue-500', 'Keluar/Pindah': 'text-red-500', 'Masuk': 'text-gray-500' };
+  const statusColors: Record<Santri['status'], string> = { 
+    'Aktif': 'text-teal-500', 
+    'Hiatus': 'text-yellow-500', 
+    'Lulus': 'text-blue-500', 
+    'Keluar/Pindah': 'text-red-500', 
+    'Masuk': 'text-gray-500',
+    'Baru': 'text-purple-500',
+    'Diterima': 'text-green-600',
+    'Cadangan': 'text-orange-500',
+    'Ditolak': 'text-red-700'
+  };
 
   const statusData: StatusData[] = (['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah', 'Masuk'] as Santri['status'][]).map(status => ({
       name: status, count: statusCounts[status] || 0, percentage: totalSantri > 0 ? ((statusCounts[status] || 0) / totalSantri) * 100 : 0, color: statusColors[status]

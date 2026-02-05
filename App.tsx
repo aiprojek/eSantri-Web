@@ -33,12 +33,14 @@ const Kalender = React.lazy(() => import('./components/Kalender'));
 const Perpustakaan = React.lazy(() => import('./components/Perpustakaan')); 
 const Kesehatan = React.lazy(() => import('./components/Kesehatan')); 
 const BK = React.lazy(() => import('./components/BK'));
-const BukuTamu = React.lazy(() => import('./components/BukuTamu')); // NEW
+const BukuTamu = React.lazy(() => import('./components/BukuTamu')); 
+const Koperasi = React.lazy(() => import('./components/Koperasi')); // NEW
 
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
 const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
 
 // --- Alert Modal Component ---
+// ... (AlertModal implementation) ...
 interface AlertModalProps {
   isOpen: boolean;
   title: string;
@@ -165,6 +167,7 @@ const AccessDenied: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
+    // ... (existing hooks and state)
     const { 
         isLoading, 
         toasts, 
@@ -290,7 +293,7 @@ const AppContent: React.FC = () => {
                             return checkAccess('kesehatan') ? <Kesehatan /> : <AccessDenied />;
                         case Page.BK: 
                             return checkAccess('bk') ? <BK /> : <AccessDenied />;
-                        case Page.BukuTamu: // NEW
+                        case Page.BukuTamu: 
                             return checkAccess('bukutamu') ? <BukuTamu /> : <AccessDenied />;
                         case Page.DataMaster:
                             return checkAccess('datamaster') ? <DataMaster /> : <AccessDenied />;
@@ -300,6 +303,8 @@ const AppContent: React.FC = () => {
                             return checkAccess('keasramaan') ? <Asrama /> : <AccessDenied />;
                         case Page.BukuKas:
                             return checkAccess('bukukas') ? <BukuKas /> : <AccessDenied />;
+                        case Page.Koperasi: // NEW
+                            return checkAccess('koperasi') ? <Koperasi /> : <AccessDenied />;
                         case Page.Surat:
                             return checkAccess('surat') ? <SuratMenyurat /> : <AccessDenied />;
                         case Page.PSB:
@@ -322,6 +327,7 @@ const AppContent: React.FC = () => {
         );
     };
     
+    // ... (rest of App component)
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100">

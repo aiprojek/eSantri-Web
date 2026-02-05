@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -14,6 +14,7 @@ export class ESantriDatabase extends Dexie {
   saldoSantri!: Table<SaldoSantri, number>;
   transaksiSaldo!: Table<TransaksiSaldo, number>;
   transaksiKas!: Table<TransaksiKas, number>;
+  chartOfAccounts!: Table<ChartOfAccount, number>; 
   suratTemplates!: Table<SuratTemplate, number>;
   arsipSurat!: Table<ArsipSurat, number>;
   pendaftar!: Table<Pendaftar, number>;
@@ -32,11 +33,19 @@ export class ESantriDatabase extends Dexie {
   bkSessions!: Table<BkSession, number>; 
   bukuTamu!: Table<BukuTamu, number>; 
   jadwalPelajaran!: Table<JadwalPelajaran, number>;
-  arsipJadwal!: Table<ArsipJadwal, number>; // NEW
+  arsipJadwal!: Table<ArsipJadwal, number>;
+  payrollRecords!: Table<PayrollRecord, number>;
+  piketSchedules!: Table<PiketSchedule, number>;
+  produkKoperasi!: Table<ProdukKoperasi, number>; 
+  transaksiKoperasi!: Table<TransaksiKoperasi, number>;
+  riwayatStok!: Table<RiwayatStok, number>; 
+  keuanganKoperasi!: Table<KeuanganKoperasi, number>;
+  pendingOrders!: Table<PendingOrder, number>;
+  diskon!: Table<Diskon, number>; // NEW
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(35).stores({ // Bumped to 35 for Arsip Jadwal
+    (this as any).version(44).stores({ // Bump version
       santri: '++id, nis, namaLengkap, kamarId',
       settings: '++id',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
@@ -44,6 +53,7 @@ export class ESantriDatabase extends Dexie {
       saldoSantri: 'santriId',
       transaksiSaldo: '++id, santriId, tanggal',
       transaksiKas: '++id, tanggal, jenis, kategori',
+      chartOfAccounts: '++id, kode, nama, kategori',
       suratTemplates: '++id, nama, kategori',
       arsipSurat: '++id, nomorSurat, tujuan, tanggalBuat',
       pendaftar: '++id, namaLengkap, jenjangId, tanggalDaftar, status',
@@ -62,9 +72,17 @@ export class ESantriDatabase extends Dexie {
       bkSessions: '++id, santriId, tanggal, status, kategori',
       bukuTamu: '++id, tanggal, status, namaTamu',
       jadwalPelajaran: '++id, rombelId, [rombelId+hari+jamKe], guruId',
-      arsipJadwal: '++id, tahunAjaran, semester, jenjangId' // NEW
+      arsipJadwal: '++id, tahunAjaran, semester, jenjangId',
+      payrollRecords: '++id, guruId, [bulan+tahun], tanggalBayar',
+      piketSchedules: '++id, tanggal, sholat',
+      produkKoperasi: '++id, nama, barcode, kategori',
+      transaksiKoperasi: '++id, tanggal, tipePembeli, statusTransaksi',
+      riwayatStok: '++id, produkId, tanggal, tipe',
+      keuanganKoperasi: '++id, tanggal, jenis',
+      pendingOrders: '++id, customerName, timestamp',
+      diskon: '++id, nama, aktif' // NEW
     }).upgrade(async (tx: any) => {
-       // Migration handled by Dexie
+       // Migration logic if needed
     });
   }
 }

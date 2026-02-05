@@ -344,10 +344,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const onDeleteSampleData = async () => { 
-        await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.auditLogs, db.absensi, async () => { 
+        await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, async () => { 
             await db.santri.clear(); await db.tagihan.clear(); await db.pembayaran.clear(); 
             await db.saldoSantri.clear(); await db.transaksiSaldo.clear(); await db.transaksiKas.clear(); 
             await db.auditLogs.clear(); await db.absensi.clear(); 
+            await db.tahfizh.clear(); await db.kesehatanRecords.clear(); await db.bkSessions.clear(); await db.bukuTamu.clear();
+            await db.buku.clear(); await db.sirkulasi.clear(); await db.inventaris.clear(); await db.calendarEvents.clear();
+            await db.jadwalPelajaran.clear(); await db.arsipJadwal.clear(); await db.pendaftar.clear(); await db.raporRecords.clear();
+            
+            // New Modules Clear
+            await db.payrollRecords.clear();
+            await db.piketSchedules.clear();
+            await db.produkKoperasi.clear();
+            await db.transaksiKoperasi.clear();
+            await db.riwayatStok.clear();
+            await db.keuanganKoperasi.clear();
+            await db.pendingOrders.clear();
+            
+            // Note: We don't clear settings or users (except maybe generic staff?) usually to keep access
         }); 
         triggerAutoSync(); 
     };
@@ -359,10 +373,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const downloadBackup = async () => {
         const data = {
-            settings: await db.settings.toArray(), santri: await db.santri.toArray(), tagihan: await db.tagihan.toArray(), pembayaran: await db.pembayaran.toArray(), saldoSantri: await db.saldoSantri.toArray(), 
-            transaksiSaldo: await db.transaksiSaldo.toArray(), transaksiKas: await db.transaksiKas.toArray(), suratTemplates: await db.suratTemplates.toArray(), arsipSurat: await db.arsipSurat.toArray(), 
-            pendaftar: await db.pendaftar.toArray(), auditLogs: await db.auditLogs.toArray(), users: await db.users.toArray(), raporRecords: await db.raporRecords.toArray(), absensi: await db.absensi.toArray(), 
-            version: '2.0', timestamp: new Date().toISOString(),
+            settings: await db.settings.toArray(), 
+            santri: await db.santri.toArray(), 
+            tagihan: await db.tagihan.toArray(), 
+            pembayaran: await db.pembayaran.toArray(), 
+            saldoSantri: await db.saldoSantri.toArray(), 
+            transaksiSaldo: await db.transaksiSaldo.toArray(), 
+            transaksiKas: await db.transaksiKas.toArray(), 
+            suratTemplates: await db.suratTemplates.toArray(), 
+            arsipSurat: await db.arsipSurat.toArray(), 
+            pendaftar: await db.pendaftar.toArray(), 
+            auditLogs: await db.auditLogs.toArray(), 
+            users: await db.users.toArray(), 
+            raporRecords: await db.raporRecords.toArray(), 
+            absensi: await db.absensi.toArray(),
+            tahfizh: await db.tahfizh.toArray(),
+            buku: await db.buku.toArray(),
+            sirkulasi: await db.sirkulasi.toArray(),
+            obat: await db.obat.toArray(),
+            kesehatanRecords: await db.kesehatanRecords.toArray(),
+            bkSessions: await db.bkSessions.toArray(),
+            bukuTamu: await db.bukuTamu.toArray(),
+            inventaris: await db.inventaris.toArray(),
+            calendarEvents: await db.calendarEvents.toArray(),
+            jadwalPelajaran: await db.jadwalPelajaran.toArray(),
+            arsipJadwal: await db.arsipJadwal.toArray(),
+            
+            // New Modules
+            payrollRecords: await db.payrollRecords.toArray(),
+            piketSchedules: await db.piketSchedules.toArray(),
+            produkKoperasi: await db.produkKoperasi.toArray(),
+            transaksiKoperasi: await db.transaksiKoperasi.toArray(),
+            riwayatStok: await db.riwayatStok.toArray(),
+            keuanganKoperasi: await db.keuanganKoperasi.toArray(),
+            pendingOrders: await db.pendingOrders.toArray(),
+            
+            version: '3.0', // Bumped version for new schema support
+            timestamp: new Date().toISOString(),
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

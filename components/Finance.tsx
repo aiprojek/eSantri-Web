@@ -10,6 +10,8 @@ import { UangSakuView } from './finance/UangSakuView';
 import { PengaturanBiaya } from './finance/PengaturanBiaya';
 import { PengaturanRedaksi } from './finance/PengaturanRedaksi';
 import { SetoranKasView } from './finance/SetoranKasView'; 
+import { PayrollView } from './finance/PayrollView';
+import { LaporanTunggakan } from './finance/LaporanTunggakan'; // NEW
 import { PembayaranModal } from './finance/modals/PembayaranModal';
 import { RiwayatKeuanganSantriModal } from './finance/modals/RiwayatKeuanganSantriModal';
 import { KuitansiTemplate } from './finance/print/KuitansiTemplate';
@@ -20,7 +22,7 @@ const Finance: React.FC = () => {
     const { santriList } = useSantriContext();
     const { tagihanList, pembayaranList } = useFinanceContext();
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'status' | 'setoran' | 'uangsaku' | 'pengaturan' | 'redaksi'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'status' | 'aging' | 'setoran' | 'uangsaku' | 'payroll' | 'pengaturan' | 'redaksi'>('dashboard');
     
     // State for Payment Modal
     const [isPembayaranModalOpen, setIsPembayaranModalOpen] = useState(false);
@@ -74,10 +76,12 @@ const Finance: React.FC = () => {
                 <nav className="flex -mb-px overflow-x-auto">
                     <button onClick={() => setActiveTab('dashboard')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
                     <button onClick={() => setActiveTab('status')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'status' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Status Pembayaran</button>
+                    <button onClick={() => setActiveTab('aging')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'aging' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-graph-down mr-1"></i> Laporan Umur Piutang</button>
                     <button onClick={() => setActiveTab('setoran')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'setoran' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-box-arrow-in-down mr-1"></i> Setoran Kas</button>
                     <button onClick={() => setActiveTab('uangsaku')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'uangsaku' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Uang Saku</button>
                     {canWrite && (
                         <>
+                            <button onClick={() => setActiveTab('payroll')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'payroll' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-cash-stack mr-1"></i> Penggajian (Payroll)</button>
                             <button onClick={() => setActiveTab('pengaturan')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'pengaturan' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Biaya</button>
                             <button onClick={() => setActiveTab('redaksi')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'redaksi' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Redaksi</button>
                         </>
@@ -87,8 +91,10 @@ const Finance: React.FC = () => {
             
             {activeTab === 'dashboard' && <FinanceDashboard santriList={santriList} tagihanList={tagihanList} pembayaranList={pembayaranList} settings={settings} />}
             {activeTab === 'status' && <StatusPembayaranView onBayarClick={openPembayaranModal} onHistoryClick={openHistoryModal} setPrintableSuratTagihanData={setPrintableSuratTagihanData} canWrite={canWrite} />}
+            {activeTab === 'aging' && <LaporanTunggakan />}
             {activeTab === 'setoran' && <SetoranKasView canWrite={canWrite} />}
             {activeTab === 'uangsaku' && <UangSakuView canWrite={canWrite} />}
+            {activeTab === 'payroll' && canWrite && <PayrollView canWrite={canWrite} />}
             {activeTab === 'pengaturan' && canWrite && <PengaturanBiaya />}
             {activeTab === 'redaksi' && canWrite && <PengaturanRedaksi />}
             

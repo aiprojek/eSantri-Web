@@ -1,6 +1,6 @@
 
 import { db } from '../db';
-import { PondokSettings, Santri, Tagihan } from '../types';
+import { PondokSettings, Santri, Tagihan, TenagaPengajar, PayrollRecord } from '../types';
 
 export const generateTagihanBulanan = async (
     dexieDb: typeof db,
@@ -107,3 +107,81 @@ export const generateTagihanAwal = async (
 
     return { result: { generated, skipped }, newTagihan: newTagihanData };
 };
+
+// --- PAYROLL SERVICES ---
+
+export const generatePayrollDraft = async (
+    dexieDb: typeof db,
+    teachers: TenagaPengajar[],
+    month: number,
+    year: number,
+    effectiveWeeks: number = 4
+): Promise<PayrollRecord[]> => {
+    
+    // Check if payroll already exists for this period
+    const existing = await dexieDb.payrollRecords
+        .where({ bulan: month, tahun: year })
+        .toArray();
+        
+    const existingMap = new Map(existing.map(r => [r.guruId, r]));
+    const drafts: PayrollRecord[] = [];
+
+    for (const t of teachers) {
+        if (existingMap.has(t.id)) {
+            // If exists, keep it unless user chooses to overwrite (handled by UI logic to delete first)
+            // But here we'll just skip to avoid duplicates in generation view
+            continue; 
+        }
+
+        // Calculate teaching hours
+        // Count how many schedule slots this teacher has
+        const jadwalCount = await dexieDb.jadwalPelajaran.where('guruId').equals(t.id).count();
+        const totalJamSebulan = jadwalCount * effectiveWeeks;
+        
+        // Defaults
+        const cfg = t.configGaji || { 
+            gajiPokok: 0, 
+            tunjanganJabatan: 0, 
+            honorPerJam: 0, 
+            tunjanganLain: 0, 
+            potonganLain: 0 
+        };
+
+        const totalHonorJTM = totalJamSebulan * cfg.honorPerJam;
+        
+        // Find Jabatan Name
+        const jabatan = t.riwayatJabatan.length > 0 
+            ? t.riwayatJabatan.sort((a,b) => b.tanggalMulai.localeCompare(a.tanggalMulai))[0].jabatan 
+            : 'Guru';
+
+        const totalDiterima = cfg.gajiPokok + cfg.tunjanganJabatan + totalHonorJTM + cfg.tunjanganLain + 0 /*Bonus*/ - cfg.potonganLain - 0 /*PotonganAbsen*/;
+
+        const draft: PayrollRecord = {
+            id: parseInt(`${Date.now()}${Math.floor(Math.random()*1000)}`.slice(0,16)), // Temp ID
+            guruId: t.id,
+            namaGuru: t.nama,
+            jabatan: jabatan,
+            bulan: month,
+            tahun: year,
+            tanggalBayar: new Date().toISOString().split('T')[0],
+            
+            gajiPokok: cfg.gajiPokok,
+            tunjanganJabatan: cfg.tunjanganJabatan,
+            totalJamMengajar: totalJamSebulan,
+            honorPerJam: cfg.honorPerJam,
+            totalHonorJTM: totalHonorJTM,
+            tunjanganLain: cfg.tunjanganLain,
+            bonus: 0,
+            
+            potonganLain: cfg.potonganLain,
+            potonganAbsen: 0,
+            
+            totalDiterima: totalDiterima,
+            lastModified: Date.now()
+        };
+        
+        drafts.push(draft);
+    }
+    
+    return drafts;
+}

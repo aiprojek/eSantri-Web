@@ -36,7 +36,7 @@ export const ADMIN_PERMISSIONS = {
     perpustakaan: 'write',
     kesehatan: 'write',
     bk: 'write', 
-    bukutamu: 'write', // NEW
+    bukutamu: 'write',
     datamaster: 'write',
     keuangan: 'write',
     keasramaan: 'write',
@@ -45,6 +45,7 @@ export const ADMIN_PERMISSIONS = {
     laporan: 'write',
     auditlog: 'write',
     pengaturan: 'write',
+    koperasi: 'write', // NEW
     syncAdmin: true,
 };
 
@@ -60,7 +61,7 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     perpustakaan: 'read',
     kesehatan: 'read', 
     bk: 'none', 
-    bukutamu: 'write', // Staff usually handles guests
+    bukutamu: 'write',
     datamaster: 'none',
     keuangan: 'none',
     keasramaan: 'read',
@@ -69,5 +70,6 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     laporan: 'read',
     auditlog: 'none',
     pengaturan: 'none',
+    koperasi: 'write', // Staff usually handles sales
     syncAdmin: false,
 };

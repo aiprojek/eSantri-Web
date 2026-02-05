@@ -108,16 +108,17 @@ export const SantriModal: React.FC<SantriModalProps> = ({
     }
   };
   
-  const TabButton: React.FC<{ tabId: string, label: string }> = ({ tabId, label }) => (
+  const TabButton: React.FC<{ tabId: string, label: string, icon: string }> = ({ tabId, label, icon }) => (
     <button
         type="button"
         onClick={() => setActiveTab(tabId)}
-        className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+        className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === tabId
-                ? 'border-b-2 border-teal-600 text-teal-600'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                ? 'border-teal-600 text-teal-600 bg-teal-50'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
         }`}
     >
+        <i className={`bi ${icon} text-lg`}></i>
         {label}
     </button>
   );
@@ -143,15 +144,19 @@ export const SantriModal: React.FC<SantriModalProps> = ({
                 </div>
                 <button onClick={onClose} type="button" className="text-gray-400 hover:text-gray-600"><i className="bi bi-x-lg text-xl"></i></button>
             </div>
-            <div className="flex-grow overflow-y-auto p-6">
-                <nav className="border-b border-gray-200 flex space-x-2">
-                    <TabButton tabId="dataDiri" label="Data Diri & Akademik" />
-                    <TabButton tabId="dataOrtu" label="Data Orang Tua & Wali" />
-                    <TabButton tabId="riwayatStatus" label="Riwayat Status" />
-                    <TabButton tabId="dataLain" label="Data Lain-lain" />
-                </nav>
+            
+            <div className="flex-grow overflow-y-auto p-0">
+                {/* Scrollable Tabs Container */}
+                <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
+                    <div className="flex overflow-x-auto scrollbar-hide">
+                        <TabButton tabId="dataDiri" label="Data Diri & Akademik" icon="bi-person-vcard" />
+                        <TabButton tabId="dataOrtu" label="Data Orang Tua & Wali" icon="bi-people" />
+                        <TabButton tabId="riwayatStatus" label="Riwayat Status" icon="bi-clock-history" />
+                        <TabButton tabId="dataLain" label="Data Lain-lain" icon="bi-journal-text" />
+                    </div>
+                </div>
 
-                <div className="mt-4">
+                <div className="p-6">
                     {activeTab === 'dataDiri' && <TabDataDiri formMethods={formMethods} onGenerateNis={handleGenerateNis} />}
                     {activeTab === 'dataOrtu' && <TabDataOrangTua formMethods={formMethods} />}
                     {activeTab === 'riwayatStatus' && <TabRiwayatStatus formMethods={formMethods} />}
@@ -164,6 +169,7 @@ export const SantriModal: React.FC<SantriModalProps> = ({
                     )}
                 </div>
             </div>
+            
             <div className="p-4 border-t flex justify-end space-x-2 bg-gray-50 rounded-b-lg">
                 <button onClick={onClose} type="button" className="text-gray-600 bg-white hover:bg-gray-100 focus:ring-4 focus:outline-none focus:ring-blue-300 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5 hover:text-gray-900 focus:z-10">Batal</button>
                 <button type="submit" disabled={isSubmitting} className="text-white bg-teal-700 hover:bg-teal-800 focus:ring-4 focus:outline-none focus:ring-teal-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center flex items-center justify-center min-w-[130px] disabled:bg-teal-400 disabled:cursor-not-allowed">

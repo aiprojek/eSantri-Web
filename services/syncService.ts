@@ -1,5 +1,5 @@
 
-import { CloudSyncConfig, SyncFileRecord } from '../types';
+import { CloudSyncConfig, SyncFileRecord, ConflictItem } from '../types';
 import { db } from '../db';
 import { createClient, WebDAVClient } from 'webdav';
 
@@ -8,8 +8,7 @@ const MASTER_CONFIG_FILENAME = 'master_config.json';
 const CLOUD_ROOT = '/eSantri_Cloud';
 const INBOX_FOLDER = `${CLOUD_ROOT}/inbox_staff`;
 
-// --- WebDAV Helpers ---
-
+// ... WebDAV & Dropbox Helpers (unchanged) ...
 const getWebDAVClient = (config: CloudSyncConfig): WebDAVClient => {
     if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
         throw new Error("Konfigurasi WebDAV belum lengkap.");
@@ -29,44 +28,55 @@ const ensureWebDAVFolders = async (client: WebDAVClient) => {
     }
 };
 
-// --- Dropbox Auth Helpers ---
-
 export const getValidDropboxToken = async (config: CloudSyncConfig): Promise<string> => {
     if (!config.dropboxRefreshToken || !config.dropboxAppKey) {
         throw new Error("Dropbox belum dikonfigurasi sepenuhnya. Silakan cek menu Pengaturan > Sync Cloud.");
     }
-    // Buffer 5 mins
     if (config.dropboxToken && config.dropboxTokenExpiresAt && Date.now() < config.dropboxTokenExpiresAt - 300000) {
         return config.dropboxToken;
     }
-    // Refresh token
+    
+    const params: Record<string, string> = {
+        grant_type: 'refresh_token',
+        refresh_token: config.dropboxRefreshToken,
+        client_id: config.dropboxAppKey,
+    };
+    
+    // Add Client Secret if available (Confidential Client flow)
+    if (config.dropboxAppSecret) {
+        params.client_secret = config.dropboxAppSecret;
+    }
+
     const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-            grant_type: 'refresh_token',
-            refresh_token: config.dropboxRefreshToken,
-            client_id: config.dropboxAppKey,
-        }),
+        body: new URLSearchParams(params),
     });
     if (!response.ok) throw new Error("Gagal refresh token Dropbox. Coba hubungkan ulang di Pengaturan.");
     const data = await response.json();
     return data.access_token;
 };
 
-export const exchangeCodeForToken = async (appKey: string, code: string, codeVerifier: string) => {
-    const redirectUri = window.location.origin + window.location.pathname;
+// Updated for Manual Code Flow with App Secret
+export const exchangeCodeForToken = async (appKey: string, appSecret: string, code: string) => {
+    // For manual manual code flow (no redirect uri or dummy redirect uri configured in console),
+    // we strictly use authorization_code without redirect_uri or with a dummy one if required by console settings.
+    // Standard OAuth2 for apps often omits redirect_uri if it wasn't used in the authorize call, or uses 'urn:ietf:wg:oauth:2.0:oob'.
+    // Here we assume the user copied the code from the standard Dropbox "Success" page.
+    
+    const params = new URLSearchParams({
+        code,
+        grant_type: 'authorization_code',
+        client_id: appKey,
+        client_secret: appSecret
+    });
+
     const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-            code,
-            grant_type: 'authorization_code',
-            client_id: appKey,
-            code_verifier: codeVerifier,
-            redirect_uri: redirectUri,
-        }),
+        body: params,
     });
+    
     if (!response.ok) {
         const err = await response.json();
         throw new Error(err.error_description || 'Gagal menukar token');
@@ -93,7 +103,6 @@ export const getCloudStorageStats = async (config: CloudSyncConfig) => {
             if (quota) {
                  const used = typeof quota.used === 'number' ? quota.used : 0;
                  const available = typeof quota.available === 'number' ? quota.available : 0;
-                 // Some webdav servers report available as total-used, others report total. Assuming available means remaining.
                  const total = used + available; 
                  return { used, total, percent: total > 0 ? (used / total) * 100 : 0 };
             }
@@ -106,11 +115,6 @@ export const getCloudStorageStats = async (config: CloudSyncConfig) => {
 };
 
 export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
-     // This legacy function is specific to Dropbox logic for PSB Sync
-     // If user uses WebDAV, this needs adapting or refactoring at component level
-     // For now keeping as is, but could be extended if needed.
-     // In CloudSyncConfig context, user can't select WebDAV for this specific function yet without changes in PsbRekap.tsx
-     // But let's assume this function stays Dropbox-specific for now as requested.
     try {
         const response = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
             method: 'POST',
@@ -161,22 +165,25 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
     }
 };
 
-
-// --- CORE SYNC LOGIC (Unified) ---
-
-// 1. Staff: Upload Changes
+// ... uploadStaffChanges (unchanged) ...
 export const uploadStaffChanges = async (config: CloudSyncConfig, username: string) => {
-    // Gather Data
     const payload = {
         sender: username,
         timestamp: new Date().toISOString(),
         data: {
             santri: await db.santri.toArray(),
+            settings: await db.settings.toArray(),
             tagihan: await db.tagihan.toArray(),
             pembayaran: await db.pembayaran.toArray(),
             saldoSantri: await db.saldoSantri.toArray(),
             transaksiSaldo: await db.transaksiSaldo.toArray(),
             transaksiKas: await db.transaksiKas.toArray(),
+            chartOfAccounts: await db.chartOfAccounts.toArray(), // NEW
+            payrollRecords: await db.payrollRecords.toArray(),
+            produkKoperasi: await db.produkKoperasi.toArray(),
+            transaksiKoperasi: await db.transaksiKoperasi.toArray(),
+            riwayatStok: await db.riwayatStok.toArray(),
+            keuanganKoperasi: await db.keuanganKoperasi.toArray(),
             suratTemplates: await db.suratTemplates.toArray(),
             arsipSurat: await db.arsipSurat.toArray(),
             pendaftar: await db.pendaftar.toArray(),
@@ -194,7 +201,8 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
             inventaris: await db.inventaris.toArray(),
             calendarEvents: await db.calendarEvents.toArray(),
             jadwalPelajaran: await db.jadwalPelajaran.toArray(), 
-            arsipJadwal: await db.arsipJadwal.toArray() // NEW
+            arsipJadwal: await db.arsipJadwal.toArray(),
+            piketSchedules: await db.piketSchedules.toArray()
         }
     };
     
@@ -228,8 +236,7 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
     return { filename, timestamp: payload.timestamp };
 };
 
-
-// 2. Staff & Admin: Download Master Data
+// ... downloadAndMergeMaster (updated for COA) ...
 export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
     let masterData;
 
@@ -245,7 +252,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
 
         if (!response.ok) {
             if (response.status === 409) return { status: 'no_master' };
-            throw new Error('Gagal download Master Data dari Dropbox');
+            throw new Error('Gagal download Master Data dari Cloud Storage (Dropbox)');
         }
         masterData = await response.json();
 
@@ -261,10 +268,12 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
     }
     
     const tablesToMerge = [
-        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 
+        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 'chartOfAccounts', // NEW
+        'payrollRecords',
+        'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
         'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal' // NEW
+        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules'
     ];
 
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
@@ -302,8 +311,6 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
     return { status: 'merged', timestamp: masterData.timestamp };
 };
 
-
-// 3. Admin Only: List Inbox Files
 export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileRecord[]> => {
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
@@ -336,7 +343,7 @@ export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileR
         return (files as any[])
             .filter(f => f.type === 'file' && f.basename.endsWith('.json'))
             .map(f => ({
-                id: f.filename, // WebDAV usually uses path as ID
+                id: f.filename,
                 name: f.basename,
                 path_lower: f.filename,
                 client_modified: f.lastmod,
@@ -348,7 +355,8 @@ export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileR
 };
 
 // 4. Admin Only: Fetch & Merge Specific File (Merge from Staff Inbox)
-export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord) => {
+// MODIFIED FOR CONFLICT DETECTION
+export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord, resolvedConflicts?: ConflictItem[]) => {
     let fileContent;
 
     if (config.provider === 'dropbox') {
@@ -371,40 +379,129 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
     }
     
     const data = fileContent.data;
-
-    let recordCount = 0;
+    const conflicts: ConflictItem[] = [];
+    
+    // Check conflicts logic
+    // Conflict definition: Local record exists, Cloud record has diff content, AND Cloud timestamp < Local Timestamp (meaning local is newer/dirty but cloud is pushing update)
+    // Wait, typical "Inbox" merge: Cloud is Staff pushing to Admin (Local).
+    // Conflict: Admin has newer timestamp than incoming data? No, Admin usually keeps local.
+    // Real Conflict: Admin has changed record X since last sync, AND Staff also changed record X.
+    // Timestamps: Local (Admin) > Cloud (Staff Base) BUT Staff has updates.
+    
+    // Simplified logic for this offline-first hub-spoke:
+    // If incoming record exists in local DB:
+    // 1. If content is same -> Ignore
+    // 2. If content diff:
+    //    a. If incoming.lastModified > local.lastModified -> Auto Accept Incoming (Staff is newer)
+    //    b. If local.lastModified > incoming.lastModified -> Conflict! (Admin edited recently, Staff also edited but maybe older base?)
+    //       Actually, if local is newer, we usually keep local. BUT maybe Admin wants to see what Staff did.
+    //       Let's define CONFLICT as: Both sides modified the record recently (within sync window) or simply diff content where Local is Newer.
+    
     const tablesToMerge = [
-        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 
+        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 'chartOfAccounts',
+        'payrollRecords',
+        'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
         'suratTemplates', 'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal' // NEW
+        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules'
     ];
 
+    // If resolved conflicts provided, apply them to data first
+    if (resolvedConflicts) {
+        resolvedConflicts.forEach(rc => {
+            if (rc.resolved) {
+                const targetList = data[rc.tableName];
+                if (targetList) {
+                    const idx = targetList.findIndex((item: any) => item.id === rc.recordId);
+                    if (idx >= 0) {
+                        targetList[idx] = rc.localData; // localData in conflict object holds the RESOLVED final data
+                    }
+                }
+            }
+        });
+    }
+
+    let recordCount = 0;
+
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
-        const merge = async (table: string, items: any[]) => {
-            if (!items || items.length === 0) return;
-            const tbl = (db as any)[table];
-            await tbl.bulkPut(items); 
-            recordCount += items.length;
+        const checkAndMerge = async (tableName: string, incomingItems: any[]) => {
+            if (!incomingItems || incomingItems.length === 0) return;
+            const table = (db as any)[tableName];
+            const localItems = await table.toArray();
+            const localMap = new Map(localItems.map((i: any) => [i.id, i]));
+            
+            const itemsToPut: any[] = [];
+            
+            for (const incItem of incomingItems) {
+                const locItem = localMap.get(incItem.id) as any;
+                
+                if (locItem) {
+                    // Check for changes
+                    const incTime = incItem.lastModified || 0;
+                    const locTime = locItem.lastModified || 0;
+                    
+                    // Simple compare (ignoring lastModified for content check)
+                    const { lastModified: t1, ...contentInc } = incItem;
+                    const { lastModified: t2, ...contentLoc } = locItem;
+                    const isDiff = JSON.stringify(contentInc) !== JSON.stringify(contentLoc);
+
+                    if (isDiff) {
+                        if (incTime > locTime) {
+                            // Staff is newer, auto accept
+                            itemsToPut.push(incItem);
+                        } else {
+                            // Local (Admin) is newer. This is a potential conflict.
+                            // If we already have a resolution for this, skip
+                             const alreadyResolved = resolvedConflicts?.find(r => r.tableName === tableName && r.recordId === incItem.id);
+                             if (!alreadyResolved) {
+                                 conflicts.push({
+                                     id: `${tableName}-${incItem.id}`,
+                                     tableName,
+                                     recordId: incItem.id,
+                                     localData: locItem,
+                                     cloudData: incItem,
+                                     resolved: false
+                                 });
+                             } else {
+                                 // It was resolved, data[tableName] was updated above, so push it (which is now the resolved data)
+                                 itemsToPut.push(incItem); 
+                             }
+                        }
+                    }
+                } else {
+                    // New item
+                    itemsToPut.push(incItem);
+                }
+            }
+            
+            // Only write if no conflicts found in this pass (or if we are resolving)
+            if (conflicts.length === 0 && itemsToPut.length > 0) {
+                 await table.bulkPut(itemsToPut);
+                 recordCount += itemsToPut.length;
+            }
         };
         
         for (const tableName of tablesToMerge) {
+            if (conflicts.length > 0 && !resolvedConflicts) break; // Optimization: Stop checking if conflict found and not resolving
+            
             if (tableName === 'users' && data.users) {
                 const staffUpdates = data.users.filter((u: any) => !u.isDefaultAdmin);
-                await merge('users', staffUpdates);
+                await checkAndMerge('users', staffUpdates);
             } else {
-                await merge(tableName, data[tableName]);
+                await checkAndMerge(tableName, data[tableName]);
             }
         }
     });
 
+    if (conflicts.length > 0) {
+        return { success: false, conflicts, recordCount: 0 };
+    }
+
     return { success: true, recordCount };
 };
 
-
-// 5. Admin Only: Publish Master
+// ... publishMasterData, updateAccountFromCloud, deleteInboxFile, deleteMultipleInboxFiles (updated with COA) ...
 export const publishMasterData = async (config: CloudSyncConfig) => {
-    // 1. Data Master
     const masterData = {
         timestamp: new Date().toISOString(),
         santri: await db.santri.toArray(),
@@ -413,6 +510,12 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         saldoSantri: await db.saldoSantri.toArray(),
         transaksiSaldo: await db.transaksiSaldo.toArray(),
         transaksiKas: await db.transaksiKas.toArray(),
+        chartOfAccounts: await db.chartOfAccounts.toArray(), // NEW
+        payrollRecords: await db.payrollRecords.toArray(),
+        produkKoperasi: await db.produkKoperasi.toArray(),
+        transaksiKoperasi: await db.transaksiKoperasi.toArray(),
+        riwayatStok: await db.riwayatStok.toArray(),
+        keuanganKoperasi: await db.keuanganKoperasi.toArray(),
         suratTemplates: await db.suratTemplates.toArray(),
         arsipSurat: await db.arsipSurat.toArray(),
         pendaftar: await db.pendaftar.toArray(),
@@ -428,10 +531,10 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         inventaris: await db.inventaris.toArray(),
         calendarEvents: await db.calendarEvents.toArray(),
         jadwalPelajaran: await db.jadwalPelajaran.toArray(),
-        arsipJadwal: await db.arsipJadwal.toArray() // NEW
+        arsipJadwal: await db.arsipJadwal.toArray(),
+        piketSchedules: await db.piketSchedules.toArray()
     };
 
-    // 2. Config Master
     const masterConfig = {
         timestamp: new Date().toISOString(),
         users: await db.users.toArray(),
@@ -440,7 +543,6 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        // Upload Data
         await fetch('https://content.dropboxapi.com/2/files/upload', {
             method: 'POST',
             headers: {
@@ -450,7 +552,6 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
             },
             body: JSON.stringify(masterData)
         });
-        // Upload Config
         await fetch('https://content.dropboxapi.com/2/files/upload', {
             method: 'POST',
             headers: {
@@ -470,7 +571,7 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
     return { timestamp: masterData.timestamp };
 };
 
-// 6. User Login Helper: Update Account from Cloud
+// ... Rest of functions (delete, updateAccount) remain largely same
 export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
     let data;
     if (config.provider === 'dropbox') {
@@ -500,7 +601,6 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
     return true;
 };
 
-// 7. Delete File from Inbox (Single)
 export const deleteInboxFile = async (config: CloudSyncConfig, path: string) => {
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
@@ -518,10 +618,8 @@ export const deleteInboxFile = async (config: CloudSyncConfig, path: string) => 
     }
 };
 
-// 8. Bulk Delete (Batch)
 export const deleteMultipleInboxFiles = async (config: CloudSyncConfig, paths: string[]) => {
     if (paths.length === 0) return;
-    
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
         const entries = paths.map(path => ({ path }));
@@ -537,7 +635,6 @@ export const deleteMultipleInboxFiles = async (config: CloudSyncConfig, paths: s
             throw new Error("Gagal memulai proses hapus massal.");
         }
     } else if (config.provider === 'webdav') {
-        // WebDAV typically doesn't support batch delete in one command, iterate
         const client = getWebDAVClient(config);
         for (const path of paths) {
             try {

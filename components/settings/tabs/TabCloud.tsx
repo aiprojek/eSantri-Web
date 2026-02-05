@@ -57,21 +57,6 @@ const SensitiveInput: React.FC<{
     );
 };
 
-// PKCE Helper Functions
-const generateCodeVerifier = () => {
-    const array = new Uint8Array(32);
-    window.crypto.getRandomValues(array);
-    return Array.from(array, dec => ('0' + dec.toString(16)).substr(-2)).join('');
-};
-
-const generateCodeChallenge = async (verifier: string) => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const digest = await window.crypto.subtle.digest('SHA-256', data);
-    const base64Digest = btoa(String.fromCharCode(...new Uint8Array(digest)));
-    return base64Digest.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-};
-
 interface TabCloudProps {
     localSettings: PondokSettings;
     setLocalSettings: React.Dispatch<React.SetStateAction<PondokSettings>>;
@@ -79,11 +64,14 @@ interface TabCloudProps {
 }
 
 export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSettings, onSaveSettings }) => {
-    const { settings, showToast, showConfirmation } = useAppContext();
+    const { settings, showToast } = useAppContext();
     const [isConnectingDropbox, setIsConnectingDropbox] = useState(false);
     const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
     const [isLoadingStats, setIsLoadingStats] = useState(false);
     const [isTestingWebDav, setIsTestingWebDav] = useState(false);
+    
+    // Manual Auth Flow State
+    const [manualAuthCode, setManualAuthCode] = useState('');
     
     // Pairing States
     const [showPairingModal, setShowPairingModal] = useState(false);
@@ -91,8 +79,6 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     const [inputPairingCode, setInputPairingCode] = useState('');
     const [isProcessingPairing, setIsProcessingPairing] = useState(false);
     const [pairingStep, setPairingStep] = useState(''); 
-    
-    const currentRedirectUri = window.location.origin + window.location.pathname;
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -104,7 +90,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
 
             setIsLoadingStats(true);
             try {
-                if (config.provider === 'dropbox' && config.dropboxToken) {
+                if (config.provider === 'dropbox' && config.dropboxRefreshToken) {
                     const stats = await getCloudStorageStats(config);
                     setStorageStats(stats);
                 } else if (config.provider === 'webdav' && config.webdavUrl) {
@@ -112,43 +98,14 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     setStorageStats(stats);
                 }
             } catch (error) {
-                showToast(`Gagal memuat status cloud: ${(error as Error).message}`, 'error');
+                // Silent fail for stats, or show toast
+                console.error("Cloud stats failed", error);
             } finally {
                 setIsLoadingStats(false);
             }
         };
         fetchStats();
-    }, [settings.cloudSyncConfig, showToast]);
-
-    useEffect(() => {
-        const handleAuthCallback = async () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const code = urlParams.get('code');
-            const storedVerifier = sessionStorage.getItem('dropbox_code_verifier');
-
-            if (code && storedVerifier && settings.cloudSyncConfig.provider === 'dropbox') {
-                window.history.replaceState({}, document.title, window.location.pathname);
-                setIsConnectingDropbox(true);
-                try {
-                    const result = await exchangeCodeForToken(settings.cloudSyncConfig.dropboxAppKey!, code, storedVerifier);
-                    const updatedConfig = {
-                        ...settings.cloudSyncConfig,
-                        dropboxToken: result.access_token,
-                        dropboxRefreshToken: result.refresh_token,
-                        dropboxTokenExpiresAt: Date.now() + (result.expires_in * 1000)
-                    };
-                    await onSaveSettings({ ...settings, cloudSyncConfig: updatedConfig });
-                    sessionStorage.removeItem('dropbox_code_verifier');
-                    showToast('Berhasil terhubung dengan Dropbox!', 'success');
-                } catch (error) {
-                    showToast(`Gagal menghubungkan Dropbox: ${(error as Error).message}`, 'error');
-                } finally {
-                    setIsConnectingDropbox(false);
-                }
-            }
-        };
-        handleAuthCallback();
-    }, []);
+    }, [settings.cloudSyncConfig]);
 
     const handleSyncProviderChange = (provider: SyncProvider) => {
         setLocalSettings(prev => ({
@@ -165,21 +122,46 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
         }));
     };
 
-    const handleConnectDropbox = async () => {
+    const handleOpenDropboxAuth = () => {
         const appKey = localSettings.cloudSyncConfig.dropboxAppKey;
         if (!appKey) {
             showToast('Harap isi App Key terlebih dahulu.', 'error');
             return;
         }
-        if (appKey !== settings.cloudSyncConfig.dropboxAppKey) {
-            await onSaveSettings(localSettings);
+        // Standard code flow without specific redirect URI (manual copy paste)
+        const authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${appKey}&response_type=code&token_access_type=offline`;
+        window.open(authUrl, '_blank', 'width=600,height=700');
+    };
+
+    const handleVerifyDropboxCode = async () => {
+        const { dropboxAppKey, dropboxAppSecret } = localSettings.cloudSyncConfig;
+        if (!dropboxAppKey || !dropboxAppSecret || !manualAuthCode) {
+            showToast('App Key, App Secret, dan Kode Otorisasi wajib diisi.', 'error');
+            return;
         }
-        const verifier = generateCodeVerifier();
-        const challenge = await generateCodeChallenge(verifier);
-        sessionStorage.setItem('dropbox_code_verifier', verifier);
-        const redirectUri = window.location.origin + window.location.pathname;
-        const authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${appKey}&response_type=code&code_challenge=${challenge}&code_challenge_method=S256&token_access_type=offline&redirect_uri=${encodeURIComponent(redirectUri)}`;
-        window.location.href = authUrl;
+
+        setIsConnectingDropbox(true);
+        try {
+            const result = await exchangeCodeForToken(dropboxAppKey, dropboxAppSecret, manualAuthCode);
+            const updatedConfig = {
+                ...settings.cloudSyncConfig,
+                dropboxAppKey,
+                dropboxAppSecret,
+                dropboxToken: result.access_token,
+                dropboxRefreshToken: result.refresh_token,
+                dropboxTokenExpiresAt: Date.now() + (result.expires_in * 1000),
+                provider: 'dropbox' as SyncProvider
+            };
+            
+            // Save immediately
+            await onSaveSettings({ ...settings, cloudSyncConfig: updatedConfig });
+            setManualAuthCode('');
+            showToast('Berhasil terhubung dengan Dropbox!', 'success');
+        } catch (error) {
+            showToast(`Verifikasi Gagal: ${(error as Error).message}`, 'error');
+        } finally {
+            setIsConnectingDropbox(false);
+        }
     };
 
     const handleTestWebDav = async () => {
@@ -190,11 +172,10 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
         }
         setIsTestingWebDav(true);
         try {
-            // Test connection by listing root directory
             const stats = await getCloudStorageStats(localSettings.cloudSyncConfig);
             if (stats) setStorageStats(stats);
-            showToast('Koneksi WebDAV Berhasil!', 'success');
             await onSaveSettings(localSettings);
+            showToast('Koneksi WebDAV Berhasil!', 'success');
         } catch (e) {
             showToast(`Gagal koneksi WebDAV: ${(e as Error).message}. Pastikan CORS diaktifkan di server Anda.`, 'error');
         } finally {
@@ -209,13 +190,14 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
         let payloadString = '';
 
         if (config.provider === 'dropbox') {
-             if (!config.dropboxRefreshToken || !config.dropboxAppKey) {
-                showToast('Anda belum terhubung ke Dropbox. Tidak bisa generate kode.', 'error');
+             if (!config.dropboxRefreshToken || !config.dropboxAppKey || !config.dropboxAppSecret) {
+                showToast('Konfigurasi Dropbox belum lengkap (Key/Secret/Token).', 'error');
                 return;
             }
             payloadString = JSON.stringify({
                 p: 'dropbox',
                 k: config.dropboxAppKey,
+                s: config.dropboxAppSecret,
                 r: config.dropboxRefreshToken
             });
         } else if (config.provider === 'webdav') {
@@ -254,6 +236,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     ...updatedConfig,
                     provider: 'dropbox',
                     dropboxAppKey: data.k,
+                    dropboxAppSecret: data.s,
                     dropboxRefreshToken: data.r,
                     dropboxToken: '', 
                     dropboxTokenExpiresAt: 0
@@ -267,19 +250,8 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     webdavPassword: data.w
                 };
             } else {
-                 // Backward compatibility for old dropbox-only codes
-                 if (data.k && data.r) {
-                      updatedConfig = {
-                        ...updatedConfig,
-                        provider: 'dropbox',
-                        dropboxAppKey: data.k,
-                        dropboxRefreshToken: data.r,
-                        dropboxToken: '', 
-                        dropboxTokenExpiresAt: 0
-                    };
-                 } else {
-                     throw new Error("Kode tidak dikenali.");
-                 }
+                 // Fallback legacy (only supported if secret was optional, but now mandatory for desktop flow)
+                 throw new Error("Kode versi lama tidak didukung pada versi desktop.");
             }
             
             // Simpan ke DB agar fungsi sync bisa membacanya
@@ -348,12 +320,12 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     </div>
                 )}
 
-                {/* --- DROPBOX UI --- */}
+                {/* --- DROPBOX UI (MANUAL FLOW) --- */}
                 {localSettings.cloudSyncConfig?.provider === 'dropbox' && (
                     <div className="col-span-2 space-y-6">
                         <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-blue-50">
                             <div className="flex justify-between items-center">
-                                <h4 className="font-bold text-blue-800 text-sm">A. Setup Dropbox (Admin)</h4>
+                                <h4 className="font-bold text-blue-800 text-sm">A. Setup Dropbox (Mode Desktop/Manual)</h4>
                                 {settings.cloudSyncConfig.dropboxRefreshToken && (
                                     <span className="text-green-600 text-xs font-bold bg-green-100 px-2 py-1 rounded border border-green-200">
                                         <i className="bi bi-check-circle-fill"></i> Terhubung
@@ -364,25 +336,53 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                             {!settings.cloudSyncConfig.dropboxRefreshToken ? (
                                 <>
                                     <div className="p-3 bg-blue-100 border border-blue-300 rounded text-xs text-blue-900">
-                                        <strong>Cara Koneksi:</strong> Buat App di Dropbox Console, dapatkan <strong>App Key</strong>, lalu login.
-                                        <br/>Redirect URI Wajib: <code className="select-all font-mono">{currentRedirectUri}</code>
+                                        <strong>Cara Koneksi:</strong> Masukkan App Key & Secret dari Dropbox Console Anda. Klik "Dapatkan Kode", izinkan akses, lalu copy kode yang muncul dan paste di bawah.
                                     </div>
-                                    <div>
-                                        <label className="block mb-2 text-sm font-medium text-gray-700">App Key</label>
-                                        <SensitiveInput 
-                                            value={localSettings.cloudSyncConfig.dropboxAppKey || ''}
-                                            onChange={(val) => handleSyncConfigChange('dropboxAppKey', val)}
-                                            placeholder="Masukkan App Key Dropbox"
-                                        />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block mb-2 text-sm font-medium text-gray-700">App Key</label>
+                                            <SensitiveInput 
+                                                value={localSettings.cloudSyncConfig.dropboxAppKey || ''}
+                                                onChange={(val) => handleSyncConfigChange('dropboxAppKey', val)}
+                                                placeholder="App Key"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block mb-2 text-sm font-medium text-gray-700">App Secret</label>
+                                            <SensitiveInput 
+                                                value={localSettings.cloudSyncConfig.dropboxAppSecret || ''}
+                                                onChange={(val) => handleSyncConfigChange('dropboxAppSecret', val)}
+                                                placeholder="App Secret"
+                                            />
+                                        </div>
                                     </div>
-                                    <div>
-                                        <button onClick={handleConnectDropbox} disabled={isConnectingDropbox} className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2">
-                                            {isConnectingDropbox ? 'Menghubungkan...' : <><i className="bi bi-dropbox"></i> Login Dropbox</>}
+                                    
+                                    <div className="border-t border-blue-200 pt-4">
+                                        <label className="block mb-2 text-sm font-bold text-gray-700">Langkah Otorisasi:</label>
+                                        <div className="flex gap-2 mb-3">
+                                            <div className="flex-1">
+                                                <button onClick={handleOpenDropboxAuth} className="w-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 py-2 rounded text-sm font-medium">
+                                                    1. Dapatkan Kode Otorisasi (Buka Browser)
+                                                </button>
+                                            </div>
+                                            <div className="flex-1">
+                                                <input 
+                                                    type="text" 
+                                                    value={manualAuthCode}
+                                                    onChange={e => setManualAuthCode(e.target.value)}
+                                                    className="w-full border border-gray-300 rounded p-2 text-sm"
+                                                    placeholder="2. Paste Kode Disini..."
+                                                />
+                                            </div>
+                                        </div>
+                                        <button onClick={handleVerifyDropboxCode} disabled={isConnectingDropbox} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center justify-center gap-2">
+                                            {isConnectingDropbox ? 'Memverifikasi...' : '3. Verifikasi & Simpan'}
                                         </button>
                                     </div>
                                 </>
                             ) : (
                                 <div>
+                                    <div className="text-xs text-gray-500 mb-2">Terhubung dengan App Key: <strong>{settings.cloudSyncConfig.dropboxAppKey}</strong></div>
                                     <button onClick={handleGeneratePairingCode} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm">
                                         <i className="bi bi-qr-code"></i> Bagikan Akses (Pairing Code)
                                     </button>
@@ -398,11 +398,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-orange-50">
                              <div className="flex justify-between items-center">
                                 <h4 className="font-bold text-orange-800 text-sm">A. Setup WebDAV (Nextcloud/CasaOS)</h4>
-                                <a href="https://github.com/aiprojek/eSantri-Web/wiki/CORS-Setup" target="_blank" className="text-xs text-orange-600 hover:underline"><i className="bi bi-info-circle"></i> Info CORS</a>
                             </div>
-                            <p className="text-xs text-orange-800 bg-orange-100 p-2 rounded">
-                                <strong>PENTING:</strong> Pastikan server WebDAV/Nextcloud Anda mengizinkan <strong>CORS</strong> dari domain aplikasi ini. Jika tidak, koneksi akan ditolak oleh browser.
-                            </p>
 
                             <div>
                                 <label className="block mb-2 text-sm font-medium text-gray-700">WebDAV URL</label>
@@ -500,7 +496,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         </div>
 
                         <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded border border-red-200">
-                            <strong>PERHATIAN:</strong> Kode ini memberikan akses penuh ke penyimpanan data eSantri Anda (Dropbox/WebDAV). Jangan bagikan sembarangan.
+                            <strong>PERHATIAN:</strong> Kode ini mengandung Kunci Rahasia akses penyimpanan data (App Secret). Jangan bagikan di tempat umum.
                         </div>
 
                         <div className="mt-6 flex justify-end">

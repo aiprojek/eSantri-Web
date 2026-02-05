@@ -2,15 +2,21 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import { listInboxFiles, processInboxFile, publishMasterData, deleteInboxFile, deleteMultipleInboxFiles } from '../services/syncService';
-import { SyncFileRecord } from '../types';
+import { SyncFileRecord, ConflictItem } from '../types';
 import { db } from '../db';
 import { formatBytes } from '../utils/formatters';
+import { ConflictResolver } from './sync/ConflictResolver';
 
 export const AdminSyncDashboard: React.FC = () => {
     const { settings, showToast, showConfirmation, showAlert, currentUser } = useAppContext();
     const [files, setFiles] = useState<SyncFileRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [processingId, setProcessingId] = useState<string | null>(null);
+
+    // Conflict State
+    const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
+    const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+    const [currentFileToMerge, setCurrentFileToMerge] = useState<SyncFileRecord | null>(null);
 
     const config = settings.cloudSyncConfig;
 
@@ -48,11 +54,20 @@ export const AdminSyncDashboard: React.FC = () => {
         fetchFiles();
     }, []);
 
-    const handleMerge = async (file: SyncFileRecord) => {
+    const handleMerge = async (file: SyncFileRecord, resolveConflicts?: ConflictItem[]) => {
         setProcessingId(file.id);
         try {
-            const result = await processInboxFile(config, file);
+            // If resolveConflicts is provided, we are re-trying with resolved data
+            const result = await processInboxFile(config, file, resolveConflicts);
             
+            if (result.conflicts && result.conflicts.length > 0) {
+                // Trigger Visual Conflict Resolution
+                setConflicts(result.conflicts);
+                setCurrentFileToMerge(file);
+                setIsConflictModalOpen(true);
+                return; // Stop here, wait for modal
+            }
+
             // Log history using current user identity
             const mergerIdentity = currentUser?.username || 'Admin (Virtual)';
 
@@ -62,18 +77,26 @@ export const AdminSyncDashboard: React.FC = () => {
                 fileName: file.name,
                 mergedAt: new Date().toISOString(),
                 mergedBy: mergerIdentity,
-                recordCount: result.recordCount
+                recordCount: result.recordCount || 0
             });
 
             showToast(`Berhasil menggabungkan ${result.recordCount} data.`, 'success');
             
             // Update UI list
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, status: 'merged' } : f));
+            setConflicts([]);
+            setIsConflictModalOpen(false);
 
         } catch (e) {
             showAlert('Gagal Menggabungkan Data', (e as Error).message);
         } finally {
             setProcessingId(null);
+        }
+    };
+
+    const handleConflictResolved = (resolvedList: ConflictItem[]) => {
+        if (currentFileToMerge) {
+            handleMerge(currentFileToMerge, resolvedList);
         }
     };
 
@@ -150,15 +173,22 @@ export const AdminSyncDashboard: React.FC = () => {
         );
     }
 
+    const providerLabel = config.provider === 'webdav' ? 'WebDAV / Nextcloud' : 'Dropbox';
+    const providerIcon = config.provider === 'webdav' ? 'bi-hdd-network text-orange-600' : 'bi-dropbox text-blue-600';
+    const providerBg = config.provider === 'webdav' ? 'bg-orange-50 border-orange-200 text-orange-800' : 'bg-blue-50 border-blue-200 text-blue-800';
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                        {config.provider === 'webdav' ? <i className="bi bi-hdd-network text-orange-600"></i> : <i className="bi bi-dropbox text-blue-600"></i>}
-                        Pusat Sinkronisasi ({config.provider === 'webdav' ? 'WebDAV' : 'Dropbox'})
+                        <i className={`bi ${providerIcon}`}></i>
+                        Pusat Sinkronisasi Cloud
                     </h1>
-                    <p className="text-sm text-gray-500">Kelola data masuk dari staff dan perbarui data master.</p>
+                    <div className={`mt-2 inline-flex items-center gap-2 px-2 py-0.5 rounded text-xs border ${providerBg}`}>
+                        <i className="bi bi-link-45deg"></i> Terhubung ke: <strong>{providerLabel}</strong>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">Kelola data masuk dari staff dan perbarui data master.</p>
                 </div>
                 <div className="flex gap-2">
                     <button onClick={fetchFiles} className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 text-sm">
@@ -236,11 +266,19 @@ export const AdminSyncDashboard: React.FC = () => {
                 <strong>Panduan Admin Pengepul:</strong>
                 <ol className="list-decimal pl-5 mt-1 space-y-1">
                     <li>Klik "Segarkan" untuk melihat file kiriman staff.</li>
-                    <li>Klik "Gabung" pada file baru untuk memasukkan data staff ke database Admin (Merge Cerdas: Data baru ditambah, Data lama diperbarui jika timestamp lebih baru).</li>
+                    <li>Klik "Gabung" pada file baru. Jika ada data yang konflik (diedit staff tapi di admin juga berubah), jendela <strong>Resolusi Konflik</strong> akan muncul.</li>
                     <li>Setelah semua file digabung, klik "Publikasikan Master" agar seluruh staff bisa mendownload data gabungan terbaru.</li>
                     <li>Gunakan tombol "Bersihkan" untuk menghapus file yang sudah tidak diperlukan dari Cloud agar penyimpanan tidak penuh.</li>
                 </ol>
             </div>
+
+            {/* Conflict Resolver Modal */}
+            <ConflictResolver 
+                isOpen={isConflictModalOpen} 
+                conflicts={conflicts} 
+                onResolve={handleConflictResolved} 
+                onCancel={() => { setIsConflictModalOpen(false); setConflicts([]); }} 
+            />
         </div>
     );
 };

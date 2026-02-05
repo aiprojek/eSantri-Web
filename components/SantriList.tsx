@@ -343,7 +343,9 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
         </div>
 
         <div className="bg-white border border-gray-200 rounded-none md:rounded-xl shadow-sm overflow-hidden flex flex-col">
-            <div className="overflow-x-auto min-h-[300px]">
+            
+            {/* --- DESKTOP VIEW (Table) --- */}
+            <div className="hidden md:block overflow-x-auto min-h-[300px]">
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-50/50 border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm">
                         <tr>
@@ -373,10 +375,59 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                                 </td>
                             </tr>
                         ))}
-                        {filteredSantri.length === 0 && <tr><td colSpan={7} className="px-6 py-12 text-center"><div className="flex flex-col items-center justify-center"><div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-3"><i className="bi bi-search text-xl"></i></div><h3 className="text-sm font-medium text-gray-900">Tidak ada data ditemukan</h3><p className="text-xs text-gray-500 mt-1 max-w-xs">Coba ubah kata kunci pencarian atau filter Anda.</p></div></td></tr>}
                     </tbody>
                 </table>
             </div>
+            
+            {/* --- MOBILE VIEW (Cards) --- */}
+            <div className="block md:hidden bg-gray-50 p-2">
+                <div className="space-y-3">
+                    {paginatedSantri.map(santri => (
+                        <div key={santri.id} className={`bg-white rounded-lg p-3 shadow-sm border ${selectedSantriIds.includes(santri.id) ? 'border-teal-500 ring-1 ring-teal-500' : 'border-gray-200'}`}>
+                            <div className="flex justify-between items-start">
+                                <div className="flex items-start gap-3">
+                                    <div onClick={() => canWrite && handleSelectOne(santri.id)}>
+                                        <TableAvatar name={santri.namaLengkap} url={santri.fotoUrl} />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-gray-800 text-sm leading-tight">{santri.namaLengkap}</h3>
+                                        <div className="text-xs text-gray-500 mt-0.5 flex gap-2">
+                                            <span className="font-mono bg-gray-100 px-1 rounded">{santri.nis}</span>
+                                            <span>{getDetailName('rombel', santri.rombelId)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <StatusBadge status={santri.status} />
+                            </div>
+                            
+                            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
+                                <div>
+                                     <i className={`bi bi-gender-${santri.jenisKelamin === 'Laki-laki' ? 'male text-blue-500' : 'female text-pink-500'} mr-1`}></i> {santri.jenisKelamin}
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => openModal(santri)} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded font-medium">
+                                        {canWrite ? 'Edit' : 'Detail'}
+                                    </button>
+                                    {canWrite && (
+                                        <button onClick={() => handleDelete(santri.id)} className="px-3 py-1.5 bg-red-50 text-red-700 rounded font-medium">
+                                            Hapus
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    
+                    {filteredSantri.length === 0 && (
+                        <div className="text-center py-10 bg-white rounded-lg border border-dashed">
+                             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-3 mx-auto"><i className="bi bi-search text-xl"></i></div>
+                             <h3 className="text-sm font-medium text-gray-900">Tidak ada data ditemukan</h3>
+                             <p className="text-xs text-gray-500 mt-1 px-4">Coba ubah kata kunci pencarian atau filter Anda.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
             <div className="bg-gray-50 border-t border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-sm text-gray-600">Menampilkan <span className="font-medium text-gray-900">{startItem}-{endItem}</span> dari <span className="font-medium text-gray-900">{filteredSantri.length}</span> santri</div>
                 <div className="flex items-center gap-4"><select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-1.5"><option value={10}>10 baris</option><option value={25}>25 baris</option><option value={50}>50 baris</option><option value={100}>100 baris</option></select><Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} /></div>

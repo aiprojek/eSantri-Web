@@ -1,6 +1,7 @@
+
 import React from 'react';
 
-// --- TIPE DATA ---
+// --- TIPE DATA UTAMA ---
 
 export interface FeatureItemData {
     icon: string;
@@ -19,7 +20,7 @@ export interface FeatureCategory {
 
 export interface FaqItemData {
     question: string;
-    answer: React.ReactNode;
+    answer: string | React.ReactNode;
 }
 
 export interface FaqCategoryData {
@@ -75,14 +76,15 @@ export const FEATURE_DATA: FeatureCategory[] = [
     },
     {
         id: 'keuangan',
-        title: 'Keuangan & Aset',
+        title: 'Keuangan & Bisnis',
         color: 'text-green-600',
         icon: 'bi-wallet2',
         items: [
+            { icon: 'bi-shop', title: 'Koperasi & Kantin (POS)', desc: 'Aplikasi kasir lengkap dengan dukungan barcode, struk Bluetooth, dan fitur Kasbon (Hutang).' },
             { icon: 'bi-cash-coin', title: 'SPP & Tagihan', desc: 'Generate tagihan bulanan/bebas secara massal dan pelacakan tunggakan real-time.' },
             { icon: 'bi-wallet-fill', title: 'Tabungan Uang Saku', desc: 'Dompet digital santri untuk deposit dan penarikan uang saku (Cashless).' },
+            { icon: 'bi-cash-stack', title: 'Payroll (Penggajian)', desc: 'Hitung honor guru otomatis berdasarkan jadwal mengajar (JTM) dan cetak slip gaji.' },
             { icon: 'bi-journal-text', title: 'Buku Kas Umum (BKU)', desc: 'Pencatatan arus kas masuk/keluar lembaga dengan rekapitulasi otomatis.' },
-            { icon: 'bi-box-seam-fill', title: 'Sarana Prasarana (Aset)', desc: 'Inventarisasi aset bergerak/tetap, valuasi aset, dan label kondisi barang.' },
         ]
     },
     {
@@ -91,7 +93,7 @@ export const FEATURE_DATA: FeatureCategory[] = [
         color: 'text-purple-600',
         icon: 'bi-cpu-fill',
         items: [
-            { icon: 'bi-cloud-arrow-up-fill', title: 'Cloud Sync (Hub & Spoke)', desc: 'Sinkronisasi data antar Admin dan Staff menggunakan Dropbox/WebDAV tanpa server mahal.' },
+            { icon: 'bi-cloud-arrow-up-fill', title: 'Cloud Sync (Hub & Spoke)', desc: 'Sinkronisasi data antar Admin dan Staff menggunakan Dropbox/WebDAV dengan sistem Pairing Code.' },
             { icon: 'bi-file-earmark-person-fill', title: 'PSB Online', desc: 'Formulir pendaftaran custom, integrasi WhatsApp, dan Google Sheet.' },
             { icon: 'bi-envelope-paper-fill', title: 'Surat Menyurat', desc: 'Buat surat massal dengan placeholder otomatis dan arsip digital.' },
             { icon: 'bi-printer-fill', title: 'Pusat Cetak Dokumen', desc: 'Cetak Kartu Santri, Kuitansi, Label, dan Laporan dalam format PDF/Excel.' },
@@ -141,6 +143,25 @@ export const faqData: FaqCategoryData[] = [
             {
                 question: "Apa yang terjadi jika saya 'Clear Cache' browser?",
                 answer: <span className="text-red-600 font-bold">BAHAYA! Menghapus Cache/History akan MENGHAPUS SEMUA DATA. Pastikan Anda rutin melakukan "Unduh Cadangan Data" (file JSON) atau Sinkronisasi Cloud agar data aman.</span>
+            }
+        ]
+    },
+    {
+        title: "Koperasi & Kantin",
+        icon: "bi-shop",
+        colorClass: "bg-pink-100 text-pink-700 border-pink-200",
+        items: [
+            {
+                 question: "Bagaimana cara kerja 'Parkir Pesanan'?",
+                 answer: "Saat santri di kasir lupa bawa uang atau ingin menambah barang tapi antrean panjang, klik tombol 'Simpan Sementara'. Pesanan akan disimpan. Anda bisa melayani santri lain dulu. Nanti, klik tombol Keranjang (warna oranye) di atas untuk memanggil kembali pesanan tersebut." 
+            },
+            {
+                 question: "Bagaimana jika santri ingin Kasbon/Hutang?",
+                 answer: "Di halaman pembayaran (Checkout), pilih metode 'Hutang'. Jika pelanggan adalah 'Umum', Anda wajib mengisi Nama dan No HP. Data hutang akan masuk ke tab 'Kasbon' dan tidak dihitung sebagai pemasukan kas sampai dilunasi."
+            },
+            {
+                 question: "Cara menghubungkan Printer Thermal Bluetooth?",
+                 answer: "Buka tab 'Pengaturan' di menu Koperasi. Klik tombol 'Cari & Hubungkan Printer'. Pastikan Bluetooth laptop/HP aktif dan printer sudah dinyalakan. Setelah terhubung, struk akan otomatis tercetak saat transaksi selesai."
             }
         ]
     },
@@ -269,8 +290,20 @@ export const faqData: FaqCategoryData[] = [
                 answer: "Pembayaran santri masuk ke status 'Di Laci Kasir' (Pending). Admin Keuangan harus melakukan 'Setoran Kas' di menu Keuangan agar uang tercatat resmi masuk ke Buku Kas Umum Pondok."
             },
             {
-                question: "Apa beda Uang Saku dan SPP?",
-                answer: "Uang Saku adalah tabungan pribadi santri (Deposit/Penarikan) yang dikelola pondok. SPP adalah kewajiban bayar bulanan. Saldo Uang Saku tidak otomatis memotong SPP kecuali ditarik manual."
+                question: "Apakah fitur Keuangan & Payroll aman digunakan?",
+                answer: (
+                    <div>
+                        <p className="mb-2">Sangat aman, namun kami <strong>SANGAT MEREKOMENDASIKAN</strong> dua hal ini untuk Bendahara:</p>
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Multi-User:</strong> Aktifkan di Pengaturan. Buat akun khusus untuk Bendahara agar setiap transaksi tercatat atas nama petugas (Audit Trail).</li>
+                            <li><strong>Cloud Sync:</strong> Data keuangan adalah data vital. Sinkronisasi ke Dropbox/WebDAV memastikan data tidak hilang jika laptop rusak atau terkena virus.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                question: "Bagaimana cara hitung gaji guru otomatis?",
+                answer: "Gunakan menu Keuangan > Penggajian. Pastikan Anda sudah mengatur Jadwal Pelajaran terlebih dahulu. Sistem akan menghitung estimasi honor berdasarkan (Jumlah Jam Mengajar x Honor per Jam) + Gaji Pokok."
             }
         ]
     },
@@ -294,7 +327,7 @@ export const faqData: FaqCategoryData[] = [
         ]
     },
     {
-        title: "Kalender & Sarpras",
+        title: "Kalender & Jadwal Ibadah",
         icon: "bi-calendar-range-fill",
         colorClass: "bg-yellow-50 border-yellow-500 text-yellow-900",
         items: [
@@ -303,12 +336,12 @@ export const faqData: FaqCategoryData[] = [
                 answer: "Tentu. Anda bisa mencetak Kalender Akademik dalam berbagai layout (1 lembar, 3 lembar, 4 lembar) dan memilih penanggalan utama (Masehi atau Hijriah). Klik tombol 'Cetak / Export' di menu Kalender."
             },
             {
-                question: "Bagaimana cara menghitung nilai aset di Sarpras?",
-                answer: "Sistem otomatis menjumlahkan 'Harga Perolehan' dari semua barang yang Anda input. Pastikan Anda mengisi estimasi harga saat menambah data aset agar laporan valuasi akurat."
+                question: "Bagaimana cara membuat Jadwal Piket Imam & Muadzin?",
+                answer: "Buka menu **Kalender > Tab 'Jadwal Piket Ibadah'**. Pilih tanggal, lalu klik tombol **'Auto Isi'** (ikon tongkat sihir). Sistem akan mengacak santri putra aktif untuk mengisi slot yang masih kosong secara otomatis. Anda juga bisa mengedit manual."
             },
-            {
-                question: "Bisakah saya import data agenda kalender dari Excel?",
-                answer: "Saat ini fitur import Excel untuk kalender belum tersedia. Namun, Anda bisa menggunakan fitur 'Tambah Massal' (tombol tabel) untuk menginput banyak kegiatan sekaligus dalam satu layar."
+             {
+                question: "Apakah penanda puasa Ramadhan di kalender akurat?",
+                answer: "Penanda puasa (Ramadhan/Sunnah) di kalender menggunakan metode **Hisab/Estimasi**. Untuk penetapan awal Ramadhan dan Hari Raya, tetap ikuti keputusan resmi pemerintah (Sidang Isbat). Anda bisa menyesuaikan selisih hari di menu **Pengaturan > Umum > Koreksi Tanggal Hijriah**."
             }
         ]
     }
@@ -439,14 +472,25 @@ export const panduanData: PanduanSectionData[] = [
                 )
             },
             {
-                title: 'Aktivasi & Pairing (Satu Kali Saja)',
+                title: 'Aktivasi & Setup (Oleh Admin)',
                 color: 'black',
                 content: (
                     <ol className="list-decimal pl-5 space-y-2 text-sm mt-1 bg-gray-50 p-3 rounded border">
-                        <li><strong>Di Laptop Admin Pusat:</strong> Buka <em>Pengaturan &gt; Sync Cloud</em>. Login Dropbox. Buat Akun User untuk Staff di menu <em>User & Keamanan</em>.</li>
-                        <li>Klik tombol <strong>"Bagikan Akses (Pairing Code)"</strong>. Salin kode yang muncul.</li>
-                        <li><strong>Di Laptop Staff:</strong> Buka menu Sync Cloud. Paste kode tersebut di kolom <strong>"Setup Cepat"</strong>. Klik Hubungkan.</li>
-                        <li>Sistem otomatis mengunduh semua data terbaru dari Pusat. Setelah selesai, klik <strong>OK</strong> dan login menggunakan akun yang sudah dibuatkan Admin.</li>
+                        <li><strong>Di Laptop Admin Pusat:</strong> Buka <em>Pengaturan &gt; Sync Cloud</em>.</li>
+                        <li>Pilih Provider (Dropbox atau WebDAV).</li>
+                        <li>Jika menggunakan <strong>Dropbox</strong>: Masukkan <em>App Key</em> & <em>App Secret</em> (Didapat dari Dropbox Developer Console), lalu klik "Dapatkan Kode" dan ikuti proses otorisasi manual.</li>
+                        <li>Setelah terhubung, klik tombol <strong>"Bagikan Akses (Pairing Code)"</strong>. Salin kode rahasia yang muncul.</li>
+                    </ol>
+                )
+            },
+             {
+                title: 'Koneksi Staff (Pairing)',
+                color: 'black',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-2 text-sm mt-1">
+                         <li><strong>Di Laptop Staff:</strong> Buka menu <em>Pengaturan &gt; Sync Cloud</em>.</li>
+                         <li>Paste kode dari Admin ke kolom <strong>"Setup Cepat"</strong> di bagian bawah.</li>
+                         <li>Klik <strong>Hubungkan</strong>. Sistem akan otomatis mengonfigurasi akses cloud dan mendownload data terbaru.</li>
                     </ol>
                 )
             },
@@ -531,6 +575,82 @@ export const panduanData: PanduanSectionData[] = [
                             <li>File Excel akan terunduh. Kolom-kolomnya sudah disesuaikan agar mudah dicopy ke template EMIS.</li>
                         </ol>
                     </div>
+                )
+            }
+        ]
+    },
+    {
+        id: 'koperasi',
+        badge: 14,
+        badgeColor: 'pink',
+        title: 'Koperasi & Kantin',
+        steps: [
+            {
+                title: 'Rekomendasi: Akun Khusus Penjaga Toko (Multi-User)',
+                color: 'purple',
+                content: (
+                    <div className="bg-pink-50 p-3 rounded border border-pink-200 text-sm text-pink-900">
+                        <strong>KEAMANAN DATA:</strong> Jangan berikan akses Admin penuh kepada penjaga koperasi/kantin.
+                        <ul className="list-disc pl-5 mt-1 space-y-1">
+                            <li>Buat user baru di <em>Pengaturan > Akun</em>.</li>
+                            <li>Pilih role <strong>Staff</strong>.</li>
+                            <li>Matikan semua akses kecuali <strong>Koperasi</strong>.</li>
+                            <li>Dengan ini, penjaga toko hanya bisa berjualan dan tidak bisa mengintip data SPP atau BK santri.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: 'Manajemen Produk & Stok Opname',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li><strong>Input Produk:</strong> Masuk tab <em>Produk & Stok</em>. Gunakan "Tambah Massal" untuk input cepat. Scan barcode barang agar kasir lebih cepat.</li>
+                        <li><strong>Stok Menipis:</strong> Aktifkan filter "Stok Menipis" di daftar produk untuk melihat barang yang perlu dibeli (kulakan).</li>
+                        <li><strong>Stok Opname:</strong> Klik tombol <em>Stok Opname</em>. Masukkan jumlah fisik barang di rak pada kolom yang tersedia. Sistem otomatis menghitung selisih dan mencatatnya sebagai koreksi stok.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Transaksi Kasir (POS) & Printer Bluetooth',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
+                        <li><strong>Hubungkan Printer:</strong> Di tab <em>Pengaturan</em>, klik "Cari & Hubungkan Printer" untuk pairing dengan thermal printer Bluetooth.</li>
+                        <li><strong>Scan Barcode:</strong> Arahkan kursor ke kolom pencarian, scan barang.</li>
+                        <li><strong>Pilih Pelanggan:</strong> 
+                            <ul className="list-disc pl-4 text-xs">
+                                <li><strong>Santri:</strong> Gunakan Saldo Tabungan (Cashless). Jika saldo kurang, transaksi ditolak.</li>
+                                <li><strong>Umum:</strong> Pembayaran Tunai.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Metode Bayar:</strong> Pilih Tunai, Tabungan, atau <strong>Hutang/Kasbon</strong>.</li>
+                        <li><strong>Checkout:</strong> Klik Bayar. Struk akan tercetak otomatis jika printer terhubung.</li>
+                    </ol>
+                )
+            },
+            {
+                title: 'Manajemen Hutang (Kasbon) & Pelunasan',
+                content: (
+                     <div className="text-sm">
+                         <p className="mb-2">Jika santri/pembeli tidak membawa uang:</p>
+                         <ol className="list-decimal pl-5 space-y-1">
+                             <li>Saat checkout, pilih metode <strong>Hutang</strong>. Transaksi akan tercatat tapi uang belum masuk kas.</li>
+                             <li>Untuk melihat daftar hutang, buka tab <strong>Kasbon (Hutang)</strong>.</li>
+                             <li>Jika pembeli datang membayar, klik tombol <strong>Lunasi</strong> pada transaksi tersebut.</li>
+                             <li>Pilih metode pelunasan (Tunai/Potong Tabungan). Setelah lunas, uang baru akan tercatat sebagai Pemasukan di laporan keuangan.</li>
+                         </ol>
+                     </div>
+                )
+            },
+            {
+                title: 'Laporan Keuangan Toko',
+                content: (
+                     <div className="text-sm">
+                         <p className="mb-2">Sistem memisahkan laporan operasional toko dengan keuangan pondok pusat.</p>
+                         <ul className="list-disc pl-5 space-y-1">
+                             <li><strong>Tab Riwayat:</strong> Fokus pada omset penjualan dan barang keluar.</li>
+                             <li><strong>Tab Laba Rugi:</strong> Fokus pada profit bersih. Anda bisa mencatat pengeluaran operasional toko (Gaji penjaga, Listrik Toko, Plastik) di sini agar Laba Bersih terlihat akurat.</li>
+                         </ul>
+                     </div>
                 )
             }
         ]
@@ -694,7 +814,7 @@ export const panduanData: PanduanSectionData[] = [
                         <li>Sistem akan menampilkan tabel matriks kehadiran tanggal 1-31 beserta persentase.</li>
                         <li>Klik tombol <strong>Export</strong> (Pojok Kanan Atas) untuk opsi lanjutan:
                              <ul className="list-disc pl-4 mt-1 border-l-2 border-teal-200">
-                                <li><strong>Download PDF:</strong> Menghasilkan file PDF berkualitas tinggi (Vektor) lengkap dengan Kop Surat resmi.</li>
+                                <li><strong>Download PDF:</strong> Menghasilkan file PDF digital yang sangat rapi (High Quality/Vector), lengkap dengan Kop Surat resmi.</li>
                                 <li><strong>Excel (.xlsx):</strong> Mengunduh data mentah untuk diolah lebih lanjut di Microsoft Excel.</li>
                              </ul>
                         </li>
@@ -843,6 +963,21 @@ export const panduanData: PanduanSectionData[] = [
         badgeColor: 'blue',
         title: 'Keuangan & Pembayaran',
         steps: [
+             {
+                title: 'Rekomendasi: Multi-User & Cloud (Wajib untuk Bendahara)',
+                color: 'red',
+                content: (
+                    <div className="bg-red-50 p-3 rounded border border-red-200 text-sm text-red-900">
+                        <p className="font-bold mb-1"><i className="bi bi-shield-lock-fill"></i> Keamanan Data Vital</p>
+                        <p className="mb-2">Data keuangan dan gaji sangat sensitif. Jangan gunakan akun Admin tunggal bersama-sama.</p>
+                        <ul className="list-disc pl-5 mt-1 space-y-1">
+                            <li>Buat akun khusus untuk Bendahara (Role: Staff, Akses: Keuangan Write).</li>
+                            <li><strong>Wajib Multi-User:</strong> Aktifkan di Pengaturan agar setiap transaksi (SPP/Gaji) tercatat <em>siapa</em> yang menginputnya (Audit Trail).</li>
+                            <li><strong>Wajib Cloud Sync:</strong> Data keuangan adalah data vital. Sinkronisasi ke Dropbox/WebDAV memastikan data tidak hilang jika laptop rusak atau terkena virus.</li>
+                        </ul>
+                    </div>
+                )
+            },
             {
                 title: 'Siklus Tagihan & Pembayaran',
                 content: (
@@ -865,6 +1000,16 @@ export const panduanData: PanduanSectionData[] = [
                             <li>Cetak laporan "Rekening Koran" untuk laporan ke wali santri.</li>
                         </ul>
                     </>
+                )
+            },
+            {
+                title: 'Penggajian Guru (Payroll)',
+                content: (
+                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li><strong>Konfigurasi:</strong> Buka tab <em>Penggajian &gt; Konfigurasi</em>. Isi Gaji Pokok, Tunjangan, dan Tarif JTM (Jam Tatap Muka) per guru.</li>
+                        <li><strong>Generate Bulanan:</strong> Buka tab <em>Generate Gaji</em>. Pilih Bulan/Tahun. Klik "Hitung Estimasi". Sistem otomatis menghitung total jam dari Jadwal Pelajaran.</li>
+                        <li><strong>Cetak & Posting:</strong> Periksa draft gaji. Jika sudah benar, klik "Posting Keuangan" untuk mencatat pengeluaran kas otomatis, lalu cetak Slip Gaji PDF.</li>
+                    </ul>
                 )
             },
              {
@@ -907,6 +1052,19 @@ export const panduanData: PanduanSectionData[] = [
                         <li>Klik tombol "Tempatkan" pada kartu kamar yang tersedia.</li>
                     </ul>
                 )
+            },
+            {
+                title: 'Optimalisasi Tim Asrama (Cloud)',
+                color: 'orange',
+                content: (
+                    <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm">
+                        <strong>Tips Kolaborasi:</strong> Jika kantor asrama putra dan putri terpisah, gunakan fitur <strong>Cloud Sync</strong>. 
+                        <ul className="list-disc pl-5 mt-1">
+                            <li>Buat akun khusus untuk Musyrif/Musyrifah.</li>
+                            <li>Mereka dapat mengecek data santri atau kapasitas kamar langsung dari asrama tanpa perlu ke kantor pusat.</li>
+                        </ul>
+                    </div>
+                )
             }
         ]
     },
@@ -931,6 +1089,20 @@ export const panduanData: PanduanSectionData[] = [
                 )
             },
             {
+                title: 'Kerja Tim Panitia PSB (Multi-User)',
+                color: 'green',
+                content: (
+                     <div className="bg-green-50 p-3 rounded border border-green-200 text-sm">
+                        <strong>Rekomendasi Panitia:</strong> Jangan kerjakan sendiri. Aktifkan <strong>Multi-User</strong> dan bagikan tugas:
+                        <ul className="list-disc pl-5 mt-1">
+                            <li><strong>Meja 1:</strong> Input Data & Wawancara.</li>
+                            <li><strong>Meja 2:</strong> Terima Pembayaran & Seragam.</li>
+                        </ul>
+                        Semua laptop panitia terhubung ke data pusat via Cloud.
+                    </div>
+                )
+            },
+            {
                 title: 'Surat Menyurat & Arsip',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
@@ -946,7 +1118,7 @@ export const panduanData: PanduanSectionData[] = [
         id: 'kalender',
         badge: 12,
         badgeColor: 'yellow',
-        title: 'Kalender Akademik',
+        title: 'Kalender & Jadwal Ibadah',
         steps: [
             {
                 title: 'Input Agenda Kegiatan',
@@ -955,6 +1127,17 @@ export const panduanData: PanduanSectionData[] = [
                         <li>Buka menu <strong>Kalender</strong>.</li>
                         <li>Klik <strong>Tambah Agenda</strong> untuk memasukkan kegiatan secara manual satu per satu.</li>
                         <li>Gunakan tombol <strong>Tambah Massal</strong> (ikon tabel) untuk memasukkan banyak agenda sekaligus (seperti Jadwal Ujian, Libur Semester, PHBI) dalam format tabel yang cepat.</li>
+                    </ul>
+                )
+            },
+             {
+                title: 'Manajemen Jadwal Piket Ibadah',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka tab <strong>Jadwal Piket Ibadah</strong> di menu Kalender.</li>
+                        <li>Pilih tanggal yang ingin diatur.</li>
+                        <li><strong>Manual:</strong> Klik tombol edit pada kolom Muadzin/Imam untuk memilih santri tertentu.</li>
+                        <li><strong>Otomatis:</strong> Klik tombol <strong>Auto Isi</strong>. Sistem akan memilih santri putra secara acak untuk mengisi slot yang kosong pada hari tersebut.</li>
                     </ul>
                 )
             },
@@ -1007,6 +1190,17 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Slip Buku:</strong> Cetak slip tanggal kembali untuk ditempel di belakang buku.</li>
                         <li><strong>Label Punggung:</strong> Cetak label kode buku (Call Number) untuk ditempel di punggung buku (spine) agar mudah disusun di rak.</li>
                     </ul>
+                )
+            },
+            {
+                title: 'Integrasi Komputer Perpustakaan',
+                color: 'teal',
+                content: (
+                    <div className="bg-teal-50 p-3 rounded border border-teal-200 text-sm">
+                        <strong>Saran Implementasi:</strong> Biasanya perpustakaan memiliki komputer khusus yang terpisah dari kantor admin.
+                        <br/>
+                        Gunakan <strong>Cloud Sync</strong> untuk menghubungkan komputer perpustakaan dengan database santri pusat. Pustakawan cukup login dengan akun staff terbatas untuk mengelola peminjaman.
+                    </div>
                 )
             }
         ]

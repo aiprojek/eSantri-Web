@@ -4,11 +4,12 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useForm } from 'react-hook-form';
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
-import { CalendarEvent, PondokSettings } from '../types';
+import { CalendarEvent, PondokSettings, PiketSchedule, Santri } from '../types';
 import { printToPdfNative } from '../utils/pdfGenerator';
 import { CalendarPrintTemplate } from './kalender/CalendarPrintTemplate';
 import { BulkEventModal } from './kalender/modals/BulkEventModal';
 import { formatDate, getHijriDate, findStartOfHijriMonth } from '../utils/formatters';
+import { useSantriContext } from '../contexts/SantriContext';
 
 // --- EVENT MODAL ---
 interface EventModalProps {
@@ -354,7 +355,266 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, setti
     );
 };
 
-// ... (Rest of existing helpers and components)
+// --- STUDENT SELECTOR MODAL (NEW) ---
+interface StudentSelectorModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSelect: (santriId: number | null) => void;
+    title: string;
+}
+
+const StudentSelectorModal: React.FC<StudentSelectorModalProps> = ({ isOpen, onClose, onSelect, title }) => {
+    const { settings } = useAppContext();
+    const { santriList } = useSantriContext();
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterJenjang, setFilterJenjang] = useState<number>(0);
+    const [filterKelas, setFilterKelas] = useState<number>(0);
+    const [filterRombel, setFilterRombel] = useState<number>(0);
+
+    // Derived Available Options
+    const availableKelas = useMemo(() => filterJenjang ? settings.kelas.filter(k => k.jenjangId === filterJenjang) : [], [filterJenjang, settings.kelas]);
+    const availableRombel = useMemo(() => filterKelas ? settings.rombel.filter(r => r.kelasId === filterKelas) : [], [filterKelas, settings.rombel]);
+
+    const filteredSantri = useMemo(() => {
+        return santriList.filter(s => {
+            if (s.status !== 'Aktif' || s.jenisKelamin !== 'Laki-laki') return false; // Filter hanya Laki-laki aktif
+            if (filterJenjang && s.jenjangId !== filterJenjang) return false;
+            if (filterKelas && s.kelasId !== filterKelas) return false;
+            if (filterRombel && s.rombelId !== filterRombel) return false;
+            if (searchTerm) {
+                const lower = searchTerm.toLowerCase();
+                if (!s.namaLengkap.toLowerCase().includes(lower) && !s.nis.includes(lower)) return false;
+            }
+            return true;
+        }).slice(0, 50); // Limit results for performance
+    }, [santriList, filterJenjang, filterKelas, filterRombel, searchTerm]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-[80] flex justify-center items-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg h-[80vh] flex flex-col">
+                <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+                    <h3 className="font-bold text-gray-800">{title}</h3>
+                    <button onClick={onClose}><i className="bi bi-x-lg text-gray-500"></i></button>
+                </div>
+                
+                <div className="p-4 space-y-3 bg-gray-50 border-b">
+                    <div className="relative">
+                        <input type="text" placeholder="Cari nama santri..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 p-2 border rounded-lg text-sm focus:ring-teal-500 focus:border-teal-500" autoFocus />
+                        <i className="bi bi-search absolute left-3 top-2.5 text-gray-400"></i>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        <select value={filterJenjang} onChange={e => {setFilterJenjang(Number(e.target.value)); setFilterKelas(0); setFilterRombel(0);}} className="w-full border rounded p-2 text-xs">
+                            <option value={0}>Jenjang</option>
+                            {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                        </select>
+                        <select value={filterKelas} onChange={e => {setFilterKelas(Number(e.target.value)); setFilterRombel(0);}} disabled={!filterJenjang} className="w-full border rounded p-2 text-xs disabled:bg-gray-200">
+                            <option value={0}>Kelas</option>
+                            {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                        </select>
+                        <select value={filterRombel} onChange={e => setFilterRombel(Number(e.target.value))} disabled={!filterKelas} className="w-full border rounded p-2 text-xs disabled:bg-gray-200">
+                            <option value={0}>Rombel</option>
+                            {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="flex-grow overflow-y-auto p-2 space-y-1">
+                    <button onClick={() => onSelect(null)} className="w-full text-left p-3 hover:bg-red-50 rounded-lg text-red-600 font-medium text-sm flex items-center gap-2 border border-transparent hover:border-red-200 mb-2">
+                        <i className="bi bi-x-circle"></i> Kosongkan / Hapus Petugas
+                    </button>
+                    {filteredSantri.map(s => (
+                        <button key={s.id} onClick={() => onSelect(s.id)} className="w-full text-left p-3 hover:bg-teal-50 rounded-lg flex items-center gap-3 border border-transparent hover:border-teal-200 transition-colors group">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 group-hover:bg-teal-200 group-hover:text-teal-800">
+                                {s.namaLengkap.charAt(0)}
+                            </div>
+                            <div>
+                                <div className="text-sm font-bold text-gray-800 group-hover:text-teal-900">{s.namaLengkap}</div>
+                                <div className="text-xs text-gray-500">{settings.rombel.find(r=>r.id===s.rombelId)?.nama} • {s.nis}</div>
+                            </div>
+                        </button>
+                    ))}
+                    {filteredSantri.length === 0 && (
+                        <div className="text-center py-8 text-gray-400 text-sm">Tidak ada santri ditemukan.</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- TAB JADWAL PIKET (NEW) ---
+const JadwalPiketView: React.FC = () => {
+    const { settings, showToast, showConfirmation, currentUser } = useAppContext();
+    const { santriList } = useSantriContext();
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.keasramaan === 'write'; 
+
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [piketList, setPiketList] = useState<PiketSchedule[]>([]);
+    
+    // Modal Selector State
+    const [selectorOpen, setSelectorOpen] = useState(false);
+    const [editingSlot, setEditingSlot] = useState<{ id: number | null, sholat: string, field: 'muadzinSantriId' | 'imamSantriId' } | null>(null);
+
+    const sholatList = ['Subuh', 'Dzuhur', 'Ashar', 'Maghrib', 'Isya'] as const;
+
+    useEffect(() => {
+        const fetchPiket = async () => {
+            const data = await db.piketSchedules.where('tanggal').equals(selectedDate).toArray();
+            setPiketList(data);
+        };
+        fetchPiket();
+    }, [selectedDate]);
+
+    const handleOpenSelector = (sholat: string, field: 'muadzinSantriId' | 'imamSantriId') => {
+        if (!canWrite) return;
+        const existing = piketList.find(p => p.sholat === sholat);
+        setEditingSlot({ id: existing ? existing.id : null, sholat, field });
+        setSelectorOpen(true);
+    };
+
+    const handleSelectSantri = async (santriId: number | null) => {
+        setSelectorOpen(false);
+        if (!editingSlot) return;
+
+        const { id, sholat, field } = editingSlot;
+        
+        if (id) {
+            await db.piketSchedules.update(id, { [field]: santriId || undefined, lastModified: Date.now() });
+            setPiketList(prev => prev.map(p => p.id === id ? { ...p, [field]: santriId || undefined } : p));
+        } else {
+            const newItem: PiketSchedule = {
+                id: Date.now(),
+                tanggal: selectedDate,
+                sholat: sholat as any,
+                [field]: santriId || undefined,
+                lastModified: Date.now()
+            };
+            await db.piketSchedules.add(newItem);
+            setPiketList(prev => [...prev, newItem]);
+        }
+    };
+
+    const handleAutoGenerate = () => {
+        if (!canWrite) return;
+        showConfirmation('Generate Otomatis?', 'Sistem akan memilih santri secara acak untuk mengisi jadwal yang kosong pada tanggal ini.', async () => {
+            const activeSantri = santriList.filter(s => s.status === 'Aktif' && s.jenisKelamin === 'Laki-laki');
+            if (activeSantri.length < 5) {
+                showToast('Jumlah santri putra kurang dari 5, tidak cukup untuk generate.', 'error');
+                return;
+            }
+
+            const updates = [];
+            for (const sholat of sholatList) {
+                const existing = piketList.find(p => p.sholat === sholat);
+                const randomSantri = activeSantri[Math.floor(Math.random() * activeSantri.length)];
+                
+                if (!existing) {
+                    updates.push(db.piketSchedules.add({
+                        id: Date.now() + Math.random(),
+                        tanggal: selectedDate,
+                        sholat,
+                        muadzinSantriId: randomSantri.id,
+                        lastModified: Date.now()
+                    } as PiketSchedule));
+                } else if (!existing.muadzinSantriId) {
+                     updates.push(db.piketSchedules.update(existing.id, { muadzinSantriId: randomSantri.id, lastModified: Date.now() }));
+                }
+            }
+            await Promise.all(updates);
+            // Refresh
+            const data = await db.piketSchedules.where('tanggal').equals(selectedDate).toArray();
+            setPiketList(data);
+            showToast('Jadwal piket berhasil digenerate.', 'success');
+        }, { confirmColor: 'blue' });
+    };
+
+    const getSantriName = (id?: number) => {
+        if (!id) return null;
+        const s = santriList.find(s => s.id === id);
+        return s ? s.namaLengkap : 'Unknown';
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800">Jadwal Piket Ibadah</h2>
+                    <p className="text-sm text-gray-500">Petugas Adzan dan Imam santri harian.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="border rounded-lg p-2 text-sm" />
+                    {canWrite && (
+                        <button onClick={handleAutoGenerate} className="bg-teal-50 text-teal-700 border border-teal-200 px-3 py-2 rounded-lg text-sm font-bold hover:bg-teal-100 flex items-center gap-2">
+                            <i className="bi bi-magic"></i> Auto Isi
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-100 text-gray-600 uppercase border-b">
+                        <tr>
+                            <th className="p-3 w-32">Waktu Sholat</th>
+                            <th className="p-3 w-1/3">Muadzin</th>
+                            <th className="p-3 w-1/3">Imam (Santri/Badal)</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                        {sholatList.map(sholat => {
+                            const item = piketList.find(p => p.sholat === sholat);
+                            const muadzinName = getSantriName(item?.muadzinSantriId);
+                            const imamName = getSantriName(item?.imamSantriId);
+
+                            return (
+                                <tr key={sholat} className="hover:bg-gray-50">
+                                    <td className="p-3 font-bold text-teal-800 bg-gray-50/50 align-middle border-r">{sholat}</td>
+                                    <td className="p-2">
+                                        <button 
+                                            onClick={() => handleOpenSelector(sholat, 'muadzinSantriId')}
+                                            disabled={!canWrite}
+                                            className={`w-full text-left px-3 py-2 rounded border transition-colors flex justify-between items-center ${muadzinName ? 'bg-white border-gray-300 text-gray-800' : 'bg-gray-50 border-dashed border-gray-300 text-gray-400'}`}
+                                        >
+                                            <span className="font-medium truncate">{muadzinName || 'Pilih Petugas...'}</span>
+                                            {canWrite && <i className="bi bi-pencil-square text-xs opacity-50"></i>}
+                                        </button>
+                                    </td>
+                                    <td className="p-2">
+                                        <button 
+                                            onClick={() => handleOpenSelector(sholat, 'imamSantriId')}
+                                            disabled={!canWrite}
+                                            className={`w-full text-left px-3 py-2 rounded border transition-colors flex justify-between items-center ${imamName ? 'bg-white border-gray-300 text-gray-800' : 'bg-gray-50 border-dashed border-gray-300 text-gray-400'}`}
+                                        >
+                                            <span className="font-medium truncate">{imamName || 'Pilih Petugas (Opsional)...'}</span>
+                                            {canWrite && <i className="bi bi-pencil-square text-xs opacity-50"></i>}
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-50 text-blue-800 rounded text-xs border border-blue-100 flex items-start gap-2">
+                 <i className="bi bi-info-circle-fill text-lg"></i>
+                 <div>
+                     <strong>Info:</strong> Jadwal Imam santri bersifat latihan/badal. Imam utama tetap diasuh oleh Ustadz/Kyai sesuai jadwal pengajian.
+                 </div>
+            </div>
+
+            {/* Modal Selector */}
+            <StudentSelectorModal 
+                isOpen={selectorOpen}
+                onClose={() => setSelectorOpen(false)}
+                onSelect={handleSelectSantri}
+                title={editingSlot ? `Pilih ${editingSlot.field === 'muadzinSantriId' ? 'Muadzin' : 'Imam'} - ${editingSlot.sholat}` : 'Pilih Petugas'}
+            />
+        </div>
+    );
+}
 
 // --- MAIN COMPONENT ---
 
@@ -363,16 +623,16 @@ const Kalender: React.FC = () => {
     const events = useLiveQuery(() => db.calendarEvents.filter(e => !e.deleted).toArray(), []) || [];
     
     // State "anchorDate" selalu menyimpan tanggal referensi untuk grid yang sedang dilihat
-    // Jika mode Masehi: anchorDate = Tanggal 1 Bulan Masehi
-    // Jika mode Hijriah: anchorDate = Tanggal Masehi yang bertepatan dengan Tanggal 1 Bulan Hijriah
     const [anchorDate, setAnchorDate] = useState(new Date()); 
     const [isEventModalOpen, setIsEventModalOpen] = useState(false);
-    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false); // NEW
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [primarySystem, setPrimarySystem] = useState<'Masehi' | 'Hijriah'>('Masehi');
-    
+    const [showFasting, setShowFasting] = useState(false); // NEW TOGGLE
+    const [activeView, setActiveView] = useState<'kalender' | 'piket'>('kalender'); // NEW TAB
+
     // Print State
     const [printConfig, setPrintConfig] = useState<{
         theme: 'classic' | 'modern' | 'bold' | 'dark' | 'ceria', 
@@ -389,11 +649,9 @@ const Kalender: React.FC = () => {
     // Reset Anchor ketika ganti mode agar sinkron
     useEffect(() => {
         if (primarySystem === 'Masehi') {
-            // Set ke tanggal 1 bulan ini
             const now = new Date();
             setAnchorDate(new Date(now.getFullYear(), now.getMonth(), 1));
         } else {
-            // Set ke tanggal 1 bulan Hijriah saat ini
             setAnchorDate(findStartOfHijriMonth(new Date(), hijriAdjustment));
         }
     }, [primarySystem, hijriAdjustment]);
@@ -402,26 +660,59 @@ const Kalender: React.FC = () => {
     
     // Grid Generation Logic
     const calendarDays = useMemo(() => {
-        const days: { dateObj: Date, masehi: number, hijri: string, hijriDay: string }[] = [];
+        const days: { dateObj: Date, masehi: number, hijri: string, hijriDay: string, isFasting?: string, isRamadan?: boolean }[] = [];
         
+        const processDay = (d: Date) => {
+            const h = getHijriDate(d, hijriAdjustment);
+            const dayOfWeek = d.getDay();
+            const hDay = parseInt(h.day);
+            const hMonth = h.month;
+
+            let fastingType = '';
+            let isRamadan = false;
+
+            if (hMonth === 'Ramadhan') {
+                isRamadan = true;
+                fastingType = 'Ramadhan';
+            } else {
+                // Ayyamul Bidh (13, 14, 15) except Tasyrik days (Zulhijjah 13 is forbidden)
+                if ([13, 14, 15].includes(hDay)) {
+                    if (hMonth !== 'Dhu al-Hijjah' || hDay !== 13) {
+                         fastingType = 'Ayyamul Bidh';
+                    }
+                } 
+                // Monday Thursday
+                else if (dayOfWeek === 1 || dayOfWeek === 4) {
+                    // Check forbidden days (1 Syawal, 10 Dzulhijjah, Tasyrik 11,12,13)
+                    const isSyawal1 = hMonth === 'Shawwal' && hDay === 1;
+                    const isAdhaOrTasyrik = hMonth === 'Dhu al-Hijjah' && [10, 11, 12, 13].includes(hDay);
+                    
+                    if (!isSyawal1 && !isAdhaOrTasyrik) {
+                         fastingType = 'Sunnah';
+                    }
+                }
+            }
+
+            return {
+                dateObj: d,
+                masehi: d.getDate(),
+                hijri: `${h.month} ${h.year}`,
+                hijriDay: h.day,
+                isFasting: fastingType,
+                isRamadan
+            };
+        };
+
         if (primarySystem === 'Masehi') {
-            // Logic Masehi (Standard)
             const year = anchorDate.getFullYear();
             const month = anchorDate.getMonth();
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             
             for (let i = 1; i <= daysInMonth; i++) {
                 const d = new Date(year, month, i);
-                const h = getHijriDate(d, hijriAdjustment);
-                days.push({
-                    dateObj: d,
-                    masehi: i,
-                    hijri: `${h.month} ${h.year}`,
-                    hijriDay: h.day
-                });
+                days.push(processDay(d));
             }
         } else {
-            // Logic Hijriah (Custom Grid)
             const startHijri = getHijriDate(anchorDate, hijriAdjustment);
             const targetHijriMonth = startHijri.month;
             
@@ -429,13 +720,7 @@ const Kalender: React.FC = () => {
             for (let i = 0; i < 30; i++) {
                 const currentHijri = getHijriDate(d, hijriAdjustment);
                 if (currentHijri.month !== targetHijriMonth) break; 
-
-                days.push({
-                    dateObj: new Date(d),
-                    masehi: d.getDate(),
-                    hijri: `${currentHijri.month} ${currentHijri.year}`,
-                    hijriDay: currentHijri.day
-                });
+                days.push(processDay(new Date(d)));
                 d.setDate(d.getDate() + 1);
             }
         }
@@ -450,25 +735,19 @@ const Kalender: React.FC = () => {
         
         if (primarySystem === 'Masehi') {
             const masehiMonth = firstDay.dateObj.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
-            
             const startHijri = getHijriDate(firstDay.dateObj, hijriAdjustment);
             const endHijri = getHijriDate(lastDay.dateObj, hijriAdjustment);
-            
             const hijriStr = startHijri.month === endHijri.month 
                 ? `${startHijri.month} ${startHijri.year}` 
                 : `${startHijri.month} - ${endHijri.month} ${startHijri.year}`;
-                
             return { main: masehiMonth.toUpperCase(), sub: `${hijriStr} H` };
         } else {
             const hijriMonth = getHijriDate(firstDay.dateObj, hijriAdjustment);
-            
             const startMasehi = firstDay.dateObj.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
             const endMasehi = lastDay.dateObj.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
-            
             const masehiStr = (firstDay.dateObj.getMonth() === lastDay.dateObj.getMonth())
                 ? startMasehi
                 : `${firstDay.dateObj.toLocaleString('id-ID', { month: 'long' })} - ${endMasehi}`;
-
             return { main: `${hijriMonth.month} ${hijriMonth.year}`.toUpperCase(), sub: masehiStr };
         }
     }, [calendarDays, primarySystem, hijriAdjustment]);
@@ -540,7 +819,6 @@ const Kalender: React.FC = () => {
     const handlePrintRequest = (theme: any, layout: any, system: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => {
         setPrintConfig({ theme, layout, primarySystem: system, showKop, customImage, imagePosition });
         setIsPrintModalOpen(false);
-        // Delay to allow render
         setTimeout(() => {
             printToPdfNative('calendar-print-area', `Kalender_Akademik_${anchorDate.getFullYear()}`);
         }, 500);
@@ -571,12 +849,28 @@ const Kalender: React.FC = () => {
             const mainNum = primarySystem === 'Masehi' ? dayData.masehi : dayData.hijriDay;
             const subNum = primarySystem === 'Masehi' ? dayData.hijriDay : dayData.masehi;
 
+            // Fasting Styling
+            let fastingClass = '';
+            let fastingIcon = null;
+            if (showFasting && dayData.isFasting) {
+                if (dayData.isRamadan) {
+                    fastingClass = 'bg-yellow-50 border-yellow-200';
+                    if(mainNum === 1) fastingIcon = <div className="absolute top-1 right-1 text-yellow-600 text-[10px]"><i className="bi bi-moon-stars-fill"></i></div>;
+                } else if (dayData.isFasting === 'Ayyamul Bidh') {
+                    fastingClass = 'bg-blue-50 border-blue-200';
+                    fastingIcon = <div className="absolute top-1 right-1 text-blue-400 text-[8px] opacity-70" title="Ayyamul Bidh"><i className="bi bi-brightness-high-fill"></i></div>;
+                } else if (dayData.isFasting === 'Sunnah') {
+                    fastingIcon = <div className="absolute top-1 right-1 text-green-400 text-[8px] opacity-50" title="Puasa Senin-Kamis"><i className="bi bi-droplet-fill"></i></div>;
+                }
+            }
+
             gridCells.push(
                 <div 
                     key={dateStr} 
                     onClick={() => { if(canWrite) { setSelectedDate(dateStr); setEditingEvent(null); setIsEventModalOpen(true); } }}
-                    className={`border border-gray-100 p-2 min-h-[100px] bg-white relative hover:bg-gray-50 transition-colors ${canWrite ? 'cursor-pointer' : ''}`}
+                    className={`border p-2 min-h-[100px] relative transition-colors ${canWrite ? 'cursor-pointer' : ''} ${fastingClass || 'bg-white border-gray-100 hover:bg-gray-50'}`}
                 >
+                    {fastingIcon}
                     <div className="flex justify-between items-start mb-1">
                         <div className={`text-sm font-bold ${isToday ? 'bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center' : 'text-gray-700'}`}>
                             {mainNum}
@@ -607,96 +901,143 @@ const Kalender: React.FC = () => {
 
     return (
         <div className="min-h-screen pb-20">
-            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-800">Kalender Akademik</h1>
-                    <p className="text-gray-500 text-sm">Agenda kegiatan pondok pesantren.</p>
+                    <h1 className="text-3xl font-bold text-gray-800">Kalender & Jadwal</h1>
+                    <p className="text-gray-500 text-sm">Akademik, Ibadah, dan Kegiatan Pesantren.</p>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={() => setIsPrintModalOpen(true)} className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center gap-2">
-                        <i className="bi bi-printer"></i> Cetak / Export
+            </div>
+
+            {/* TAB NAVIGATION */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6 sticky top-0 z-40">
+                <nav className="flex -mb-px">
+                    <button 
+                        onClick={() => setActiveView('kalender')} 
+                        className={`flex-1 py-4 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeView === 'kalender' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                    >
+                        <i className="bi bi-calendar-range text-lg"></i> Kalender Akademik
                     </button>
-                    {canWrite && (
-                        <div className="flex gap-2">
-                             <button onClick={() => { setIsBulkModalOpen(true); }} className="bg-teal-50 text-teal-700 border border-teal-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-100 flex items-center gap-2">
-                                <i className="bi bi-table"></i> Tambah Massal
+                    <button 
+                        onClick={() => setActiveView('piket')} 
+                        className={`flex-1 py-4 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeView === 'piket' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                    >
+                        <i className="bi bi-clock-history text-lg"></i> Jadwal Piket Ibadah
+                    </button>
+                </nav>
+            </div>
+
+            {activeView === 'kalender' && (
+                <div className="animate-fade-in">
+                    {/* Toolbar */}
+                    <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
+                         {/* Toggle Fasting */}
+                         <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border shadow-sm">
+                            <label className="text-sm text-gray-700 font-medium cursor-pointer select-none flex items-center gap-2">
+                                <input type="checkbox" checked={showFasting} onChange={e => setShowFasting(e.target.checked)} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500" />
+                                <i className="bi bi-moon-stars text-teal-600"></i>
+                                Tampilkan Puasa Sunnah
+                            </label>
+                        </div>
+
+                         <div className="flex gap-2 ml-auto">
+                            <button onClick={() => setIsPrintModalOpen(true)} className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center gap-2">
+                                <i className="bi bi-printer"></i> Cetak
                             </button>
-                            <button onClick={() => { setEditingEvent(null); setSelectedDate(''); setIsEventModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2">
-                                <i className="bi bi-plus-lg"></i> Tambah Agenda
-                            </button>
+                            {canWrite && (
+                                <div className="flex gap-2">
+                                     <button onClick={() => { setIsBulkModalOpen(true); }} className="bg-teal-50 text-teal-700 border border-teal-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-100 flex items-center gap-2">
+                                        <i className="bi bi-table"></i> Bulk
+                                    </button>
+                                    <button onClick={() => { setEditingEvent(null); setSelectedDate(''); setIsEventModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2">
+                                        <i className="bi bi-plus-lg"></i> Agenda
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {showFasting && (
+                        <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded text-sm text-yellow-800 flex items-start gap-2">
+                            <i className="bi bi-info-circle-fill mt-0.5"></i>
+                            <div>
+                                <strong>Tanbih:</strong> Tanggal Hijriah, Awal Ramadhan, dan Hari Raya dalam kalender ini adalah hasil <em>hisab/estimasi</em> algoritma. 
+                                Kepastian tanggal ibadah tetap mengikuti keputusan Sidang Isbat Pemerintah / otoritas setempat.
+                            </div>
                         </div>
                     )}
-                </div>
-            </div>
 
-            <div className="flex justify-end mb-4">
-                <div className="inline-flex bg-white border rounded-lg p-1 shadow-sm">
-                    <button 
-                        onClick={() => setPrimarySystem('Masehi')}
-                        className={`px-3 py-1 text-xs font-bold rounded ${primarySystem === 'Masehi' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
-                    >
-                        Masehi
-                    </button>
-                    <button 
-                        onClick={() => setPrimarySystem('Hijriah')}
-                        className={`px-3 py-1 text-xs font-bold rounded ${primarySystem === 'Hijriah' ? 'bg-teal-100 text-teal-700' : 'text-gray-500 hover:text-gray-700'}`}
-                    >
-                        Hijriah
-                    </button>
-                </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-                <div className="flex justify-between items-center p-4 border-b bg-gray-50">
-                    <button onClick={handlePrev} className="p-2 hover:bg-gray-200 rounded-full"><i className="bi bi-chevron-left"></i></button>
-                    <div className="text-center">
-                        <h2 className="text-xl font-bold text-gray-800">{headerInfo.main}</h2>
-                        <p className="text-sm text-teal-600 font-medium">{headerInfo.sub}</p>
+                    <div className="flex justify-end mb-4">
+                        <div className="inline-flex bg-white border rounded-lg p-1 shadow-sm">
+                            <button 
+                                onClick={() => setPrimarySystem('Masehi')}
+                                className={`px-3 py-1 text-xs font-bold rounded ${primarySystem === 'Masehi' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Masehi
+                            </button>
+                            <button 
+                                onClick={() => setPrimarySystem('Hijriah')}
+                                className={`px-3 py-1 text-xs font-bold rounded ${primarySystem === 'Hijriah' ? 'bg-teal-100 text-teal-700' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Hijriah
+                            </button>
+                        </div>
                     </div>
-                    <button onClick={handleNext} className="p-2 hover:bg-gray-200 rounded-full"><i className="bi bi-chevron-right"></i></button>
-                </div>
-                <div className="grid grid-cols-7 bg-gray-100 border-b">
-                    {['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].map((day, i) => (
-                        <div key={day} className={`p-3 text-center font-bold text-sm ${i === 0 ? 'text-red-600' : 'text-gray-600'}`}>{day}</div>
-                    ))}
-                </div>
-                <div className="grid grid-cols-7 bg-gray-200 gap-px border-b">
-                    {renderCalendarGrid()}
-                </div>
-            </div>
 
-            <div className="mt-8 bg-white p-6 rounded-xl shadow-md">
-                <h3 className="text-lg font-bold text-gray-700 mb-4 border-b pb-2">Agenda Bulan Ini</h3>
-                {monthEvents.length > 0 ? (
-                    <ul className="space-y-3">
-                        {[...monthEvents].sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).map(ev => (
-                            <li key={ev.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg group">
-                                <div className={`w-3 h-3 rounded-full shrink-0 ${ev.color.startsWith('#') ? '' : ev.color}`} style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}></div>
-                                <div className="flex-grow">
-                                    <div className="font-bold text-gray-800 text-sm">{ev.title}</div>
-                                    <div className="text-xs text-gray-500">
-                                        {formatDate(ev.startDate)} {ev.startDate !== ev.endDate && ` - ${formatDate(ev.endDate)}`}
-                                        <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-[10px] uppercase border">{ev.category}</span>
-                                    </div>
-                                </div>
-                                {canWrite && (
-                                    <button onClick={() => { setEditingEvent(ev); setIsEventModalOpen(true); }} className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <i className="bi bi-pencil-square"></i>
-                                    </button>
-                                )}
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="text-gray-400 italic text-sm">Tidak ada agenda di bulan ini.</p>
-                )}
-            </div>
+                    <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+                        <div className="flex justify-between items-center p-4 border-b bg-gray-50">
+                            <button onClick={handlePrev} className="p-2 hover:bg-gray-200 rounded-full"><i className="bi bi-chevron-left"></i></button>
+                            <div className="text-center">
+                                <h2 className="text-xl font-bold text-gray-800">{headerInfo.main}</h2>
+                                <p className="text-sm text-teal-600 font-medium">{headerInfo.sub}</p>
+                            </div>
+                            <button onClick={handleNext} className="p-2 hover:bg-gray-200 rounded-full"><i className="bi bi-chevron-right"></i></button>
+                        </div>
+                        <div className="grid grid-cols-7 bg-gray-100 border-b">
+                            {['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].map((day, i) => (
+                                <div key={day} className={`p-3 text-center font-bold text-sm ${i === 0 ? 'text-red-600' : 'text-gray-600'}`}>{day}</div>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-7 bg-gray-200 gap-px border-b">
+                            {renderCalendarGrid()}
+                        </div>
+                    </div>
+
+                    <div className="mt-8 bg-white p-6 rounded-xl shadow-md">
+                        <h3 className="text-lg font-bold text-gray-700 mb-4 border-b pb-2">Agenda Bulan Ini</h3>
+                        {monthEvents.length > 0 ? (
+                            <ul className="space-y-3">
+                                {[...monthEvents].sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).map(ev => (
+                                    <li key={ev.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg group">
+                                        <div className={`w-3 h-3 rounded-full shrink-0 ${ev.color.startsWith('#') ? '' : ev.color}`} style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}></div>
+                                        <div className="flex-grow">
+                                            <div className="font-bold text-gray-800 text-sm">{ev.title}</div>
+                                            <div className="text-xs text-gray-500">
+                                                {formatDate(ev.startDate)} {ev.startDate !== ev.endDate && ` - ${formatDate(ev.endDate)}`}
+                                                <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-[10px] uppercase border">{ev.category}</span>
+                                            </div>
+                                        </div>
+                                        {canWrite && (
+                                            <button onClick={() => { setEditingEvent(ev); setIsEventModalOpen(true); }} className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <i className="bi bi-pencil-square"></i>
+                                            </button>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-gray-400 italic text-sm">Tidak ada agenda di bulan ini.</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeView === 'piket' && <JadwalPiketView />}
 
             <EventModal 
                 isOpen={isEventModalOpen} 
                 onClose={() => setIsEventModalOpen(false)} 
                 onSave={handleSaveEvent} 
-                onUpdate={handleUpdateEvent}
+                onUpdate={handleUpdateEvent} 
                 onDelete={handleDeleteEvent}
                 eventData={editingEvent}
                 selectedDate={selectedDate}

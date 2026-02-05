@@ -1,5 +1,6 @@
 
 
+
 import { Santri, PondokSettings, Pendaftar } from '../types';
 
 // This is an internal helper and doesn't need to be exported.
@@ -186,6 +187,11 @@ export const generatePendaftarCsv = (pendaftarList: Pendaftar[]): string => {
         const rowData = headers.map(header => {
             const key = PSB_HEADER_MAP[header];
             let value = (p as any)[key];
+            
+            // Special handling for nested Alamat object in Pendaftar
+            if (key === 'alamat' && typeof value === 'object') {
+                value = value.detail;
+            }
 
             // Format specific fields for export
             if (key === 'jenisKelamin') value = value === 'Laki-laki' ? 'L' : 'P';
@@ -305,15 +311,29 @@ export const parsePendaftarCsv = (csvText: string): Omit<Pendaftar, 'id'>[] => {
             namaLengkap: data.namaLengkap,
             nisn: data.nisn || '',
             nik: data.nik || '',
+            nis: '',
+            jenisSantri: 'Mondok - Baru',
+            kelasId: 0,
+            rombelId: 0,
             jenisKelamin: gender,
             tempatLahir: data.tempatLahir || '',
             tanggalLahir: normalizeDate(data.tanggalLahir as string),
-            alamat: data.alamat || '',
+            // Construct nested Alamat object
+            alamat: {
+                detail: (typeof data.alamat === 'string' ? data.alamat : '') || '',
+                desaKelurahan: (data as any)['desaKelurahan'] || '',
+                kecamatan: (data as any)['kecamatan'] || '',
+                kabupatenKota: (data as any)['kabupatenKota'] || '',
+                provinsi: (data as any)['provinsi'] || '',
+                kodePos: (data as any)['kodePos'] || '',
+            },
             namaWali: data.namaWali || '',
             nomorHpWali: data.nomorHpWali || '',
             jenjangId: parseInt(String(data.jenjangId)) || 0,
             asalSekolah: data.asalSekolah || '',
             tanggalDaftar: normalizeDate(data.tanggalDaftar as string) || new Date().toISOString(),
+            // Ensure tanggalMasuk is set (Required by Santri type inheritance)
+            tanggalMasuk: normalizeDate(data.tanggalDaftar as string) || new Date().toISOString(),
             status: 'Baru', // Default status for imported data
             catatan: data.catatan || '',
             jalurPendaftaran: (data.jalurPendaftaran as any) || 'Reguler',
@@ -321,13 +341,6 @@ export const parsePendaftarCsv = (csvText: string): Omit<Pendaftar, 'id'>[] => {
             
             // Default filler for required fields not in simple CSV
             kewarganegaraan: 'WNI',
-            
-            // Optional extended fields if CSV has them (using loose matching)
-            desaKelurahan: (data as any)['desaKelurahan'] || '',
-            kecamatan: (data as any)['kecamatan'] || '',
-            kabupatenKota: (data as any)['kabupatenKota'] || '',
-            provinsi: (data as any)['provinsi'] || '',
-            kodePos: (data as any)['kodePos'] || '',
             
             // Fix: Added missing required fields for Pendaftar interface
             namaAyah: (data as any)['namaAyah'] || '',

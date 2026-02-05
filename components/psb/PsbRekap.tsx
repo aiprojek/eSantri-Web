@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
@@ -136,21 +134,29 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     namaLengkap: item.namaLengkap,
                     nisn: item.nisn || '',
                     nik: item.nik || '',
+                    nis: '',
+                    jenisSantri: 'Mondok - Baru',
+                    kelasId: 0,
+                    rombelId: 0,
                     jenisKelamin: item.jenisKelamin === 'Perempuan' ? 'Perempuan' : 'Laki-laki',
                     tempatLahir: item.tempatLahir || '',
                     tanggalLahir: item.tanggalLahir || '',
-                    alamat: item.alamat || '',
-                    desaKelurahan: item.desaKelurahan || '',
-                    kecamatan: item.kecamatan || '',
-                    kabupatenKota: item.kabupatenKota || '',
-                    provinsi: item.provinsi || '',
-                    kodePos: item.kodePos || '',
+                    alamat: {
+                        detail: item.alamat || '',
+                        desaKelurahan: item.desaKelurahan || '',
+                        kecamatan: item.kecamatan || '',
+                        kabupatenKota: item.kabupatenKota || '',
+                        provinsi: item.provinsi || '',
+                        kodePos: item.kodePos || '',
+                    },
                     
                     namaWali: item.namaWali || '',
                     nomorHpWali: item.nomorHpWali || '',
                     jenjangId: parseInt(item.jenjangId) || settings.psbConfig.targetJenjangId || 0,
                     asalSekolah: item.asalSekolah || '',
                     tanggalDaftar: item.tanggalDaftar || item.Timestamp || new Date().toISOString(),
+                    // Fix: Add missing tanggalMasuk required by Pendaftar type (from Santri)
+                    tanggalMasuk: item.tanggalDaftar || item.Timestamp || new Date().toISOString(),
                     status: 'Baru',
                     kewarganegaraan: 'WNI',
                     gelombang: settings.psbConfig.activeGelombang,
@@ -237,6 +243,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             ...data,
             jenjangId: parseInt(data.jenjangId),
             tanggalDaftar: data.tanggalDaftar || new Date().toISOString(),
+            // Fix: Add missing tanggalMasuk required by Pendaftar type (from Santri)
+            tanggalMasuk: data.tanggalDaftar || new Date().toISOString(),
             status: 'Baru',
             kewarganegaraan: data.kewarganegaraan || 'WNI',
             gelombang: settings.psbConfig.activeGelombang
@@ -257,6 +265,10 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
     const handleAccept = (pendaftar: Pendaftar) => {
         if (!canWrite) return;
+
+        // Parse customData to check for hubunganWali or other extra fields
+        const customData = pendaftar.customData ? JSON.parse(pendaftar.customData) : {};
+
         showConfirmation('Terima Sebagai Santri?', `Pindahkan ${pendaftar.namaLengkap} ke Database Santri Aktif? Data akan disalin dan status pendaftar akan berubah menjadi "Diterima".`, async () => {
             
             // Initial Status History Entry
@@ -284,12 +296,12 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 
                 // Address Mapping
                 alamat: { 
-                    detail: pendaftar.alamat, 
-                    desaKelurahan: pendaftar.desaKelurahan, 
-                    kecamatan: pendaftar.kecamatan, 
-                    kabupatenKota: pendaftar.kabupatenKota, 
-                    provinsi: pendaftar.provinsi, 
-                    kodePos: pendaftar.kodePos 
+                    detail: pendaftar.alamat.detail, 
+                    desaKelurahan: pendaftar.alamat.desaKelurahan, 
+                    kecamatan: pendaftar.alamat.kecamatan, 
+                    kabupatenKota: pendaftar.alamat.kabupatenKota, 
+                    provinsi: pendaftar.alamat.provinsi, 
+                    kodePos: pendaftar.alamat.kodePos 
                 },
 
                 // Parent Data Mapping
@@ -311,7 +323,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
                 namaWali: pendaftar.namaWali,
                 teleponWali: pendaftar.nomorHpWali,
-                statusWali: pendaftar.hubunganWali,
+                statusWali: pendaftar.statusWali || customData.hubunganWali, // Fix: Check customData for hubunganWali if statusWali is empty
                 statusHidupWali: pendaftar.statusHidupWali,
                 pekerjaanWali: pendaftar.pekerjaanWali,
                 pendidikanWali: pendaftar.pendidikanWali,
@@ -363,6 +375,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             ...d,
             status: d.status || 'Baru',
             tanggalDaftar: d.tanggalDaftar || new Date().toISOString(),
+            // Fix: Add missing tanggalMasuk required by Pendaftar type (from Santri)
+            tanggalMasuk: d.tanggalDaftar || new Date().toISOString(),
             jalurPendaftaran: d.jalurPendaftaran || 'Reguler'
         } as Pendaftar));
         

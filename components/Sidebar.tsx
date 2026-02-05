@@ -69,7 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           title: "Administrasi & Umum",
           key: "administrasi",
           items: [
-              { page: Page.BukuTamu, icon: 'bi-person-rolodex', show: canAccess('bukutamu'), label: 'Buku Tamu' }, // NEW
+              { page: Page.BukuTamu, icon: 'bi-person-rolodex', show: canAccess('bukutamu'), label: 'Buku Tamu' },
               { page: Page.PSB, icon: 'bi-person-plus-fill', show: canAccess('psb') },
               { page: Page.Surat, icon: 'bi-envelope-paper-fill', show: canAccess('surat') },
               { page: Page.Laporan, icon: 'bi-printer-fill', show: canAccess('laporan') },
@@ -91,6 +91,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           items: [
               { page: Page.Keuangan, icon: 'bi-cash-coin', show: canAccess('keuangan') },
               { page: Page.BukuKas, icon: 'bi-journal-album', show: canAccess('bukukas') },
+              { page: Page.Koperasi, icon: 'bi-shop', show: canAccess('koperasi'), label: 'Koperasi / Mart' }, // NEW
               { page: Page.Sarpras, icon: 'bi-box-seam-fill', show: canAccess('sarpras') },
           ]
       },
@@ -267,7 +268,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
         </div>
       </div>
     </aside>
-
+    {/* ... (Modal code remains same) ... */}
     {showSyncOptions && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex justify-center items-center p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden animate-fade-in-down">

@@ -6,25 +6,34 @@ import { TabRilis, latestVersion, latestUpdateDate } from './tentang/TabRilis';
 import { TabLisensi } from './tentang/TabLisensi';
 import { TabKontak } from './tentang/TabKontak';
 import { TabFaq } from './tentang/TabFaq';
+import { TabLayanan } from './tentang/TabLayanan';
 
 const TabButton: React.FC<{
-    tabId: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi';
+    tabId: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan';
     label: string;
     icon: string;
     isActive: boolean;
-    onClick: (id: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi') => void;
-}> = ({ tabId, label, icon, isActive, onClick }) => (
+    onClick: (id: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan') => void;
+    isSpecial?: boolean;
+}> = ({ tabId, label, icon, isActive, onClick, isSpecial }) => (
     <button
         onClick={() => onClick(tabId)}
-        className={`flex items-center gap-2 py-3 px-4 text-center font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 ${isActive ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+        className={`flex items-center gap-2 py-3 px-4 text-center font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 ${
+            isActive 
+                ? 'border-teal-600 text-teal-600' 
+                : isSpecial 
+                    ? 'border-transparent text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+        }`}
     >
-        <i className={`bi ${icon}`}></i>
+        <i className={`bi ${icon} ${isSpecial ? 'text-lg' : ''}`}></i>
         <span>{label}</span>
+        {isSpecial && <span className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1">PRO</span>}
     </button>
 );
 
 const Tentang: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi'>('tentang');
+    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan'>('tentang');
 
     return (
         <div>
@@ -41,6 +50,7 @@ const Tentang: React.FC = () => {
                 <div className="border-b border-gray-200">
                     <nav className="flex -mb-px overflow-x-auto">
                         <TabButton tabId="tentang" label="Tentang Aplikasi" icon="bi-info-circle" isActive={activeTab === 'tentang'} onClick={setActiveTab} />
+                        <TabButton tabId="layanan" label="Layanan Premium" icon="bi-stars" isActive={activeTab === 'layanan'} onClick={setActiveTab} isSpecial={true} />
                         <TabButton tabId="panduan" label="Panduan Pengguna" icon="bi-book-half" isActive={activeTab === 'panduan'} onClick={setActiveTab} />
                         <TabButton tabId="faq" label="FAQ / Tanya Jawab" icon="bi-question-circle" isActive={activeTab === 'faq'} onClick={setActiveTab} />
                         <TabButton tabId="rilis" label="Catatan Rilis" icon="bi-clock-history" isActive={activeTab === 'rilis'} onClick={setActiveTab} />
@@ -51,6 +61,7 @@ const Tentang: React.FC = () => {
 
                 <div className="mt-6">
                     {activeTab === 'tentang' && <TabTentang />}
+                    {activeTab === 'layanan' && <TabLayanan />}
                     {activeTab === 'panduan' && <TabPanduan />}
                     {activeTab === 'faq' && <TabFaq />}
                     {activeTab === 'rilis' && <TabRilis />}

@@ -64,11 +64,11 @@ export const StrukPreview: React.FC<{ transaksi?: TransaksiKoperasi, items?: Car
                 <>
                     <div className="flex justify-between mt-1">
                         <span>{transaksi.metodePembayaran}</span>
-                        <span>{formatRupiah(transaksi.bayar)}</span>
+                        <span>{formatRupiah(transaksi.bayar || 0)}</span>
                     </div>
                     <div className="flex justify-between mt-1">
                         <span>Kembali</span>
-                        <span>{formatRupiah(transaksi.kembali)}</span>
+                        <span>{formatRupiah(transaksi.kembali || 0)}</span>
                     </div>
                 </>
             )}

@@ -13,7 +13,7 @@ import WelcomeModal from './components/WelcomeModal';
 import UpdateNotification from './components/UpdateNotification';
 import { BackupReminderModal } from './components/BackupReminderModal';
 import { LoginScreen } from './components/Login'; 
-import { Page, UserPermissions } from './types';
+import { Page, UserPermissions, SantriFilters } from './types';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingFallback } from './components/common/LoadingFallback';
 
@@ -241,9 +241,9 @@ const AppContent: React.FC = () => {
         setCurrentPage(Page.Tentang);
     };
 
-    const handleNavigate = (page: Page, filters = {}) => {
+    const handleNavigate = (page: Page, filters: Partial<SantriFilters> = {}) => {
         if (Object.keys(filters).length > 0) {
-            setSantriFilters(prev => ({ ...prev, ...filters }));
+            setSantriFilters((prev: SantriFilters) => ({ ...prev, ...filters }));
         }
         setCurrentPage(page);
     };

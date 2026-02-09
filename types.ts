@@ -170,6 +170,9 @@ export interface Santri {
     berkebutuhanKhusus?: string;
     riwayatPenyakit?: string;
     hobi?: string[];
+    tinggiBadan?: number;
+    beratBadan?: number;
+    jarakKePondok?: string;
     
     jenisSantri: string; // Mondok - Baru etc.
     statusKeluarga?: string;

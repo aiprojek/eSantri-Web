@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect } from 'react';
 import { Pendaftar, Alamat } from '../../../types';
 import { useAppContext } from '../../../AppContext';
@@ -225,4 +222,32 @@ export const BulkPendaftarEditor: React.FC<BulkPendaftarEditorProps> = ({ isOpen
 
                                         <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.namaAyah} onChange={e => updateRow(row.tempId, 'namaAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                         <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.nikAyah} onChange={e => updateRow(row.tempId, 'nikAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                        <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.pekerja
+                                        <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.pekerjaanAyah} onChange={e => updateRow(row.tempId, 'pekerjaanAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                        <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.teleponAyah} onChange={e => updateRow(row.tempId, 'teleponAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+
+                                        <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.namaIbu} onChange={e => updateRow(row.tempId, 'namaIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                        <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.nikIbu} onChange={e => updateRow(row.tempId, 'nikIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                        <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.pekerjaanIbu} onChange={e => updateRow(row.tempId, 'pekerjaanIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                        <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.teleponIbu} onChange={e => updateRow(row.tempId, 'teleponIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+
+                                        <td className="px-2 py-2 bg-gray-100/50"><input type="text" value={row.namaWali} onChange={e => updateRow(row.tempId, 'namaWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                        <td className="px-2 py-2 bg-gray-100/50"><input type="text" value={row.nomorHpWali} onChange={e => updateRow(row.tempId, 'nomorHpWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+
+                                        <td className="px-2 py-2 text-center border-l">
+                                            <button onClick={() => handleRemoveRow(row.tempId)} className="text-red-500 hover:text-red-700 p-1"><i className="bi bi-x-lg"></i></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="p-4 bg-gray-50 border-t sticky bottom-0 left-0 right-0">
+                        <button onClick={handleAddRow} className="text-teal-600 font-medium text-sm hover:text-teal-800 flex items-center gap-2">
+                            <i className="bi bi-plus-circle-fill"></i> Tambah Baris
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};

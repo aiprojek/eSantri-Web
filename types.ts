@@ -1030,3 +1030,45 @@ export enum ReportType {
   LembarRapor = 'LembarRapor',
   RaporLengkap = 'RaporLengkap',
 }
+
+// --- NEW GLOBAL STATE TYPES ---
+
+export interface ToastData {
+    id: number;
+    message: string;
+    type: 'success' | 'error' | 'info';
+}
+
+export interface ConfirmationState {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+    confirmText?: string;
+    confirmColor?: string;
+}
+
+export interface AlertState {
+    isOpen: boolean;
+    title: string;
+    message: string;
+}
+
+export interface BackupModalState {
+    isOpen: boolean;
+    reason: 'periodic' | 'action';
+}
+
+export interface SantriFilters {
+    search: string;
+    jenjang: string;
+    kelas: string;
+    rombel: string;
+    status: string;
+    gender: string;
+    provinsi: string;
+    kabupatenKota: string;
+    kecamatan: string;
+}
+
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';

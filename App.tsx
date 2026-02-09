@@ -3,6 +3,10 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { AppProvider, useAppContext, ToastData } from './AppContext';
 import { SantriProvider } from './contexts/SantriContext';
 import { FinanceProvider } from './contexts/FinanceContext';
+import { UIProvider } from './contexts/UIContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { SettingsProvider } from './contexts/SettingsContext';
+
 import Sidebar from './components/Sidebar';
 import ConfirmModal from './components/ConfirmModal';
 import WelcomeModal from './components/WelcomeModal';
@@ -34,13 +38,12 @@ const Perpustakaan = React.lazy(() => import('./components/Perpustakaan'));
 const Kesehatan = React.lazy(() => import('./components/Kesehatan')); 
 const BK = React.lazy(() => import('./components/BK'));
 const BukuTamu = React.lazy(() => import('./components/BukuTamu')); 
-const Koperasi = React.lazy(() => import('./components/Koperasi')); // NEW
+const Koperasi = React.lazy(() => import('./components/Koperasi')); 
 
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
 const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
 
 // --- Alert Modal Component ---
-// ... (AlertModal implementation) ...
 interface AlertModalProps {
   isOpen: boolean;
   title: string;
@@ -70,7 +73,6 @@ const AlertModal: React.FC<AlertModalProps> = ({ isOpen, title, message, onClose
     </div>
   );
 };
-
 
 // --- Toast Components ---
 interface ToastProps extends ToastData {
@@ -151,7 +153,6 @@ const ToastContainer: React.FC<ToastContainerProps> = ({ toasts = [], onClose })
     </div>
   );
 };
-// --- End Toast Components ---
 
 // --- Access Denied Component ---
 const AccessDenied: React.FC = () => (
@@ -167,7 +168,6 @@ const AccessDenied: React.FC = () => (
 );
 
 const AppContent: React.FC = () => {
-    // ... (existing hooks and state)
     const { 
         isLoading, 
         toasts, 
@@ -303,7 +303,7 @@ const AppContent: React.FC = () => {
                             return checkAccess('keasramaan') ? <Asrama /> : <AccessDenied />;
                         case Page.BukuKas:
                             return checkAccess('bukukas') ? <BukuKas /> : <AccessDenied />;
-                        case Page.Koperasi: // NEW
+                        case Page.Koperasi: 
                             return checkAccess('koperasi') ? <Koperasi /> : <AccessDenied />;
                         case Page.Surat:
                             return checkAccess('surat') ? <SuratMenyurat /> : <AccessDenied />;
@@ -327,7 +327,6 @@ const AppContent: React.FC = () => {
         );
     };
     
-    // ... (rest of App component)
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -410,13 +409,19 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-        <AppProvider>
-          <SantriProvider>
-             <FinanceProvider>
-                 <AppContent />
-             </FinanceProvider>
-          </SantriProvider>
-        </AppProvider>
+        <UIProvider>
+            <SettingsProvider>
+                <AuthProvider>
+                    <SantriProvider>
+                        <FinanceProvider>
+                            <AppProvider>
+                                <AppContent />
+                            </AppProvider>
+                        </FinanceProvider>
+                    </SantriProvider>
+                </AuthProvider>
+            </SettingsProvider>
+        </UIProvider>
     </ErrorBoundary>
   );
 };

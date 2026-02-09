@@ -10,53 +10,51 @@ import { printToPdfNative } from '../../utils/pdfGenerator';
 import { StrukPreview, DEFAULT_KOP_SETTINGS } from './Shared';
 
 export const TransactionHistory: React.FC = () => {
-    const transactions = useLiveQuery(() => db.transaksiKoperasi.orderBy('tanggal').reverse().toArray(), []) || [];
     const { settings } = useAppContext();
     const [lastPrintedTrx, setLastPrintedTrx] = useState<TransaksiKoperasi | null>(null);
 
-    // Date Filter
+    // Date Filter - Default to Current Month
     const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
-    // Derived Stats (FOKUS OPERASIONAL)
-    const stats = useMemo(() => {
-        const filteredTrx = transactions.filter(t => {
-            const d = new Date(t.tanggal);
-            return d >= new Date(startDate) && d <= new Date(endDate + 'T23:59:59');
-        });
+    // OPTIMIZED QUERY: Hanya ambil data sesuai rentang tanggal dari DB
+    // Menghindari memuat ribuan transaksi lama yang tidak relevan
+    const transactions = useLiveQuery(() => {
+        // Tambahkan 'T23:59:59' untuk mencakup sampai akhir hari pada endDate
+        const endDateTime = endDate + 'T23:59:59.999';
         
-        const omset = filteredTrx.reduce((sum, t) => sum + (Number(t.totalBelanja) || 0), 0);
-        const count = filteredTrx.length;
+        return db.transaksiKoperasi
+            .where('tanggal')
+            .between(startDate, endDateTime, true, true)
+            .reverse() // Terbaru di atas
+            .toArray();
+    }, [startDate, endDate]) || [];
+
+    // Derived Stats (FOKUS OPERASIONAL)
+    // Karena data 'transactions' sudah terfilter dari DB, kita tinggal reduce saja
+    const stats = useMemo(() => {
+        const omset = transactions.reduce((sum, t) => sum + (Number(t.totalBelanja) || 0), 0);
+        const count = transactions.length;
         
         // Hitung total item terjual (qty)
-        const totalItemsSold = filteredTrx.reduce((sum, t) => {
+        const totalItemsSold = transactions.reduce((sum, t) => {
             return sum + t.items.reduce((itemSum, item) => itemSum + item.qty, 0);
         }, 0);
 
         return { omset, count, totalItemsSold };
-    }, [transactions, startDate, endDate]);
-
-    const filteredTransactions = useMemo(() => {
-         return transactions.filter(t => {
-            const d = new Date(t.tanggal);
-            return d >= new Date(startDate) && d <= new Date(endDate + 'T23:59:59');
-        });
-    }, [transactions, startDate, endDate]);
+    }, [transactions]);
 
     const handlePrintStruk = (trx: TransaksiKoperasi) => {
         setLastPrintedTrx(trx);
-        const kopSettings = localStorage.getItem('esantri_koperasi_settings') 
-            ? JSON.parse(localStorage.getItem('esantri_koperasi_settings')!) 
-            : DEFAULT_KOP_SETTINGS;
-            
+        // Fallback settings logic handled in StrukPreview or pass directly
         setTimeout(() => {
-             // In real scenario, use Web Bluetooth. Here fallback to PDF/Print Dialog for hidden div.
             printToPdfNative('history-receipt-area', `Struk_${trx.id}`);
         }, 300);
     };
 
      const handleExport = () => {
-         exportKoperasiToExcel(filteredTransactions);
+         // Export data yang sedang ditampilkan (sudah terfilter tanggal)
+         exportKoperasiToExcel(transactions);
     };
 
     return (
@@ -66,7 +64,7 @@ export const TransactionHistory: React.FC = () => {
                 <div className="bg-white p-4 rounded-xl border-l-4 border-green-500 shadow-sm">
                     <p className="text-gray-500 text-xs font-bold uppercase">Omset Penjualan</p>
                     <p className="text-2xl font-bold text-green-700">{formatRupiah(stats.omset)}</p>
-                    <p className="text-xs text-gray-400 mt-1">Total Uang Masuk</p>
+                    <p className="text-xs text-gray-400 mt-1">Total Uang Masuk (Periode Ini)</p>
                 </div>
                 <div className="bg-white p-4 rounded-xl border-l-4 border-blue-500 shadow-sm">
                     <p className="text-gray-500 text-xs font-bold uppercase">Volume Transaksi</p>
@@ -83,10 +81,11 @@ export const TransactionHistory: React.FC = () => {
             {/* FILTER & LIST */}
             <div className="bg-white p-6 rounded-lg shadow-md flex-grow flex flex-col overflow-hidden">
                 <div className="flex flex-col md:flex-row justify-between items-center mb-4 shrink-0 gap-3">
-                    <div className="flex gap-2 items-center">
-                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border rounded p-2 text-sm" />
-                        <span>s.d.</span>
-                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border rounded p-2 text-sm" />
+                    <div className="flex gap-2 items-center bg-gray-50 p-2 rounded border">
+                        <span className="text-xs font-bold text-gray-500 uppercase mr-2">Filter Periode:</span>
+                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border rounded p-1.5 text-sm" />
+                        <span className="text-gray-400">-</span>
+                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border rounded p-1.5 text-sm" />
                     </div>
                     <button onClick={handleExport} className="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700 flex items-center gap-2">
                         <i className="bi bi-file-earmark-spreadsheet"></i> Export Excel
@@ -106,7 +105,7 @@ export const TransactionHistory: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {filteredTransactions.map(t => (
+                            {transactions.map(t => (
                                 <tr key={t.id} className="hover:bg-gray-50">
                                     <td className="p-3 whitespace-nowrap text-gray-500">{new Date(t.tanggal).toLocaleString('id-ID')}</td>
                                     <td className="p-3 font-medium">{t.namaPembeli} <span className="text-xs text-gray-400">({t.tipePembeli})</span></td>
@@ -120,7 +119,7 @@ export const TransactionHistory: React.FC = () => {
                                     </td>
                                 </tr>
                             ))}
-                            {filteredTransactions.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-gray-400">Tidak ada transaksi pada periode ini.</td></tr>}
+                            {transactions.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-gray-400">Tidak ada transaksi pada periode ini.</td></tr>}
                         </tbody>
                     </table>
                 </div>

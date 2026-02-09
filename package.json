@@ -19,7 +19,9 @@
     "html2canvas": "^1.4.1",
     "webdav": "^5.7.1",
     "bootstrap-icons": "^1.11.3",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "date-fns": "^3.3.1",
+    "react-virtuoso": "^4.7.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

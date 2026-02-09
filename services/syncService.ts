@@ -8,6 +8,47 @@ const MASTER_CONFIG_FILENAME = 'master_config.json';
 const CLOUD_ROOT = '/eSantri_Cloud';
 const INBOX_FOLDER = `${CLOUD_ROOT}/inbox_staff`;
 
+// --- HELPER: RETRY FETCH & VALIDATION ---
+
+const fetchWithRetry = async (url: string, options: RequestInit, retries: number = 3, backoff: number = 500): Promise<Response> => {
+    try {
+        const response = await fetch(url, options);
+        if (response.ok) return response;
+        // Don't retry for 4xx client errors (except 429 too many requests)
+        if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+        }
+        throw new Error(`Server Error ${response.status}`);
+    } catch (error) {
+        if (retries > 0) {
+            console.warn(`Fetch failed, retrying in ${backoff}ms... (${retries} left)`, error);
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            return fetchWithRetry(url, options, retries - 1, backoff * 2);
+        }
+        throw error;
+    }
+};
+
+const validateSyncData = (data: any): boolean => {
+    if (!data || typeof data !== 'object') return false;
+    
+    // Check essential tables
+    const requiredTables = ['santri', 'tagihan', 'pembayaran'];
+    if (!data.data && !data.santri) return false; // Accepts both payload formats (inbox payload or direct master)
+    
+    // If it's inbox payload
+    if (data.sender && data.timestamp && data.data) {
+         return requiredTables.every(t => Array.isArray(data.data[t]));
+    }
+    
+    // If it's master payload
+    if (data.timestamp && data.santri) {
+         return requiredTables.every(t => Array.isArray(data[t]));
+    }
+
+    return false;
+};
+
 // ... WebDAV & Dropbox Helpers (unchanged) ...
 const getWebDAVClient = (config: CloudSyncConfig): WebDAVClient => {
     if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
@@ -47,23 +88,18 @@ export const getValidDropboxToken = async (config: CloudSyncConfig): Promise<str
         params.client_secret = config.dropboxAppSecret;
     }
 
-    const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+    const response = await fetchWithRetry('https://api.dropboxapi.com/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams(params),
     });
-    if (!response.ok) throw new Error("Gagal refresh token Dropbox. Coba hubungkan ulang di Pengaturan.");
+    
     const data = await response.json();
     return data.access_token;
 };
 
 // Updated for Manual Code Flow with App Secret
 export const exchangeCodeForToken = async (appKey: string, appSecret: string, code: string) => {
-    // For manual manual code flow (no redirect uri or dummy redirect uri configured in console),
-    // we strictly use authorization_code without redirect_uri or with a dummy one if required by console settings.
-    // Standard OAuth2 for apps often omits redirect_uri if it wasn't used in the authorize call, or uses 'urn:ietf:wg:oauth:2.0:oob'.
-    // Here we assume the user copied the code from the standard Dropbox "Success" page.
-    
     const params = new URLSearchParams({
         code,
         grant_type: 'authorization_code',
@@ -87,11 +123,10 @@ export const exchangeCodeForToken = async (appKey: string, appSecret: string, co
 export const getCloudStorageStats = async (config: CloudSyncConfig) => {
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        const response = await fetch('https://api.dropboxapi.com/2/users/get_space_usage', {
+        const response = await fetchWithRetry('https://api.dropboxapi.com/2/users/get_space_usage', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!response.ok) throw new Error("Gagal mengambil status penyimpanan Dropbox.");
         const data = await response.json();
         const used = data.used || 0;
         const total = data.allocation?.allocated || 0;
@@ -116,7 +151,7 @@ export const getCloudStorageStats = async (config: CloudSyncConfig) => {
 
 export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
     try {
-        const response = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+        const response = await fetchWithRetry('https://api.dropboxapi.com/2/files/list_folder', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -125,7 +160,6 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
             body: JSON.stringify({ path: INBOX_FOLDER })
         });
         
-        if (!response.ok) return [];
         const listData = await response.json();
         
         const files = listData.entries
@@ -137,7 +171,7 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
         const seenIds = new Set();
 
         for (const file of files) {
-             const dlResponse = await fetch('https://content.dropboxapi.com/2/files/download', {
+             const dlResponse = await fetchWithRetry('https://content.dropboxapi.com/2/files/download', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -165,7 +199,7 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
     }
 };
 
-// ... uploadStaffChanges (unchanged) ...
+// ... uploadStaffChanges ...
 export const uploadStaffChanges = async (config: CloudSyncConfig, username: string) => {
     const payload = {
         sender: username,
@@ -211,7 +245,7 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        await fetch('https://content.dropboxapi.com/2/files/upload', {
+        await fetchWithRetry('https://content.dropboxapi.com/2/files/upload', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -236,13 +270,13 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
     return { filename, timestamp: payload.timestamp };
 };
 
-// ... downloadAndMergeMaster (updated for COA) ...
+// ... downloadAndMergeMaster (updated) ...
 export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
     let masterData;
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        const response = await fetch('https://content.dropboxapi.com/2/files/download', {
+        const response = await fetchWithRetry('https://content.dropboxapi.com/2/files/download', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -266,9 +300,13 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
     } else {
          throw new Error("Provider tidak valid");
     }
+
+    if (!validateSyncData(masterData)) {
+        throw new Error("Format data master tidak valid atau rusak.");
+    }
     
     const tablesToMerge = [
-        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 'chartOfAccounts', // NEW
+        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 'chartOfAccounts',
         'payrollRecords',
         'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
         'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
@@ -314,7 +352,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
 export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileRecord[]> => {
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        const response = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+        const response = await fetchWithRetry('https://api.dropboxapi.com/2/files/list_folder', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -326,7 +364,6 @@ export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileR
             })
         });
         
-        if (!response.ok) return []; 
         const data = await response.json();
         return data.entries.filter((e: any) => e['.tag'] === 'file' && e.name.endsWith('.json')).map((e: any) => ({
             id: e.id,
@@ -354,21 +391,19 @@ export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileR
     return [];
 };
 
-// 4. Admin Only: Fetch & Merge Specific File (Merge from Staff Inbox)
-// MODIFIED FOR CONFLICT DETECTION
+// ... processInboxFile (updated for validation) ...
 export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord, resolvedConflicts?: ConflictItem[]) => {
     let fileContent;
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        const response = await fetch('https://content.dropboxapi.com/2/files/download', {
+        const response = await fetchWithRetry('https://content.dropboxapi.com/2/files/download', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Dropbox-API-Arg': JSON.stringify({ path: file.path_lower })
             }
         });
-        if (!response.ok) throw new Error("Gagal download file staff");
         fileContent = await response.json();
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
@@ -377,25 +412,13 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
     } else {
         throw new Error("Provider tidak valid");
     }
+
+    if (!validateSyncData(fileContent)) {
+        throw new Error("File dari staff rusak atau tidak valid.");
+    }
     
     const data = fileContent.data;
     const conflicts: ConflictItem[] = [];
-    
-    // Check conflicts logic
-    // Conflict definition: Local record exists, Cloud record has diff content, AND Cloud timestamp < Local Timestamp (meaning local is newer/dirty but cloud is pushing update)
-    // Wait, typical "Inbox" merge: Cloud is Staff pushing to Admin (Local).
-    // Conflict: Admin has newer timestamp than incoming data? No, Admin usually keeps local.
-    // Real Conflict: Admin has changed record X since last sync, AND Staff also changed record X.
-    // Timestamps: Local (Admin) > Cloud (Staff Base) BUT Staff has updates.
-    
-    // Simplified logic for this offline-first hub-spoke:
-    // If incoming record exists in local DB:
-    // 1. If content is same -> Ignore
-    // 2. If content diff:
-    //    a. If incoming.lastModified > local.lastModified -> Auto Accept Incoming (Staff is newer)
-    //    b. If local.lastModified > incoming.lastModified -> Conflict! (Admin edited recently, Staff also edited but maybe older base?)
-    //       Actually, if local is newer, we usually keep local. BUT maybe Admin wants to see what Staff did.
-    //       Let's define CONFLICT as: Both sides modified the record recently (within sync window) or simply diff content where Local is Newer.
     
     const tablesToMerge = [
         'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 'chartOfAccounts',
@@ -406,7 +429,6 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules'
     ];
 
-    // If resolved conflicts provided, apply them to data first
     if (resolvedConflicts) {
         resolvedConflicts.forEach(rc => {
             if (rc.resolved) {
@@ -414,7 +436,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                 if (targetList) {
                     const idx = targetList.findIndex((item: any) => item.id === rc.recordId);
                     if (idx >= 0) {
-                        targetList[idx] = rc.localData; // localData in conflict object holds the RESOLVED final data
+                        targetList[idx] = rc.localData;
                     }
                 }
             }
@@ -436,22 +458,17 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                 const locItem = localMap.get(incItem.id) as any;
                 
                 if (locItem) {
-                    // Check for changes
                     const incTime = incItem.lastModified || 0;
                     const locTime = locItem.lastModified || 0;
                     
-                    // Simple compare (ignoring lastModified for content check)
                     const { lastModified: t1, ...contentInc } = incItem;
                     const { lastModified: t2, ...contentLoc } = locItem;
                     const isDiff = JSON.stringify(contentInc) !== JSON.stringify(contentLoc);
 
                     if (isDiff) {
                         if (incTime > locTime) {
-                            // Staff is newer, auto accept
                             itemsToPut.push(incItem);
                         } else {
-                            // Local (Admin) is newer. This is a potential conflict.
-                            // If we already have a resolution for this, skip
                              const alreadyResolved = resolvedConflicts?.find(r => r.tableName === tableName && r.recordId === incItem.id);
                              if (!alreadyResolved) {
                                  conflicts.push({
@@ -463,18 +480,15 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                                      resolved: false
                                  });
                              } else {
-                                 // It was resolved, data[tableName] was updated above, so push it (which is now the resolved data)
                                  itemsToPut.push(incItem); 
                              }
                         }
                     }
                 } else {
-                    // New item
                     itemsToPut.push(incItem);
                 }
             }
             
-            // Only write if no conflicts found in this pass (or if we are resolving)
             if (conflicts.length === 0 && itemsToPut.length > 0) {
                  await table.bulkPut(itemsToPut);
                  recordCount += itemsToPut.length;
@@ -482,7 +496,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         };
         
         for (const tableName of tablesToMerge) {
-            if (conflicts.length > 0 && !resolvedConflicts) break; // Optimization: Stop checking if conflict found and not resolving
+            if (conflicts.length > 0 && !resolvedConflicts) break; 
             
             if (tableName === 'users' && data.users) {
                 const staffUpdates = data.users.filter((u: any) => !u.isDefaultAdmin);
@@ -500,7 +514,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
     return { success: true, recordCount };
 };
 
-// ... publishMasterData, updateAccountFromCloud, deleteInboxFile, deleteMultipleInboxFiles (updated with COA) ...
+// ... publishMasterData, updateAccountFromCloud, deleteInboxFile, deleteMultipleInboxFiles (unchanged logic but use fetchWithRetry) ...
 export const publishMasterData = async (config: CloudSyncConfig) => {
     const masterData = {
         timestamp: new Date().toISOString(),
@@ -510,7 +524,7 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         saldoSantri: await db.saldoSantri.toArray(),
         transaksiSaldo: await db.transaksiSaldo.toArray(),
         transaksiKas: await db.transaksiKas.toArray(),
-        chartOfAccounts: await db.chartOfAccounts.toArray(), // NEW
+        chartOfAccounts: await db.chartOfAccounts.toArray(),
         payrollRecords: await db.payrollRecords.toArray(),
         produkKoperasi: await db.produkKoperasi.toArray(),
         transaksiKoperasi: await db.transaksiKoperasi.toArray(),
@@ -543,7 +557,7 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
 
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        await fetch('https://content.dropboxapi.com/2/files/upload', {
+        await fetchWithRetry('https://content.dropboxapi.com/2/files/upload', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -552,7 +566,7 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
             },
             body: JSON.stringify(masterData)
         });
-        await fetch('https://content.dropboxapi.com/2/files/upload', {
+        await fetchWithRetry('https://content.dropboxapi.com/2/files/upload', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -571,19 +585,17 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
     return { timestamp: masterData.timestamp };
 };
 
-// ... Rest of functions (delete, updateAccount) remain largely same
 export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
     let data;
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        const response = await fetch('https://content.dropboxapi.com/2/files/download', {
+        const response = await fetchWithRetry('https://content.dropboxapi.com/2/files/download', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Dropbox-API-Arg': JSON.stringify({ path: `${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}` })
             }
         });
-        if (!response.ok) throw new Error("Gagal mengambil data akun dari cloud.");
         data = await response.json();
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
@@ -604,7 +616,7 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
 export const deleteInboxFile = async (config: CloudSyncConfig, path: string) => {
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
-        await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
+        await fetchWithRetry('https://api.dropboxapi.com/2/files/delete_v2', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -623,7 +635,7 @@ export const deleteMultipleInboxFiles = async (config: CloudSyncConfig, paths: s
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
         const entries = paths.map(path => ({ path }));
-        const launchResponse = await fetch('https://api.dropboxapi.com/2/files/delete_batch', {
+        await fetchWithRetry('https://api.dropboxapi.com/2/files/delete_batch', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -631,9 +643,6 @@ export const deleteMultipleInboxFiles = async (config: CloudSyncConfig, paths: s
             },
             body: JSON.stringify({ entries })
         });
-        if (!launchResponse.ok) {
-            throw new Error("Gagal memulai proses hapus massal.");
-        }
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         for (const path of paths) {

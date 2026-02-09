@@ -1,4 +1,7 @@
 
+import { format, parseISO, isValid } from 'date-fns';
+import { id } from 'date-fns/locale';
+
 export const formatRupiah = (number: number) => {
     return new Intl.NumberFormat('id-ID', {
         style: 'currency',
@@ -11,32 +14,25 @@ export const formatRupiah = (number: number) => {
 export const formatDate = (dateString?: string | Date) => {
     if (!dateString) return '';
     try {
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return '';
-        return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        const date = typeof dateString === 'string' ? parseISO(dateString) : dateString;
+        if (!isValid(date)) return '';
+        return format(date, 'd MMMM yyyy', { locale: id });
     } catch (e) { return ''; }
 };
 
 export const formatDateTime = (dateString?: string | Date) => {
     if (!dateString) return '';
     try {
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return '';
-        return date.toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const date = typeof dateString === 'string' ? parseISO(dateString) : dateString;
+        if (!isValid(date)) return '';
+        return format(date, 'd MMM yyyy, HH:mm', { locale: id });
     } catch (e) { return ''; }
 };
 
 // Mendapatkan detail Hijriah dari tanggal Masehi dengan opsi Adjustment (Koreksi)
+// Note: date-fns tidak memiliki built-in Hijri, kita tetap gunakan Intl.DateTimeFormat
 export const getHijriDate = (date: Date, adjustment: number = 0) => {
     try {
-        // Adjust tanggal Masehi SEBELUM konversi
-        // Jika adjustment = -1, kita mundur 1 hari. 
-        // Logika: Jika 1 Muharram harusnya besok, tapi user set +1, maka hari ini dianggap 2 Muharram? 
-        // Standar aplikasi Muslim: Jika "Official" lebih lambat 1 hari, adjustment = -1.
-        // Artinya input date dikurangi 1 hari? TIDAK. 
-        // Adjustment +1 artinya Tanggal Hijriah "Maju" 1 hari. 
-        // Jadi kita menambah hari ke tanggal Masehi yang diumpankan ke converter.
-        
         const adjustedDate = new Date(date);
         adjustedDate.setDate(adjustedDate.getDate() + adjustment);
 

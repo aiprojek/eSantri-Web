@@ -1,198 +1,79 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
-import { PondokSettings, SuratTemplate, ArsipSurat, AuditLog, User } from './types';
-import { db, PondokSettingsWithId } from './db';
-import { initialSettings, initialSantri } from './data/mock';
+import { SuratTemplate, ArsipSurat, AuditLog, PondokSettings } from './types';
+import { db } from './db';
 import { uploadStaffChanges, downloadAndMergeMaster, publishMasterData } from './services/syncService';
-import { ADMIN_PERMISSIONS } from './services/authService';
+import { initialSantri } from './data/mock';
 
-// --- Types ---
-export interface ToastData {
-  id: number;
-  message: string;
-  type: 'success' | 'error' | 'info';
-}
+// Import New Contexts
+import { useUIContext } from './contexts/UIContext';
+import { useAuthContext } from './contexts/AuthContext';
+import { useSettingsContext } from './contexts/SettingsContext';
+import { useSantriContext } from './contexts/SantriContext';
 
-export interface ConfirmationState {
-  isOpen: boolean;
-  title: string;
-  message: string;
-  onConfirm: () => void | Promise<void>;
-  confirmText?: string;
-  confirmColor?: string;
-}
+// Legacy Types Re-export (for compatibility)
+export type { ToastData, ConfirmationState, AlertState, SyncStatus } from './types';
+import { SyncStatus } from './types'; // Need specific import for value
 
-export interface AlertState {
-    isOpen: boolean;
-    title: string;
-    message: string;
-}
-
-interface SantriFilters {
-  search: string;
-  jenjang: string;
-  kelas: string;
-  rombel: string;
-  status: string;
-  gender: string;
-  provinsi: string;
-  kabupatenKota: string;
-  kecamatan: string;
-}
-
-interface BackupModalState {
-    isOpen: boolean;
-    reason: 'periodic' | 'action';
-}
-
-export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
-
-// This Context now focuses on CORE functionality: Settings, Auth, UI, Sync
 interface AppContextType {
+  // From SettingsContext
   isLoading: boolean;
-  settings: PondokSettingsWithId;
+  settings: PondokSettings;
+  backupModal: any;
+  onSaveSettings: (newSettings: PondokSettings) => Promise<void>;
+  downloadBackup: () => Promise<void>;
+  triggerBackupCheck: (forceAction?: boolean) => void;
+  closeBackupModal: () => void;
   
-  // These are light enough to keep in Core or move to a LettersContext, but we'll keep here for simplicity of migration
-  suratTemplates: SuratTemplate[];
-  arsipSuratList: ArsipSurat[];
-  
-  // UI State
-  santriFilters: SantriFilters;
-  setSantriFilters: React.Dispatch<React.SetStateAction<SantriFilters>>;
-  toasts: ToastData[];
-  confirmation: ConfirmationState;
-  alertModal: AlertState;
-  backupModal: BackupModalState;
-  
-  // Auth State
-  currentUser: User | null;
-  login: (user: User) => void;
+  // From AuthContext
+  currentUser: any;
+  login: (user: any) => void;
   logout: () => void;
 
-  // Sync State
-  syncStatus: SyncStatus;
+  // From UIContext
+  toasts: any[];
+  confirmation: any;
+  alertModal: any;
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  removeToast: (id: number) => void;
+  showAlert: (title: string, message: string) => void;
+  hideAlert: () => void;
+  showConfirmation: (title: string, message: string, onConfirm: () => void | Promise<void>, options?: any) => void;
+  hideConfirmation: () => void;
 
-  // Actions
-  onSaveSettings: (newSettings: PondokSettings) => Promise<void>;
+  // From SantriContext
+  santriFilters: any;
+  setSantriFilters: React.Dispatch<React.SetStateAction<any>>;
+
+  // Local/Legacy (Surat & Sync)
+  suratTemplates: SuratTemplate[];
+  arsipSuratList: ArsipSurat[];
+  syncStatus: SyncStatus;
+  
   onSaveSuratTemplate: (template: SuratTemplate) => Promise<void>;
   onDeleteSuratTemplate: (id: number) => Promise<void>;
   onSaveArsipSurat: (surat: Omit<ArsipSurat, 'id'>) => Promise<void>;
   onDeleteArsipSurat: (id: number) => Promise<void>;
   onDeleteSampleData: () => Promise<void>;
-  
-  downloadBackup: () => Promise<void>;
-  triggerBackupCheck: (forceAction?: boolean) => void;
-  closeBackupModal: () => void;
-  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
-  removeToast: (id: number) => void;
-  showAlert: (title: string, message: string) => void;
-  hideAlert: () => void;
-  showConfirmation: (
-    title: string,
-    message: string,
-    onConfirm: () => void | Promise<void>,
-    options?: { confirmText?: string; confirmColor?: string }
-  ) => void;
-  hideConfirmation: () => void;
   triggerManualSync: (action: 'up' | 'down' | 'admin_publish') => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const VIRTUAL_ADMIN: User = {
-    id: 0,
-    username: 'admin',
-    passwordHash: '',
-    fullName: 'Administrator Inti',
-    role: 'admin',
-    permissions: ADMIN_PERMISSIONS as any,
-    securityQuestion: '',
-    securityAnswerHash: '',
-};
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [isLoading, setIsLoading] = useState(true);
-    
-    // Core Data - Loaded via LiveQuery for reactivity
-    const settingsList = useLiveQuery(() => db.settings.toArray(), []) || [];
-    
-    // DATA MIGRATION LOGIC (SELF-HEALING)
-    // Ensures compatibility with older databases by deeply merging defaults
-    const settings = useMemo(() => {
-        const rawSettings = settingsList[0];
-        // If no settings at all, return initial defaults
-        if (!rawSettings) return initialSettings as PondokSettingsWithId;
-        
-        // If settings exist, merge them on top of defaults to fill any missing new fields
-        return {
-            ...initialSettings, // 1. Start with fresh defaults
-            ...rawSettings,     // 2. Overwrite with user data
-            
-            // 3. Force deep merge for nested config objects (Crucial for new features)
-            psbConfig: { 
-                ...initialSettings.psbConfig, 
-                ...(rawSettings.psbConfig || {}) 
-            },
-            cloudSyncConfig: { 
-                ...initialSettings.cloudSyncConfig, 
-                ...(rawSettings.cloudSyncConfig || {}) 
-            },
-            backupConfig: { 
-                ...initialSettings.backupConfig, 
-                ...(rawSettings.backupConfig || {}) 
-            },
-            nisSettings: { 
-                ...initialSettings.nisSettings, 
-                ...(rawSettings.nisSettings || {}),
-                // Deep merge array inside object if needed, but for jenjangConfig usually replace is safer or manual handle
-                // For safety, fallback to empty array if missing
-                jenjangConfig: rawSettings.nisSettings?.jenjangConfig || initialSettings.nisSettings.jenjangConfig
-            },
-            
-            // 4. Ensure arrays are never undefined
-            jenjang: rawSettings.jenjang || [],
-            kelas: rawSettings.kelas || [],
-            rombel: rawSettings.rombel || [],
-            tenagaPengajar: rawSettings.tenagaPengajar || [],
-            mataPelajaran: rawSettings.mataPelajaran || [],
-            biaya: rawSettings.biaya || [],
-            
-        } as PondokSettingsWithId;
-    }, [settingsList]);
-    
-    // Use filter because 'deleted' is not indexed
+    // Consume sub-contexts
+    const ui = useUIContext();
+    const auth = useAuthContext();
+    const sets = useSettingsContext();
+    const santriCtx = useSantriContext();
+
+    // Local State for Surat & Sync
     const suratTemplates = useLiveQuery(() => db.suratTemplates.filter((t: SuratTemplate) => !t.deleted).toArray(), []) || [];
     const arsipSuratList = useLiveQuery(() => db.arsipSurat.filter((a: ArsipSurat) => !a.deleted).toArray(), []) || [];
-    
-    // Auth State
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
-
-    // Sync Status State
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
-    const hasPendingChanges = useRef(false);
-
-    const [santriFilters, setSantriFilters] = useState<SantriFilters>({
-      search: '', jenjang: '', kelas: '', rombel: '', status: '', gender: '', provinsi: '', kabupatenKota: '', kecamatan: ''
-    });
-    const [toasts, setToasts] = useState<ToastData[]>([]);
-    const [confirmation, setConfirmation] = useState<ConfirmationState>({
-        isOpen: false, title: '', message: '', onConfirm: () => {},
-    });
-    const [alertModal, setAlertModal] = useState<AlertState>({ isOpen: false, title: '', message: '' });
-    const [backupModal, setBackupModal] = useState<BackupModalState>({ isOpen: false, reason: 'periodic' });
-
     const autoSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pullSyncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const hasCheckedBackupRef = useRef(false);
-
-    const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-        setToasts(prev => [...prev, { id: Date.now(), message, type }]);
-    }, []);
-
-    const removeToast = useCallback((id: number) => {
-        setToasts(prev => prev.filter(toast => toast.id !== id));
-    }, []);
 
     const generateUniqueId = (): number => {
         const timestamp = Date.now();
@@ -200,149 +81,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return parseInt(`${timestamp}${random}`.slice(0, 16)); 
     };
 
-    // Initial Data Check
-    useEffect(() => {
-        const checkInit = async () => {
-            const count = await db.settings.count();
-            if (count === 0 && localStorage.getItem('eSantriSampleDataDeleted') !== 'true') {
-                 await db.settings.put(initialSettings);
-                 await db.santri.bulkPut(initialSantri);
-            }
-            setIsLoading(false);
-        };
-        checkInit();
-    }, []);
+    // Helper Log
+    const logActivity = sets.logActivity;
 
-    // Sync Current User with Multi-User Mode
-    useEffect(() => {
-        if (!settings) return;
-        if (!settings.multiUserMode) {
-            setCurrentUser(VIRTUAL_ADMIN);
-        } else if (currentUser && currentUser.id === 0) {
-            setCurrentUser(null); // Logout virtual admin if switched to multi-user
-        }
-    }, [settings?.multiUserMode]);
+    const addTimestamp = (data: any) => ({ ...data, lastModified: Date.now() });
 
-    // Global Error Handler
+    // Sync Logic
     useEffect(() => {
-        const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-            const message = event.reason?.message || (typeof event.reason === 'string' ? event.reason : "Terjadi kesalahan yang tidak terduga.");
-            if (!message.includes('ResizeObserver')) {
-                 showToast(`Error: ${message}`, 'error');
-            }
-        };
-        window.addEventListener('unhandledrejection', handleUnhandledRejection);
-        return () => window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    }, [showToast]);
-
-    useEffect(() => {
-        if (settings.cloudSyncConfig?.autoSync && settings.cloudSyncConfig.provider !== 'none') {
+        if (sets.settings.cloudSyncConfig?.autoSync && sets.settings.cloudSyncConfig.provider !== 'none') {
             if (pullSyncIntervalRef.current) clearInterval(pullSyncIntervalRef.current);
             pullSyncIntervalRef.current = setInterval(() => {
                 triggerManualSync('down');
             }, 300000); 
         }
         return () => { if (pullSyncIntervalRef.current) clearInterval(pullSyncIntervalRef.current); }
-    }, [settings.cloudSyncConfig]);
-
-    const login = (user: User) => setCurrentUser(user);
-    const logout = () => setCurrentUser(null);
-
-    const logActivity = async (tableName: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', recordId: string, oldData?: any, newData?: any) => {
-        const username = currentUser?.username || 'System';
-        const log: AuditLog = {
-            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            table_name: tableName,
-            record_id: recordId,
-            operation,
-            old_data: oldData,
-            new_data: newData,
-            changed_by: username,
-            username: username,
-            created_at: new Date().toISOString()
-        };
-        await db.auditLogs.add(log);
-    };
+    }, [sets.settings.cloudSyncConfig]);
 
     const triggerAutoSync = useCallback(() => {
-        if (!settings.cloudSyncConfig?.autoSync || settings.cloudSyncConfig.provider === 'none') return;
-        if (currentUser?.role === 'admin' && settings.multiUserMode) return;
+        if (!sets.settings.cloudSyncConfig?.autoSync || sets.settings.cloudSyncConfig.provider === 'none') return;
+        if (auth.currentUser?.role === 'admin' && sets.settings.multiUserMode) return;
 
         setSyncStatus('syncing');
-        hasPendingChanges.current = true;
 
         if (autoSyncTimeoutRef.current) clearTimeout(autoSyncTimeoutRef.current);
 
         autoSyncTimeoutRef.current = setTimeout(async () => {
             try {
-                const username = currentUser?.username || 'user';
-                await uploadStaffChanges(settings.cloudSyncConfig, username);
+                const username = auth.currentUser?.username || 'user';
+                await uploadStaffChanges(sets.settings.cloudSyncConfig, username);
                 
-                // Update Last Sync
-                const id = settings.id;
+                const id = sets.settings.id;
                 await db.settings.update(id!, { 
-                    cloudSyncConfig: { ...settings.cloudSyncConfig, lastSync: new Date().toISOString() } 
+                    cloudSyncConfig: { ...sets.settings.cloudSyncConfig, lastSync: new Date().toISOString() } 
                 });
 
                 setSyncStatus('success');
-                hasPendingChanges.current = false;
                 setTimeout(() => setSyncStatus('idle'), 3000);
             } catch (error) {
                 setSyncStatus('error');
             }
         }, 5000); 
-    }, [settings, currentUser, showToast]);
+    }, [sets.settings, auth.currentUser]);
 
     const triggerManualSync = async (action: 'up' | 'down' | 'admin_publish') => {
-        const config = settings.cloudSyncConfig;
+        const config = sets.settings.cloudSyncConfig;
         if (!config || config.provider === 'none') return;
 
         setSyncStatus('syncing');
         try {
             if (action === 'admin_publish') {
-                if (currentUser?.role !== 'admin' && !currentUser?.permissions?.syncAdmin) {
+                if (auth.currentUser?.role !== 'admin' && !auth.currentUser?.permissions?.syncAdmin) {
                     throw new Error("Anda tidak memiliki izin untuk mempublikasikan master data.");
                 }
                 await publishMasterData(config);
-                showToast('Data Master berhasil dipublikasikan.', 'success');
+                ui.showToast('Data Master berhasil dipublikasikan.', 'success');
             } else if (action === 'up') {
-                const username = currentUser?.username || 'user';
+                const username = auth.currentUser?.username || 'user';
                 await uploadStaffChanges(config, username);
-                showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
-                hasPendingChanges.current = false;
+                ui.showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
             } else {
                 const result = await downloadAndMergeMaster(config);
                 if (result.status === 'merged') {
-                    showToast('Data terbaru dari Admin berhasil digabungkan.', 'success');
+                    ui.showToast('Data terbaru dari Admin berhasil digabungkan.', 'success');
                     setTimeout(() => window.location.reload(), 1500);
                 } else if (result.status === 'no_master') {
-                    showToast('Belum ada Master Data dari Admin di Cloud.', 'info');
+                    ui.showToast('Belum ada Master Data dari Admin di Cloud.', 'info');
                 }
             }
             setSyncStatus('success');
             setTimeout(() => setSyncStatus('idle'), 3000);
         } catch (e) {
             setSyncStatus('error');
-            showToast(`Gagal Sync: ${(e as Error).message}`, 'error');
+            ui.showToast(`Gagal Sync: ${(e as Error).message}`, 'error');
         }
     };
 
-    const addTimestamp = (data: any) => ({ ...data, lastModified: Date.now() });
+    // Surat Actions
+    const onSaveSuratTemplate = async (template: SuratTemplate) => { const withTs = addTimestamp(template); if (template.id) { await db.suratTemplates.put(withTs); await logActivity('suratTemplates', 'UPDATE', template.id.toString()); } else { const newId = generateUniqueId(); const newItem = { ...withTs, id: newId }; await db.suratTemplates.put(newItem); await logActivity('suratTemplates', 'INSERT', newId.toString()); } triggerAutoSync(); };
+    const onDeleteSuratTemplate = async (id: number) => { const item = suratTemplates.find(t => t.id === id); if(!item) return; const deletedItem = { ...item, deleted: true, lastModified: Date.now() }; await db.suratTemplates.put(deletedItem); await logActivity('suratTemplates', 'DELETE', id.toString()); triggerAutoSync(); };
+    const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => { const id = generateUniqueId(); const withTs = addTimestamp({ ...surat, id }); await db.arsipSurat.put(withTs as ArsipSurat); await logActivity('arsipSurat', 'INSERT', id.toString()); triggerAutoSync(); };
+    const onDeleteArsipSurat = async (id: number) => { const item = arsipSuratList.find(a => a.id === id); if(!item) return; const deletedItem = { ...item, deleted: true, lastModified: Date.now() }; await db.arsipSurat.put(deletedItem); await logActivity('arsipSurat', 'DELETE', id.toString()); triggerAutoSync(); };
 
-    const onSaveSettings = async (newSettings: PondokSettings) => {
-        const id = settings.id;
-        const settingsWithId = { ...newSettings, id, lastModified: Date.now() };
-        await db.settings.put(settingsWithId);
-        await logActivity('settings', 'UPDATE', id?.toString() || '1', null, newSettings);
-        triggerAutoSync();
-        
-        if (newSettings.multiUserMode === false) {
-            setCurrentUser(VIRTUAL_ADMIN);
-        } else if (newSettings.multiUserMode === true && !currentUser) {
-            setCurrentUser(null);
-        }
-    };
-
+    // Sample Data
     const onDeleteSampleData = async () => { 
         await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, async () => { 
             await db.santri.clear(); await db.tagihan.clear(); await db.pembayaran.clear(); 
@@ -360,96 +180,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await db.riwayatStok.clear();
             await db.keuanganKoperasi.clear();
             await db.pendingOrders.clear();
-            
-            // Note: We don't clear settings or users (except maybe generic staff?) usually to keep access
         }); 
         triggerAutoSync(); 
     };
 
-    const onSaveSuratTemplate = async (template: SuratTemplate) => { const withTs = addTimestamp(template); if (template.id) { await db.suratTemplates.put(withTs); await logActivity('suratTemplates', 'UPDATE', template.id.toString()); } else { const newId = generateUniqueId(); const newItem = { ...withTs, id: newId }; await db.suratTemplates.put(newItem); await logActivity('suratTemplates', 'INSERT', newId.toString()); } triggerAutoSync(); };
-    const onDeleteSuratTemplate = async (id: number) => { const item = suratTemplates.find(t => t.id === id); if(!item) return; const deletedItem = { ...item, deleted: true, lastModified: Date.now() }; await db.suratTemplates.put(deletedItem); await logActivity('suratTemplates', 'DELETE', id.toString()); triggerAutoSync(); };
-    const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => { const id = generateUniqueId(); const withTs = addTimestamp({ ...surat, id }); await db.arsipSurat.put(withTs as ArsipSurat); await logActivity('arsipSurat', 'INSERT', id.toString()); triggerAutoSync(); };
-    const onDeleteArsipSurat = async (id: number) => { const item = arsipSuratList.find(a => a.id === id); if(!item) return; const deletedItem = { ...item, deleted: true, lastModified: Date.now() }; await db.arsipSurat.put(deletedItem); await logActivity('arsipSurat', 'DELETE', id.toString()); triggerAutoSync(); };
-
-    const downloadBackup = async () => {
-        const data = {
-            settings: await db.settings.toArray(), 
-            santri: await db.santri.toArray(), 
-            tagihan: await db.tagihan.toArray(), 
-            pembayaran: await db.pembayaran.toArray(), 
-            saldoSantri: await db.saldoSantri.toArray(), 
-            transaksiSaldo: await db.transaksiSaldo.toArray(), 
-            transaksiKas: await db.transaksiKas.toArray(), 
-            suratTemplates: await db.suratTemplates.toArray(), 
-            arsipSurat: await db.arsipSurat.toArray(), 
-            pendaftar: await db.pendaftar.toArray(), 
-            auditLogs: await db.auditLogs.toArray(), 
-            users: await db.users.toArray(), 
-            raporRecords: await db.raporRecords.toArray(), 
-            absensi: await db.absensi.toArray(),
-            tahfizh: await db.tahfizh.toArray(),
-            buku: await db.buku.toArray(),
-            sirkulasi: await db.sirkulasi.toArray(),
-            obat: await db.obat.toArray(),
-            kesehatanRecords: await db.kesehatanRecords.toArray(),
-            bkSessions: await db.bkSessions.toArray(),
-            bukuTamu: await db.bukuTamu.toArray(),
-            inventaris: await db.inventaris.toArray(),
-            calendarEvents: await db.calendarEvents.toArray(),
-            jadwalPelajaran: await db.jadwalPelajaran.toArray(),
-            arsipJadwal: await db.arsipJadwal.toArray(),
-            
-            // New Modules
-            payrollRecords: await db.payrollRecords.toArray(),
-            piketSchedules: await db.piketSchedules.toArray(),
-            produkKoperasi: await db.produkKoperasi.toArray(),
-            transaksiKoperasi: await db.transaksiKoperasi.toArray(),
-            riwayatStok: await db.riwayatStok.toArray(),
-            keuanganKoperasi: await db.keuanganKoperasi.toArray(),
-            pendingOrders: await db.pendingOrders.toArray(),
-            
-            version: '3.0', // Bumped version for new schema support
-            timestamp: new Date().toISOString(),
-        };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a'); link.href = url; link.download = `backup_esantri_${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
-        
-        const newSettings = { ...settings, backupConfig: { ...settings.backupConfig, lastBackup: new Date().toISOString() } };
-        onSaveSettings(newSettings);
-    };
-
-    const triggerBackupCheck = useCallback((forceAction: boolean = false) => {
-        if (forceAction) { setBackupModal({ isOpen: true, reason: 'action' }); return; }
-        if (hasCheckedBackupRef.current) return;
-        if (!settings.backupConfig) return;
-        const { lastBackup, frequency } = settings.backupConfig;
-        if (frequency === 'never') return;
-        const now = new Date(); const last = lastBackup ? new Date(lastBackup) : new Date(0); const diffDays = (now.getTime() - last.getTime()) / (1000 * 3600 * 24);
-        if ((frequency === 'daily' && diffDays >= 1) || (frequency === 'weekly' && diffDays >= 7)) { setBackupModal({ isOpen: true, reason: 'periodic' }); hasCheckedBackupRef.current = true; }
-    }, [settings.backupConfig]);
-
-    const closeBackupModal = () => setBackupModal(prev => ({ ...prev, isOpen: false }));
-    const showAlert = (title: string, message: string) => setAlertModal({ isOpen: true, title, message });
-    const hideAlert = () => setAlertModal({ ...alertModal, isOpen: false });
-
-    const showConfirmation = (title: string, message: string, onConfirm: () => void | Promise<void>, options: { confirmText?: string; confirmColor?: string } = {}) => {
-        setConfirmation({
-            isOpen: true, title, message,
-            onConfirm: async () => { await onConfirm(); setConfirmation(prev => ({ ...prev, isOpen: false })); },
-            confirmText: options.confirmText, confirmColor: options.confirmColor
-        });
-    };
-    const hideConfirmation = () => setConfirmation(prev => ({ ...prev, isOpen: false }));
-
     return (
         <AppContext.Provider value={{
-            isLoading, settings, suratTemplates, arsipSuratList, santriFilters, setSantriFilters, toasts, confirmation, alertModal, backupModal, 
-            currentUser, login, logout, syncStatus,
-            onSaveSettings, onSaveSuratTemplate, onDeleteSuratTemplate, onSaveArsipSurat, onDeleteArsipSurat, onDeleteSampleData, 
-            downloadBackup, triggerBackupCheck, closeBackupModal, showToast, removeToast, showAlert, hideAlert, showConfirmation, hideConfirmation,
-            triggerManualSync
+            // Spread sub-contexts
+            ...ui,
+            ...auth,
+            ...sets,
+            santriFilters: santriCtx.santriFilters,
+            setSantriFilters: santriCtx.setSantriFilters,
+
+            // Local
+            suratTemplates, arsipSuratList, syncStatus,
+            onSaveSuratTemplate, onDeleteSuratTemplate, onSaveArsipSurat, onDeleteArsipSurat,
+            onDeleteSampleData, triggerManualSync
         }}>
             {children}
         </AppContext.Provider>
@@ -462,5 +209,5 @@ export const useAppContext = () => {
   return context;
 };
 
-// Alias for semantic clarity in other files
-export const useSettingsContext = useAppContext;
+// Legacy alias
+export const useSettingsContextLegacy = useAppContext;

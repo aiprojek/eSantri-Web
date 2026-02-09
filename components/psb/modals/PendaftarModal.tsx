@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Pendaftar, PondokSettings } from '../../../types';
 import { useAppContext } from '../../../AppContext';
@@ -19,8 +18,8 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
     // State to hold parsed custom data
     const [parsedCustomData, setParsedCustomData] = useState<Record<string, any>>({});
 
-    // Initial state with comprehensive fields
-    const [formData, setFormData] = useState<Partial<Pendaftar>>({
+    // Use 'any' for formData to allow flat address fields and avoid type conflicts with Pendaftar interface
+    const [formData, setFormData] = useState<any>({
         namaLengkap: '',
         nisn: '',
         nik: '',
@@ -33,7 +32,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         jumlahSaudara: undefined,
         berkebutuhanKhusus: '',
         
-        alamat: '',
+        alamat: '', // Detail address as string
         desaKelurahan: '',
         kecamatan: '',
         kabupatenKota: '',
@@ -76,7 +75,17 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
     useEffect(() => {
         if (isOpen) {
             if (pendaftarData) {
-                setFormData(pendaftarData);
+                // Flatten address object for form state
+                const { alamat, ...rest } = pendaftarData;
+                setFormData({
+                    ...rest,
+                    alamat: alamat?.detail || '',
+                    desaKelurahan: alamat?.desaKelurahan || '',
+                    kecamatan: alamat?.kecamatan || '',
+                    kabupatenKota: alamat?.kabupatenKota || '',
+                    provinsi: alamat?.provinsi || '',
+                    kodePos: alamat?.kodePos || '',
+                });
                 try {
                     setParsedCustomData(pendaftarData.customData ? JSON.parse(pendaftarData.customData) : {});
                 } catch (e) {
@@ -117,15 +126,15 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
 
     if (!isOpen) return null;
 
-    const handleChange = (key: keyof Pendaftar, value: any) => {
-        setFormData(prev => ({ ...prev, [key]: value }));
+    const handleChange = (key: string, value: any) => {
+        setFormData((prev: any) => ({ ...prev, [key]: value }));
     };
 
     const handleCustomDataChange = (key: string, value: string) => {
         const updated = { ...parsedCustomData, [key]: value };
         setParsedCustomData(updated);
         // Sync back to formData string immediately
-        setFormData(prev => ({ ...prev, customData: JSON.stringify(updated) }));
+        setFormData((prev: any) => ({ ...prev, customData: JSON.stringify(updated) }));
     };
 
     const handleSave = () => {
@@ -136,6 +145,15 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
 
         const dataToSave = {
             ...formData,
+            // Reconstruct nested Alamat object
+            alamat: {
+                detail: formData.alamat,
+                desaKelurahan: formData.desaKelurahan,
+                kecamatan: formData.kecamatan,
+                kabupatenKota: formData.kabupatenKota,
+                provinsi: formData.provinsi,
+                kodePos: formData.kodePos
+            },
             jenjangId: Number(formData.jenjangId),
             anakKe: formData.anakKe ? Number(formData.anakKe) : undefined,
             jumlahSaudara: formData.jumlahSaudara ? Number(formData.jumlahSaudara) : undefined,
@@ -313,4 +331,181 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                             <div className="grid grid-cols-1 gap-4">
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Alamat Lengkap (Jalan, RT/RW, Dusun)</label>
-                                    <textarea rows={2} value={formData.alamat} onChange={e => handleChange('alamat', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Contoh: Jl. Merdeka No. 10, RT 01/RW 02, Dusun
+                                    <textarea rows={2} value={formData.alamat} onChange={e => handleChange('alamat', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Contoh: Jl. Merdeka No. 10, RT 01/RW 02, Dusun Krajan"></textarea>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Desa / Kelurahan</label>
+                                        <input type="text" value={formData.desaKelurahan || ''} onChange={e => handleChange('desaKelurahan', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Kecamatan</label>
+                                        <input type="text" value={formData.kecamatan || ''} onChange={e => handleChange('kecamatan', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Kabupaten / Kota</label>
+                                        <input type="text" value={formData.kabupatenKota || ''} onChange={e => handleChange('kabupatenKota', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Provinsi</label>
+                                        <input type="text" value={formData.provinsi || ''} onChange={e => handleChange('provinsi', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Kode Pos</label>
+                                        <input type="text" value={formData.kodePos || ''} onChange={e => handleChange('kodePos', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- TAB 3: DATA ORANG TUA --- */}
+                    {activeTab === 'ortu' && (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {/* Ayah */}
+                                <div className="space-y-4">
+                                    <h4 className="font-semibold text-gray-700 border-b pb-2">Data Ayah</h4>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Nama Ayah</label>
+                                        <input type="text" value={formData.namaAyah || ''} onChange={e => handleChange('namaAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">NIK Ayah</label>
+                                        <input type="text" value={formData.nikAyah || ''} onChange={e => handleChange('nikAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Status Ayah</label>
+                                        <select value={formData.statusAyah || ''} onChange={e => handleChange('statusAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                            <option value="">- Pilih -</option>
+                                            <option value="Hidup">Hidup</option>
+                                            <option value="Meninggal">Meninggal</option>
+                                            <option value="Bercerai">Bercerai</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan</label>
+                                        <input type="text" value={formData.pekerjaanAyah || ''} onChange={e => handleChange('pekerjaanAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Ayah</label>
+                                        <input type="text" value={formData.teleponAyah || ''} onChange={e => handleChange('teleponAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                </div>
+
+                                {/* Ibu */}
+                                <div className="space-y-4">
+                                    <h4 className="font-semibold text-gray-700 border-b pb-2">Data Ibu</h4>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Nama Ibu</label>
+                                        <input type="text" value={formData.namaIbu || ''} onChange={e => handleChange('namaIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">NIK Ibu</label>
+                                        <input type="text" value={formData.nikIbu || ''} onChange={e => handleChange('nikIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Status Ibu</label>
+                                        <select value={formData.statusIbu || ''} onChange={e => handleChange('statusIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                            <option value="">- Pilih -</option>
+                                            <option value="Hidup">Hidup</option>
+                                            <option value="Meninggal">Meninggal</option>
+                                            <option value="Bercerai">Bercerai</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan</label>
+                                        <input type="text" value={formData.pekerjaanIbu || ''} onChange={e => handleChange('pekerjaanIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Ibu</label>
+                                        <input type="text" value={formData.teleponIbu || ''} onChange={e => handleChange('teleponIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <h4 className="font-semibold text-gray-700 border-b pb-2 mt-6">Data Wali (Jika Ada)</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Nama Wali</label>
+                                    <input type="text" value={formData.namaWali || ''} onChange={e => handleChange('namaWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Wali</label>
+                                    <input type="text" value={formData.nomorHpWali || ''} onChange={e => handleChange('nomorHpWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Hubungan dengan Santri</label>
+                                    <input type="text" value={formData.statusWali || ''} onChange={e => handleChange('statusWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Paman, Kakek, dll" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- TAB 4: SEKOLAH --- */}
+                    {activeTab === 'sekolah' && (
+                        <div className="space-y-4">
+                            <h4 className="font-semibold text-gray-700 border-b pb-2">Pendidikan Sebelumnya & Tujuan</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Mendaftar ke Jenjang</label>
+                                    <select value={formData.jenjangId} onChange={e => handleChange('jenjangId', parseInt(e.target.value))} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                        <option value={0}>-- Pilih Jenjang --</option>
+                                        {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Jalur Pendaftaran</label>
+                                    <select value={formData.jalurPendaftaran || 'Reguler'} onChange={e => handleChange('jalurPendaftaran', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                        <option value="Reguler">Reguler</option>
+                                        <option value="Prestasi">Prestasi</option>
+                                        <option value="Beasiswa">Beasiswa</option>
+                                        <option value="Pindahan">Pindahan</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Sekolah Asal</label>
+                                    <input type="text" value={formData.asalSekolah || ''} onChange={e => handleChange('asalSekolah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Nama Sekolah Sebelumnya" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Alamat Sekolah Asal</label>
+                                    <input type="text" value={formData.alamatSekolahAsal || ''} onChange={e => handleChange('alamatSekolahAsal', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- TAB 5: DATA TAMBAHAN --- */}
+                    {activeTab === 'tambahan' && (
+                        <div className="space-y-4">
+                            <h4 className="font-semibold text-gray-700 border-b pb-2">Catatan & Data Kustom</h4>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Catatan Admin</label>
+                                <textarea rows={3} value={formData.catatan || ''} onChange={e => handleChange('catatan', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Catatan internal panitia..."></textarea>
+                            </div>
+                            
+                            {Object.keys(parsedCustomData).length > 0 && (
+                                <div className="mt-4">
+                                    <h5 className="font-bold text-gray-600 mb-2 text-sm uppercase">Data Tambahan (dari Formulir Online)</h5>
+                                    <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                        {Object.entries(parsedCustomData).map(([key, val]) => (
+                                            <div key={key}>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase">{key.replace(/_/g, ' ')}</label>
+                                                {renderCustomValue(key, val)}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-4 border-t bg-gray-50 flex justify-end gap-2 rounded-b-lg">
+                    <button onClick={onClose} className="px-4 py-2 text-gray-600 bg-white hover:bg-gray-100 border border-gray-300 rounded-lg text-sm font-medium">Batal</button>
+                    <button onClick={handleSave} className="px-6 py-2 bg-teal-600 text-white hover:bg-teal-700 rounded-lg text-sm font-bold shadow-sm">Simpan Data</button>
+                </div>
+            </div>
+        </div>
+    );
+};

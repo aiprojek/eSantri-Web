@@ -1,6 +1,7 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { PondokSettings, TenagaPengajar, Jenjang } from '../../../types';
+import { compressImage } from '../../../utils/imageOptimizer';
 
 interface TabUmumProps {
     localSettings: PondokSettings;
@@ -14,15 +15,24 @@ const LogoUploader: React.FC<{
     onLogoChange: (url: string) => void;
 }> = ({ label, logoUrl, onLogoChange }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                onLogoChange(reader.result as string);
-            };
-            reader.readAsDataURL(file);
+            setIsProcessing(true);
+            try {
+                // Logo mungkin butuh resolusi sedikit lebih baik dari pas foto, tapi tetap dikompres
+                // Max width 500px cukup untuk kop surat
+                const compressedBase64 = await compressImage(file, 500, 0.8);
+                onLogoChange(compressedBase64);
+            } catch (error) {
+                console.error("Gagal kompres logo:", error);
+                alert("Gagal memproses gambar.");
+            } finally {
+                setIsProcessing(false);
+                if(fileInputRef.current) fileInputRef.current.value = '';
+            }
         }
     };
 
@@ -33,17 +43,18 @@ const LogoUploader: React.FC<{
                 <img 
                     src={logoUrl || 'https://placehold.co/100x100/e2e8f0/334155?text=Logo'} 
                     alt={label} 
-                    className="w-20 h-20 object-contain rounded-md border bg-gray-100 p-1"
+                    className={`w-20 h-20 object-contain rounded-md border bg-gray-100 p-1 ${isProcessing ? 'opacity-50' : ''}`}
                 />
                 <div className="flex-grow space-y-2">
                     <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">URL Logo</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">URL Logo (atau Upload)</label>
                         <input
                             type="text"
                             placeholder="https://example.com/logo.png"
-                            value={logoUrl?.startsWith('data:') ? '' : logoUrl || ''}
+                            value={logoUrl?.startsWith('data:') ? '(Gambar Terupload)' : logoUrl || ''}
                             onChange={(e) => onLogoChange(e.target.value)}
-                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                            disabled={logoUrl?.startsWith('data:')}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 disabled:text-gray-500"
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -57,9 +68,10 @@ const LogoUploader: React.FC<{
                         <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="text-sm text-white bg-gray-600 hover:bg-gray-700 font-medium px-4 py-2 rounded-md"
+                            disabled={isProcessing}
+                            className="text-sm text-white bg-gray-600 hover:bg-gray-700 font-medium px-4 py-2 rounded-md disabled:bg-gray-400 flex items-center gap-2"
                         >
-                            Upload
+                            {isProcessing ? '...' : 'Upload'}
                         </button>
                         {logoUrl && (
                              <button

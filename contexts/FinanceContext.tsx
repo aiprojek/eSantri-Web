@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas } from '../types';
 import { db } from '../db';
 import { generateTagihanBulanan, generateTagihanAwal } from '../services/financeService';
-import { useSettingsContext } from '../AppContext';
+import { useSettingsContext } from './SettingsContext';
 
 interface FinanceContextType {
   tagihanList: Tagihan[];
@@ -25,8 +25,6 @@ const FinanceContext = createContext<FinanceContextType | null>(null);
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { settings } = useSettingsContext();
 
-  // Live Queries - Only run when this component is mounted
-  // Fix: Use filter instead of where('deleted') because 'deleted' field is not indexed in db.ts
   const tagihanList = useLiveQuery(() => db.tagihan.filter((t: Tagihan) => !t.deleted).toArray(), []) || [];
   const pembayaranList = useLiveQuery(() => db.pembayaran.filter((p: Pembayaran) => !p.deleted).toArray(), []) || [];
   const saldoSantriList = useLiveQuery(() => db.saldoSantri.toArray(), []) || [];
@@ -37,7 +35,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const generateUniqueId = () => parseInt(`${Date.now()}${Math.floor(Math.random() * 1000)}`.slice(0, 16));
 
   const onGenerateTagihanBulanan = async (tahun: number, bulan: number) => {
-    // Fetch santri directly from DB to avoid context dependency
     const santriList = await db.santri.filter((s: any) => !s.deleted).toArray();
     const { result, newTagihan } = await generateTagihanBulanan(db, settings, santriList, tahun, bulan);
     const withTs = newTagihan.map(t => addTimestamp({ ...t, id: generateUniqueId() }));
@@ -46,7 +43,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const onGenerateTagihanAwal = async () => {
-    // Fetch santri directly from DB to avoid context dependency
     const santriList = await db.santri.filter((s: any) => !s.deleted).toArray();
     const { result, newTagihan } = await generateTagihanAwal(db, settings, santriList);
     const withTs = newTagihan.map(t => addTimestamp({ ...t, id: generateUniqueId() }));
@@ -58,7 +54,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const id = generateUniqueId();
     await db.pembayaran.put(addTimestamp({ ...data, id }) as Pembayaran);
     
-    // Update status tagihan
     for (const tid of data.tagihanIds) {
         const tagihan = await db.tagihan.get(tid);
         if (tagihan) {
@@ -68,41 +63,65 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const onAddTransaksiSaldo = async (data: Omit<TransaksiSaldo, 'id' | 'saldoSetelah' | 'tanggal'>) => {
-    const currentSaldo = saldoSantriList.find(s => s.santriId === data.santriId)?.saldo || 0;
-    let saldoSetelah = currentSaldo;
-    if (data.jenis === 'Deposit') saldoSetelah += data.jumlah;
-    else {
-        if (currentSaldo < data.jumlah) throw new Error('Saldo tidak mencukupi.');
-        saldoSetelah -= data.jumlah;
-    }
-    const id = generateUniqueId();
-    await db.transaksiSaldo.put(addTimestamp({ ...data, saldoSetelah, tanggal: new Date().toISOString(), id }) as TransaksiSaldo);
-    await db.saldoSantri.put(addTimestamp({ santriId: data.santriId, saldo: saldoSetelah }));
+    const santriSaldo = await db.saldoSantri.get(data.santriId);
+    const currentSaldo = santriSaldo ? santriSaldo.saldo : 0;
+    
+    let newSaldo = currentSaldo;
+    if (data.jenis === 'Deposit') newSaldo += data.jumlah;
+    else newSaldo -= data.jumlah;
+
+    await (db as any).transaction('rw', db.saldoSantri, db.transaksiSaldo, async () => {
+        await db.saldoSantri.put({ santriId: data.santriId, saldo: newSaldo, lastModified: Date.now() });
+        await db.transaksiSaldo.add({
+            ...data,
+            id: generateUniqueId(),
+            tanggal: new Date().toISOString(),
+            saldoSetelah: newSaldo,
+            lastModified: Date.now()
+        } as TransaksiSaldo);
+    });
   };
 
   const onAddTransaksiKas = async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => {
-    // Note: This logic assumes chronological insertion. For strict accounting, we might need more complex logic.
-    const lastKas = await db.transaksiKas.orderBy('tanggal').last();
-    let saldoSetelah = lastKas ? lastKas.saldoSetelah : 0;
-    if (data.jenis === 'Pemasukan') saldoSetelah += data.jumlah;
-    else saldoSetelah -= data.jumlah;
+      const lastTx = await db.transaksiKas.orderBy('tanggal').last();
+      const lastSaldo = lastTx ? lastTx.saldoSetelah : 0;
+      let newSaldo = lastSaldo;
+      if (data.jenis === 'Pemasukan') newSaldo += data.jumlah;
+      else newSaldo -= data.jumlah;
 
-    const id = generateUniqueId();
-    await db.transaksiKas.put(addTimestamp({ ...data, saldoSetelah, tanggal: new Date().toISOString(), id }) as TransaksiKas);
+      await db.transaksiKas.add({
+          ...data,
+          id: generateUniqueId(),
+          tanggal: new Date().toISOString(),
+          saldoSetelah: newSaldo,
+          lastModified: Date.now()
+      } as TransaksiKas);
   };
 
   const onSetorKeKas = async (pembayaranIds: number[], total: number, tanggal: string, pj: string, catatan: string) => {
-      await onAddTransaksiKas({
-          jenis: 'Pemasukan',
-          kategori: 'Setoran Pembayaran Santri',
-          deskripsi: catatan,
-          jumlah: total,
-          penanggungJawab: pj
+      await (db as any).transaction('rw', db.pembayaran, db.transaksiKas, async () => {
+          // 1. Mark payments as deposited
+          for(const pid of pembayaranIds) {
+              await db.pembayaran.update(pid, { disetorKeKas: true, lastModified: Date.now() });
+          }
+
+          // 2. Add Kas Entry
+          const lastTx = await db.transaksiKas.orderBy('tanggal').last();
+          const lastSaldo = lastTx ? lastTx.saldoSetelah : 0;
+          const newSaldo = lastSaldo + total;
+
+          await db.transaksiKas.add({
+              id: generateUniqueId(),
+              tanggal: tanggal || new Date().toISOString(),
+              jenis: 'Pemasukan',
+              kategori: 'Setoran Pembayaran Santri',
+              deskripsi: catatan,
+              jumlah: total,
+              saldoSetelah: newSaldo,
+              penanggungJawab: pj,
+              lastModified: Date.now()
+          } as TransaksiKas);
       });
-      
-      const payments = await db.pembayaran.bulkGet(pembayaranIds);
-      const updated = payments.filter(p => p).map(p => ({ ...p, disetorKeKas: true, lastModified: Date.now() }));
-      await db.pembayaran.bulkPut(updated as Pembayaran[]);
   };
 
   return (

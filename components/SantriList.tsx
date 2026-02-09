@@ -6,11 +6,11 @@ import { useSantriContext } from '../contexts/SantriContext';
 import { useSantriFilter } from '../hooks/useSantriFilter';
 import { useDebounce } from '../hooks/useDebounce';
 import { SantriModal } from './santri/SantriModal';
-import { Pagination } from './common/Pagination';
 import { BulkStatusModal } from './santri/modals/BulkStatusModal';
 import { BulkMoveModal } from './santri/modals/BulkMoveModal';
 import { generateSantriCsvForUpdate, generateSantriCsvTemplate, parseSantriCsv, ParsedCsvResult } from '../services/csvService';
 import { BulkSantriEditor } from './santri/modals/BulkSantriEditor';
+import { TableVirtuoso } from 'react-virtuoso';
 
 interface SantriListProps {
   initialFilters?: any;
@@ -20,8 +20,8 @@ type ImportMode = 'update' | 'add';
 type ImportPreview = ParsedCsvResult;
 
 const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
-  const { settings, showConfirmation, showToast, showAlert, santriFilters, setSantriFilters, currentUser } = useAppContext();
-  const { santriList, onAddSantri, onBulkAddSantri, onUpdateSantri, onDeleteSantri, onBulkUpdateSantri } = useSantriContext();
+  const { settings, showConfirmation, showToast, showAlert, currentUser } = useAppContext();
+  const { santriList, onAddSantri, onBulkAddSantri, onUpdateSantri, onDeleteSantri, onBulkUpdateSantri, santriFilters, setSantriFilters } = useSantriContext();
   
   const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.santri === 'write';
 
@@ -43,8 +43,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
 
   const [isImporting, setIsImporting] = useState(false);
   
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+  // NOTE: Pagination state is removed in favor of Virtualization
   
   const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
   const [isBulkStatusModalOpen, setBulkStatusModalOpen] = useState(false);
@@ -53,48 +52,25 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
   const [bulkEditorMode, setBulkEditorMode] = useState<'add' | 'edit'>('add');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => { handleFilterChange('search', debouncedSearchTerm); }, [debouncedSearchTerm]);
-  useEffect(() => { setCurrentPage(1); }, [filters, itemsPerPage]);
   useEffect(() => { setSelectedSantriIds([]); }, [filters]);
 
   const getDetailName = (type: 'jenjang' | 'kelas' | 'rombel', id: number): string => {
     const item = settings[type].find(i => i.id === id);
     return item ? item.nama : '-';
   }
-  
-  const paginatedSantri = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredSantri.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredSantri, currentPage, itemsPerPage]);
-  
-  const totalPages = Math.ceil(filteredSantri.length / itemsPerPage);
-  const startItem = filteredSantri.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
-  const endItem = Math.min(currentPage * itemsPerPage, filteredSantri.length);
 
-    const paginatedIds = useMemo(() => paginatedSantri.map(s => s.id), [paginatedSantri]);
-    const allOnPageSelected = paginatedIds.length > 0 && paginatedIds.every(id => selectedSantriIds.includes(id));
+  const handleSelectOne = (id: number) => {
+      setSelectedSantriIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
 
-    useEffect(() => {
-        if (selectAllCheckboxRef.current) {
-            const someOnPageSelected = paginatedIds.some(id => selectedSantriIds.includes(id));
-            selectAllCheckboxRef.current.checked = allOnPageSelected;
-            selectAllCheckboxRef.current.indeterminate = someOnPageSelected && !allOnPageSelected;
-        }
-    }, [selectedSantriIds, paginatedIds, allOnPageSelected]);
-
-    const handleSelectOne = (id: number) => {
-        setSelectedSantriIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-    };
-
-    const handleSelectAllOnPage = () => {
-        if (allOnPageSelected) {
-            setSelectedSantriIds(prev => prev.filter(id => !paginatedIds.includes(id)));
-        } else {
-            setSelectedSantriIds(prev => [...new Set([...prev, ...paginatedIds])]);
-        }
-    };
+  const handleSelectAllFiltered = () => {
+      if (selectedSantriIds.length === filteredSantri.length) {
+          setSelectedSantriIds([]);
+      } else {
+          setSelectedSantriIds(filteredSantri.map(s => s.id));
+      }
+  };
 
     const handleBulkUpdate = async (updatedFields: Partial<Santri>) => {
         const santriToUpdate = santriList.filter(s => selectedSantriIds.includes(s.id)).map(s => ({ ...s, ...updatedFields }));
@@ -291,9 +267,46 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
       return <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-medium rounded-full border ${colors[status] || colors['Aktif']}`}>{status}</span>;
   };
 
+  // --- VIRTUALIZED TABLE COMPONENTS ---
+  const TableComponents = {
+    Table: (props: any) => <table {...props} className="w-full text-left border-collapse" />,
+    TableHead: (props: any) => <thead {...props} className="bg-gray-50/50 border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm" />,
+    TableRow: (props: any) => <tr {...props} className="group hover:bg-gray-50 border-b border-gray-100" />,
+    TableBody: React.forwardRef<HTMLTableSectionElement, any>((props, ref) => <tbody {...props} ref={ref} className="divide-y divide-gray-100" />),
+  };
+
+  const FixedHeaderContent = () => (
+      <tr>
+        <th scope="col" className="p-4 w-10 bg-gray-50"><div className="flex items-center"><input type="checkbox" onChange={handleSelectAllFiltered} checked={selectedSantriIds.length > 0 && selectedSantriIds.length === filteredSantri.length} disabled={!canWrite} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2 disabled:text-gray-300"/></div></th>
+        <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase bg-gray-50">Nama Lengkap</th>
+        <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase bg-gray-50">Identitas</th>
+        <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase bg-gray-50">Kelas</th>
+        <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase bg-gray-50">Status</th>
+        <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase bg-gray-50">Info</th>
+        <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase text-right bg-gray-50">Aksi</th>
+      </tr>
+  );
+
+  const RowContent = (_index: number, santri: Santri) => (
+      <>
+        <td className="p-4"><div className="flex items-center"><input type="checkbox" checked={selectedSantriIds.includes(santri.id)} onChange={() => handleSelectOne(santri.id)} disabled={!canWrite} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2 disabled:text-gray-300"/></div></td>
+        <td className="p-4"><div className="flex items-center"><TableAvatar name={santri.namaLengkap} url={santri.fotoUrl} /><div><div className="text-sm font-medium text-gray-900">{santri.namaLengkap}</div>{santri.namaHijrah && <div className="text-xs text-gray-500">({santri.namaHijrah})</div>}</div></div></td>
+        <td className="p-4"><div className="text-sm text-gray-900 font-mono">{santri.nis}</div>{santri.nisn && <div className="text-xs text-gray-500">NISN: {santri.nisn}</div>}</td>
+        <td className="p-4"><div className="text-sm text-gray-900">{getDetailName('rombel', santri.rombelId)}</div><div className="text-xs text-gray-500">{getDetailName('jenjang', santri.jenjangId)}</div></td>
+        <td className="p-4"><StatusBadge status={santri.status} /></td>
+        <td className="p-4"><div className="text-xs text-gray-500 flex flex-col gap-0.5"><span title="Tanggal Masuk"><i className="bi bi-calendar-event mr-1"></i> {new Date(santri.tanggalMasuk).toLocaleDateString('id-ID')}</span><span title="Jenis Kelamin"><i className={`bi bi-gender-${santri.jenisKelamin === 'Laki-laki' ? 'male text-blue-500' : 'female text-pink-500'} mr-1`}></i> {santri.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</span></div></td>
+        <td className="p-4 text-right">
+            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => openModal(santri)} className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors" title={canWrite ? "Edit" : "Lihat Detail"}><i className={`bi ${canWrite ? 'bi-pencil-square' : 'bi-eye-fill'}`}></i></button>
+                {canWrite && <button onClick={() => handleDelete(santri.id)} className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors" title="Hapus"><i className="bi bi-trash"></i></button>}
+            </div>
+        </td>
+      </>
+  );
+
   return (
-    <div className="w-full">
-        <div className="flex flex-col gap-6 mb-6">
+    <div className="w-full flex flex-col h-[calc(100vh-100px)]">
+        <div className="flex-none flex flex-col gap-6 mb-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div><h1 className="text-2xl font-bold text-gray-900 tracking-tight">Database Santri</h1><p className="text-gray-500 text-sm mt-1">Kelola data santri, filter, dan ekspor data.</p></div>
                 {canWrite && (
@@ -334,7 +347,7 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
             </div>
 
             {showAdvancedFilters && (
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-down">
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-down mb-4">
                     <input type="text" placeholder="Filter Provinsi..." value={filters.provinsi} onChange={(e) => handleFilterChange('provinsi', e.target.value)} className="bg-white border border-gray-300 text-sm rounded-lg p-2.5 w-full"/>
                     <input type="text" placeholder="Filter Kab/Kota..." value={filters.kabupatenKota} onChange={(e) => handleFilterChange('kabupatenKota', e.target.value)} className="bg-white border border-gray-300 text-sm rounded-lg p-2.5 w-full"/>
                     <input type="text" placeholder="Filter Kecamatan..." value={filters.kecamatan} onChange={(e) => handleFilterChange('kecamatan', e.target.value)} className="bg-white border border-gray-300 text-sm rounded-lg p-2.5 w-full"/>
@@ -342,47 +355,22 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
             )}
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-none md:rounded-xl shadow-sm overflow-hidden flex flex-col">
-            
-            {/* --- DESKTOP VIEW (Table) --- */}
-            <div className="hidden md:block overflow-x-auto min-h-[300px]">
-                <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50/50 border-b border-gray-200 sticky top-0 z-10 backdrop-blur-sm">
-                        <tr>
-                            <th scope="col" className="p-4 w-10"><div className="flex items-center"><input type="checkbox" ref={selectAllCheckboxRef} onChange={handleSelectAllOnPage} disabled={!canWrite} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2 disabled:text-gray-300"/></div></th>
-                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Nama Lengkap</th>
-                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Identitas</th>
-                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Kelas</th>
-                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Status</th>
-                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase">Info</th>
-                            <th scope="col" className="p-4 text-xs font-semibold tracking-wide text-gray-500 uppercase text-right">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {paginatedSantri.map(santri => (
-                            <tr key={santri.id} className={`group transition-colors ${selectedSantriIds.includes(santri.id) ? 'bg-teal-50/60 hover:bg-teal-50' : 'hover:bg-gray-50'}`}>
-                                <td className="p-4"><div className="flex items-center"><input type="checkbox" checked={selectedSantriIds.includes(santri.id)} onChange={() => handleSelectOne(santri.id)} disabled={!canWrite} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 focus:ring-2 disabled:text-gray-300"/></div></td>
-                                <td className="p-4"><div className="flex items-center"><TableAvatar name={santri.namaLengkap} url={santri.fotoUrl} /><div><div className="text-sm font-medium text-gray-900">{santri.namaLengkap}</div>{santri.namaHijrah && <div className="text-xs text-gray-500">({santri.namaHijrah})</div>}</div></div></td>
-                                <td className="p-4"><div className="text-sm text-gray-900 font-mono">{santri.nis}</div>{santri.nisn && <div className="text-xs text-gray-500">NISN: {santri.nisn}</div>}</td>
-                                <td className="p-4"><div className="text-sm text-gray-900">{getDetailName('rombel', santri.rombelId)}</div><div className="text-xs text-gray-500">{getDetailName('jenjang', santri.jenjangId)}</div></td>
-                                <td className="p-4"><StatusBadge status={santri.status} /></td>
-                                <td className="p-4"><div className="text-xs text-gray-500 flex flex-col gap-0.5"><span title="Tanggal Masuk"><i className="bi bi-calendar-event mr-1"></i> {new Date(santri.tanggalMasuk).toLocaleDateString('id-ID')}</span><span title="Jenis Kelamin"><i className={`bi bi-gender-${santri.jenisKelamin === 'Laki-laki' ? 'male text-blue-500' : 'female text-pink-500'} mr-1`}></i> {santri.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</span></div></td>
-                                <td className="p-4 text-right">
-                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => openModal(santri)} className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors" title={canWrite ? "Edit" : "Lihat Detail"}><i className={`bi ${canWrite ? 'bi-pencil-square' : 'bi-eye-fill'}`}></i></button>
-                                        {canWrite && <button onClick={() => handleDelete(santri.id)} className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors" title="Hapus"><i className="bi bi-trash"></i></button>}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+        <div className="flex-grow min-h-0 bg-white border border-gray-200 rounded-none md:rounded-xl shadow-sm overflow-hidden flex flex-col">
+            {/* --- DESKTOP VIEW (Virtualized Table) --- */}
+            <div className="hidden md:block flex-grow h-full">
+                <TableVirtuoso
+                    data={filteredSantri}
+                    components={TableComponents}
+                    fixedHeaderContent={FixedHeaderContent}
+                    itemContent={RowContent}
+                    style={{ height: '100%' }}
+                />
             </div>
             
-            {/* --- MOBILE VIEW (Cards) --- */}
-            <div className="block md:hidden bg-gray-50 p-2">
+            {/* --- MOBILE VIEW (Cards - Simple Map for now) --- */}
+            <div className="block md:hidden bg-gray-50 p-2 overflow-y-auto h-full">
                 <div className="space-y-3">
-                    {paginatedSantri.map(santri => (
+                    {filteredSantri.slice(0, 50).map(santri => ( // Pagination for mobile is simpler to just limit for performance, or implement infinite scroll here separately
                         <div key={santri.id} className={`bg-white rounded-lg p-3 shadow-sm border ${selectedSantriIds.includes(santri.id) ? 'border-teal-500 ring-1 ring-teal-500' : 'border-gray-200'}`}>
                             <div className="flex justify-between items-start">
                                 <div className="flex items-start gap-3">
@@ -428,9 +416,8 @@ const SantriList: React.FC<SantriListProps> = ({ initialFilters = {} }) => {
                 </div>
             </div>
 
-            <div className="bg-gray-50 border-t border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-sm text-gray-600">Menampilkan <span className="font-medium text-gray-900">{startItem}-{endItem}</span> dari <span className="font-medium text-gray-900">{filteredSantri.length}</span> santri</div>
-                <div className="flex items-center gap-4"><select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 p-1.5"><option value={10}>10 baris</option><option value={25}>25 baris</option><option value={50}>50 baris</option><option value={100}>100 baris</option></select><Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} /></div>
+            <div className="bg-gray-50 border-t border-gray-200 p-2 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+                <div className="text-sm text-gray-600">Total Santri: <span className="font-medium text-gray-900">{filteredSantri.length}</span></div>
             </div>
         </div>
 

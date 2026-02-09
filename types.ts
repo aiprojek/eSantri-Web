@@ -100,7 +100,7 @@ export interface Pelanggaran {
 
 export interface RiwayatStatus {
     id: number;
-    status: 'Aktif' | 'Hiatus' | 'Lulus' | 'Keluar/Pindah' | 'Masuk';
+    status: 'Aktif' | 'Hiatus' | 'Lulus' | 'Keluar/Pindah' | 'Masuk' | 'Baru' | 'Diterima' | 'Cadangan' | 'Ditolak';
     tanggal: string;
     keterangan: string;
 }

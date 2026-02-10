@@ -140,8 +140,8 @@ export const TabLayanan: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-3 flex-shrink-0">
-                    <a href="https://saweria.co/aiprojek" target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
-                        <i className="bi bi-gift-fill"></i> Saweria
+                    <a href="https://lynk.id/aiprojek/s/bvBJvdA" target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                        <i className="bi bi-cup-hot-fill"></i> Traktir Kopi
                     </a>
                     <a href="https://github.com/aiprojek/eSantri-Web" target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-white border border-yellow-300 text-yellow-800 font-bold rounded-lg hover:bg-yellow-100 transition-colors flex items-center gap-2">
                         <i className="bi bi-star-fill"></i> Star GitHub

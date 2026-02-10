@@ -54,7 +54,7 @@ const ServiceCard: React.FC<{
 );
 
 export const TabLayanan: React.FC = () => {
-    const waBaseUrl = "https://wa.me/6281234567890"; // Ganti dengan nomor WA Anda
+    const waBaseUrl = "https://wa.me/6281225879494"; // Ganti dengan nomor WA Anda
 
     return (
         <div className="space-y-8 animate-fade-in">

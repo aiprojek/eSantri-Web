@@ -8,6 +8,58 @@ const MASTER_CONFIG_FILENAME = 'master_config.json';
 const CLOUD_ROOT = '/eSantri_Cloud';
 const INBOX_FOLDER = `${CLOUD_ROOT}/inbox_staff`;
 
+// --- HELPER: COMPRESSION & DECOMPRESSION ---
+
+/**
+ * Mengompresi objek JSON menjadi GZIP ArrayBuffer.
+ * Mengurangi ukuran file hingga 80-90% untuk mempercepat sync.
+ */
+const compressData = async (data: any): Promise<ArrayBuffer> => {
+    // 1. Convert JSON to string
+    const jsonString = JSON.stringify(data);
+    
+    // 2. Create stream from string
+    const stream = new Blob([jsonString]).stream();
+    
+    // 3. Pipe through GZIP compressor
+    const compressedStream = stream.pipeThrough(new CompressionStream('gzip'));
+    
+    // 4. Convert back to ArrayBuffer
+    return await new Response(compressedStream).arrayBuffer();
+};
+
+/**
+ * Mendekompresi ArrayBuffer/String. 
+ * Mendukung Backward Compatibility: Jika gagal dekompresi (file lama), coba parse sebagai JSON biasa.
+ */
+const decompressData = async (input: ArrayBuffer | string): Promise<any> => {
+    // If input is string (from WebDAV text read sometimes), convert to buffer
+    let buffer: ArrayBuffer;
+    if (typeof input === 'string') {
+        buffer = new TextEncoder().encode(input).buffer;
+    } else {
+        buffer = input;
+    }
+
+    try {
+        // Try to decompress assuming it is GZIP
+        const stream = new Blob([buffer]).stream();
+        const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
+        const decompressedRes = await new Response(decompressedStream).json(); // Direct to JSON
+        return decompressedRes;
+    } catch (e) {
+        // Fallback: File mungkin format lama (Uncompressed JSON String)
+        // Kita coba parse langsung buffer tersebut sebagai text -> JSON
+        try {
+            const text = new TextDecoder().decode(buffer);
+            return JSON.parse(text);
+        } catch (jsonError) {
+            console.error("Gagal dekompresi dan gagal parsing JSON biasa:", jsonError);
+            throw new Error("File rusak atau format tidak dikenali.");
+        }
+    }
+};
+
 // --- HELPER: RETRY FETCH & VALIDATION ---
 
 const fetchWithRetry = async (url: string, options: RequestInit, retries: number = 3, backoff: number = 500): Promise<Response> => {
@@ -179,7 +231,10 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
                 }
             });
             if (dlResponse.ok) {
-                const json = await dlResponse.json();
+                // UPDATE: Handle Decompression
+                const buffer = await dlResponse.arrayBuffer();
+                const json = await decompressData(buffer);
+                
                 if (json.data && Array.isArray(json.data.pendaftar)) {
                     json.data.pendaftar.forEach((p: any) => {
                          const key = p.namaLengkap + (p.nomorHpWali || '');
@@ -240,6 +295,9 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
         }
     };
     
+    // UPDATE: Compress Payload before upload
+    const compressedBuffer = await compressData(payload);
+
     const filename = `${new Date().getTime()}_${username.replace(/\s+/g, '_')}.json`;
     const fullPath = `${INBOX_FOLDER}/${filename}`;
 
@@ -257,12 +315,12 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
                 }),
                 'Content-Type': 'application/octet-stream'
             },
-            body: JSON.stringify(payload)
+            body: compressedBuffer
         });
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         await ensureWebDAVFolders(client);
-        await client.putFileContents(fullPath, JSON.stringify(payload));
+        await client.putFileContents(fullPath, compressedBuffer);
     } else {
         throw new Error("Provider tidak valid");
     }
@@ -288,15 +346,19 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
             if (response.status === 409) return { status: 'no_master' };
             throw new Error('Gagal download Master Data dari Cloud Storage (Dropbox)');
         }
-        masterData = await response.json();
+        
+        // UPDATE: Handle Decompression
+        const buffer = await response.arrayBuffer();
+        masterData = await decompressData(buffer);
 
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         if (!(await client.exists(`${CLOUD_ROOT}/${MASTER_FILENAME}`))) {
              return { status: 'no_master' };
         }
-        const contents = await client.getFileContents(`${CLOUD_ROOT}/${MASTER_FILENAME}`, { format: "text" });
-        masterData = JSON.parse(contents as string);
+        const contents = await client.getFileContents(`${CLOUD_ROOT}/${MASTER_FILENAME}`);
+        // WebDAV client might return string or buffer. decompressData handles both.
+        masterData = await decompressData(contents as any);
     } else {
          throw new Error("Provider tidak valid");
     }
@@ -391,7 +453,7 @@ export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileR
     return [];
 };
 
-// ... processInboxFile (updated for validation) ...
+// ... processInboxFile (updated for validation & decompression) ...
 export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord, resolvedConflicts?: ConflictItem[]) => {
     let fileContent;
 
@@ -404,11 +466,15 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                 'Dropbox-API-Arg': JSON.stringify({ path: file.path_lower })
             }
         });
-        fileContent = await response.json();
+        // UPDATE: Handle Decompression
+        const buffer = await response.arrayBuffer();
+        fileContent = await decompressData(buffer);
+
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
-        const contents = await client.getFileContents(file.path_lower, { format: "text" });
-        fileContent = JSON.parse(contents as string);
+        const contents = await client.getFileContents(file.path_lower);
+        // WebDAV client returns string or buffer
+        fileContent = await decompressData(contents as any);
     } else {
         throw new Error("Provider tidak valid");
     }
@@ -514,7 +580,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
     return { success: true, recordCount };
 };
 
-// ... publishMasterData, updateAccountFromCloud, deleteInboxFile, deleteMultipleInboxFiles (unchanged logic but use fetchWithRetry) ...
+// ... publishMasterData, updateAccountFromCloud ...
 export const publishMasterData = async (config: CloudSyncConfig) => {
     const masterData = {
         timestamp: new Date().toISOString(),
@@ -555,6 +621,10 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         settings: await db.settings.toArray()
     };
 
+    // UPDATE: Compress Data before Upload
+    const compressedMaster = await compressData(masterData);
+    const compressedConfig = await compressData(masterConfig);
+
     if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
         await fetchWithRetry('https://content.dropboxapi.com/2/files/upload', {
@@ -564,7 +634,7 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
                 'Dropbox-API-Arg': JSON.stringify({ path: `${CLOUD_ROOT}/${MASTER_FILENAME}`, mode: 'overwrite', mute: true }),
                 'Content-Type': 'application/octet-stream'
             },
-            body: JSON.stringify(masterData)
+            body: compressedMaster
         });
         await fetchWithRetry('https://content.dropboxapi.com/2/files/upload', {
             method: 'POST',
@@ -573,13 +643,13 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
                 'Dropbox-API-Arg': JSON.stringify({ path: `${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}`, mode: 'overwrite', mute: true }),
                 'Content-Type': 'application/octet-stream'
             },
-            body: JSON.stringify(masterConfig)
+            body: compressedConfig
         });
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         await ensureWebDAVFolders(client);
-        await client.putFileContents(`${CLOUD_ROOT}/${MASTER_FILENAME}`, JSON.stringify(masterData));
-        await client.putFileContents(`${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}`, JSON.stringify(masterConfig));
+        await client.putFileContents(`${CLOUD_ROOT}/${MASTER_FILENAME}`, compressedMaster);
+        await client.putFileContents(`${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}`, compressedConfig);
     }
     
     return { timestamp: masterData.timestamp };
@@ -596,14 +666,18 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
                 'Dropbox-API-Arg': JSON.stringify({ path: `${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}` })
             }
         });
-        data = await response.json();
+        
+        // UPDATE: Handle Decompression
+        const buffer = await response.arrayBuffer();
+        data = await decompressData(buffer);
+
     } else if (config.provider === 'webdav') {
         const client = getWebDAVClient(config);
         if (!(await client.exists(`${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}`))) {
             throw new Error("File konfigurasi akun tidak ditemukan di server WebDAV.");
         }
-        const contents = await client.getFileContents(`${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}`, { format: "text" });
-        data = JSON.parse(contents as string);
+        const contents = await client.getFileContents(`${CLOUD_ROOT}/${MASTER_CONFIG_FILENAME}`);
+        data = await decompressData(contents as any);
     }
 
     if (data && data.users) {

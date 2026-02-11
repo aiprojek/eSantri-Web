@@ -1,10 +1,12 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAppContext } from '../AppContext';
 import { useFinanceContext } from '../contexts/FinanceContext';
 import { TransaksiKas } from '../types';
 import { formatRupiah } from '../utils/formatters';
+import { db } from '../db';
+import { Pagination } from './common/Pagination';
 
 const StatCard: React.FC<{ icon: string; title: string; value: string | number; color: string; textColor: string }> = ({ icon, title, value, color, textColor }) => (
     <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-4 transition-transform hover:-translate-y-1">
@@ -60,49 +62,97 @@ const TransaksiModal: React.FC<TransaksiModalProps> = ({ isOpen, onClose, onSave
 
 const BukuKas: React.FC = () => {
     const { showToast, showAlert, currentUser } = useAppContext();
-    const { transaksiKasList, onAddTransaksiKas } = useFinanceContext();
+    const { onAddTransaksiKas } = useFinanceContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.bukukas === 'write';
 
     const [filters, setFilters] = useState({ startDate: '', endDate: '', jenis: '', kategori: '' });
+    
+    // Pagination State (Replacing full list load)
+    const [transactions, setTransactions] = useState<TransaksiKas[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(15);
+    const [totalItems, setTotalItems] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
+    const itemsPerPage = 15;
     
-    const sortedTransaksi = useMemo(() => [...transaksiKasList].sort((a,b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime()), [transaksiKasList]);
+    // Stats State (Calculated separately for full view)
+    const [stats, setStats] = useState({ totalPemasukan: 0, totalPengeluaran: 0, saldoAkhir: 0 });
+    const [existingKategori, setExistingKategori] = useState<string[]>([]);
 
-    const stats = useMemo(() => {
-        let totalPemasukan = 0; let totalPengeluaran = 0;
-        sortedTransaksi.forEach(t => { if (t.jenis === 'Pemasukan') totalPemasukan += t.jumlah; else totalPengeluaran += t.jumlah; });
-        const saldoAkhir = sortedTransaksi[0]?.saldoSetelah || 0;
-        return { totalPemasukan, totalPengeluaran, saldoAkhir };
-    }, [sortedTransaksi]);
-    
-    const existingKategori = useMemo(() => [...new Set(transaksiKasList.map(t => t.kategori))], [transaksiKasList]);
+    const fetchTransactions = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            let collection = db.transaksiKas.orderBy('tanggal').reverse();
 
-    const filteredTransaksi = useMemo(() => {
-        return sortedTransaksi.filter(t => {
-            const tDate = new Date(t.tanggal);
-            const startMatch = !filters.startDate || tDate >= new Date(filters.startDate);
-            const endMatch = !filters.endDate || tDate <= new Date(filters.endDate + 'T23:59:59');
-            const jenisMatch = !filters.jenis || t.jenis === filters.jenis;
-            const kategoriMatch = !filters.kategori || t.kategori.toLowerCase().includes(filters.kategori.toLowerCase());
-            return startMatch && endMatch && jenisMatch && kategoriMatch;
-        });
-    }, [sortedTransaksi, filters]);
+            // Note: Complex filtering on non-indexed fields is manual after fetch or needs compound indices.
+            // For now, simple date filtering is efficient. Text filtering is done in memory for the *page* or limited set.
+            // But to be robust for >10k items, we should filter at query level.
+            // Dexie filtering:
+            const filteredCollection = collection.filter(t => {
+                 const tDate = new Date(t.tanggal);
+                 const startMatch = !filters.startDate || tDate >= new Date(filters.startDate);
+                 const endMatch = !filters.endDate || tDate <= new Date(filters.endDate + 'T23:59:59');
+                 const jenisMatch = !filters.jenis || t.jenis === filters.jenis;
+                 const kategoriMatch = !filters.kategori || t.kategori.toLowerCase().includes(filters.kategori.toLowerCase());
+                 return startMatch && endMatch && jenisMatch && kategoriMatch;
+            });
 
-    useEffect(() => { setCurrentPage(1); }, [filters]);
-    
-    const paginatedTransaksi = useMemo(() => filteredTransaksi.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [filteredTransaksi, currentPage, itemsPerPage]);
-    const totalPages = Math.ceil(filteredTransaksi.length / itemsPerPage);
+            // 1. Count
+            const count = await filteredCollection.count();
+            setTotalItems(count);
+
+            // 2. Pagination
+            const offset = (currentPage - 1) * itemsPerPage;
+            const pageData = await filteredCollection.offset(offset).limit(itemsPerPage).toArray();
+            setTransactions(pageData);
+
+            // 3. Stats (Must calculate from ALL data matching filters, not just page)
+            // Warning: This can be slow if thousands of records match the filter. 
+            // Optimization: If no filter, use cached stats or optimized aggregation.
+            // For now, we fetch all matching *ID* and minimal data or iterate.
+            const allMatching = await filteredCollection.toArray(); // Needed for totals
+            
+            let totalPemasukan = 0; let totalPengeluaran = 0;
+            const uniqueCats = new Set<string>();
+            
+            allMatching.forEach(t => {
+                if (t.jenis === 'Pemasukan') totalPemasukan += t.jumlah; else totalPengeluaran += t.jumlah;
+                uniqueCats.add(t.kategori);
+            });
+            
+            // Get Absolute Latest Transaction for Real Balance (Not just filtered)
+            const absoluteLastTx = await db.transaksiKas.orderBy('tanggal').last();
+            const saldoAkhir = absoluteLastTx?.saldoSetelah || 0;
+
+            setStats({ totalPemasukan, totalPengeluaran, saldoAkhir });
+            setExistingKategori(Array.from(uniqueCats));
+
+        } catch (e) {
+            console.error("Failed to fetch Buku Kas", e);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [currentPage, filters]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filters]);
+
+    useEffect(() => {
+        fetchTransactions();
+    }, [fetchTransactions]);
 
     const handleSave = async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => {
         if (!canWrite) return;
-        try { await onAddTransaksiKas(data); showToast('Transaksi berhasil ditambahkan.', 'success'); } catch (e) { showAlert('Gagal Menyimpan', (e as Error).message); }
+        try { 
+            await onAddTransaksiKas(data); 
+            showToast('Transaksi berhasil ditambahkan.', 'success'); 
+            fetchTransactions(); // Refresh list
+        } catch (e) { 
+            showAlert('Gagal Menyimpan', (e as Error).message); 
+        }
     };
-
-    const startItem = filteredTransaksi.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
-    const endItem = Math.min(currentPage * itemsPerPage, filteredTransaksi.length);
 
     return (
         <div className="w-full">
@@ -112,9 +162,9 @@ const BukuKas: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <StatCard title="Total Pemasukan" value={formatRupiah(stats.totalPemasukan)} icon="bi-arrow-down-circle-fill" color="bg-green-100 text-green-600" textColor="text-green-600" />
-                <StatCard title="Total Pengeluaran" value={formatRupiah(stats.totalPengeluaran)} icon="bi-arrow-up-circle-fill" color="bg-red-100 text-red-600" textColor="text-red-600" />
-                <StatCard title="Saldo Akhir" value={formatRupiah(stats.saldoAkhir)} icon="bi-wallet2" color="bg-blue-100 text-blue-600" textColor="text-blue-600" />
+                <StatCard title="Total Pemasukan (Filter)" value={formatRupiah(stats.totalPemasukan)} icon="bi-arrow-down-circle-fill" color="bg-green-100 text-green-600" textColor="text-green-600" />
+                <StatCard title="Total Pengeluaran (Filter)" value={formatRupiah(stats.totalPengeluaran)} icon="bi-arrow-up-circle-fill" color="bg-red-100 text-red-600" textColor="text-red-600" />
+                <StatCard title="Saldo Akhir (Aktual)" value={formatRupiah(stats.saldoAkhir)} icon="bi-wallet2" color="bg-blue-100 text-blue-600" textColor="text-blue-600" />
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
@@ -136,7 +186,7 @@ const BukuKas: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {paginatedTransaksi.map(t => (
+                            {transactions.map(t => (
                                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{new Date(t.tanggal).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</td>
                                     <td className="px-6 py-4 whitespace-nowrap"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{t.kategori}</span></td>
@@ -146,19 +196,13 @@ const BukuKas: React.FC = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-gray-800">{formatRupiah(t.saldoSetelah)}</td>
                                 </tr>
                             ))}
-                             {filteredTransaksi.length === 0 && <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500"><div className="flex flex-col items-center justify-center"><i className="bi bi-inbox text-4xl mb-2 text-gray-300"></i><p>Tidak ada transaksi yang cocok dengan filter.</p></div></td></tr>}
+                             {transactions.length === 0 && !isLoading && <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500"><div className="flex flex-col items-center justify-center"><i className="bi bi-inbox text-4xl mb-2 text-gray-300"></i><p>Tidak ada transaksi yang cocok dengan filter.</p></div></td></tr>}
                         </tbody>
                     </table>
                 </div>
 
-                <div className="bg-gray-50 border-t border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="text-sm text-gray-600">Menampilkan <span className="font-medium text-gray-900">{startItem}-{endItem}</span> dari <span className="font-medium text-gray-900">{filteredTransaksi.length}</span> transaksi</div>
-                    <div className="flex items-center gap-4">
-                        <div className="flex gap-2">
-                            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Sebelumnya</button>
-                            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Berikutnya</button>
-                        </div>
-                    </div>
+                <div className="bg-gray-50 border-t border-gray-200 p-4">
+                     <Pagination currentPage={currentPage} totalPages={Math.ceil(totalItems / itemsPerPage)} onPageChange={setCurrentPage} />
                 </div>
             </div>
             {isModalOpen && <TransaksiModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSave} existingKategori={existingKategori} />}

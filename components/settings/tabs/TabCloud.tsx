@@ -191,9 +191,10 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
 
         if (config.provider === 'dropbox') {
              if (!config.dropboxRefreshToken || !config.dropboxAppKey || !config.dropboxAppSecret) {
-                showToast('Konfigurasi Dropbox belum lengkap (Key/Secret/Token).', 'error');
+                showToast('Cloud belum terhubung. Pastikan status sudah "Terhubung" sebelum membagikan akses.', 'error');
                 return;
             }
+            // Include REFRESH TOKEN. This allows session cloning.
             payloadString = JSON.stringify({
                 p: 'dropbox',
                 k: config.dropboxAppKey,
@@ -237,8 +238,8 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     provider: 'dropbox',
                     dropboxAppKey: data.k,
                     dropboxAppSecret: data.s,
-                    dropboxRefreshToken: data.r,
-                    dropboxToken: '', 
+                    dropboxRefreshToken: data.r, // SESSION CLONED HERE
+                    dropboxToken: '', // Clear old token to force refresh
                     dropboxTokenExpiresAt: 0
                 };
             } else if (data.p === 'webdav') {
@@ -250,22 +251,30 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     webdavPassword: data.w
                 };
             } else {
-                 // Fallback legacy (only supported if secret was optional, but now mandatory for desktop flow)
-                 throw new Error("Kode versi lama tidak didukung pada versi desktop.");
+                 throw new Error("Format kode tidak dikenali.");
             }
             
-            // Simpan ke DB agar fungsi sync bisa membacanya
+            // 1. Save Config Locally
             await onSaveSettings({ ...settings, cloudSyncConfig: updatedConfig });
             
-            // Step 2: Download Data Akun & Pengaturan (Config)
+            // 2. Validate Session immediately (Force Refresh Token usage)
+            setPairingStep('validating');
+            try {
+                // This calls getQuota/getSpaceUsage. If credentials (refresh token) are invalid, it throws.
+                await getCloudStorageStats(updatedConfig);
+            } catch (err) {
+                throw new Error("Kode valid, tapi gagal terhubung ke Cloud. Sesi mungkin kadaluarsa atau internet bermasalah.");
+            }
+
+            // 3. Download Data Akun & Pengaturan (Config)
             setPairingStep('downloading_account');
             await updateAccountFromCloud(updatedConfig);
             
-            // Step 3: Download Master Data (Santri, Transaksi, dll)
+            // 4. Download Master Data (Santri, Transaksi, dll)
             setPairingStep('downloading_data');
             await downloadAndMergeMaster(updatedConfig);
             
-            // Step 4: Success
+            // 5. Success
             setPairingStep('success');
 
         } catch (e) {
@@ -384,8 +393,11 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                                 <div>
                                     <div className="text-xs text-gray-500 mb-2">Terhubung dengan App Key: <strong>{settings.cloudSyncConfig.dropboxAppKey}</strong></div>
                                     <button onClick={handleGeneratePairingCode} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm">
-                                        <i className="bi bi-qr-code"></i> Bagikan Akses (Pairing Code)
+                                        <i className="bi bi-qr-code"></i> Bagikan Sesi (Pairing Code)
                                     </button>
+                                    <p className="text-[10px] text-purple-700 mt-2">
+                                        *Fitur ini akan menyalin Sesi Login (Refresh Token) ke perangkat staff agar mereka <strong>tidak perlu login manual</strong>.
+                                    </p>
                                 </div>
                             )}
                         </div>
@@ -434,7 +446,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                                 </button>
                                 {storageStats && (
                                     <button onClick={handleGeneratePairingCode} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm">
-                                        <i className="bi bi-qr-code"></i> Bagikan Akses
+                                        <i className="bi bi-qr-code"></i> Bagikan Sesi
                                     </button>
                                 )}
                             </div>
@@ -447,7 +459,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     <div className="col-span-2 grid grid-cols-1 gap-4 border p-4 rounded-lg bg-green-50">
                         <h4 className="font-bold text-green-800 text-sm">B. Setup Cepat (Untuk Staff)</h4>
                         <p className="text-xs text-green-700">
-                            Punya kode dari Admin? Paste di sini untuk langsung terhubung.
+                            Punya kode dari Admin? Paste di sini untuk langsung terhubung tanpa login.
                         </p>
                         <div className="flex gap-2">
                             <input 
@@ -466,7 +478,8 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                                 {isProcessingPairing ? <span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span> : 'Hubungkan'}
                             </button>
                         </div>
-                        {pairingStep === 'connecting' && <p className="text-xs text-green-700 animate-pulse">Memverifikasi kode...</p>}
+                        {pairingStep === 'connecting' && <p className="text-xs text-green-700 animate-pulse">Menyalin Sesi Cloud...</p>}
+                        {pairingStep === 'validating' && <p className="text-xs text-orange-700 animate-pulse">Memverifikasi Token & Koneksi...</p>}
                         {pairingStep === 'downloading_account' && <p className="text-xs text-blue-700 animate-pulse">Mengunduh data akun...</p>}
                         {pairingStep === 'downloading_data' && <p className="text-xs text-indigo-700 animate-pulse">Mengunduh data master...</p>}
                     </div>
@@ -477,9 +490,9 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             {showPairingModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
-                        <h3 className="text-lg font-bold text-gray-800 mb-2">Kode Pairing Akses Cloud</h3>
+                        <h3 className="text-lg font-bold text-gray-800 mb-2">Kode Pairing (Kloning Sesi)</h3>
                         <p className="text-sm text-gray-600 mb-4">
-                            Berikan kode ini kepada Staff untuk akses cepat tanpa login manual.
+                            Berikan kode ini kepada Staff. Staff tidak perlu login manual, sistem akan menggunakan sesi (Refresh Token) yang sama dengan komputer ini.
                         </p>
                         
                         <div className="bg-gray-100 p-3 rounded border border-gray-300 relative group">
@@ -496,7 +509,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         </div>
 
                         <div className="mt-4 p-3 bg-red-50 text-red-700 text-xs rounded border border-red-200">
-                            <strong>PERHATIAN:</strong> Kode ini mengandung Kunci Rahasia akses penyimpanan data (App Secret). Jangan bagikan di tempat umum.
+                            <strong>PERHATIAN:</strong> Kode ini mengandung Kunci Rahasia akses penyimpanan data. Jangan bagikan di tempat umum.
                         </div>
 
                         <div className="mt-6 flex justify-end">
@@ -513,9 +526,9 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600">
                             <i className="bi bi-cloud-check-fill text-4xl"></i>
                         </div>
-                        <h3 className="text-2xl font-bold text-gray-800 mb-2">Sinkronisasi Berhasil</h3>
+                        <h3 className="text-2xl font-bold text-gray-800 mb-2">Koneksi Berhasil!</h3>
                         <p className="text-gray-600 mb-6 leading-relaxed">
-                            Aplikasi telah berhasil terhubung dan mengunduh data terbaru dari server.
+                            Sesi Cloud telah berhasil disalin dan divalidasi. Data Master terbaru juga sudah diunduh.
                         </p>
                         <button 
                             onClick={handleFinishPairing} 

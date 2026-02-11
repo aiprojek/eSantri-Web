@@ -1,40 +1,66 @@
-import React, { useEffect, useState } from 'react';
+
+import React, { useEffect, useState, useCallback } from 'react';
 import { AuditLog } from '../types';
 import { useAppContext } from '../AppContext';
 import { db } from '../db';
+import { Pagination } from './common/Pagination';
 
 export const AuditLogView: React.FC = () => {
-    const { settings, showToast } = useAppContext();
+    const { settings } = useAppContext();
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    // Filters & Pagination State
     const [filterTable, setFilterTable] = useState('');
     const [filterOp, setFilterOp] = useState('');
-    
-    useEffect(() => {
-        const fetchLogs = async () => {
-            setIsLoading(true);
-            try {
-                // Fetch from Local IndexedDB
-                const data = await db.auditLogs.orderBy('created_at').reverse().limit(100).toArray();
-                setLogs(data);
-                setError(null);
-            } catch (err: any) {
-                console.error("Error fetching logs:", err);
-                setError(err.message || "Gagal mengambil data log.");
-            } finally {
-                setIsLoading(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalItems, setTotalItems] = useState(0);
+    const itemsPerPage = 20;
+
+    const fetchLogs = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            let collection = db.auditLogs.orderBy('created_at').reverse();
+
+            // Apply Filters at DB Level (Dexie)
+            if (filterTable || filterOp) {
+                collection = collection.filter(log => {
+                    const tableMatch = !filterTable || log.table_name.toLowerCase().includes(filterTable.toLowerCase());
+                    const opMatch = !filterOp || log.operation === filterOp;
+                    return tableMatch && opMatch;
+                });
             }
-        };
 
+            // 1. Get Total Count (for Pagination UI)
+            const count = await collection.count();
+            setTotalItems(count);
+
+            // 2. Get Data Slice (Offset & Limit)
+            const offset = (currentPage - 1) * itemsPerPage;
+            const data = await collection.offset(offset).limit(itemsPerPage).toArray();
+            
+            setLogs(data);
+            setError(null);
+        } catch (err: any) {
+            console.error("Error fetching logs:", err);
+            setError(err.message || "Gagal mengambil data log.");
+        } finally {
+            setIsLoading(false);
+        }
+    }, [currentPage, filterTable, filterOp, settings.cloudSyncConfig]);
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filterTable, filterOp]);
+
+    // Fetch data when dependencies change
+    useEffect(() => {
         fetchLogs();
-    }, [settings.cloudSyncConfig]);
+    }, [fetchLogs]);
 
-    const filteredLogs = logs.filter(log => {
-        const tableMatch = !filterTable || log.table_name.toLowerCase().includes(filterTable.toLowerCase());
-        const opMatch = !filterOp || log.operation === filterOp;
-        return tableMatch && opMatch;
-    });
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
 
     const getOpColor = (op: string) => {
         switch(op) {
@@ -107,7 +133,10 @@ export const AuditLogView: React.FC = () => {
                         <option value="UPDATE">UPDATE (Ubah)</option>
                         <option value="DELETE">DELETE (Hapus)</option>
                     </select>
-                    {isLoading && <span className="flex items-center text-sm text-gray-500"><i className="bi bi-arrow-repeat animate-spin mr-2"></i> Memuat...</span>}
+                    <div className="ml-auto flex items-center gap-2">
+                        {isLoading && <span className="flex items-center text-sm text-gray-500"><i className="bi bi-arrow-repeat animate-spin mr-2"></i> Memuat...</span>}
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Total: {totalItems} Log</span>
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto border rounded-lg">
@@ -122,7 +151,7 @@ export const AuditLogView: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {filteredLogs.map(log => (
+                            {logs.map(log => (
                                 <tr key={log.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-3 whitespace-nowrap text-gray-500">
                                         {new Date(log.created_at).toLocaleString('id-ID')}
@@ -146,13 +175,21 @@ export const AuditLogView: React.FC = () => {
                                     </td>
                                 </tr>
                             ))}
-                            {filteredLogs.length === 0 && !isLoading && (
+                            {logs.length === 0 && !isLoading && (
                                 <tr>
                                     <td colSpan={5} className="text-center py-8 text-gray-500">Belum ada log aktivitas yang tercatat.</td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                <div className="mt-4">
+                    <Pagination 
+                        currentPage={currentPage} 
+                        totalPages={totalPages} 
+                        onPageChange={setCurrentPage} 
+                    />
                 </div>
             </div>
         </div>

@@ -259,7 +259,7 @@ export const panduanData: PanduanSectionData[] = [
                     <div className="bg-pink-50 p-3 rounded border border-pink-200 text-sm text-pink-900">
                         <strong>KEAMANAN DATA:</strong> Jangan berikan akses Admin penuh kepada penjaga koperasi/kantin.
                         <ul className="list-disc pl-5 mt-1 space-y-1">
-                            <li>Buat user baru di <em>Pengaturan > Akun</em>.</li>
+                            <li>Buat user baru di <em>Pengaturan &gt; Akun</em>.</li>
                             <li>Pilih role <strong>Staff</strong>.</li>
                             <li>Matikan semua akses kecuali <strong>Koperasi</strong>.</li>
                             <li>Dengan ini, penjaga toko hanya bisa berjualan dan tidak bisa mengintip data SPP atau BK santri.</li>

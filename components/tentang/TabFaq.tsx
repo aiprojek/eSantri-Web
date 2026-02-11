@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { faqData, FaqItemData } from '../../data/content';
+import { faqData, FaqItemData } from '../../data/faq';
 
 const FaqItem: React.FC<{ item: FaqItemData; isOpen: boolean; toggle: () => void; highlight?: string }> = ({ item, isOpen, toggle, highlight }) => {
     

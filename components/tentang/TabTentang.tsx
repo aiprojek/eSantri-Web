@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo } from 'react';
-import { FEATURE_DATA, FeatureCategory, FeatureItemData } from '../../data/content';
+import { FEATURE_DATA, FeatureCategory, FeatureItemData } from '../../data/features';
 
 const FeatureCard: React.FC<{ item: FeatureItemData }> = ({ item }) => (
     <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-100 shadow-sm hover:shadow-md transition-all hover:border-teal-200 h-full">

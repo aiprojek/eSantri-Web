@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
-import { panduanData } from '../../data/content';
+import { panduanData } from '../../data/panduan';
 
 const PanduanLangkah: React.FC<{ number: number; title: string; children: React.ReactNode; isLast?: boolean; color?: string }> = ({ number, title, children, isLast = false, color = 'teal' }) => {
     const colorClasses: Record<string, string> = {
@@ -209,7 +209,7 @@ export const TabPanduan: React.FC = () => {
                                                 key={idx}
                                                 number={startNumber + idx + 1}
                                                 title={step.title} 
-                                                color={step.color || section.badgeColor}
+                                                color={(step as any).color || section.badgeColor}
                                                 isLast={idx === section.steps.length - 1}
                                             >
                                                 {step.content}

@@ -1,3 +1,4 @@
+
 name: Release App
 
 on:
@@ -26,7 +27,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      # --- Install Dependencies (ImageMagick Required for Icon Gen) ---
+      # --- Install Dependencies ---
       
       # Ubuntu
       - name: Install dependencies (ubuntu)
@@ -50,10 +51,24 @@ jobs:
       - name: Install Frontend dependencies
         run: npm install
 
-      # FIX: Generate App Icons from SVG source
-      # This creates src-tauri/icons/* which are required for bundling
-      - name: Generate App Icons
-        run: npm run tauri -- icon public/icon.svg
+      # FIX: Generate App Icons robustly
+      # 1. Convert SVG to large PNG using ImageMagick (avoids Tauri SVG decoder issues)
+      # 2. Use Tauri CLI to generate all icon sizes from the PNG
+      
+      - name: Generate Icons (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p src-tauri/icons
+          convert -background none -resize 1024x1024 public/icon.svg public/icon-source.png
+          npm run tauri -- icon public/icon-source.png
+
+      - name: Generate Icons (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if not exist "src-tauri\icons" mkdir "src-tauri\icons"
+          magick public/icon.svg -background none -resize 1024x1024 public/icon-source.png
+          npm run tauri -- icon public/icon-source.png
+        shell: cmd
 
       # Build Frontend first to ensure no errors
       - name: Check Frontend Build

@@ -2,6 +2,7 @@
 {
   "name": "esantri-web",
   "version": "1.0.0",
+  "type": "module",
   "description": "eSantri Web Application",
   "scripts": {
     "dev": "vite",

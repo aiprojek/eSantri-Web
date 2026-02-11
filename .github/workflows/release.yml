@@ -4,7 +4,7 @@ name: Release App
 on:
   release:
     types: [created]
-  # Tambahkan ini agar bisa dijalankan manual lewat tab 'Actions'
+  # Menjalankan manual lewat tab 'Actions'
   workflow_dispatch:
 
 jobs:

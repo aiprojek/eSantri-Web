@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { useSantriFilter } from '../hooks/useSantriFilter';
@@ -28,9 +29,24 @@ const SantriList: React.FC = () => {
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [isBulkStatusOpen, setIsBulkStatusOpen] = useState(false);
     const [isBulkMoveOpen, setIsBulkMoveOpen] = useState(false);
+    
+    // Dropdown Menu State
+    const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
+    const optionsMenuRef = useRef<HTMLDivElement>(null);
 
     // Permission Check
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.santri === 'write';
+
+    // Close menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
+                setIsOptionsMenuOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     const paginatedSantri = filteredSantri.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
     const totalPages = Math.ceil(filteredSantri.length / itemsPerPage);
@@ -103,7 +119,7 @@ const SantriList: React.FC = () => {
     };
 
     // CSV / Bulk Editor
-    const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>, mode: 'add' | 'update') => {
         const file = e.target.files?.[0];
@@ -128,6 +144,7 @@ const SantriList: React.FC = () => {
                  showToast((err as Error).message, 'error');
             }
             if (fileInputRef.current) fileInputRef.current.value = '';
+            setIsOptionsMenuOpen(false);
         };
         reader.readAsText(file);
     };
@@ -141,6 +158,7 @@ const SantriList: React.FC = () => {
         a.download = 'template_santri.csv';
         a.click();
         window.URL.revokeObjectURL(url);
+        setIsOptionsMenuOpen(false);
     };
 
     const handleDownloadData = () => {
@@ -152,6 +170,7 @@ const SantriList: React.FC = () => {
         a.download = 'data_santri_backup.csv';
         a.click();
         window.URL.revokeObjectURL(url);
+        setIsOptionsMenuOpen(false);
     }
     
     const StatusBadge = ({ status }: { status: Santri['status'] }) => {
@@ -178,24 +197,29 @@ const SantriList: React.FC = () => {
                 </div>
                 {canWrite && (
                     <div className="flex gap-2">
-                        <button onClick={() => { setEditingSantri(null); setIsModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2">
+                        <button onClick={() => { setEditingSantri(null); setIsModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2 transition-colors shadow-sm">
                             <i className="bi bi-person-plus-fill"></i> Tambah
                         </button>
-                        <div className="relative group">
-                            <button className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-50 flex items-center gap-2">
+                        <div className="relative" ref={optionsMenuRef}>
+                            <button 
+                                onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)} 
+                                className={`bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-50 flex items-center gap-2 transition-colors ${isOptionsMenuOpen ? 'bg-gray-50 ring-2 ring-gray-200' : ''}`}
+                            >
                                 <i className="bi bi-three-dots-vertical"></i> Opsi Lain
                             </button>
-                            <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-xl z-50 hidden group-hover:block">
-                                <button onClick={() => { setBulkEditorMode('add'); setBulkEditorData([]); setIsBulkEditorOpen(true); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"><i className="bi bi-table"></i> Tambah Massal (Grid)</button>
-                                <button onClick={() => { setBulkEditorMode('edit'); setBulkEditorData(filteredSantri); setIsBulkEditorOpen(true); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"><i className="bi bi-pencil-square"></i> Edit Massal (Grid)</button>
-                                <hr/>
-                                <button onClick={handleDownloadTemplate} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"><i className="bi bi-file-earmark-spreadsheet"></i> Download Template CSV</button>
-                                <button onClick={handleDownloadData} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"><i className="bi bi-download"></i> Backup CSV</button>
-                                <label className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 cursor-pointer flex items-center">
-                                    <i className="bi bi-upload mr-2"></i> Import CSV
-                                    <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={(e) => handleImportCSV(e, 'add')} />
-                                </label>
-                            </div>
+                            {isOptionsMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50 animate-fade-in-down overflow-hidden">
+                                    <button onClick={() => { setBulkEditorMode('add'); setBulkEditorData([]); setIsBulkEditorOpen(true); setIsOptionsMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700"><i className="bi bi-table mr-2 text-teal-600"></i> Tambah Massal (Grid)</button>
+                                    <button onClick={() => { setBulkEditorMode('edit'); setBulkEditorData(filteredSantri); setIsBulkEditorOpen(true); setIsOptionsMenuOpen(false); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700"><i className="bi bi-pencil-square mr-2 text-blue-600"></i> Edit Massal (Grid)</button>
+                                    <hr className="border-gray-100"/>
+                                    <button onClick={handleDownloadTemplate} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700"><i className="bi bi-file-earmark-spreadsheet mr-2 text-green-600"></i> Download Template CSV</button>
+                                    <button onClick={handleDownloadData} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700"><i className="bi bi-download mr-2 text-gray-600"></i> Backup CSV</button>
+                                    <label className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 text-gray-700 cursor-pointer flex items-center">
+                                        <i className="bi bi-upload mr-2 text-purple-600"></i> Import CSV
+                                        <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={(e) => handleImportCSV(e, 'add')} />
+                                    </label>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -204,23 +228,23 @@ const SantriList: React.FC = () => {
             {/* Filters */}
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
                  <div className="lg:col-span-5 relative">
-                     <input type="text" placeholder="Cari Nama, NIS, NIK..." value={santriFilters.search} onChange={e => handleFilterChange('search', e.target.value)} className="w-full pl-9 border rounded-lg p-2.5 text-sm"/>
+                     <input type="text" placeholder="Cari Nama, NIS, NIK..." value={santriFilters.search} onChange={e => handleFilterChange('search', e.target.value)} className="w-full pl-9 border rounded-lg p-2.5 text-sm focus:ring-teal-500 focus:border-teal-500"/>
                      <i className="bi bi-search absolute left-3 top-3 text-gray-400"></i>
                  </div>
                  <select value={santriFilters.jenjang} onChange={e => handleFilterChange('jenjang', e.target.value)} className="border rounded-lg p-2 text-sm"><option value="">Semua Jenjang</option>{settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}</select>
-                 <select value={santriFilters.kelas} onChange={e => handleFilterChange('kelas', e.target.value)} className="border rounded-lg p-2 text-sm" disabled={!santriFilters.jenjang}><option value="">Semua Kelas</option>{availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}</select>
-                 <select value={santriFilters.rombel} onChange={e => handleFilterChange('rombel', e.target.value)} className="border rounded-lg p-2 text-sm" disabled={!santriFilters.kelas}><option value="">Semua Rombel</option>{availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}</select>
+                 <select value={santriFilters.kelas} onChange={e => handleFilterChange('kelas', e.target.value)} className="border rounded-lg p-2 text-sm disabled:bg-gray-100" disabled={!santriFilters.jenjang}><option value="">Semua Kelas</option>{availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}</select>
+                 <select value={santriFilters.rombel} onChange={e => handleFilterChange('rombel', e.target.value)} className="border rounded-lg p-2 text-sm disabled:bg-gray-100" disabled={!santriFilters.kelas}><option value="">Semua Rombel</option>{availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}</select>
                  <select value={santriFilters.status} onChange={e => handleFilterChange('status', e.target.value)} className="border rounded-lg p-2 text-sm"><option value="">Semua Status</option><option value="Aktif">Aktif</option><option value="Lulus">Lulus</option><option value="Keluar/Pindah">Keluar/Pindah</option></select>
                  <select value={santriFilters.gender} onChange={e => handleFilterChange('gender', e.target.value)} className="border rounded-lg p-2 text-sm"><option value="">Semua Gender</option><option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option></select>
             </div>
 
             {/* Bulk Actions Toolbar */}
             {selectedIds.length > 0 && canWrite && (
-                <div className="bg-teal-50 border border-teal-200 p-3 rounded-lg flex items-center justify-between animate-fade-in-down">
+                <div className="bg-teal-50 border border-teal-200 p-3 rounded-lg flex items-center justify-between animate-fade-in-down shadow-sm">
                     <span className="text-sm font-bold text-teal-800">{selectedIds.length} santri dipilih</span>
                     <div className="flex gap-2">
-                        <button onClick={() => setIsBulkStatusOpen(true)} className="px-3 py-1.5 bg-white border border-teal-300 text-teal-700 text-xs font-bold rounded hover:bg-teal-100">Ubah Status</button>
-                        <button onClick={() => setIsBulkMoveOpen(true)} className="px-3 py-1.5 bg-white border border-teal-300 text-teal-700 text-xs font-bold rounded hover:bg-teal-100">Pindah Kelas</button>
+                        <button onClick={() => setIsBulkStatusOpen(true)} className="px-3 py-1.5 bg-white border border-teal-300 text-teal-700 text-xs font-bold rounded hover:bg-teal-100 transition-colors">Ubah Status</button>
+                        <button onClick={() => setIsBulkMoveOpen(true)} className="px-3 py-1.5 bg-white border border-teal-300 text-teal-700 text-xs font-bold rounded hover:bg-teal-100 transition-colors">Pindah Kelas</button>
                     </div>
                 </div>
             )}
@@ -230,7 +254,7 @@ const SantriList: React.FC = () => {
                 <table className="w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
                         <tr>
-                            <th className="p-4 w-10 text-center"><input type="checkbox" onChange={handleSelectAll} checked={selectedIds.length > 0 && selectedIds.length === paginatedSantri.length} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500" /></th>
+                            <th className="p-4 w-10 text-center"><input type="checkbox" onChange={handleSelectAll} checked={selectedIds.length > 0 && selectedIds.length === paginatedSantri.length} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" /></th>
                             <th className="p-4">Nama Santri</th>
                             <th className="p-4">NIS / NISN</th>
                             <th className="p-4">Kelas</th>
@@ -241,26 +265,26 @@ const SantriList: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {paginatedSantri.map(s => (
-                            <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="p-4 text-center"><input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => handleSelectOne(s.id)} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500" /></td>
+                            <tr key={s.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.includes(s.id) ? 'bg-teal-50/30' : ''}`}>
+                                <td className="p-4 text-center"><input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => handleSelectOne(s.id)} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" /></td>
                                 <td className="p-4 font-bold text-gray-800 flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
-                                         {s.fotoUrl && !s.fotoUrl.includes('text=Foto') ? <img src={s.fotoUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">{s.namaLengkap.charAt(0)}</div>}
+                                    <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-300">
+                                         {s.fotoUrl && !s.fotoUrl.includes('text=Foto') ? <img src={s.fotoUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs font-bold">{s.namaLengkap.charAt(0)}</div>}
                                     </div>
                                     {s.namaLengkap}
                                 </td>
                                 <td className="p-4 text-gray-500 font-mono text-xs">{s.nis || '-'} <br/> {s.nisn}</td>
                                 <td className="p-4">
-                                    <div className="text-gray-900">{settings.kelas.find(k=>k.id===s.kelasId)?.nama || '-'}</div>
+                                    <div className="text-gray-900 font-medium">{settings.kelas.find(k=>k.id===s.kelasId)?.nama || '-'}</div>
                                     <div className="text-gray-500 text-xs">{settings.rombel.find(r=>r.id===s.rombelId)?.nama}</div>
                                 </td>
-                                <td className="p-4 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td>
+                                <td className="p-4 text-center"><span className={`px-2 py-0.5 rounded text-xs font-bold ${s.jenisKelamin === 'Laki-laki' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</span></td>
                                 <td className="p-4"><StatusBadge status={s.status} /></td>
                                 <td className="p-4 text-center">
                                     {canWrite && (
                                         <div className="flex justify-center gap-2">
-                                            <button onClick={() => handleEdit(s)} className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-2 rounded transition-colors"><i className="bi bi-pencil-square"></i></button>
-                                            <button onClick={() => handleDelete(s.id)} className="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors"><i className="bi bi-trash"></i></button>
+                                            <button onClick={() => handleEdit(s)} className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-2 rounded transition-colors" title="Edit"><i className="bi bi-pencil-square"></i></button>
+                                            <button onClick={() => handleDelete(s.id)} className="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors" title="Hapus"><i className="bi bi-trash"></i></button>
                                         </div>
                                     )}
                                 </td>
@@ -291,8 +315,6 @@ const SantriList: React.FC = () => {
                 initialData={bulkEditorData}
                 onSave={async (data) => {
                     if (bulkEditorMode === 'add') {
-                        // Cast partial data to compatible Omit<Santri, 'id'> type
-                        // In real app, might need more rigorous validation or default filling
                         await onBulkAddSantri(data as Omit<Santri, 'id'>[]);
                         showToast(`${data.length} santri ditambahkan`, 'success');
                     } else {

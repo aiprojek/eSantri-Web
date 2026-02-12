@@ -48,6 +48,29 @@ export const SantriModal: React.FC<SantriModalProps> = ({
         if (santriData) {
             reset(santriData);
             originalStatusRef.current = santriData.status;
+        } else {
+            // Reset form dengan nilai default untuk data baru
+            reset({
+                id: 0,
+                namaLengkap: '',
+                nis: '',
+                nik: '',
+                nisn: '',
+                jenisKelamin: 'Laki-laki',
+                tempatLahir: '',
+                tanggalLahir: '',
+                kewarganegaraan: 'WNI',
+                alamat: { detail: '' },
+                namaAyah: '',
+                namaIbu: '',
+                status: 'Aktif',
+                jenisSantri: 'Mondok - Baru',
+                jenjangId: 0,
+                kelasId: 0,
+                rombelId: 0,
+                tanggalMasuk: new Date().toISOString().split('T')[0],
+            } as unknown as Santri);
+            originalStatusRef.current = 'Aktif';
         }
         setActiveTab('dataDiri');
     }
@@ -62,9 +85,6 @@ export const SantriModal: React.FC<SantriModalProps> = ({
 
     const statusChanged = originalStatusRef.current !== processedData.status;
     if (statusChanged) {
-      // Need to re-set the processed data into the form context for the mutation modal to pick it up if needed
-      // but strictly we pass data to onSave.
-      // For mutation modal flow, we just trigger the modal, and saving happens in handleSaveMutasi using getValues
       setIsMutasiModalOpen(true);
     } else {
       await onSave(processedData);
@@ -123,15 +143,15 @@ export const SantriModal: React.FC<SantriModalProps> = ({
     </button>
   );
   
-  if (!isOpen || !santriData) return null;
+  if (!isOpen) return null;
     
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4" onClick={onClose}>
         <form onSubmit={handleSubmit(onFormSubmit)} noValidate className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
                 <div className="flex items-center gap-4">
-                    <h3 className="text-xl font-semibold text-gray-800">{santriData.id > 0 ? 'Edit Data Santri' : 'Tambah Santri Baru'}</h3>
-                    {santriData.id === 0 && onSwitchToBulk && (
+                    <h3 className="text-xl font-semibold text-gray-800">{santriData && santriData.id > 0 ? 'Edit Data Santri' : 'Tambah Santri Baru'}</h3>
+                    {(!santriData || santriData.id === 0) && onSwitchToBulk && (
                         <button 
                             type="button" 
                             onClick={onSwitchToBulk}

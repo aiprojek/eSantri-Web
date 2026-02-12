@@ -62,14 +62,33 @@ export const TabLayanan: React.FC = () => {
             <div className="text-center max-w-2xl mx-auto mb-8">
                 <h2 className="text-2xl font-bold text-gray-800 mb-3">Layanan Premium & Dukungan</h2>
                 <p className="text-gray-600">
-                    Aplikasi eSantri Web 100% Gratis & Open Source. Namun, jika Anda membutuhkan kemudahan teknis, server online, atau fitur khusus, kami siap membantu.
+                    Aplikasi eSantri Web 100% Gratis & Open Source. Namun, jika Anda membutuhkan kemudahan teknis, installer siap pakai, atau fitur khusus, kami siap membantu.
                 </p>
             </div>
 
-            {/* Pricing Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Pricing Cards - Changed grid to 2 columns for better balance with 4 items */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* Paket 1: Managed Hosting */}
+                {/* Paket 1: Installer Desktop (NEW) */}
+                <ServiceCard 
+                    title="Installer Desktop Native"
+                    price="Rp 150rb"
+                    period="donasi"
+                    icon="bi-laptop"
+                    description="File aplikasi siap install. Lebih stabil, terisolasi dari browser, dan icon langsung di Desktop/Start Menu."
+                    features={[
+                        "Mendukung Windows, Linux, & macOS",
+                        "Tanpa Install Node.js/Terminal (Ribet)",
+                        "Shortcut Icon di Desktop",
+                        "Performa Lebih Ringan & Cepat",
+                        "Dapat Update Versi Baru"
+                    ]}
+                    buttonText="Beli Installer"
+                    buttonColor="bg-purple-600 hover:bg-purple-700 text-white"
+                    link={`${waBaseUrl}?text=Halo%20Admin,%20saya%20ingin%20donasi%20untuk%20mendapatkan%20file%20Installer%20Desktop%20(Windows/Linux/Mac).`}
+                />
+
+                {/* Paket 2: Managed Hosting */}
                 <ServiceCard 
                     title="eSantri Cloud (SaaS)"
                     price="Rp 750rb"
@@ -90,13 +109,13 @@ export const TabLayanan: React.FC = () => {
                     link={`${waBaseUrl}?text=Halo%20Admin,%20saya%20tertarik%20dengan%20paket%20eSantri%20Cloud.`}
                 />
 
-                {/* Paket 2: Jasa Support */}
+                {/* Paket 3: Jasa Support */}
                 <ServiceCard 
                     title="Jasa Setup & Migrasi"
                     price="Rp 350rb"
                     period="sekali bayar"
                     icon="bi-tools"
-                    description="Kami bantu install aplikasi di komputer/laptop Anda dan migrasi data Excel lama ke sistem baru."
+                    description="Kami bantu install aplikasi di komputer/laptop Anda (via Remote/Zoom) dan migrasi data Excel lama ke sistem baru."
                     features={[
                         "Instalasi di Localhost/Laptop",
                         "Import Data Santri dari Excel",
@@ -109,7 +128,7 @@ export const TabLayanan: React.FC = () => {
                     link={`${waBaseUrl}?text=Halo%20Admin,%20saya%20butuh%20bantuan%20Setup%20dan%20Migrasi%20Data.`}
                 />
 
-                {/* Paket 3: Custom & Branding */}
+                {/* Paket 4: Custom & Branding */}
                 <ServiceCard 
                     title="Custom & Branding"
                     price="Hubungi Kami"

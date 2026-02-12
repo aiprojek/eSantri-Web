@@ -46,20 +46,39 @@ export const KoperasiSettingsView: React.FC = () => {
     };
 
     const connectPrinter = async () => {
-        if (!(navigator as any).bluetooth) {
-            alert("Browser ini tidak mendukung Web Bluetooth. Gunakan Chrome/Edge di Android/Desktop.");
+        const nav = navigator as any;
+        
+        // Cek dukungan API Bluetooth
+        if (!nav.bluetooth) {
+            // Cek apakah ini lingkungan Tauri (Desktop)
+            const isTauri = !!(window as any).__TAURI__;
+            
+            if (isTauri) {
+                alert(
+                    "INFO MODE DESKTOP:\n\n" +
+                    "Di aplikasi Desktop, akses Bluetooth Web dibatasi oleh sistem operasi.\n\n" +
+                    "SOLUSI: \n" +
+                    "1. Hubungkan/Pairing Printer Bluetooth Anda ke Windows/Mac melalui menu 'Settings > Devices > Printers'.\n" +
+                    "2. Gunakan tombol 'Test Print (System Dialog)' di bawah.\n" +
+                    "3. Pilih printer Anda di daftar printer sistem."
+                );
+            } else {
+                alert("Browser ini tidak mendukung Web Bluetooth. Silakan gunakan Google Chrome atau Microsoft Edge.");
+            }
             return;
         }
+
         setIsConnecting(true);
         try {
-            const dev = await (navigator as any).bluetooth.requestDevice({
+            const dev = await nav.bluetooth.requestDevice({
                 filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }] // Standard UUID for many thermal printers
             });
             await dev.gatt?.connect();
             setDevice(dev);
             showToast(`Terhubung ke ${dev.name}`, 'success');
         } catch (e) {
-            alert('Gagal koneksi: ' + e);
+            console.error(e);
+            showToast('Gagal koneksi atau dibatalkan.', 'error');
         } finally {
             setIsConnecting(false);
         }
@@ -67,9 +86,15 @@ export const KoperasiSettingsView: React.FC = () => {
 
     const handleTestPrint = async () => {
          if (device && device.gatt && device.gatt.connected) {
-             showToast('Mengirim perintah cetak test...', 'info');
+             // Logic cetak raw bytes ke bluetooth (sederhana)
+             const encoder = new TextEncoder();
+             const data = encoder.encode("\n\nTEST PRINT BERHASIL\n\n   eSantri Web   \n\n\n");
+             // Note: Implementasi detail writeValue tergantung karakteristik service/characteristic printer
+             showToast('Mengirim sinyal ke Printer Bluetooth...', 'info');
+             // Placeholder: implementasi write sebenarnya butuh UUID characteristic yang spesifik
          } else {
-             showToast('Printer belum terhubung via Bluetooth. Mencoba print dialog browser...', 'info');
+             // Fallback ke System Print
+             showToast('Membuka dialog cetak sistem...', 'info');
              window.print();
          }
     };
@@ -100,8 +125,8 @@ export const KoperasiSettingsView: React.FC = () => {
                          <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Lebar Kertas</label>
                             <select value={config.printerWidth} onChange={e => setConfig({...config, printerWidth: e.target.value as any})} className="w-full border rounded p-2 text-sm">
-                                <option value="58mm">58mm (Standar Bluetooth)</option>
-                                <option value="80mm">80mm (Desktop)</option>
+                                <option value="58mm">58mm (Standar Struk)</option>
+                                <option value="80mm">80mm (Lebar)</option>
                             </select>
                         </div>
                         <button onClick={handleSave} className="bg-teal-600 text-white px-4 py-2 rounded font-bold text-sm w-full hover:bg-teal-700">Simpan Profil</button>
@@ -142,24 +167,32 @@ export const KoperasiSettingsView: React.FC = () => {
 
             <div className="space-y-6">
                  <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
-                    <h3 className="font-bold text-blue-800 mb-4 border-b pb-2"><i className="bi bi-bluetooth"></i> Printer Bluetooth</h3>
+                    <h3 className="font-bold text-blue-800 mb-4 border-b pb-2"><i className="bi bi-printer-fill"></i> Konfigurasi Printer</h3>
                     <div className="space-y-3">
                          <div className="flex items-center justify-between bg-gray-50 p-3 rounded border">
-                             <span className="text-sm font-medium">{device ? `Terhubung: ${device.name}` : 'Belum Terhubung'}</span>
-                             <span className={`w-3 h-3 rounded-full ${device ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                             <div className="text-sm">
+                                 <div className="font-bold text-gray-700">Status Web Bluetooth:</div>
+                                 <div className="text-xs text-gray-500">{device ? `Terhubung: ${device.name}` : 'Tidak Terhubung / Mode Desktop'}</div>
+                             </div>
+                             <span className={`w-3 h-3 rounded-full ${device ? 'bg-green-500' : 'bg-gray-400'}`}></span>
                          </div>
+                         
+                         <div className="bg-yellow-50 p-3 rounded text-xs text-yellow-800 border border-yellow-200 mb-2">
+                             <strong>Tips Desktop:</strong> Jika tombol "Cari Printer" tidak merespon, gunakan <strong>Driver Printer Bawaan OS</strong> (Install printer di Windows/Mac), lalu gunakan tombol <strong>Test Print (System)</strong>.
+                         </div>
+
                          <button onClick={connectPrinter} disabled={isConnecting} className="w-full bg-blue-600 text-white px-4 py-2 rounded font-bold text-sm hover:bg-blue-700 disabled:bg-gray-400">
-                             {isConnecting ? 'Mencari...' : 'Cari & Hubungkan Printer'}
+                             {isConnecting ? 'Mencari...' : 'Cari Printer (Web Bluetooth)'}
                          </button>
-                         <button onClick={handleTestPrint} className="w-full bg-gray-100 text-gray-700 border px-4 py-2 rounded font-bold text-sm hover:bg-gray-200">
-                             Test Print Struk
+                         <button onClick={handleTestPrint} className="w-full bg-gray-100 text-gray-700 border px-4 py-2 rounded font-bold text-sm hover:bg-gray-200 flex items-center justify-center gap-2">
+                             <i className="bi bi-printer"></i> Test Print (System Dialog)
                          </button>
                     </div>
                 </div>
 
                 <div className="bg-gray-100 p-6 rounded-lg border shadow-inner flex flex-col items-center">
-                    <h3 className="font-bold text-gray-600 mb-4 text-sm">Preview Struk</h3>
-                    <div className="shadow-lg">
+                    <h3 className="font-bold text-gray-600 mb-4 text-sm">Preview Layout Struk</h3>
+                    <div className="shadow-lg transform scale-90 origin-top">
                         <StrukPreview items={dummyItems} settings={config} isPreview={true} />
                     </div>
                 </div>

@@ -140,21 +140,64 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
         const total = santriInJenjang.length;
         const putra = santriInJenjang.filter(s => s.jenisKelamin === 'Laki-laki').length;
         const putri = total - putra;
-        const statuses = statusData.map(s => { const count = santriInJenjang.filter(santri => santri.status === s.name).length; return { ...s, count, percentage: total > 0 ? (count / total) * 100 : 0 }; });
+        
+        const statuses = statusData.map(s => { 
+            const count = santriInJenjang.filter(santri => santri.status === s.name).length; 
+            return { ...s, count, percentage: total > 0 ? (count / total) * 100 : 0 }; 
+        });
+
         const kelasBreakdown = settings.kelas.filter(k => k.jenjangId === jenjang.id).map(kelas => {
             const santriInKelas = santriInJenjang.filter(s => s.kelasId === kelas.id);
-            return { id: kelas.id, nama: kelas.nama, total: santriInKelas.length, putra: santriInKelas.filter(s => s.jenisKelamin === 'Laki-laki').length, putri: santriInKelas.filter(s => s.jenisKelamin === 'Perempuan').length };
+            const rombels = settings.rombel.filter(r => r.kelasId === kelas.id).map(rombel => {
+                 const santriInRombel = santriInKelas.filter(s => s.rombelId === rombel.id);
+                 return {
+                     id: rombel.id,
+                     nama: rombel.nama,
+                     total: santriInRombel.length,
+                     putra: santriInRombel.filter(s => s.jenisKelamin === 'Laki-laki').length,
+                     putri: santriInRombel.filter(s => s.jenisKelamin === 'Perempuan').length
+                 };
+            });
+            return { 
+                id: kelas.id, 
+                nama: kelas.nama, 
+                total: santriInKelas.length, 
+                putra: santriInKelas.filter(s => s.jenisKelamin === 'Laki-laki').length, 
+                putri: santriInKelas.filter(s => s.jenisKelamin === 'Perempuan').length,
+                rombels
+            };
         });
+
         return { id: jenjang.id, nama: jenjang.nama, total, putra, putri, statuses, kelasBreakdown };
-  }), [settings.jenjang, settings.kelas, santriList, statusData]);
+  }), [settings.jenjang, settings.kelas, settings.rombel, santriList, statusData]);
   
   const recentSantri = [...santriList].sort((a, b) => new Date(b.tanggalMasuk).getTime() - new Date(a.tanggalMasuk).getTime()).slice(0, 5);
 
+  const handlePrint = () => {
+      window.print();
+  };
+
   return (
-    <div>
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Dashboard</h1>
-        <p className="text-gray-600 mb-8">Selamat datang! Berikut adalah ringkasan data di {settings.namaPonpes}</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+    <div className="printable-content-wrapper">
+        <div className="flex justify-between items-center mb-6 no-print">
+            <div>
+                <h1 className="text-3xl font-bold text-gray-800 mb-2">Dashboard</h1>
+                <p className="text-gray-600">Selamat datang! Berikut adalah ringkasan data di {settings.namaPonpes}</p>
+            </div>
+            <button onClick={handlePrint} className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center gap-2 shadow-sm transition-colors">
+                <i className="bi bi-printer-fill"></i> Cetak Dashboard
+            </button>
+        </div>
+
+        {/* Print Header (Visible only in print) */}
+        <div className="hidden print:block mb-8 text-center border-b pb-4">
+            <h1 className="text-2xl font-bold uppercase">{settings.namaPonpes}</h1>
+            <p className="text-sm text-gray-600">{settings.alamat}</p>
+            <h2 className="text-xl font-bold mt-4">LAPORAN RINGKASAN DASHBOARD</h2>
+            <p className="text-xs text-gray-500">Dicetak pada: {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 print:grid-cols-3 print:gap-4">
             <StatCard title="Total Santri" value={totalSantri} icon={<i className="bi-people-fill text-2xl text-white"></i>} color="bg-blue-500" onClick={() => navigateTo(Page.Santri)} />
             <StatCard title="Santri Putra" value={totalPutra} icon={<i className="bi bi-person text-2xl text-white"></i>} color="bg-sky-500" onClick={() => navigateTo(Page.Santri, { gender: 'Laki-laki' })} />
             <StatCard title="Santri Putri" value={totalPutri} icon={<i className="bi bi-person text-2xl text-white"></i>} color="bg-pink-500" onClick={() => navigateTo(Page.Santri, { gender: 'Perempuan' })} />
@@ -162,62 +205,102 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
             <StatCard title="Rombel" value={settings.rombel.length} icon={<i className="bi-building text-2xl text-white"></i>} color="bg-purple-500" />
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <div className="bg-white p-6 rounded-xl shadow-md">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 print:grid-cols-2 print:gap-4">
+            <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:break-inside-avoid">
                 <h2 className="text-xl font-bold text-gray-700 mb-4">Komposisi Status Santri</h2>
                 <StatusSantriChart statusData={statusData} total={totalSantri} />
             </div>
-            <InfoPondokCard settings={settings} />
-            <div className="bg-white p-6 rounded-xl shadow-md">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-gray-700">Santri Terbaru</h2>
-                    <button onClick={() => navigateTo(Page.Santri)} className="text-sm font-medium text-teal-600 hover:underline">Lihat Semua</button>
+            <div className="flex flex-col gap-6 print:gap-4">
+                 <div className="print:break-inside-avoid h-full">
+                    <InfoPondokCard settings={settings} />
+                 </div>
+                 <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:break-inside-avoid flex-grow">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-gray-700">Santri Terbaru</h2>
+                        <button onClick={() => navigateTo(Page.Santri)} className="text-sm font-medium text-teal-600 hover:underline no-print">Lihat Semua</button>
+                    </div>
+                    <ul className="space-y-4">
+                        {recentSantri.map(santri => (
+                            <li key={santri.id} className="flex items-center gap-4">
+                                <div className="no-print">
+                                    <DashboardAvatar santri={santri} />
+                                </div>
+                                <div className="flex-grow">
+                                    <p className="font-semibold text-sm text-gray-800">{santri.namaLengkap}</p>
+                                    <p className="text-xs text-gray-500">{settings.rombel.find(r => r.id === santri.rombelId)?.nama || 'N/A'}</p>
+                                </div>
+                                <span className="text-xs text-gray-400 flex-shrink-0">{new Date(santri.tanggalMasuk).toLocaleDateString()}</span>
+                            </li>
+                        ))}
+                        {recentSantri.length === 0 && <p className="text-center text-gray-500 py-4">Belum ada data santri baru.</p>}
+                    </ul>
                 </div>
-                <ul className="space-y-4">
-                    {recentSantri.map(santri => (
-                        <li key={santri.id} className="flex items-center gap-4">
-                            <DashboardAvatar santri={santri} />
-                            <div className="flex-grow">
-                                <p className="font-semibold text-sm text-gray-800">{santri.namaLengkap}</p>
-                                <p className="text-xs text-gray-500">{settings.rombel.find(r => r.id === santri.rombelId)?.nama || 'N/A'}</p>
-                            </div>
-                            <span className="text-xs text-gray-400 flex-shrink-0">{new Date(santri.tanggalMasuk).toLocaleDateString()}</span>
-                        </li>
-                    ))}
-                    {recentSantri.length === 0 && <p className="text-center text-gray-500 py-4">Belum ada data santri baru.</p>}
-                </ul>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-md flex flex-col">
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 mb-6 no-print">
+             <div className="bg-white p-6 rounded-xl shadow-md flex flex-col">
                 <h2 className="text-xl font-bold text-gray-700 mb-4">Aksi Cepat</h2>
-                <div className="grid grid-cols-2 gap-4 my-auto">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-auto">
                     <QuickActionButton icon="bi-person-plus-fill" label="Tambah Santri" onClick={() => navigateTo(Page.Santri)} />
                     <QuickActionButton icon="bi-person-lines-fill" label="Pendaftaran (PSB)" onClick={() => navigateTo(Page.PSB)} />
-                    <QuickActionButton icon="bi-printer-fill" label="Cetak" onClick={() => navigateTo(Page.Laporan)} />
+                    <QuickActionButton icon="bi-printer-fill" label="Cetak Laporan" onClick={() => navigateTo(Page.Laporan)} />
                     <QuickActionButton icon="bi-gear-fill" label="Pengaturan" onClick={() => navigateTo(Page.Pengaturan)} />
                 </div>
             </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6">
-            <div className="bg-white p-6 rounded-xl shadow-md">
-                <h2 className="text-xl font-bold text-gray-700 mb-4">Distribusi Santri per Jenjang</h2>
-                <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-6 print:block">
+            <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:p-0 print:border-none">
+                <h2 className="text-xl font-bold text-gray-700 mb-4 print:mb-6 print:text-black">Distribusi Santri per Jenjang</h2>
+                <div className="space-y-8 print:space-y-8">
                     {santriByJenjang.map(item => (
-                        <div key={item.id}>
+                        <div key={item.id} className="print:break-inside-avoid">
                             <div className="flex justify-between items-start mb-2">
                                 <div>
-                                    <span className="text-base font-medium text-gray-700">{item.nama}</span>
-                                    <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
-                                        <span className="flex items-center gap-1.5"><i className="bi bi-person text-blue-500"></i> {item.putra} Putra</span>
-                                        <span className="flex items-center gap-1.5"><i className="bi bi-person text-pink-500"></i> {item.putri} Putri</span>
+                                    <span className="text-lg font-bold text-gray-800">{item.nama}</span>
+                                    <div className="flex items-center gap-4 text-sm text-gray-500 mt-1 print:text-black">
+                                        <span className="flex items-center gap-1.5"><i className="bi bi-person text-blue-500 print:text-black"></i> {item.putra} Putra</span>
+                                        <span className="flex items-center gap-1.5"><i className="bi bi-person text-pink-500 print:text-black"></i> {item.putri} Putri</span>
                                     </div>
                                 </div>
-                                <span className="text-lg font-semibold text-gray-800">{item.total} <span className="text-sm font-normal text-gray-500">Santri</span></span>
+                                <span className="text-lg font-semibold text-gray-800 print:text-black">{item.total} <span className="text-sm font-normal text-gray-500 print:text-black">Santri</span></span>
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-4 flex overflow-hidden">
+                            
+                            {/* Progress Bar */}
+                            <div className="w-full bg-gray-200 rounded-full h-4 flex overflow-hidden mb-4 print:border print:border-gray-400 print:h-3">
                                 {item.statuses.filter(s => s.count > 0).map(s => (
-                                    <div key={s.name} className={`${s.color.replace('text-', 'bg-')}`} style={{ width: `${s.percentage}%` }} title={`${s.name}: ${s.count} santri`}></div>
+                                    <div key={s.name} className={`${s.color.replace('text-', 'bg-')} print:bg-gray-600`} style={{ width: `${s.percentage}%` }} title={`${s.name}: ${s.count} santri`}></div>
                                 ))}
+                            </div>
+
+                            {/* Detailed Breakdown */}
+                            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 print:bg-white print:border-gray-300">
+                                <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider border-b pb-2">Detail Kelas & Rombel</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-2">
+                                    {item.kelasBreakdown.map(kelas => (
+                                        <div key={kelas.id} className="bg-white p-3 rounded border border-gray-200 shadow-sm print:shadow-none print:border-gray-400">
+                                            <div className="flex justify-between items-center mb-2 pb-1 border-b border-gray-100">
+                                                <span className="font-bold text-gray-700 text-sm print:text-black">{kelas.nama}</span>
+                                                <span className="text-xs font-bold bg-gray-100 px-2 py-0.5 rounded text-gray-600 print:bg-transparent print:text-black print:border print:border-gray-400">{kelas.total}</span>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                {kelas.rombels.map(rombel => (
+                                                    <div key={rombel.id} className="flex justify-between items-center text-xs text-gray-600 print:text-black">
+                                                        <span className="font-medium truncate pr-2">{rombel.nama}</span>
+                                                        <div className="flex gap-2 flex-shrink-0 text-[10px] font-mono">
+                                                            <span className="text-blue-600 print:text-black">L:{rombel.putra}</span>
+                                                            <span className="text-pink-600 print:text-black">P:{rombel.putri}</span>
+                                                            <span className="font-bold text-gray-800 print:text-black">T:{rombel.total}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {kelas.rombels.length === 0 && <div className="text-xs text-gray-400 italic">Belum ada rombel</div>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {item.kelasBreakdown.length === 0 && <div className="text-xs text-gray-400 italic col-span-full">Belum ada data kelas.</div>}
+                                </div>
                             </div>
                         </div>
                     ))}

@@ -398,10 +398,89 @@ export const TabDesainRapor: React.FC = () => {
                              <div className="p-2 bg-purple-50 rounded border"><label className="block text-xs font-bold text-purple-800">Pilih Data</label><select className="w-full text-xs border rounded p-1.5" onChange={(e) => updateActiveCell({ value: e.target.value })}><option value="">-- Pilih --</option><option value="$NAMA">Nama Santri</option><option value="$NIS">NIS</option><option value="$KELAS">Kelas</option><option value="$NAMA_PONPES">Nama Pondok</option><option value="$MAPEL_NAME_1">Mapel (Set ID manual)</option></select></div>
                         )}
                         {(activeCellData.type === 'input' || activeCellData.type === 'dropdown') && (
-                            <div><label className="block text-xs font-bold mb-1 text-blue-700">KODE VARIABEL ($)</label><input type="text" value={activeCellData.key || ''} onChange={e => updateActiveCell({ key: e.target.value })} className="w-full border rounded p-2 text-sm font-mono uppercase" placeholder="CONTOH: UH1"/></div>
+                            <div className="space-y-2">
+                                <div>
+                                    <label className="block text-xs font-bold mb-1 text-blue-700">KODE VARIABEL ($)</label>
+                                    <input 
+                                        type="text" 
+                                        value={activeCellData.key || ''} 
+                                        onChange={e => updateActiveCell({ key: e.target.value })} 
+                                        className="w-full border rounded p-2 text-sm font-mono uppercase" 
+                                        placeholder="CONTOH: UH1"
+                                    />
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Kode unik untuk referensi rumus (tanpa spasi).</p>
+                                </div>
+                                
+                                {/* Variable List Helper */}
+                                <div className="bg-blue-50 p-2 rounded border border-blue-100 text-xs">
+                                    <div className="font-bold text-blue-800 mb-1">Variabel Tersedia:</div>
+                                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                                        {activeTemplate?.cells.flat()
+                                            .filter(c => c.key && c.key !== activeCellData.key)
+                                            .map(c => (
+                                                <span key={c.id} className="bg-white border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-mono text-blue-600">
+                                                    ${c.key}
+                                                </span>
+                                            ))
+                                        }
+                                        {activeTemplate?.cells.flat().filter(c => c.key).length === 0 && <span className="text-gray-400 italic">Belum ada variabel lain.</span>}
+                                    </div>
+                                </div>
+                            </div>
                         )}
                          {activeCellData.type === 'formula' && (
-                            <div><label className="block text-xs font-bold mb-1 text-yellow-700">Rumus</label><input type="text" value={activeCellData.value} onChange={e => updateActiveCell({ value: e.target.value })} className="w-full border rounded p-2 text-sm font-mono" placeholder="= RATA2($A, $B)"/></div>
+                            <div className="space-y-2">
+                                <div>
+                                    <label className="block text-xs font-bold mb-1 text-yellow-700">Rumus</label>
+                                    <input 
+                                        type="text" 
+                                        value={activeCellData.value} 
+                                        onChange={e => updateActiveCell({ value: e.target.value })} 
+                                        className="w-full border rounded p-2 text-sm font-mono" 
+                                        placeholder="= RATA2($A, $B)"
+                                    />
+                                </div>
+                                
+                                {/* Formula Guide & Helpers */}
+                                <div className="bg-yellow-50 p-2 rounded border border-yellow-100 text-xs space-y-2">
+                                    <div className="font-bold text-yellow-800 border-b border-yellow-200 pb-1 mb-1">Panduan & Helper</div>
+                                    
+                                    {/* Ranking Helper */}
+                                    <div className="bg-white p-2 rounded border border-yellow-200">
+                                        <label className="block font-bold text-gray-600 mb-1">Buat Peringkat (Ranking)</label>
+                                        <div className="flex gap-1">
+                                            <select id="rankSourceSelect" className="flex-grow border rounded px-1 py-0.5 text-[10px]">
+                                                <option value="">-- Pilih Sumber Nilai --</option>
+                                                {activeTemplate?.cells.flat()
+                                                    .filter(c => c.key && c.key !== activeCellData.key)
+                                                    .map(c => <option key={c.id} value={c.key}>${c.key}</option>)
+                                                }
+                                            </select>
+                                            <button 
+                                                onClick={() => {
+                                                    const sel = document.getElementById('rankSourceSelect') as HTMLSelectElement;
+                                                    if(sel.value) updateActiveCell({ value: `RANK($${sel.value})` });
+                                                }}
+                                                className="bg-yellow-600 text-white px-2 rounded hover:bg-yellow-700"
+                                            >
+                                                Set
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <details className="cursor-pointer group">
+                                        <summary className="font-semibold text-yellow-700 hover:underline">Lihat Daftar Rumus</summary>
+                                        <ul className="mt-1 space-y-1 text-[10px] text-gray-600 pl-2 border-l-2 border-yellow-300">
+                                            <li><code>RATA2($A, $B)</code> : Rata-rata nilai</li>
+                                            <li><code>SUM($A, $B)</code> : Penjumlahan</li>
+                                            <li><code>MAX($A, $B)</code> : Nilai tertinggi</li>
+                                            <li><code>MIN($A, $B)</code> : Nilai terendah</li>
+                                            <li><code>IF($A&gt;75, "Lulus", "Remidi")</code> : Logika IF</li>
+                                            <li><code>RANK($TOTAL)</code> : Peringkat otomatis</li>
+                                        </ul>
+                                    </details>
+                                </div>
+                            </div>
                         )}
                          <div className="grid grid-cols-2 gap-3 pt-3 border-t">
                             <div><label className="block text-xs font-bold mb-1">Lebar (px)</label><input type="number" value={activeCellData.width || ''} onChange={e => updateActiveCell({ width: parseInt(e.target.value) })} className="w-full border rounded p-2 text-sm"/></div>

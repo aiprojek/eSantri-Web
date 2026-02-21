@@ -203,10 +203,26 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 print:grid-cols-2 print:gap-4">
-            <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:break-inside-avoid">
-                <h2 className="text-xl font-bold text-gray-700 mb-4">Komposisi Status Santri</h2>
-                <StatusSantriChart statusData={statusData} total={totalSantri} />
+            {/* Left Column */}
+            <div className="flex flex-col gap-6 print:gap-4">
+                <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:break-inside-avoid">
+                    <h2 className="text-xl font-bold text-gray-700 mb-4">Komposisi Status Santri</h2>
+                    <StatusSantriChart statusData={statusData} total={totalSantri} />
+                </div>
+                
+                {/* Quick Actions - Moved here */}
+                <div className="bg-white p-6 rounded-xl shadow-md flex flex-col no-print">
+                    <h2 className="text-xl font-bold text-gray-700 mb-4">Aksi Cepat</h2>
+                    <div className="grid grid-cols-2 gap-4 my-auto">
+                        <QuickActionButton icon="bi-person-plus-fill" label="Tambah Santri" onClick={() => navigateTo(Page.Santri)} />
+                        <QuickActionButton icon="bi-person-lines-fill" label="Pendaftaran (PSB)" onClick={() => navigateTo(Page.PSB)} />
+                        <QuickActionButton icon="bi-printer-fill" label="Cetak Laporan" onClick={() => navigateTo(Page.Laporan)} />
+                        <QuickActionButton icon="bi-gear-fill" label="Pengaturan" onClick={() => navigateTo(Page.Pengaturan)} />
+                    </div>
+                </div>
             </div>
+
+            {/* Right Column */}
             <div className="flex flex-col gap-6 print:gap-4">
                  <div className="print:break-inside-avoid h-full">
                     <InfoPondokCard settings={settings} />
@@ -231,18 +247,6 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                         ))}
                         {recentSantri.length === 0 && <p className="text-center text-gray-500 py-4">Belum ada data santri baru.</p>}
                     </ul>
-                </div>
-            </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 mb-6 no-print">
-             <div className="bg-white p-6 rounded-xl shadow-md flex flex-col">
-                <h2 className="text-xl font-bold text-gray-700 mb-4">Aksi Cepat</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-auto">
-                    <QuickActionButton icon="bi-person-plus-fill" label="Tambah Santri" onClick={() => navigateTo(Page.Santri)} />
-                    <QuickActionButton icon="bi-person-lines-fill" label="Pendaftaran (PSB)" onClick={() => navigateTo(Page.PSB)} />
-                    <QuickActionButton icon="bi-printer-fill" label="Cetak Laporan" onClick={() => navigateTo(Page.Laporan)} />
-                    <QuickActionButton icon="bi-gear-fill" label="Pengaturan" onClick={() => navigateTo(Page.Pengaturan)} />
                 </div>
             </div>
         </div>

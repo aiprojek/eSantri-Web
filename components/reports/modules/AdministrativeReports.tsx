@@ -11,25 +11,94 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
     const totalPutri = totalSantri - totalPutra;
     const statusCounts = santriList.reduce((acc, santri) => { acc[santri.status] = (acc[santri.status] || 0) + 1; return acc; }, {} as Record<Santri['status'], number>);
     
+    // Calculate detailed breakdown
+    const jenjangBreakdown = settings.jenjang.map(jenjang => {
+        const santriInJenjang = santriList.filter(s => s.jenjangId === jenjang.id);
+        const kelasBreakdown = settings.kelas.filter(k => k.jenjangId === jenjang.id).map(kelas => {
+            const santriInKelas = santriInJenjang.filter(s => s.kelasId === kelas.id);
+            const rombels = settings.rombel.filter(r => r.kelasId === kelas.id).map(rombel => {
+                 const santriInRombel = santriInKelas.filter(s => s.rombelId === rombel.id);
+                 return {
+                     nama: rombel.nama,
+                     total: santriInRombel.length,
+                     putra: santriInRombel.filter(s => s.jenisKelamin === 'Laki-laki').length,
+                     putri: santriInRombel.filter(s => s.jenisKelamin === 'Perempuan').length
+                 };
+            });
+            return { 
+                nama: kelas.nama, 
+                total: santriInKelas.length,
+                rombels
+            };
+        });
+        return { 
+            nama: jenjang.nama, 
+            total: santriInJenjang.length, 
+            putra: santriInJenjang.filter(s => s.jenisKelamin === 'Laki-laki').length,
+            putri: santriInJenjang.filter(s => s.jenisKelamin === 'Perempuan').length,
+            kelasBreakdown 
+        };
+    });
+
     return (
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="Laporan Ringkas Dashboard Utama" />
                 <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
+                
                 <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Utama</h4>
                 <div className="grid grid-cols-3 gap-4 text-center mb-6">
                     <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Total Santri</div><div className="text-2xl font-bold">{totalSantri}</div></div>
                     <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Santri Putra</div><div className="text-2xl font-bold">{totalPutra}</div></div>
                     <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Santri Putri</div><div className="text-2xl font-bold">{totalPutri}</div></div>
                 </div>
-                <div className="grid grid-cols-2 gap-6" style={{ breakInside: 'avoid' }}>
+
+                <div className="grid grid-cols-2 gap-6 mb-6" style={{ breakInside: 'avoid' }}>
                     <div>
                         <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Komposisi Status</h4>
                         <table className="w-full text-sm">
                             <tbody>{(['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah'] as Santri['status'][]).map(s => (<tr key={s}><td className="py-1 font-medium">{s}</td><td className="py-1 text-right">{statusCounts[s] || 0}</td></tr>))}</tbody>
                         </table>
                     </div>
-                    <div><h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Struktur Pendidikan</h4><table className="w-full text-sm"><tbody><tr><td className="py-1 font-medium">Jumlah Jenjang</td><td className="py-1 text-right">{settings.jenjang.length}</td></tr><tr><td className="py-1 font-medium">Jumlah Rombel</td><td className="py-1 text-right">{settings.rombel.length}</td></tr></tbody></table></div>
+                    <div>
+                        <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Struktur Pendidikan</h4>
+                        <table className="w-full text-sm">
+                            <tbody>
+                                <tr><td className="py-1 font-medium">Jumlah Jenjang</td><td className="py-1 text-right">{settings.jenjang.length}</td></tr>
+                                <tr><td className="py-1 font-medium">Jumlah Kelas</td><td className="py-1 text-right">{settings.kelas.length}</td></tr>
+                                <tr><td className="py-1 font-medium">Jumlah Rombel</td><td className="py-1 text-right">{settings.rombel.length}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Detail Distribusi Santri</h4>
+                <div className="space-y-4">
+                    {jenjangBreakdown.map((j, idx) => (
+                        <div key={idx} className="border border-black rounded p-3" style={{ breakInside: 'avoid' }}>
+                            <div className="flex justify-between items-center mb-2 border-b border-gray-300 pb-1">
+                                <span className="font-bold text-base">{j.nama}</span>
+                                <span className="font-bold text-sm">Total: {j.total} (L:{j.putra}, P:{j.putri})</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                                {j.kelasBreakdown.map((k, kIdx) => (
+                                    <div key={kIdx} className="text-xs">
+                                        <div className="font-semibold bg-gray-100 px-1">{k.nama} <span className="float-right">{k.total}</span></div>
+                                        <div className="pl-2 space-y-0.5 mt-0.5">
+                                            {k.rombels.map((r, rIdx) => (
+                                                <div key={rIdx} className="flex justify-between text-[10px] text-gray-600">
+                                                    <span>- {r.nama}</span>
+                                                    <span>{r.total} (L:{r.putra}, P:{r.putri})</span>
+                                                </div>
+                                            ))}
+                                            {k.rombels.length === 0 && <div className="italic text-gray-400">- Belum ada rombel</div>}
+                                        </div>
+                                    </div>
+                                ))}
+                                {j.kelasBreakdown.length === 0 && <div className="text-xs italic text-gray-500">Belum ada data kelas.</div>}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
             <ReportFooter />

@@ -184,9 +184,6 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                 <h1 className="text-3xl font-bold text-gray-800 mb-2">Dashboard</h1>
                 <p className="text-gray-600">Selamat datang! Berikut adalah ringkasan data di {settings.namaPonpes}</p>
             </div>
-            <button onClick={handlePrint} className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center gap-2 shadow-sm transition-colors">
-                <i className="bi bi-printer-fill"></i> Cetak Dashboard
-            </button>
         </div>
 
         {/* Print Header (Visible only in print) */}

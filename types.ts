@@ -435,6 +435,29 @@ export interface GridCell {
     hidden?: boolean;
 }
 
+export interface PortalContact {
+    id: string;
+    label: string;
+    value: string;
+    icon: string;
+}
+
+export interface PortalConfig {
+    enabled: boolean;
+    theme: 'teal' | 'blue' | 'indigo' | 'slate' | 'rose' | 'emerald' | 'cyan';
+    showFinance: boolean;
+    showAcademic: boolean;
+    showAttendance: boolean;
+    showTahfizh: boolean;
+    showHealth: boolean;
+    showLibrary: boolean;
+    welcomeMessage: string;
+    announcement: string;
+    contacts: PortalContact[];
+    customLinks: { label: string; url: string }[];
+    baseUrl?: string;
+}
+
 export interface PondokSettings {
     id?: number;
     namaYayasan: string;
@@ -465,6 +488,7 @@ export interface PondokSettings {
     cloudSyncConfig: CloudSyncConfig;
     backupConfig: BackupConfig;
     psbConfig: PsbConfig;
+    portalConfig?: PortalConfig;
     
     raporTemplates?: RaporTemplate[];
     

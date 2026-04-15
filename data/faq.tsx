@@ -247,8 +247,36 @@ export const faqData: FaqCategoryData[] = [
                 )
             },
             {
+                question: "Saya menggunakan versi Desktop (Tauri), apakah link portalnya jadi localhost?",
+                answer: "Jika Anda menggunakan versi Desktop, link defaultnya memang akan mengarah ke localhost. Namun, Anda bisa mengatur 'Domain / URL Web Portal' di menu Pengaturan > Portal Wali. Masukkan URL web aplikasi Anda yang sudah dionlinekan (misal di Vercel) agar link yang dibagikan ke wali santri valid dan bisa diakses dari mana saja."
+            },
+            {
+                question: "Di mana saya bisa mendapatkan link/URL untuk dibagikan ke wali santri?",
+                answer: "Link portal dapat ditemukan di menu Pengaturan > Portal Wali. Di bagian atas halaman akan muncul panel 'URL Portal Wali Santri' lengkap dengan tombol 'Salin'. Link ini akan otomatis menyesuaikan apakah Anda membuka aplikasi via domain online atau localhost."
+            },
+            {
+                question: "Apa username dan password untuk wali santri login ke portal?",
+                answer: "Wali santri login menggunakan NIS (Nomor Induk Santri) sebagai username. Untuk password, secara default menggunakan Tanggal Lahir santri (format DDMMYYYY) atau PIN yang telah diatur oleh Admin di data santri."
+            },
+            {
                 question: "Bagaimana cara mengaktifkan Portal Wali Santri?",
-                answer: "Buka menu Pengaturan > Sync Cloud. Gulir ke bawah ke bagian 'Fitur Publik & Portal'. Centang 'Portal Wali Santri'. Jika Anda menggunakan Dropbox/WebDAV, Anda akan diminta login dengan Google (Firebase) sebagai jembatan. Setelah terhubung, klik tombol 'Update Data Portal' untuk mengirim data terbaru ke portal."
+                answer: "Buka menu Pengaturan > Portal Wali. Pastikan status portal 'Aktif'. Jika Anda menggunakan Dropbox/WebDAV, Anda akan diminta login dengan Google (Firebase) di menu Sync Cloud sebagai jembatan. Setelah terhubung, klik tombol 'Update Data Portal' untuk mengirim data terbaru ke portal."
+            },
+            {
+                question: "Bisakah saya membatasi data apa saja yang dilihat wali santri?",
+                answer: "BISA. Di menu Pengaturan > Portal Wali, terdapat bagian 'Visibilitas Modul'. Anda dapat mencentang atau menghilangkan centang pada modul Keuangan, Akademik, Absensi, Tahfizh, Kesehatan, dan Perpustakaan sesuai kebijakan pondok."
+            },
+            {
+                question: "Bagaimana cara mengubah warna tampilan portal wali?",
+                answer: "Buka menu Pengaturan > Portal Wali, lalu pilih salah satu warna pada bagian 'Tema Warna Portal'. Tersedia 7 pilihan warna profesional yang akan mengubah nuansa dashboard portal wali secara instan."
+            },
+            {
+                question: "Wali santri mengeluh data di portal tidak update, apa solusinya?",
+                answer: "Pastikan Anda sudah mengklik tombol 'Update Data Portal' di menu Pengaturan > Portal Wali setelah melakukan perubahan data di aplikasi utama. Jika menggunakan Dropbox/WebDAV, pastikan juga koneksi internet stabil saat proses update berlangsung."
+            },
+            {
+                question: "Apa fungsi fitur 'Kontak Penting' di pengaturan portal?",
+                answer: "Fitur ini memungkinkan Anda menampilkan nomor WhatsApp atau telepon pengurus pondok di dashboard wali santri. Wali cukup mengklik ikon yang tersedia di portal untuk langsung menghubungi pengurus tanpa perlu menyimpan nomor secara manual."
             },
             {
                 question: "Apa bedanya 'Kirim Perubahan' dan 'Ambil Master'?",

@@ -38,6 +38,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             psbConfig: { ...initialSettings.psbConfig, ...(rawSettings.psbConfig || {}) },
             cloudSyncConfig: { ...initialSettings.cloudSyncConfig, ...(rawSettings.cloudSyncConfig || {}) },
             backupConfig: { ...initialSettings.backupConfig, ...(rawSettings.backupConfig || {}) },
+            portalConfig: { ...initialSettings.portalConfig, ...(rawSettings.portalConfig || {}) },
             nisSettings: { 
                 ...initialSettings.nisSettings, 
                 ...(rawSettings.nisSettings || {}),

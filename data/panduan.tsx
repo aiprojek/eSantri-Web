@@ -276,18 +276,22 @@ export const panduanData: PanduanSectionData[] = [
         id: 'cloud',
         badge: 3,
         badgeColor: 'purple',
-        title: 'Sinkronisasi Cloud & Portal Wali',
+        title: 'Sinkronisasi Cloud',
         steps: [
             {
-                title: 'Konsep Sinkronisasi & Portal',
+                title: 'Konsep Sinkronisasi',
                 content: (
                     <>
                         <p className="mb-2">Aplikasi ini menyimpan data di laptop Anda (Offline). Sinkronisasi Cloud berguna untuk:</p>
                         <ul className="list-disc pl-5 space-y-1 text-sm">
                             <li><strong>Backup Otomatis:</strong> Data aman jika laptop rusak.</li>
                             <li><strong>Kerja Tim (Multi-User):</strong> Banyak laptop bisa mengakses data yang sama.</li>
-                            <li><strong>Portal Wali Santri:</strong> Membagikan informasi (nilai, tagihan) ke orang tua secara online.</li>
+                            <li><strong>Jembatan Portal:</strong> Menghubungkan data internal ke Portal Wali Santri secara aman.</li>
                         </ul>
+                        <div className="mt-3 p-2 bg-yellow-50 border border-yellow-100 rounded text-xs text-yellow-800">
+                            <i className="bi bi-info-circle mr-1"></i> 
+                            <strong>Catatan:</strong> Panduan di bawah ini (Hub & Spoke) berlaku khusus untuk pengguna <strong>Dropbox</strong> dan <strong>WebDAV</strong>. Untuk pengguna <strong>Firebase</strong>, sinkronisasi berjalan otomatis secara real-time.
+                        </div>
                     </>
                 )
             },
@@ -296,26 +300,10 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Buka menu <strong>Pengaturan &gt; Sync Cloud</strong>.</li>
-                        <li><strong>Firebase (Rekomendasi):</strong> Real-time, sangat cepat, cocok untuk kerja tim yang intensif dan langsung terintegrasi dengan Portal Wali.</li>
+                        <li><strong>Firebase (Rekomendasi):</strong> Real-time, sangat cepat, cocok untuk kerja tim yang intensif.</li>
                         <li><strong>Dropbox:</strong> Mudah, gratis, cocok untuk backup dan sinkronisasi berkala.</li>
                         <li><strong>WebDAV:</strong> Untuk Anda yang punya server sendiri (Nextcloud/CasaOS) demi privasi maksimal.</li>
                     </ul>
-                )
-            },
-            {
-                title: 'Mengaktifkan Portal Wali Santri (Hybrid Bridge)',
-                color: 'blue',
-                content: (
-                    <div className="bg-blue-50 p-3 rounded border border-blue-200 text-sm">
-                        <p className="font-bold mb-1 text-blue-900"><i className="bi bi-globe2"></i> Fitur Portal Wali</p>
-                        <p className="mb-2 text-blue-800">Jika Anda ingin wali santri bisa mengecek nilai dan tagihan secara online:</p>
-                        <ol className="list-decimal pl-5 mt-1 space-y-1 text-blue-800">
-                            <li>Di menu <strong>Pengaturan &gt; Sync Cloud</strong>, gulir ke bagian bawah "Fitur Publik & Portal".</li>
-                            <li>Centang <strong>"Portal Wali Santri"</strong>.</li>
-                            <li>Jika Anda menggunakan Dropbox/WebDAV, Anda <strong>wajib login dengan Google (Firebase)</strong> di bagian tersebut. Ini berfungsi sebagai "Jembatan" agar data sensitif di Dropbox Anda tetap aman, dan hanya data ringkas yang dikirim ke Firebase untuk dilihat wali.</li>
-                            <li>Klik <strong>"Update Data Portal"</strong> untuk mengirim data terbaru ke portal.</li>
-                        </ol>
-                    </div>
                 )
             },
             {
@@ -385,6 +373,152 @@ export const panduanData: PanduanSectionData[] = [
                             <li>Selesai. Data Master di Cloud sudah terupdate dan siap diambil Staff besok pagi.</li>
                         </ol>
                     </>
+                )
+            }
+        ]
+    },
+    {
+        id: 'portal',
+        badge: 'NEW',
+        badgeColor: 'blue',
+        title: 'Pengaturan Portal Wali Santri',
+        steps: [
+            {
+                title: 'Aktivasi & Jembatan Data (Hybrid Bridge)',
+                content: (
+                    <div className="space-y-3">
+                        <p className="text-sm">Portal Wali Santri memungkinkan orang tua memantau perkembangan anak secara online. Karena keamanan data adalah prioritas, kami menggunakan sistem <strong>Hybrid Bridge</strong>:</p>
+                        <div className="bg-blue-50 p-3 rounded border border-blue-200 text-xs text-blue-900">
+                            <ul className="list-disc pl-4 space-y-1">
+                                <li><strong>Data Utama:</strong> Tetap aman di laptop Anda atau Cloud Storage pribadi (Dropbox/WebDAV).</li>
+                                <li><strong>Data Portal:</strong> Hanya data ringkas (profil, absen, saldo, tagihan) yang dikirim ke Firebase untuk diakses wali.</li>
+                            </ul>
+                        </div>
+                        <ol className="list-decimal pl-5 space-y-1 text-sm">
+                            <li>Buka menu <strong>Pengaturan &gt; Portal Wali</strong>.</li>
+                            <li>Pastikan status portal <strong>Aktif</strong>.</li>
+                            <li>Jika belum terhubung ke Firebase, sistem akan meminta Anda login Google di tab <em>Sync Cloud</em> sebagai jembatan data.</li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: 'Mendapatkan & Membagikan URL Portal',
+                color: 'blue',
+                content: (
+                    <div className="space-y-2">
+                        <p className="text-sm">Setelah portal aktif dan terhubung ke Firebase, Anda akan melihat panel <strong>URL Portal Wali Santri</strong> di bagian atas halaman pengaturan portal.</p>
+                        <div className="bg-gray-50 p-3 rounded border text-xs">
+                            <p className="font-bold mb-1">Format URL:</p>
+                            <ul className="list-disc pl-4 space-y-1">
+                                <li><strong>Versi Online:</strong> <code>https://domain-anda.com/portal/ID_UNIK</code></li>
+                                <li><strong>Versi Desktop (Tauri) / Android:</strong> Anda harus memasukkan <em>Domain Kustom</em> di pengaturan portal agar link yang dihasilkan valid untuk wali santri.</li>
+                            </ul>
+                        </div>
+                        <p className="text-sm">Klik tombol <strong>Salin</strong> atau tunjukkan <strong>QR Code</strong> yang tersedia untuk dibagikan kepada wali santri.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Cara Wali Santri Login',
+                content: (
+                    <div className="space-y-2">
+                        <p className="text-sm">Wali santri tidak perlu membuat akun baru. Mereka cukup menggunakan data santri yang sudah ada:</p>
+                        <ul className="list-disc pl-5 space-y-1 text-sm">
+                            <li><strong>Username:</strong> NIS (Nomor Induk Santri).</li>
+                            <li><strong>Password:</strong> Secara default adalah tanggal lahir santri (format: <code>DDMMYYYY</code>) atau PIN yang ditentukan Admin.</li>
+                        </ul>
+                        <p className="text-xs italic text-gray-500">* Anda dapat mengatur instruksi login ini di bagian Pesan Selamat Datang.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Kustomisasi Tampilan (Tema)',
+                content: (
+                    <p className="text-sm">
+                        Anda dapat menyesuaikan warna portal agar sesuai dengan identitas pondok. Pilih salah satu dari 7 tema warna yang tersedia (Teal, Blue, Indigo, Slate, Rose, Emerald, Cyan). Perubahan tema akan langsung terlihat oleh wali santri saat mereka membuka portal.
+                    </p>
+                )
+            },
+            {
+                title: 'Kontrol Visibilitas Data',
+                content: (
+                    <div className="space-y-2">
+                        <p className="text-sm">Anda memiliki kendali penuh atas data apa saja yang boleh diakses oleh wali santri. Centang modul yang ingin ditampilkan:</p>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-cash-coin text-green-600"></i> Keuangan</div>
+                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-mortarboard text-blue-600"></i> Akademik</div>
+                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-calendar-check text-teal-600"></i> Absensi</div>
+                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-book text-green-700"></i> Tahfizh</div>
+                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-heart-pulse text-red-600"></i> Kesehatan</div>
+                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-book-half text-teal-700"></i> Perpustakaan</div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Informasi & Pengumuman',
+                content: (
+                    <ul className="list-disc pl-5 space-y-2 text-sm">
+                        <li><strong>Pesan Selamat Datang:</strong> Kalimat sapaan yang muncul di dashboard utama portal.</li>
+                        <li><strong>Pengumuman:</strong> Informasi penting (misal: jadwal libur, info pendaftaran) yang akan muncul di bagian atas portal wali.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Kontak Penting & Link Kustom',
+                content: (
+                    <div className="space-y-3">
+                        <div className="border-l-4 border-blue-500 pl-3 py-1 bg-blue-50">
+                            <h4 className="font-bold text-blue-800 text-sm">Kontak Penting</h4>
+                            <p className="text-xs">Tambahkan nomor WhatsApp Admin, Bendahara, atau Pengasuh. Wali santri bisa langsung mengklik ikon WhatsApp di portal untuk memulai chat.</p>
+                        </div>
+                        <div className="border-l-4 border-indigo-500 pl-3 py-1 bg-indigo-50">
+                            <h4 className="font-bold text-indigo-800 text-sm">Link Kustom</h4>
+                            <p className="text-xs">Tambahkan link ke website pondok, brosur PDF di Google Drive, atau link pendaftaran santri baru (PSB).</p>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Update Data ke Portal',
+                color: 'orange',
+                content: (
+                    <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm">
+                        <p>Setelah melakukan perubahan data (misal: input absensi baru atau mengubah pengaturan portal), jangan lupa klik tombol <strong>"Update Data Portal"</strong> di menu <em>Pengaturan &gt; Portal Wali</em> atau <em>Pengaturan &gt; Sync Cloud</em> agar data di portal wali sinkron dengan data terbaru di laptop Anda.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Hosting & Deployment (Online)',
+                content: (
+                    <div className="space-y-3">
+                        <p className="text-sm">Agar portal wali bisa diakses dari mana saja, diperlukan sebuah alamat web (URL) yang aktif di internet.</p>
+                        
+                        <div className="bg-green-50 p-3 rounded border border-green-200 text-sm">
+                            <p className="font-bold text-green-900 mb-1"><i className="bi bi-check-circle-fill"></i> Untuk Pengguna Awam (Installer):</p>
+                            <p className="text-xs">Anda cukup menggunakan link portal yang muncul di menu <strong>Pengaturan &gt; Portal Wali</strong>. Agar link tersebut valid, pastikan Admin telah memasukkan <strong>URL Web Portal</strong> yang sudah dionlinekan di kolom yang tersedia.</p>
+                        </div>
+
+                        <div className="bg-blue-50 p-3 rounded border border-blue-200 text-sm">
+                            <p className="font-bold text-blue-900 mb-1"><i className="bi bi-info-circle-fill"></i> Mengapa Harus Hosting?</p>
+                            <p className="text-xs">Karena aplikasi Desktop (Tauri) berjalan di laptop pribadi, wali santri tidak bisa mengaksesnya langsung. Anda perlu menghosting versi web aplikasi ini (sekali saja) sebagai "pintu masuk" agar wali santri bisa melihat data melalui internet.</p>
+                        </div>
+
+                        <div className="bg-gray-50 p-3 rounded border border-gray-200 text-sm">
+                            <p className="font-bold text-gray-700 mb-1"><i className="bi bi-gear-fill"></i> Untuk Tim IT / Pengembang (Lanjutan):</p>
+                            <p className="text-[11px] mb-2">Jika pondok ingin menggunakan domain sendiri (misal: <code>portal.pondokanda.com</code>), Anda bisa menghosting sendiri versi web aplikasi ini:</p>
+                            <ul className="list-disc pl-4 text-[10px] space-y-1">
+                                <li><strong>Firebase Hosting:</strong> Opsi terbaik jika menggunakan Firebase Sync.</li>
+                                <li><strong>GitHub Pages / Vercel:</strong> Gratis untuk hosting file statis (folder <code>dist</code>).</li>
+                            </ul>
+                            <div className="mt-2 p-2 bg-white border rounded text-[9px] font-mono">
+                                # Langkah Deploy:<br/>
+                                npm run build<br/>
+                                firebase deploy
+                            </div>
+                        </div>
+                    </div>
                 )
             }
         ]
@@ -1106,6 +1240,62 @@ export const panduanData: PanduanSectionData[] = [
                             <li>Generate AI (Magic Draft / Poster).</li>
                         </ul>
                     </div>
+                )
+            }
+        ]
+    },
+    {
+        id: 'fitur',
+        badge: 15,
+        badgeColor: 'teal',
+        title: 'Daftar Fitur Utama',
+        steps: [
+            {
+                title: 'Manajemen Data & Akademik',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                        <li><strong>Data Santri:</strong> Profil lengkap, riwayat status, prestasi, dan pelanggaran.</li>
+                        <li><strong>Akademik:</strong> Manajemen Marhalah, Kelas, Rombel, Mata Pelajaran, dan Jadwal Pelajaran.</li>
+                        <li><strong>Absensi:</strong> Pencatatan kehadiran harian santri per rombel.</li>
+                        <li><strong>Tahfizh:</strong> Setoran hafalan (Ziyadah/Murojaah) dengan target per juz/surah.</li>
+                        <li><strong>Rapor Dinamis:</strong> Desain format rapor sendiri dengan sistem Grid & Formula.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Keuangan & Operasional',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                        <li><strong>Keuangan:</strong> Manajemen tagihan (SPP/Uang Pangkal), pembayaran, dan penggajian guru.</li>
+                        <li><strong>Buku Kas:</strong> Pencatatan arus kas masuk/keluar pondok (Buku Kas Umum).</li>
+                        <li><strong>Koperasi & Kantin:</strong> Sistem kasir (POS) sederhana dengan stok barang dan parkir pesanan.</li>
+                        <li><strong>Sarana Prasarana:</strong> Inventaris barang, lokasi, dan kondisi aset pondok.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Layanan & Keamanan',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                        <li><strong>Keasramaan:</strong> Manajemen gedung asrama, kamar, dan penempatan santri.</li>
+                        <li><strong>Kesehatan & BK:</strong> Rekam medis santri dan bimbingan konseling (privat).</li>
+                        <li><strong>Perpustakaan:</strong> Katalog buku, sirkulasi peminjaman, dan cetak label buku.</li>
+                        <li><strong>Buku Tamu:</strong> Pencatatan kunjungan tamu dan pengawasan keamanan.</li>
+                        <li><strong>Surat Menyurat:</strong> Pembuatan surat resmi, tagihan, dan arsip digital.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Teknologi & Integrasi',
+                color: 'purple',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                        <li><strong>Offline-First:</strong> Aplikasi tetap berjalan lancar tanpa internet.</li>
+                        <li><strong>Firebase Sync:</strong> Sinkronisasi data real-time antar perangkat (Multi-User) dengan database cloud yang aman.</li>
+                        <li><strong>Cloud Sync (Dropbox/WebDAV):</strong> Backup data dan kolaborasi tim menggunakan penyimpanan awan pribadi.</li>
+                        <li><strong>Portal Wali Santri:</strong> Akses informasi santri (Nilai, Absen, Keuangan) bagi orang tua secara online.</li>
+                        <li><strong>Multi-Platform:</strong> Tersedia dalam versi Web, Desktop (Tauri), dan Android.</li>
+                    </ul>
                 )
             }
         ]

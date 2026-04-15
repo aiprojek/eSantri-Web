@@ -116,6 +116,20 @@ export const initialSettings: PondokSettings = {
     backupConfig: {
         frequency: 'weekly'
     },
+    portalConfig: {
+        enabled: false,
+        theme: 'teal',
+        showFinance: true,
+        showAcademic: true,
+        showAttendance: true,
+        showTahfizh: true,
+        showHealth: true,
+        showLibrary: true,
+        welcomeMessage: 'Selamat Datang di Portal Wali Santri',
+        announcement: '',
+        contacts: [],
+        customLinks: []
+    },
     psbConfig: {
         tahunAjaranAktif: new Date().getFullYear() + '/' + (new Date().getFullYear() + 1),
         targetKuota: 100,

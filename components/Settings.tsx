@@ -7,16 +7,25 @@ import { TabAkun } from './settings/tabs/TabAkun';
 import { TabNis } from './settings/tabs/TabNis';
 import { TabCloud } from './settings/tabs/TabCloud';
 import { TabBackup } from './settings/tabs/TabBackup';
+import { TabPortal } from './settings/tabs/TabPortal';
 
 const Settings: React.FC = () => {
     const { settings, onSaveSettings, showConfirmation, showToast } = useAppContext();
     const [localSettings, setLocalSettings] = useState<PondokSettings>(settings);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'umum' | 'akun' | 'nis' | 'cloud' | 'backup'>('umum');
+    const [activeTab, setActiveTab] = useState<'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup'>('umum');
 
     useEffect(() => {
         setLocalSettings(settings);
     }, [settings]);
+
+    useEffect(() => {
+        const handleTabChange = (e: any) => {
+            if (e.detail) setActiveTab(e.detail);
+        };
+        window.addEventListener('change-settings-tab', handleTabChange);
+        return () => window.removeEventListener('change-settings-tab', handleTabChange);
+    }, []);
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -85,7 +94,7 @@ const Settings: React.FC = () => {
     };
 
     const TabButton: React.FC<{
-        tabId: 'umum' | 'akun' | 'nis' | 'cloud' | 'backup';
+        tabId: 'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup';
         label: string;
         icon: string;
     }> = ({ tabId, label, icon }) => (
@@ -107,6 +116,7 @@ const Settings: React.FC = () => {
                     <TabButton tabId="umum" label="Umum" icon="bi-info-circle" />
                     <TabButton tabId="akun" label="User & Keamanan" icon="bi-shield-lock" />
                     <TabButton tabId="nis" label="Generator NIS" icon="bi-123" />
+                    <TabButton tabId="portal" label="Portal Wali" icon="bi-globe2" />
                     <TabButton tabId="cloud" label="Sync Cloud" icon="bi-cloud-arrow-up" />
                     <TabButton tabId="backup" label="Backup & Restore" icon="bi-hdd-fill" />
                 </nav>
@@ -116,6 +126,7 @@ const Settings: React.FC = () => {
                 {activeTab === 'umum' && <TabUmum localSettings={localSettings} handleInputChange={handleInputChange} activeTeachers={activeTeachers} />}
                 {activeTab === 'akun' && <TabAkun localSettings={localSettings} handleInputChange={handleInputChange} />}
                 {activeTab === 'nis' && <TabNis localSettings={localSettings} setLocalSettings={setLocalSettings} />}
+                {activeTab === 'portal' && <TabPortal localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
                 {activeTab === 'cloud' && <TabCloud localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
                 {activeTab === 'backup' && <TabBackup localSettings={localSettings} setLocalSettings={setLocalSettings} />}
             </div>

@@ -169,7 +169,11 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
 
     const handlePortalToggle = (checked: boolean) => {
         setIsPortalEnabled(checked);
-        handleSyncConfigChange('portalEnabled', checked);
+        setLocalSettings(prev => ({
+            ...prev,
+            cloudSyncConfig: { ...prev.cloudSyncConfig, portalEnabled: checked },
+            portalConfig: { ...prev.portalConfig!, enabled: checked }
+        }));
     };
 
     const handleSyncToPortal = async () => {
@@ -792,7 +796,15 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-blue-50 border-blue-100">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <h4 className="font-bold text-blue-800 text-sm">Portal Wali Santri (Hybrid Bridge)</h4>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-bold text-blue-800 text-sm">Portal Wali Santri (Hybrid Bridge)</h4>
+                                        <button 
+                                            onClick={() => window.dispatchEvent(new CustomEvent('change-settings-tab', { detail: 'portal' }))}
+                                            className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded hover:bg-blue-700 transition-colors"
+                                        >
+                                            <i className="bi bi-gear-fill mr-1"></i> Pengaturan Lengkap
+                                        </button>
+                                    </div>
                                     <p className="text-xs text-blue-700 mt-1 max-w-2xl">
                                         Aktifkan fitur ini untuk membuat portal khusus wali santri. 
                                         {localSettings.cloudSyncConfig?.provider !== 'firebase' && 

@@ -39,6 +39,8 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
                 { id: ReportType.DaftarRombel, title: 'Daftar Santri', description: "List santri per rombel.", icon: 'bi-people', color: 'text-teal-600' },
                 { id: ReportType.LembarAbsensi, title: 'Lembar Absensi Bulanan', description: "Grid absensi tanggal 1-31.", icon: 'bi-calendar-check', color: 'text-teal-600' },
                 { id: ReportType.LembarNilai, title: 'Lembar Nilai (Kosong)', description: "Format kosong pengisian nilai.", icon: 'bi-card-checklist', color: 'text-teal-600' },
+                { id: ReportType.LembarRapor, title: 'Serah Terima Rapor', description: "Lembar pengambilan & pengembalian rapor.", icon: 'bi-journal-check', color: 'text-teal-600' },
+                { id: ReportType.RaporLengkap, title: 'Rapor Lengkap (PDF)', description: "Cetak rapor resmi per santri.", icon: 'bi-file-earmark-pdf-fill', color: 'text-red-600' },
                 { id: ReportType.LembarPembinaan, title: 'Lembar Pembinaan', description: "Catatan prestasi & pelanggaran.", icon: 'bi-file-person', color: 'text-red-500' },
             ]
         },

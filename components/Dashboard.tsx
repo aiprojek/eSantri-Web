@@ -202,18 +202,25 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
             <StatCard title="Rombel" value={settings.rombel.length} icon={<i className="bi-building text-2xl text-white"></i>} color="bg-purple-500" />
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 print:grid-cols-2 print:gap-4">
-            {/* Left Column */}
-            <div className="flex flex-col gap-6 print:gap-4">
-                <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:break-inside-avoid">
-                    <h2 className="text-xl font-bold text-gray-700 mb-4">Komposisi Status Santri</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 lg:auto-rows-fr gap-6 mb-6 print:grid-cols-2 print:gap-4">
+            {/* Card 1: Komposisi Status Santri */}
+            <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:break-inside-avoid flex flex-col">
+                <h2 className="text-xl font-bold text-gray-700 mb-4">Komposisi Status Santri</h2>
+                <div className="flex-grow flex items-center justify-center">
                     <StatusSantriChart statusData={statusData} total={totalSantri} />
                 </div>
-                
-                {/* Quick Actions - Moved here */}
-                <div className="bg-white p-6 rounded-xl shadow-md flex flex-col no-print">
-                    <h2 className="text-xl font-bold text-gray-700 mb-4">Aksi Cepat</h2>
-                    <div className="grid grid-cols-2 gap-4 my-auto">
+            </div>
+
+            {/* Card 2: Informasi Pondok */}
+            <div className="print:break-inside-avoid">
+                <InfoPondokCard settings={settings} />
+            </div>
+
+            {/* Card 3: Aksi Cepat */}
+            <div className="bg-white p-6 rounded-xl shadow-md flex flex-col no-print">
+                <h2 className="text-xl font-bold text-gray-700 mb-4">Aksi Cepat</h2>
+                <div className="flex-grow flex items-center justify-center">
+                    <div className="grid grid-cols-2 gap-4 w-full">
                         <QuickActionButton icon="bi-person-plus-fill" label="Tambah Santri" onClick={() => navigateTo(Page.Santri)} />
                         <QuickActionButton icon="bi-person-lines-fill" label="Pendaftaran (PSB)" onClick={() => navigateTo(Page.PSB)} />
                         <QuickActionButton icon="bi-printer-fill" label="Cetak Laporan" onClick={() => navigateTo(Page.Laporan)} />
@@ -222,16 +229,13 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                 </div>
             </div>
 
-            {/* Right Column */}
-            <div className="flex flex-col gap-6 print:gap-4">
-                 <div className="print:break-inside-avoid h-full">
-                    <InfoPondokCard settings={settings} />
-                 </div>
-                 <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:break-inside-avoid flex-grow">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold text-gray-700">Santri Terbaru</h2>
-                        <button onClick={() => navigateTo(Page.Santri)} className="text-sm font-medium text-teal-600 hover:underline no-print">Lihat Semua</button>
-                    </div>
+            {/* Card 4: Santri Terbaru */}
+            <div className="bg-white p-6 rounded-xl shadow-md print:shadow-none print:border print:border-gray-300 print:break-inside-avoid flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-gray-700">Santri Terbaru</h2>
+                    <button onClick={() => navigateTo(Page.Santri)} className="text-sm font-medium text-teal-600 hover:underline no-print">Lihat Semua</button>
+                </div>
+                <div className="flex-grow flex flex-col justify-center">
                     <ul className="space-y-4">
                         {recentSantri.map(santri => (
                             <li key={santri.id} className="flex items-center gap-4">

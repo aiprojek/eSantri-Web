@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isTenantMember(tenantId) {
+      return isAuthenticated() && (
+        request.auth.uid == tenantId || 
+        exists(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members) && 
+        request.auth.uid in get(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members).data.uids
+      );
+    }
+
+    // Tenant Data
+    match /tenants/{tenantId} {
+      allow read, write: if isTenantMember(tenantId);
+      
+      match /{allSubcollections=**} {
+        allow read, write: if isTenantMember(tenantId);
+      }
+      
+      match /metadata/members {
+        // Allow anyone to join if they have the ID (pairing code)
+        // In a real app, you might want more checks
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+    }
+  }
+}

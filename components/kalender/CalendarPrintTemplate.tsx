@@ -316,29 +316,32 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                             });
 
                             return (
-                                <div key={monthData.index} className={`border rounded-lg overflow-hidden ${currentTheme.border} bg-white/80 backdrop-blur-sm`}>
-                                    <div className={`p-1.5 text-center font-bold ${currentTheme.monthTitle} flex flex-col justify-center`}>
+                                <div key={monthData.index} className={`border rounded-lg overflow-hidden ${currentTheme.border} bg-white/80 backdrop-blur-sm flex flex-col`}>
+                                    <div className={`p-2 text-center font-bold ${currentTheme.monthTitle} flex flex-col justify-center border-b ${currentTheme.border}`}>
                                         {/* Main Title (Depending on mode) */}
-                                        <div className={`text-lg leading-none ${primarySystem === 'Hijriah' ? currentTheme.hijriText : ''}`}>
+                                        <div className={`text-lg leading-tight ${primarySystem === 'Hijriah' ? currentTheme.hijriText : ''}`}>
                                             {monthData.titleMain}
                                         </div>
                                         {/* Sub Title */}
-                                        <div className={`text-[8px] font-normal mt-0.5 ${primarySystem === 'Masehi' ? currentTheme.hijriText : 'opacity-70'}`}>
+                                        <div className={`text-[9px] font-normal mt-0.5 ${primarySystem === 'Masehi' ? currentTheme.hijriText : 'opacity-70'}`}>
                                             {monthData.titleSub}
                                         </div>
                                     </div>
-                                    <div className={`grid grid-cols-7 text-center py-1 font-bold ${currentTheme.dayHeader}`}>
-                                        {dayNames.map(d => <div key={d}>{d}</div>)}
+                                    <div className={`grid grid-cols-7 text-center py-2 font-bold ${currentTheme.dayHeader} items-center border-b ${currentTheme.border}`}>
+                                        {dayNames.map(d => <div key={d} className="flex items-center justify-center h-full leading-none">{d}</div>)}
                                     </div>
-                                    <div className="grid grid-cols-7 text-center">
+                                    <div className="grid grid-cols-7 text-center flex-grow">
                                         {monthData.days.map((date, idx) => {
-                                            if (!date) return <div key={idx} className="p-1"></div>;
+                                            if (!date) {
+                                                const isLastColumn = idx % 7 === 6;
+                                                return <div key={idx} className={`p-1 ${isLastColumn ? '' : 'border-r'} ${currentTheme.border} opacity-0`}></div>;
+                                            }
                                             const hijri = getHijriDate(date, hijriAdjustment);
                                             
                                             // Determine Main vs Sub Numbers
                                             const mainNum = primarySystem === 'Masehi' ? date.getDate() : hijri.day;
                                             const subNum = primarySystem === 'Masehi' ? hijri.day : date.getDate();
-
+                                            
                                             // Check Events
                                             const dayEvents = monthEvents.filter(e => {
                                                 const start = new Date(e.startDate);
@@ -353,16 +356,20 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                                             const isSunday = date.getDay() === 0;
                                             let textColor = isSunday ? 'text-red-600' : 'inherit';
 
+                                            const cellMinHeight = layout === '1_sheet' ? 'min-h-[28px]' : 'min-h-[35px]';
+                                            const isLastColumn = idx % 7 === 6;
+                                            const isLastRow = idx >= monthData.days.length - 7;
+
                                             return (
-                                                <div key={idx} className={`p-1 border-t ${currentTheme.border} relative h-full min-h-[30px] flex flex-col items-center justify-start`}>
-                                                    <div className="flex justify-between w-full px-0.5">
+                                                <div key={idx} className={`p-1 ${!isLastColumn ? 'border-r' : ''} ${!isLastRow ? 'border-b' : ''} ${currentTheme.border} relative h-full ${cellMinHeight} flex flex-col items-center justify-start transition-colors`}>
+                                                    <div className="flex justify-between w-full px-0.5 mb-1">
                                                         {/* Primary Number (Always Large) */}
-                                                        <span className={`z-10 relative ${textColor} text-xs font-bold`}>
+                                                        <span className={`z-10 relative ${textColor} text-xs font-bold leading-none`}>
                                                             {mainNum}
                                                         </span>
                                                         
                                                         {/* Secondary Number (Always Small) */}
-                                                        <span className={`z-10 relative ${textColor} text-[6px] opacity-60`}>
+                                                        <span className={`z-10 relative ${textColor} text-[7px] font-medium opacity-70 leading-none`}>
                                                             {subNum}
                                                         </span>
                                                     </div>
@@ -387,21 +394,26 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                     </div>
 
                     {/* Footer / Legend */}
-                    <div className="mt-4 pt-4 border-t text-xs relative z-10 bg-white/80 backdrop-blur-sm rounded-lg p-2">
-                        <h4 className="font-bold mb-2">Agenda Penting Periode Ini:</h4>
-                        <ul className="grid grid-cols-2 gap-2">
+                    <div className={`mt-4 pt-4 border-t text-xs relative z-10 bg-white/80 backdrop-blur-sm rounded-lg p-2 ${layout === '1_sheet' ? 'max-h-[120px] overflow-hidden' : ''}`}>
+                        <h4 className="font-bold mb-1">Agenda Penting Periode Ini:</h4>
+                        <ul className={`grid ${layout === '1_sheet' ? 'grid-cols-3' : 'grid-cols-2'} gap-x-4 gap-y-1`}>
                              {events.filter(e => {
                                  const start = new Date(e.startDate);
                                  // Simple approximate filter for legend to avoid showing too many
                                  return start >= chunk[0].start && start <= chunk[chunk.length-1].end;
-                             }).slice(0, 10).map(e => ( 
-                                 <li key={e.id} className="flex items-center gap-2 truncate">
-                                     <span className={`w-2 h-2 rounded-full ${e.color.startsWith('#') ? '' : e.color}`} style={e.color.startsWith('#') ? { backgroundColor: e.color } : {}}></span>
-                                     <span className="font-mono text-[10px]">{formatDate(e.startDate)}</span>
+                             }).slice(0, layout === '1_sheet' ? 15 : 10).map(e => ( 
+                                 <li key={e.id} className="flex items-center gap-2 truncate text-[9px]">
+                                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.color.startsWith('#') ? '' : e.color}`} style={e.color.startsWith('#') ? { backgroundColor: e.color } : {}}></span>
+                                     <span className="font-mono text-[8px] opacity-70">{formatDate(e.startDate).split(' ')[0]}</span>
                                      <span className="truncate">{e.title}</span>
                                  </li>
                              ))}
                         </ul>
+                    </div>
+                    
+                    {/* App Footer */}
+                    <div className="mt-auto pt-4 text-center text-[10px] text-gray-500 relative z-10">
+                        dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
                     </div>
                 </div>
             ))}

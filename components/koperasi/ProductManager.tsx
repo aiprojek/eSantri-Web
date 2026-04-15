@@ -11,6 +11,7 @@ import { BulkProductEditor } from './modals/BulkProductEditor';
 export const ProductManager: React.FC = () => {
     const { showToast, showConfirmation, currentUser } = useAppContext();
     const products = useLiveQuery(() => db.produkKoperasi.filter(p => !p.deleted).toArray(), []) || [];
+    const suppliers = useLiveQuery(() => db.suppliers.toArray(), []) || [];
     const history = useLiveQuery(() => db.riwayatStok.orderBy('tanggal').reverse().limit(200).toArray(), []) || [];
     
     // Tab State
@@ -448,8 +449,14 @@ export const ProductManager: React.FC = () => {
                                     <div><label className="block text-xs font-bold mb-1">Nama Produk</label><input {...register('nama', {required:true})} className="w-full border rounded p-2 text-sm" placeholder="Contoh: Roti O" /></div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div><label className="block text-xs font-bold mb-1">Kategori</label><input list="cats" {...register('kategori')} className="w-full border rounded p-2 text-sm" /><datalist id="cats"><option value="Makanan"/><option value="Minuman"/><option value="Alat Tulis"/><option value="Kitab"/><option value="Seragam"/></datalist></div>
-                                        <div><label className="block text-xs font-bold mb-1">Barcode</label><input {...register('barcode')} className="w-full border rounded p-2 text-sm" placeholder="Scan..." /></div>
+                                        <div><label className="block text-xs font-bold mb-1">Supplier</label>
+                                            <select {...register('supplierId', { valueAsNumber: true })} className="w-full border rounded p-2 text-sm bg-white">
+                                                <option value="">-- Tanpa Supplier --</option>
+                                                {suppliers.map(s => <option key={s.id} value={s.id}>{s.nama}</option>)}
+                                            </select>
+                                        </div>
                                     </div>
+                                    <div><label className="block text-xs font-bold mb-1">Barcode</label><input {...register('barcode')} className="w-full border rounded p-2 text-sm" placeholder="Scan..." /></div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div><label className="block text-xs font-bold mb-1">Harga Beli</label><input type="number" {...register('hargaBeli', {valueAsNumber:true})} className="w-full border rounded p-2 text-sm" /></div>
                                         <div><label className="block text-xs font-bold mb-1">Harga Jual (Umum)</label><input type="number" {...register('hargaJual', {valueAsNumber:true})} className="w-full border rounded p-2 text-sm font-bold" /></div>

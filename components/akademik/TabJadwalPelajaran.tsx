@@ -1,11 +1,12 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from '../../db';
 import { JadwalPelajaran, JamPelajaran, ArsipJadwal, Rombel, TenagaPengajar } from '../../types';
 import { JadwalModal } from './modals/JadwalModal';
-import { printToPdfNative } from '../../utils/pdfGenerator';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { PrintHeader } from '../common/PrintHeader';
 import { ReportFooter, formatDate } from '../reports/modules/Common';
 
@@ -191,10 +192,26 @@ export const TabJadwalPelajaran: React.FC = () => {
     // Tabs
     const [activeTab, setActiveTab] = useState<'active' | 'archive'>('active');
 
-    // Filters Active View
     const [filterJenjangId, setFilterJenjangId] = useState<number>(settings.jenjang[0]?.id || 0);
     const [filterKelasId, setFilterKelasId] = useState<number>(0);
     const [filterRombelId, setFilterRombelId] = useState<number>(0);
+
+    // Local state for Jam Pelajaran editing to fix "reset to 0" bug
+    const [localJamConfig, setLocalJamConfig] = useState<JamPelajaran[]>([]);
+    
+    // Sync localJamConfig when jenjang changes or settings update
+    useEffect(() => {
+        const defaults: JamPelajaran[] = Array.from({ length: 8 }, (_, i) => ({
+            id: Date.now() + i, urutan: i + 1, jamMulai: '07:00', jamSelesai: '07:45', jenis: 'KBM', jenjangId: filterJenjangId
+        }));
+        
+        let config = defaults;
+        if (settings.jamPelajaran) {
+            const saved = settings.jamPelajaran.filter(j => j.jenjangId === filterJenjangId);
+            if (saved.length > 0) config = saved.sort((a,b) => a.urutan - b.urutan);
+        }
+        setLocalJamConfig(config);
+    }, [filterJenjangId, settings.jamPelajaran]);
 
     // Modal State
     const [isJadwalModalOpen, setIsJadwalModalOpen] = useState(false);
@@ -235,18 +252,8 @@ export const TabJadwalPelajaran: React.FC = () => {
         return [];
     }, [filterJenjangId, filterKelasId, filterRombelId, settings.rombel, settings.kelas]);
 
-    // Get Jam Config for current Jenjang
-    const jamConfig = useMemo(() => {
-        const defaults: JamPelajaran[] = Array.from({ length: 8 }, (_, i) => ({
-            id: Date.now() + i, urutan: i + 1, jamMulai: '07:00', jamSelesai: '07:45', jenis: 'KBM', jenjangId: filterJenjangId
-        }));
-        
-        if (settings.jamPelajaran) {
-            const saved = settings.jamPelajaran.filter(j => j.jenjangId === filterJenjangId);
-            if (saved.length > 0) return saved.sort((a,b) => a.urutan - b.urutan);
-        }
-        return defaults;
-    }, [settings.jamPelajaran, filterJenjangId]);
+    // Use localJamConfig for display and editing
+    const jamConfig = localJamConfig;
 
     const days = ['Ahad', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
@@ -339,6 +346,101 @@ export const TabJadwalPelajaran: React.FC = () => {
         showToast('Pengaturan jam pelajaran disimpan', 'success');
     };
 
+    const handleAutoGenerate = async () => {
+        if (!filterJenjangId) return;
+        
+        showConfirmation(
+            'Generate Jadwal Otomatis?',
+            'Sistem akan mencoba menyusun jadwal berdasarkan kesanggupan pengajar, kompetensi mapel, dan ketersediaan waktu. Jadwal yang sudah ada di jenjang ini akan DITIMPA. Lanjutkan?',
+            async () => {
+                try {
+                    // 1. Get all Rombels in this Jenjang
+                    const rombelIdsInJenjang = settings.rombel.filter(r => 
+                        settings.kelas.find(k => k.id === r.kelasId)?.jenjangId === filterJenjangId
+                    ).map(r => r.id);
+
+                    // 2. Clear existing schedules for these rombels
+                    const existingIds = jadwalList.filter(j => rombelIdsInJenjang.includes(j.rombelId)).map(j => j.id);
+                    await db.jadwalPelajaran.bulkDelete(existingIds);
+
+                    const newJadwal: JadwalPelajaran[] = [];
+                    const teachers = settings.tenagaPengajar;
+                    const mapels = settings.mataPelajaran.filter(m => m.jenjangId === filterJenjangId);
+                    
+                    // Simple Greedy Algorithm for Auto-Generation
+                    // For each Rombel, for each Day, for each Jam
+                    for (const rombelId of rombelIdsInJenjang) {
+                        const rombel = settings.rombel.find(r => r.id === rombelId);
+                        const kelas = settings.kelas.find(k => k.id === rombel?.kelasId);
+                        
+                        for (let dayIdx = 1; dayIdx <= 6; dayIdx++) { // Senin - Sabtu
+                            for (const jam of jamConfig) {
+                                if (jam.jenis !== 'KBM') continue;
+
+                                // Find a suitable teacher
+                                // Criteria:
+                                // - Available on this day (hariMasuk)
+                                // - Available on this jam (jamMasuk)
+                                // - Competent in a mapel for this jenjang (kompetensiMapelIds)
+                                // - Allowed to teach in this Rombel or Kelas
+                                // - Not already teaching at this time in another Rombel
+                                
+                                const suitableTeacher = teachers.find(t => {
+                                    // Day check
+                                    if (t.hariMasuk && t.hariMasuk.length > 0 && !t.hariMasuk.includes(dayIdx)) return false;
+                                    // Jam check
+                                    if (t.jamMasuk && t.jamMasuk.length > 0 && !t.jamMasuk.includes(jam.urutan)) return false;
+                                    // Rombel/Kelas check
+                                    const canTeachInRombel = !t.availableRombelIds || t.availableRombelIds.length === 0 || t.availableRombelIds.includes(rombelId);
+                                    const canTeachInKelas = !t.availableKelasIds || t.availableKelasIds.length === 0 || (kelas && t.availableKelasIds.includes(kelas.id));
+                                    if (!canTeachInRombel && !canTeachInKelas) return false;
+                                    
+                                    // Mapel check (must have at least one mapel for this jenjang)
+                                    const hasMapel = t.kompetensiMapelIds?.some(mid => mapels.some(m => m.id === mid));
+                                    if (!hasMapel) return false;
+
+                                    // Conflict check
+                                    const isBusy = newJadwal.some(j => j.hari === dayIdx && j.jamKe === jam.urutan && j.guruId === t.id);
+                                    if (isBusy) return false;
+
+                                    return true;
+                                });
+
+                                if (suitableTeacher) {
+                                    // Pick a mapel the teacher is competent in for this jenjang
+                                    const teacherMapelId = suitableTeacher.kompetensiMapelIds?.find(mid => mapels.some(m => m.id === mid));
+                                    
+                                    if (teacherMapelId) {
+                                        newJadwal.push({
+                                            id: Date.now() + Math.random(),
+                                            rombelId,
+                                            hari: dayIdx,
+                                            jamKe: jam.urutan,
+                                            mapelId: teacherMapelId,
+                                            guruId: suitableTeacher.id,
+                                            lastModified: Date.now()
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (newJadwal.length > 0) {
+                        await db.jadwalPelajaran.bulkAdd(newJadwal);
+                        showToast(`Berhasil generate ${newJadwal.length} slot jadwal otomatis!`, 'success');
+                    } else {
+                        showToast('Tidak dapat menemukan kecocokan guru untuk jadwal.', 'info');
+                    }
+                } catch (error) {
+                    console.error(error);
+                    showToast('Gagal generate jadwal otomatis.', 'error');
+                }
+            },
+            { confirmText: 'Ya, Generate', confirmColor: 'blue' }
+        );
+    };
+
     const handleAddJam = () => {
         const nextUrutan = jamConfig.length + 1;
         const newJam: JamPelajaran = {
@@ -374,10 +476,134 @@ export const TabJadwalPelajaran: React.FC = () => {
     };
 
     const handlePrint = () => {
+        const doc = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        targetRombels.forEach((rombel, index) => {
+            if (index > 0) doc.addPage();
+
+            // Header
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`JADWAL PELAJARAN KELAS ${rombel.nama.toUpperCase()}`, 148.5, 15, { align: 'center' });
+            
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.text(settings.namaPonpes, 148.5, 22, { align: 'center' });
+            
+            doc.setFontSize(10);
+            doc.text(`${settings.alamat || ''}`, 148.5, 27, { align: 'center' });
+
+            const usedTeachers = new Set<number>();
+
+            // Table Data
+            const head = [['Jam', ...days]];
+            const body = jamConfig.map(jam => {
+                const row = [
+                    `${jam.urutan}\n(${jam.jamMulai}-${jam.jamSelesai})`
+                ];
+                days.forEach((day, dayIdx) => {
+                    const item = jadwalList.find(j => j.rombelId === rombel.id && j.hari === dayIdx && j.jamKe === jam.urutan);
+                    if (item) {
+                        if (item.keterangan) {
+                            row.push(item.keterangan);
+                        } else {
+                            const mapel = settings.mataPelajaran.find(m => m.id === item.mapelId)?.nama || '';
+                            let guruStr = '-';
+                            if (item.guruId) {
+                                if (item.guruId === -1) guruStr = 'NIHIL / KOSONG';
+                                else if (item.guruId === -2) guruStr = 'MUSYRIF / TAHFIZH';
+                                else {
+                                    usedTeachers.add(item.guruId);
+                                    const teacher = settings.tenagaPengajar.find(t => t.id === item.guruId);
+                                    guruStr = teacher ? (teacher.kodeGuru || teacher.nama) : '-';
+                                }
+                            }
+                            row.push(`${mapel}\n${guruStr}`);
+                        }
+                    } else {
+                        row.push('');
+                    }
+                });
+                return row;
+            });
+
+            autoTable(doc, {
+                head: head,
+                body: body,
+                startY: 35,
+                theme: 'grid',
+                styles: {
+                    fontSize: 8,
+                    cellPadding: 2,
+                    halign: 'center',
+                    valign: 'middle',
+                    lineWidth: 0.1,
+                    lineColor: [80, 80, 80]
+                },
+                headStyles: {
+                    fillColor: [45, 150, 140], // Teal color
+                    textColor: [255, 255, 255],
+                    fontStyle: 'bold',
+                    fontSize: 9
+                },
+                columnStyles: {
+                    0: { fontStyle: 'bold', fillColor: [245, 245, 245], cellWidth: 20 }
+                },
+                alternateRowStyles: {
+                    fillColor: [250, 250, 250]
+                }
+            });
+
+            let finalY = (doc as any).lastAutoTable.finalY || 180;
+
+            // Legend
+            if (usedTeachers.size > 0) {
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Keterangan Kode Guru:', 14, finalY + 8);
+                
+                const legendArray = Array.from(usedTeachers).map(id => {
+                    const t = settings.tenagaPengajar.find(x => x.id === id);
+                    return t ? `${t.kodeGuru || t.nama} = ${t.nama}` : '';
+                }).filter(Boolean);
+                
+                const legendBody = [];
+                for (let i = 0; i < legendArray.length; i += 4) {
+                    legendBody.push([
+                        legendArray[i] || '',
+                        legendArray[i+1] || '',
+                        legendArray[i+2] || '',
+                        legendArray[i+3] || ''
+                    ]);
+                }
+
+                autoTable(doc, {
+                    body: legendBody,
+                    startY: finalY + 10,
+                    theme: 'plain',
+                    styles: { fontSize: 8, cellPadding: 1, cellWidth: 65 },
+                    margin: { left: 14 }
+                });
+                
+                finalY = (doc as any).lastAutoTable.finalY;
+            }
+
+            // Footer
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'italic');
+            doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, finalY + 10);
+            doc.text(`eSantri Digital System`, 283, finalY + 10, { align: 'right' });
+        });
+
         const titleSuffix = filterRombelId 
             ? settings.rombel.find(r=>r.id===filterRombelId)?.nama 
-            : `GABUNGAN (${targetRombels.length} Kelas)`;
-        printToPdfNative('jadwal-print-area', `Jadwal_${titleSuffix}`);
+            : `GABUNGAN_${targetRombels.length}_Kelas`;
+        doc.save(`Jadwal_${titleSuffix}.pdf`);
+        showToast('PDF Berhasil dibuat', 'success');
     };
     
     const getGuruLabel = (guruId?: number) => {
@@ -385,7 +611,8 @@ export const TabJadwalPelajaran: React.FC = () => {
         if (guruId === -1) return 'NIHIL / KOSONG';
         if (guruId === -2) return 'MUSYRIF / TAHFIZH';
         const teacher = settings.tenagaPengajar.find(t => t.id === guruId);
-        return teacher ? teacher.nama : '-';
+        if (!teacher) return '-';
+        return teacher.kodeGuru ? `${teacher.kodeGuru} - ${teacher.nama}` : teacher.nama;
     };
 
     // --- Archive Actions ---
@@ -486,9 +713,14 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 <i className="bi bi-bar-chart-fill"></i> Rekap Jam
                             </button>
                             {canWrite && (
-                                <button onClick={() => setIsArchiveModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-blue-700 shadow-sm">
-                                    <i className="bi bi-archive-fill"></i> Arsipkan Jadwal
-                                </button>
+                                <>
+                                    <button onClick={handleAutoGenerate} className="bg-teal-600 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-teal-700 shadow-sm">
+                                        <i className="bi bi-magic"></i> Auto-Generate
+                                    </button>
+                                    <button onClick={() => setIsArchiveModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-blue-700 shadow-sm">
+                                        <i className="bi bi-archive-fill"></i> Arsipkan Jadwal
+                                    </button>
+                                </>
                             )}
                             <button onClick={handlePrint} disabled={targetRombels.length === 0} className="bg-gray-700 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-gray-800 disabled:opacity-50">
                                 <i className="bi bi-printer"></i> Cetak {filterRombelId === 0 ? '(Semua)' : ''}
@@ -512,9 +744,9 @@ export const TabJadwalPelajaran: React.FC = () => {
                                         {jamConfig.map((jam, idx) => (
                                             <div key={jam.id} className="flex gap-2 items-center group">
                                                 <div className="w-6 font-bold text-center">{jam.urutan}</div>
-                                                <input type="time" value={jam.jamMulai} onChange={e => { const newConfig = [...jamConfig]; newConfig[idx] = { ...newConfig[idx], jamMulai: e.target.value }; }} className="border rounded p-1 w-16 text-center" disabled={!canWrite} />
+                                                <input type="time" value={jam.jamMulai} onChange={e => { const newConfig = [...jamConfig]; newConfig[idx] = { ...newConfig[idx], jamMulai: e.target.value }; setLocalJamConfig(newConfig); }} className="border rounded p-1 w-16 text-center" disabled={!canWrite} />
                                                 <span>-</span>
-                                                <input type="time" value={jam.jamSelesai} onChange={e => { const newConfig = [...jamConfig]; newConfig[idx] = { ...newConfig[idx], jamSelesai: e.target.value }; }} className="border rounded p-1 w-16 text-center" disabled={!canWrite} />
+                                                <input type="time" value={jam.jamSelesai} onChange={e => { const newConfig = [...jamConfig]; newConfig[idx] = { ...newConfig[idx], jamSelesai: e.target.value }; setLocalJamConfig(newConfig); }} className="border rounded p-1 w-16 text-center" disabled={!canWrite} />
                                                 {canWrite && (
                                                     <button onClick={() => handleRemoveJam(idx)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <i className="bi bi-trash"></i>

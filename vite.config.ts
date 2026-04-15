@@ -7,7 +7,8 @@ export default defineConfig({
   // Vite options tailored for Tauri development
   clearScreen: false,
   server: {
-    port: 5173,
+    port: 3000,
+    host: '0.0.0.0',
     strictPort: true, // Tauri expects a fixed port, fail if that port is not available
   },
   envPrefix: ['VITE_', 'TAURI_'],

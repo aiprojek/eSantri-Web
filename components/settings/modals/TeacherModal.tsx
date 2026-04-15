@@ -33,7 +33,10 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
             setTeacher(item || {
                 nama: '',
                 riwayatJabatan: [{ id: Date.now(), jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0] }],
-                hariMasuk: [], // Default: undefined (implies all) or empty. Let's start with empty array if new.
+                hariMasuk: [], 
+                jamMasuk: [],
+                availableRombelIds: [],
+                availableKelasIds: [],
                 kompetensiMapelIds: []
             });
         }
@@ -59,6 +62,33 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
             handleTeacherChange('hariMasuk', currentDays.filter(d => d !== dayVal));
         } else {
             handleTeacherChange('hariMasuk', [...currentDays, dayVal]);
+        }
+    };
+
+    const handleJamToggle = (jamUrutan: number) => {
+        const currentJams = teacher.jamMasuk || [];
+        if (currentJams.includes(jamUrutan)) {
+            handleTeacherChange('jamMasuk', currentJams.filter(j => j !== jamUrutan));
+        } else {
+            handleTeacherChange('jamMasuk', [...currentJams, jamUrutan]);
+        }
+    };
+
+    const handleRombelToggle = (rombelId: number) => {
+        const current = teacher.availableRombelIds || [];
+        if (current.includes(rombelId)) {
+            handleTeacherChange('availableRombelIds', current.filter(id => id !== rombelId));
+        } else {
+            handleTeacherChange('availableRombelIds', [...current, rombelId]);
+        }
+    };
+
+    const handleKelasToggle = (kelasId: number) => {
+        const current = teacher.availableKelasIds || [];
+        if (current.includes(kelasId)) {
+            handleTeacherChange('availableKelasIds', current.filter(id => id !== kelasId));
+        } else {
+            handleTeacherChange('availableKelasIds', [...current, kelasId]);
         }
     };
 
@@ -102,6 +132,9 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
             nama: teacher.nama,
             riwayatJabatan: teacher.riwayatJabatan || [],
             hariMasuk: teacher.hariMasuk,
+            jamMasuk: teacher.jamMasuk,
+            availableRombelIds: teacher.availableRombelIds,
+            availableKelasIds: teacher.availableKelasIds,
             kompetensiMapelIds: teacher.kompetensiMapelIds
         };
         onSave(teacherToSave);
@@ -116,10 +149,16 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                 </div>
                 
                 <div className="p-6 space-y-6 overflow-y-auto flex-grow">
-                     <div>
-                        <label className="block mb-1 text-sm font-medium text-gray-700">Nama Lengkap</label>
-                        <input type="text" value={teacher.nama || ''} onChange={(e) => handleTeacherChange('nama', e.target.value)} autoFocus className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: Ust. Ahmad, S.Pd.I" />
-                    </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div>
+                             <label className="block mb-1 text-sm font-medium text-gray-700">Nama Lengkap</label>
+                             <input type="text" value={teacher.nama || ''} onChange={(e) => handleTeacherChange('nama', e.target.value)} autoFocus className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: Ust. Ahmad, S.Pd.I" />
+                         </div>
+                         <div>
+                             <label className="block mb-1 text-sm font-medium text-gray-700">Kode Guru (Opsional)</label>
+                             <input type="text" value={teacher.kodeGuru || ''} onChange={(e) => handleTeacherChange('kodeGuru', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: AH, 01, dll (Untuk Jadwal)" />
+                         </div>
+                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Hari Availability */}
@@ -139,6 +178,69 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                                         </button>
                                     );
                                 })}
+                            </div>
+                        </div>
+
+                        {/* Jam Availability */}
+                        <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                            <label className="block mb-2 text-sm font-bold text-purple-800">Jam Masuk (Urutan)</label>
+                            <p className="text-xs text-purple-600 mb-2">Pilih jam ke berapa saja guru ini bersedia mengajar.</p>
+                            <div className="flex flex-wrap gap-2">
+                                {[1,2,3,4,5,6,7,8,9,10].map(jam => {
+                                    const isSelected = (teacher.jamMasuk || []).includes(jam);
+                                    return (
+                                        <button
+                                            key={jam}
+                                            onClick={() => handleJamToggle(jam)}
+                                            className={`w-8 h-8 rounded-md text-xs font-medium border transition-colors ${isSelected ? 'bg-purple-600 text-white border-purple-600 shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+                                        >
+                                            {jam}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Rombel & Kelas Availability */}
+                        <div className="bg-orange-50 p-3 rounded-lg border border-orange-200 md:col-span-2">
+                            <label className="block mb-2 text-sm font-bold text-orange-800">Ketersediaan Kelas & Rombel</label>
+                            <p className="text-xs text-orange-600 mb-3">Batasi guru ini hanya bisa mengajar di kelas atau rombel tertentu. Jika kosong, dianggap bisa di semua kelas.</p>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <h5 className="text-xs font-bold text-gray-500 mb-2 uppercase border-b pb-1">Berdasarkan Kelas</h5>
+                                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
+                                        {settings.kelas.map(k => {
+                                            const isChecked = (teacher.availableKelasIds || []).includes(k.id);
+                                            return (
+                                                <button
+                                                    key={k.id}
+                                                    onClick={() => handleKelasToggle(k.id)}
+                                                    className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${isChecked ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                                                >
+                                                    {k.nama}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h5 className="text-xs font-bold text-gray-500 mb-2 uppercase border-b pb-1">Berdasarkan Rombel</h5>
+                                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
+                                        {settings.rombel.map(r => {
+                                            const isChecked = (teacher.availableRombelIds || []).includes(r.id);
+                                            return (
+                                                <button
+                                                    key={r.id}
+                                                    onClick={() => handleRombelToggle(r.id)}
+                                                    className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${isChecked ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                                                >
+                                                    {r.nama}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

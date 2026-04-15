@@ -62,12 +62,38 @@ export const KoperasiFinance: React.FC = () => {
         // 3. Net Profit
         const netProfit = grossProfit + otherIncome - expenses;
 
+        // 4. Detailed Profit per Product
+        const profitPerProduct: { id: number, nama: string, omset: number, profit: number, qty: number }[] = [];
+        const productStats = new Map<number, { omset: number, profit: number, qty: number }>();
+
+        filteredSales.forEach(sale => {
+            sale.items.forEach(item => {
+                const buyPrice = Number(productBuyPriceMap.get(item.produkId) || 0);
+                const margin = Number(item.harga) - buyPrice;
+                const current = productStats.get(item.produkId) || { omset: 0, profit: 0, qty: 0 };
+                productStats.set(item.produkId, {
+                    omset: current.omset + (Number(item.harga) * Number(item.qty)),
+                    profit: current.profit + (margin * Number(item.qty)),
+                    qty: current.qty + Number(item.qty)
+                });
+            });
+        });
+
+        productStats.forEach((val, key) => {
+            profitPerProduct.push({
+                id: key,
+                nama: products.find(p => p.id === key)?.nama || 'Produk Terhapus',
+                ...val
+            });
+        });
+
         return {
             totalSalesOmset,
             grossProfit,
             otherIncome,
             expenses,
-            netProfit
+            netProfit,
+            profitPerProduct: profitPerProduct.sort((a, b) => b.profit - a.profit)
         };
     }, [financeRecords, salesRecords, products, filterMonth, filterYear]);
 
@@ -119,6 +145,7 @@ export const KoperasiFinance: React.FC = () => {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* ... existing cards ... */}
                 <div className="bg-white p-4 rounded-lg border-l-4 border-blue-500 shadow-sm">
                     <p className="text-xs font-bold text-gray-500 uppercase">Laba Kotor Penjualan</p>
                     <p className="text-xl font-bold text-blue-600">{formatRupiah(stats.grossProfit)}</p>
@@ -141,44 +168,74 @@ export const KoperasiFinance: React.FC = () => {
                 </div>
             </div>
 
-            {/* Transaction List */}
-            <div className="bg-white rounded-lg shadow border flex-grow overflow-hidden flex flex-col">
-                <div className="p-3 bg-gray-50 border-b font-bold text-gray-700 text-sm">Riwayat Pemasukan & Pengeluaran Operasional</div>
-                <div className="overflow-auto flex-grow">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-white text-gray-600 border-b sticky top-0 z-10">
-                            <tr>
-                                <th className="p-3">Tanggal</th>
-                                <th className="p-3">Kategori</th>
-                                <th className="p-3">Keterangan</th>
-                                <th className="p-3 text-right">Jumlah</th>
-                                <th className="p-3 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                            {financeRecords.filter(f => {
-                                const d = new Date(f.tanggal);
-                                return d.getMonth() + 1 === filterMonth && d.getFullYear() === filterYear;
-                            }).map(item => (
-                                <tr key={item.id} className="hover:bg-gray-50">
-                                    <td className="p-3 whitespace-nowrap text-gray-500">{formatDateTime(item.tanggal)}</td>
-                                    <td className="p-3">
-                                        <span className={`px-2 py-0.5 rounded text-xs border ${item.jenis === 'Pemasukan' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                                            {item.kategori}
-                                        </span>
-                                    </td>
-                                    <td className="p-3 text-gray-800">{item.deskripsi}</td>
-                                    <td className={`p-3 text-right font-bold ${item.jenis === 'Pemasukan' ? 'text-green-600' : 'text-red-600'}`}>
-                                        {item.jenis === 'Pemasukan' ? '+' : '-'} {formatRupiah(item.jumlah)}
-                                    </td>
-                                    <td className="p-3 text-center">
-                                        <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700"><i className="bi bi-trash"></i></button>
-                                    </td>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow min-h-0">
+                {/* Transaction List */}
+                <div className="lg:col-span-2 bg-white rounded-lg shadow border flex flex-col overflow-hidden">
+                    <div className="p-3 bg-gray-50 border-b font-bold text-gray-700 text-sm flex justify-between items-center">
+                        <span>Riwayat Pemasukan & Pengeluaran Operasional</span>
+                    </div>
+                    <div className="overflow-auto flex-grow">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-white text-gray-600 border-b sticky top-0 z-10">
+                                <tr>
+                                    <th className="p-3">Tanggal</th>
+                                    <th className="p-3">Kategori</th>
+                                    <th className="p-3">Keterangan</th>
+                                    <th className="p-3 text-right">Jumlah</th>
+                                    <th className="p-3 text-center">Aksi</th>
                                 </tr>
-                            ))}
-                            {financeRecords.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-gray-400">Belum ada data keuangan operasional.</td></tr>}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y">
+                                {financeRecords.filter(f => {
+                                    const d = new Date(f.tanggal);
+                                    return d.getMonth() + 1 === filterMonth && d.getFullYear() === filterYear;
+                                }).map(item => (
+                                    <tr key={item.id} className="hover:bg-gray-50">
+                                        <td className="p-3 whitespace-nowrap text-gray-500">{formatDateTime(item.tanggal)}</td>
+                                        <td className="p-3">
+                                            <span className={`px-2 py-0.5 rounded text-xs border ${item.jenis === 'Pemasukan' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                                {item.kategori}
+                                            </span>
+                                        </td>
+                                        <td className="p-3 text-gray-800">{item.deskripsi}</td>
+                                        <td className={`p-3 text-right font-bold ${item.jenis === 'Pemasukan' ? 'text-green-600' : 'text-red-600'}`}>
+                                            {item.jenis === 'Pemasukan' ? '+' : '-'} {formatRupiah(item.jumlah)}
+                                        </td>
+                                        <td className="p-3 text-center">
+                                            <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700"><i className="bi bi-trash"></i></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {financeRecords.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-gray-400">Belum ada data keuangan operasional.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* Profit per Product */}
+                <div className="bg-white rounded-lg shadow border flex flex-col overflow-hidden">
+                    <div className="p-3 bg-blue-50 border-b font-bold text-blue-800 text-sm">Analisis Laba per Produk</div>
+                    <div className="overflow-auto flex-grow">
+                        <table className="w-full text-xs text-left">
+                            <thead className="bg-white text-gray-600 border-b sticky top-0 z-10">
+                                <tr>
+                                    <th className="p-2">Produk</th>
+                                    <th className="p-2 text-center">Terjual</th>
+                                    <th className="p-2 text-right">Laba</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {stats.profitPerProduct.map(p => (
+                                    <tr key={p.id} className="hover:bg-gray-50">
+                                        <td className="p-2 font-medium">{p.nama}</td>
+                                        <td className="p-2 text-center">{p.qty}</td>
+                                        <td className="p-2 text-right font-bold text-blue-600">{formatRupiah(p.profit)}</td>
+                                    </tr>
+                                ))}
+                                {stats.profitPerProduct.length === 0 && <tr><td colSpan={3} className="p-4 text-center text-gray-400">Tidak ada data penjualan.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

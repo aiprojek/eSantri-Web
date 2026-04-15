@@ -85,8 +85,51 @@ export const TabCetakRapor: React.FC = () => {
     const [availableYears, setAvailableYears] = useState<string[]>([]);
     
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+    const [isBatchPrinting, setIsBatchPrinting] = useState(false);
     const [previewSantri, setPreviewSantri] = useState<Santri | null>(null);
     const [previewRecord, setPreviewRecord] = useState<RaporRecord | null>(null);
+    const [batchData, setBatchData] = useState<{ santri: Santri, record: RaporRecord | null }[]>([]);
+
+    const filteredTemplates = useMemo(() => {
+        const allTemplates = settings.raporTemplates || [];
+        const jenjangId = filterJenjang ? parseInt(filterJenjang) : 0;
+        const rombelId = printRombel ? parseInt(printRombel) : 0;
+        const rombel = rombelId ? settings.rombel.find(r => r.id === rombelId) : null;
+        const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : null;
+
+        if (!jenjangId) return allTemplates;
+        
+        return allTemplates.filter(t => {
+            // Global template
+            if (!t.jenjangId) return true;
+            
+            // Jenjang mismatch
+            if (t.jenjangId !== jenjangId) return false;
+            
+            // Kelas lock check
+            if (t.kelasId && (!kelas || t.kelasId !== kelas.id)) return false;
+            
+            // Rombel lock check
+            if (t.rombelId && (!rombel || t.rombelId !== rombel.id)) return false;
+            
+            return true;
+        });
+    }, [filterJenjang, printRombel, settings.raporTemplates, settings.rombel, settings.kelas]);
+
+    // Auto-select template if only one matches, or reset if current is invalid
+    useEffect(() => {
+        if (filterJenjang) {
+            // If current selection is not in filtered list, reset it
+            if (selectedTemplateId && !filteredTemplates.find(t => t.id === selectedTemplateId)) {
+                setSelectedTemplateId('');
+            }
+            
+            // If there's exactly one template available for this context, auto-select it
+            if (filteredTemplates.length === 1 && selectedTemplateId !== filteredTemplates[0].id) {
+                setSelectedTemplateId(filteredTemplates[0].id);
+            }
+        }
+    }, [filterJenjang, filteredTemplates, selectedTemplateId]);
 
     // Fetch available years from DB on mount
     useEffect(() => {
@@ -114,6 +157,18 @@ export const TabCetakRapor: React.FC = () => {
             setPreviewRecord(record || null);
             setIsPreviewOpen(true);
         }
+    };
+
+    const handlePrintAll = async () => {
+        const data = [];
+        for (const santri of filteredSantriList) {
+            const record = await db.raporRecords
+                .where({ santriId: santri.id, tahunAjaran: filterTahun, semester: filterSemester })
+                .first();
+            data.push({ santri, record: record || null });
+        }
+        setBatchData(data);
+        setIsBatchPrinting(true);
     };
 
     const selectedTemplate = useMemo(() => settings.raporTemplates?.find(t => t.id === selectedTemplateId), [selectedTemplateId, settings.raporTemplates]);
@@ -146,7 +201,16 @@ export const TabCetakRapor: React.FC = () => {
     return (
         <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Cetak Rapor</h3>
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 className="text-lg font-bold text-gray-800">Cetak Rapor</h3>
+                    <button 
+                        onClick={handlePrintAll} 
+                        disabled={filteredSantriList.length === 0}
+                        className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        <i className="bi bi-printer-fill"></i> Cetak Semua Rapor ({filteredSantriList.length})
+                    </button>
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                      <div>
@@ -183,7 +247,7 @@ export const TabCetakRapor: React.FC = () => {
                         <label className="block text-xs font-bold text-gray-500 mb-1">Desain Rapor</label>
                         <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} className="w-full border rounded p-2 text-sm bg-blue-50 focus:ring-2 focus:ring-blue-400">
                             <option value="">Standar K13 (Mapel)</option>
-                            {settings.raporTemplates?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            {filteredTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </select>
                     </div>
                 </div>
@@ -238,6 +302,37 @@ export const TabCetakRapor: React.FC = () => {
                                         <RaporLengkapTemplate santri={previewSantri} settings={settings} options={{ tahunAjaran: filterTahun, semester: filterSemester }} />
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* BATCH PRINT MODAL */}
+            {isBatchPrinting && batchData.length > 0 && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 z-[70] flex justify-center items-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col">
+                        <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                            <h3 className="text-lg font-bold text-gray-800">Cetak Massal ({batchData.length} Rapor)</h3>
+                            <div className="flex gap-2">
+                                 <button onClick={() => printToPdfNative('batch-print-container', `Rapor_Massal_${filterTahun.replace('/','-')}`)} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700"><i className="bi bi-printer"></i> Mulai Cetak</button>
+                                 <button onClick={() => setIsBatchPrinting(false)} className="text-gray-500 hover:text-gray-700"><i className="bi bi-x-lg text-xl"></i></button>
+                            </div>
+                        </div>
+                        <div className="flex-grow overflow-auto bg-gray-200 p-8 flex justify-center">
+                            <div id="batch-print-container" className="space-y-8">
+                                {batchData.map((item, idx) => (
+                                    <div key={item.santri.id} className={idx < batchData.length - 1 ? 'break-after-page' : ''}>
+                                        {selectedTemplate ? (
+                                            <DynamicRaporPreview template={selectedTemplate} santri={item.santri} record={item.record} settings={settings} />
+                                        ) : (
+                                            <div className="bg-white shadow-lg p-8 printable-content-wrapper" style={{ width: '21cm', minHeight: '29.7cm', padding: '2cm' }}>
+                                                <RaporLengkapTemplate santri={item.santri} settings={settings} options={{ tahunAjaran: filterTahun, semester: filterSemester }} />
+                                            </div>
+                                        )}
+                                        {/* Page Break for Printing */}
+                                        <div style={{ pageBreakAfter: 'always' }}></div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>

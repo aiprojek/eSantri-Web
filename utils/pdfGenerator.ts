@@ -23,10 +23,26 @@ export const generatePdf = async (elementId: string, options: PdfGeneratorOption
     const element = document.getElementById(elementId);
     if (!element) return;
 
-    const contentWrapper = element.querySelector('.printable-content-wrapper');
-    if (!contentWrapper) return;
+    let pages: HTMLElement[] = [];
+    const wrappers = element.querySelectorAll('.printable-content-wrapper');
+    
+    if (wrappers.length > 1) {
+        // Case 1: Multiple wrappers, each is a page
+        pages = Array.from(wrappers) as HTMLElement[];
+    } else if (wrappers.length === 1) {
+        const wrapper = wrappers[0] as HTMLElement;
+        // Check if the wrapper itself is styled as a page
+        if (wrapper.style.pageBreakAfter === 'always' || wrapper.style.width === '21cm' || wrapper.style.width === '33cm') {
+            pages = [wrapper];
+        } else {
+            // Case 2: One wrapper, its children are pages
+            pages = Array.from(wrapper.children) as HTMLElement[];
+        }
+    } else {
+        // Case 3: No wrapper, just use the element itself or its children
+        pages = [element as HTMLElement];
+    }
 
-    const pages = Array.from(contentWrapper.children) as HTMLElement[];
     if (pages.length === 0) return;
 
     let format: [number, number] = getPageDimensions(options.paperSize);
@@ -53,16 +69,23 @@ export const generatePdf = async (elementId: string, options: PdfGeneratorOption
             doc.addPage(format, isLandscape ? 'l' : 'p');
         }
 
-        const canvas = await html2canvas(page, {
-            scale: 3, // Higher scale for better resolution (sharp text)
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            // Ensure capture covers the whole element including potential margins
+        console.log(`Generating PDF for page ${i + 1}/${pages.length}`, {
             width: page.offsetWidth,
             height: page.offsetHeight,
-            windowWidth: document.documentElement.offsetWidth,
-            windowHeight: document.documentElement.offsetHeight,
+            id: page.id,
+            className: page.className
+        });
+
+        const canvas = await html2canvas(page, {
+            scale: 2.5, // Balanced scale
+            useCORS: true,
+            allowTaint: true,
+            logging: true, // Enable logging for debugging
+            backgroundColor: '#ffffff',
+            width: page.offsetWidth || 794, // Fallback to A4 width in pixels if 0
+            height: page.offsetHeight || 1123, // Fallback to A4 height in pixels if 0
+            windowWidth: 1200,
+            windowHeight: 1600,
             onclone: (clonedDoc) => {
                 const clonedElement = clonedDoc.querySelector(`[data-html2canvas-ignore]`);
                 if (clonedElement) clonedElement.remove();
@@ -75,11 +98,39 @@ export const generatePdf = async (elementId: string, options: PdfGeneratorOption
             }
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const imgProps = doc.getImageProperties(imgData);
-        const pdfImgHeight = (imgProps.height * pageWidth) / imgProps.width;
-
-        doc.addImage(imgData, 'JPEG', 0, 0, pageWidth, pdfImgHeight);
+        if (canvas.width > 0) {
+            let pdfImgWidth = pageWidth;
+            let pdfImgHeight = (canvas.height * pageWidth) / canvas.width;
+            
+            // If image is taller than page, scale it down to fit height
+            if (pdfImgHeight > pageHeight) {
+                pdfImgHeight = pageHeight;
+                pdfImgWidth = (canvas.width * pageHeight) / canvas.height;
+            }
+            
+            const xOffset = (pageWidth - pdfImgWidth) / 2;
+            
+            // Get image data and detect format
+            let imgData = canvas.toDataURL('image/jpeg', 0.8);
+            let format = 'JPEG';
+            
+            if (!imgData.startsWith('data:image/jpeg')) {
+                imgData = canvas.toDataURL('image/png');
+                format = 'PNG';
+            }
+            
+            try {
+                doc.addImage(imgData, format, xOffset, 0, pdfImgWidth, pdfImgHeight, undefined, 'FAST');
+            } catch (e) {
+                console.error("PDF addImage error:", e);
+                // Last resort: try without format to let jsPDF auto-detect
+                try {
+                    doc.addImage(imgData, xOffset, 0, pdfImgWidth, pdfImgHeight);
+                } catch (e2) {
+                    console.error("PDF addImage fallback error:", e2);
+                }
+            }
+        }
     }
 
     doc.save(options.fileName);
@@ -92,9 +143,8 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
     
-    // Get the inner HTML of the printable wrapper to avoid printing the scroll container background
-    const contentWrapper = element.querySelector('.printable-content-wrapper');
-    const content = contentWrapper ? contentWrapper.innerHTML : element.innerHTML;
+    // Use the element's innerHTML directly to preserve multiple pages and their specific wrapper classes
+    const content = element.innerHTML;
 
     // Create a hidden iframe
     const iframe = document.createElement('iframe');
@@ -120,19 +170,24 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
     <style>
         @media print {
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white; }
-            @page { margin: 0; size: auto; }
+            @page { margin: 0; size: A4 portrait; }
             .printable-content-wrapper { 
-                width: 100% !important; 
+                width: 21cm !important; 
+                height: 29.7cm !important;
+                min-height: 29.7cm !important;
                 transform: none !important; 
-                margin: 0 !important; 
+                margin: 0 auto !important; 
                 box-shadow: none !important; 
+                page-break-after: always;
+                page-break-inside: avoid;
+                overflow: hidden !important;
             }
             /* Reset shadows for print */
             .shadow-lg, .shadow-md, .shadow-xl { box-shadow: none !important; }
         }
         body { background-color: white; margin: 0; padding: 0; }
         /* Ensure grid/flex layouts work inside the iframe context */
-        .printable-content-wrapper { transform: none !important; }
+        .printable-content-wrapper { transform: none !important; margin: 0 auto; }
     </style>`;
 
     doc.open();
@@ -144,18 +199,13 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
             ${styles}
         </head>
         <body>
-            <div class="printable-content-wrapper">
-                ${content}
-            </div>
+            ${content}
             <script>
                 // Wait for resources (images/fonts) to load before printing
                 window.onload = () => {
                     setTimeout(() => {
                         window.focus();
                         window.print();
-                        // Removing the iframe immediately can break the print dialog in some browsers
-                        // We leave it or the caller cleans it up, but for safety in this utility:
-                        // window.parent.document.body.removeChild(window.frameElement); 
                     }, 1000);
                 };
             </script>

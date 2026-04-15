@@ -29,16 +29,26 @@ export const panduanData: PanduanSectionData[] = [
                     <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500 text-sm text-gray-700 space-y-3">
                         <p>
                             <strong>Asal Usul & Evolusi:</strong> Aplikasi ini awalnya didesain untuk penggunaan <em>Admin Sentris</em> (terpusat pada satu komputer). 
-                            Namun, untuk mempermudah pekerjaan Admin tanpa menambah biaya server yang mahal, kami menghadirkan fitur <strong>Sinkronisasi Cloud (Hub & Spoke)</strong>.
+                            Namun, kami telah menghadirkan dua opsi sinkronisasi modern:
                         </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-white p-3 rounded border border-yellow-200 shadow-sm">
+                                <h4 className="font-bold text-teal-700 text-xs uppercase mb-1">Opsi 1: Firebase Realtime (Rekomendasi)</h4>
+                                <p className="text-[11px]">Data tersinkronisasi secara otomatis dan instan antar perangkat. Sangat cocok untuk kolaborasi tim secara langsung tanpa perlu kirim/terima manual.</p>
+                            </div>
+                            <div className="bg-white p-3 rounded border border-yellow-200 shadow-sm opacity-80">
+                                <h4 className="font-bold text-gray-600 text-xs uppercase mb-1">Opsi 2: Cloud Sync (Hub & Spoke)</h4>
+                                <p className="text-[11px]">Menggunakan Dropbox/WebDAV. Cocok untuk backup berkala atau jika Anda ingin kontrol penuh atas file database di cloud storage Anda sendiri.</p>
+                            </div>
+                        </div>
                         <div className="border-t border-yellow-200 pt-2">
                             <strong>Saran Penggunaan:</strong>
                             <ul className="list-disc pl-5 mt-1 space-y-1">
                                 <li>
-                                    <strong>Pahami Alurnya Dulu:</strong> Sebelum penerapan penuh di pondok, sangat disarankan untuk mencoba aplikasi ini dalam <strong>tim kecil</strong> (misal: 1 Admin + 1 Guru) untuk memahami cara kerja kirim/terima data.
+                                    <strong>Pahami Alurnya Dulu:</strong> Sebelum penerapan penuh di pondok, sangat disarankan untuk mencoba aplikasi ini dalam <strong>tim kecil</strong> (misal: 1 Admin + 1 Guru) untuk memahami cara kerja sinkronisasi yang dipilih.
                                 </li>
                                 <li>
-                                    <strong>Gunakan Fitur Kolaborasi:</strong> Untuk menunjang pekerjaan Admin agar tidak menumpuk, sangat disarankan mengaktifkan fitur <strong>Multi-User</strong> dan dukungan <strong>Cloud Sync</strong>. Biarkan Guru/Musyrif mengisi data (Absensi/Tahfizh) dari perangkat mereka sendiri.
+                                    <strong>Gunakan Fitur Kolaborasi:</strong> Untuk menunjang pekerjaan Admin agar tidak menumpuk, sangat disarankan mengaktifkan fitur <strong>Multi-User</strong> dan dukungan <strong>Firebase Realtime</strong>. Biarkan Guru/Musyrif mengisi data (Absensi/Tahfizh) dari perangkat mereka sendiri secara real-time.
                                 </li>
                             </ul>
                         </div>
@@ -111,10 +121,18 @@ export const panduanData: PanduanSectionData[] = [
                             <p className="text-xs mb-1">Jika staff lupa jawaban keamanan dan Admin mereset password secara manual, ikuti urutan wajib ini agar password baru bisa dipakai staff:</p>
                             <ol className="list-decimal pl-4 text-xs text-orange-900 space-y-1">
                                 <li><strong>Admin:</strong> Ubah password di menu <em>Pengaturan &gt; Akun</em>.</li>
-                                <li><strong>Admin:</strong> Buka menu <em>Pusat Sync</em> (atau klik tombol Sync Cloud) &gt; Klik <strong>"Publikasikan Master"</strong>. (Langkah ini wajib agar konfigurasi user baru terkirim ke Cloud).</li>
+                                <li><strong>Admin:</strong> Buka menu <em>Pusat Sync</em> (atau klik tombol Sync Cloud) &gt; Klik <strong>"Publikasikan Master"</strong> (atau data akan otomatis terkirim jika menggunakan Firebase).</li>
                                 <li><strong>Staff:</strong> Di halaman login laptop staff, klik tombol <strong>"Update Data Akun dari Cloud"</strong>.</li>
                                 <li><strong>Staff:</strong> Login dengan password baru.</li>
                             </ol>
+                        </div>
+                        <div className="border-l-4 border-teal-500 pl-3 py-1 bg-teal-50">
+                            <h4 className="font-bold text-teal-800 text-sm">Jika Menggunakan Firebase (Google Login)</h4>
+                            <p className="text-xs mb-1">Jika Anda menggunakan Firebase Realtime, manajemen password sedikit berbeda:</p>
+                            <ul className="list-disc pl-4 text-xs text-teal-700">
+                                <li><strong>Password Google:</strong> Jika lupa password Google, silakan reset melalui layanan Google.</li>
+                                <li><strong>Password Lokal:</strong> Jika Anda lupa password lokal untuk masuk ke aplikasi, gunakan tombol <strong>"Update Data Akun dari Cloud"</strong> di halaman login. Sistem akan mengambil data user terbaru dari Firebase (termasuk password yang mungkin sudah direset oleh Admin Utama).</li>
+                            </ul>
                         </div>
                     </div>
                 )
@@ -122,12 +140,184 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
-        id: 'sop',
-        badge: 'SOP',
-        badgeColor: 'gray',
-        title: 'SOP Multi-Admin (Hub & Spoke)',
-        containerClass: 'border-l-4 border-l-gray-800',
+        id: 'firebase',
+        badge: 'NEW',
+        badgeColor: 'teal',
+        title: 'Firebase Realtime & Multi-User',
         steps: [
+            {
+                title: 'Apa itu Firebase Realtime?',
+                content: (
+                    <div className="bg-teal-50 p-4 rounded-lg border-l-4 border-teal-500 text-sm text-gray-700 space-y-3">
+                        <p>
+                            <strong>Sinkronisasi Instan:</strong> Berbeda dengan Dropbox/WebDAV yang memerlukan proses "Kirim" dan "Terima" manual, 
+                            <strong>Firebase</strong> bekerja secara real-time. Setiap perubahan data di satu laptop akan langsung muncul di laptop lain dalam hitungan detik.
+                        </p>
+                        <p>
+                            <strong>Multi-User Sejati:</strong> Fitur ini memungkinkan banyak admin atau staff bekerja secara bersamaan di database yang sama tanpa takut bentrok data.
+                        </p>
+                    </div>
+                )
+            },
+            {
+                title: 'Cara Aktivasi (Login Google)',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-2 text-sm mt-1 bg-gray-50 p-3 rounded border">
+                        <li>Buka menu <strong>Pengaturan &gt; Sync Cloud</strong>.</li>
+                        <li>Pilih Provider: <strong>Firebase Realtime</strong>.</li>
+                        <li>Klik tombol <strong>"Login dengan Google"</strong>. Gunakan akun Google pondok Anda.</li>
+                        <li>Setelah login berhasil, status akan berubah menjadi <strong>"Terhubung"</strong>.</li>
+                    </ol>
+                )
+            },
+            {
+                title: 'PENTING: Whitelist Domain (Login Google)',
+                color: 'red',
+                content: (
+                    <div className="bg-red-50 p-3 rounded border border-red-200 text-sm text-red-900 space-y-2">
+                        <p className="font-bold mb-1"><i className="bi bi-globe"></i> Otorisasi Domain di Firebase</p>
+                        <p>Agar fitur <strong>Login Google</strong> berfungsi, Firebase harus mengenali alamat website tempat aplikasi ini berjalan.</p>
+                        
+                        <div className="bg-white p-2 rounded border border-red-100 text-xs">
+                            <p className="font-bold text-gray-700 mb-1">Domain yang biasanya sudah terdaftar otomatis:</p>
+                            <ul className="list-disc pl-4 space-y-0.5">
+                                <li><code>localhost</code> (untuk pengetesan lokal)</li>
+                                <li><code>namaproject.firebaseapp.com</code></li>
+                                <li><code>namaproject.web.app</code></li>
+                            </ul>
+                        </div>
+
+                        <p>Jika Anda menggunakan domain lain (misal: <code>esantriweb.pages.dev</code>, <code>esantri.pondokanda.com</code>, atau IP Server), Anda <strong>WAJIB</strong> menambahkannya secara manual di Firebase Console:</p>
+                        
+                        <ol className="list-decimal pl-5 mt-2 space-y-1">
+                            <li>Buka <strong>Firebase Console</strong> &gt; Project Anda.</li>
+                            <li>Pilih menu <strong>Authentication</strong> &gt; Tab <strong>Settings</strong>.</li>
+                            <li>Klik <strong>Authorized Domains</strong> &gt; Klik <strong>Add Domain</strong>.</li>
+                            <li>Masukkan domain tempat aplikasi Anda dihosting (tanpa <code>https://</code>, misal: <code>esantriweb.pages.dev</code>).</li>
+                        </ol>
+                        <p className="text-[10px] italic mt-2">* Tanpa langkah ini, Anda akan menemui error "Unauthorized Domain" saat mencoba Login Google.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Alur Multi-User (Admin & Staff)',
+                content: (
+                    <div className="space-y-3">
+                        <div className="border-l-4 border-teal-500 pl-3 py-1 bg-teal-50">
+                            <h4 className="font-bold text-teal-800 text-sm">1. Sisi Admin (Pusat)</h4>
+                            <p className="text-xs">Admin login dengan Google, lalu klik tombol <strong>"Bagikan Sesi (Pairing Code)"</strong>. Berikan kode tersebut ke Staff.</p>
+                        </div>
+                        <div className="border-l-4 border-blue-500 pl-3 py-1 bg-blue-50">
+                            <h4 className="font-bold text-blue-800 text-sm">2. Sisi Staff (Pengurus)</h4>
+                            <p className="text-xs">Staff login dengan <strong>akun Google mereka sendiri</strong>, lalu masukkan Pairing Code dari Admin di kolom "Setup Cepat".</p>
+                        </div>
+                        <p className="text-[10px] text-gray-500 italic">* Metode ini lebih aman karena Staff tidak perlu tahu password akun Google Admin.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Migrasi Data Awal (PENTING)',
+                color: 'orange',
+                content: (
+                    <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm">
+                        <p className="mb-2">Jika Anda sudah memiliki data lokal dan ingin memindahkannya ke Firebase untuk pertama kali:</p>
+                        <ol className="list-decimal pl-5 space-y-1">
+                            <li>Pastikan Anda sudah login ke Firebase.</li>
+                            <li>Klik tombol <strong>"Upload Semua Data ke Cloud"</strong> di menu Pengaturan Cloud.</li>
+                            <li>Tunggu hingga proses selesai. Sekarang data Anda sudah ada di cloud dan siap diakses perangkat lain.</li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: 'Penggunaan Project Sendiri (Versi Build / Mandiri)',
+                color: 'purple',
+                content: (
+                    <div className="bg-purple-50 p-3 rounded border border-purple-200 text-sm text-purple-900">
+                        <p className="font-bold mb-1"><i className="bi bi-gear-wide-connected"></i> Konfigurasi Kustom (App Key/Secret)</p>
+                        <p className="mb-2">Jika Anda menggunakan versi build yang tidak memiliki URL tetap atau ingin menggunakan project Firebase sendiri:</p>
+                        <ol className="list-decimal pl-5 space-y-1">
+                            <li>Buka menu <strong>Pengaturan &gt; Sync Cloud</strong>.</li>
+                            <li>Klik <strong>"Gunakan Project Firebase Sendiri (Advanced)"</strong>.</li>
+                            <li>Masukkan <strong>API Key, Project ID, App ID</strong>, dll (didapat dari Firebase Console). Ini adalah padanan dari App Key/Secret di Dropbox.</li>
+                            <li>Klik <strong>Simpan</strong> dan <strong>Refresh Halaman</strong>.</li>
+                            <li><strong>PENTING:</strong> Jangan lupa mendaftarkan domain website Anda di menu <em>Authentication &gt; Settings &gt; Authorized Domains</em> pada Firebase Console project baru Anda tersebut.</li>
+                        </ol>
+                        <p className="mt-2 text-[10px] italic">* Catatan: Untuk versi build lokal, pastikan Anda menjalankan aplikasi melalui local server (seperti <code>npx serve</code>) agar Login Google tetap berfungsi.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Keamanan & Isolasi Data',
+                content: (
+                    <p className="text-sm">
+                        Setiap pondok memiliki <strong>Tenant ID</strong> unik. Data Pondok A tidak akan bisa dilihat oleh Pondok B meskipun menggunakan aplikasi yang sama. 
+                        Akses staff dikontrol melalui daftar anggota yang hanya bisa dikelola oleh Admin Pondok tersebut.
+                    </p>
+                )
+            },
+            {
+                title: 'Batasan Versi Gratis (Free Tier)',
+                color: 'red',
+                content: (
+                    <div className="bg-red-50 p-3 rounded border border-red-200 text-sm text-red-900">
+                        <p className="font-bold mb-1"><i className="bi bi-exclamation-triangle-fill"></i> Ketentuan Firebase Free Tier:</p>
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Penyimpanan:</strong> Maksimal 1GB untuk database dan 5GB untuk file dokumen.</li>
+                            <li><strong>Transfer Data:</strong> Ada batasan kuota harian untuk baca/tulis data (50k read / 20k write per hari).</li>
+                            <li><strong>Jika Kuota Habis:</strong> Sinkronisasi akan terhenti sementara hingga kuota direset keesokan harinya. Untuk penggunaan skala besar, disarankan upgrade ke paket Pay-as-you-go (Blaze).</li>
+                        </ul>
+                    </div>
+                )
+            }
+        ]
+    },
+    {
+        id: 'cloud',
+        badge: 3,
+        badgeColor: 'purple',
+        title: 'Sinkronisasi Cloud & Portal Wali',
+        steps: [
+            {
+                title: 'Konsep Sinkronisasi & Portal',
+                content: (
+                    <>
+                        <p className="mb-2">Aplikasi ini menyimpan data di laptop Anda (Offline). Sinkronisasi Cloud berguna untuk:</p>
+                        <ul className="list-disc pl-5 space-y-1 text-sm">
+                            <li><strong>Backup Otomatis:</strong> Data aman jika laptop rusak.</li>
+                            <li><strong>Kerja Tim (Multi-User):</strong> Banyak laptop bisa mengakses data yang sama.</li>
+                            <li><strong>Portal Wali Santri:</strong> Membagikan informasi (nilai, tagihan) ke orang tua secara online.</li>
+                        </ul>
+                    </>
+                )
+            },
+            {
+                title: 'Pilih Penyedia Cloud',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Pengaturan &gt; Sync Cloud</strong>.</li>
+                        <li><strong>Firebase (Rekomendasi):</strong> Real-time, sangat cepat, cocok untuk kerja tim yang intensif dan langsung terintegrasi dengan Portal Wali.</li>
+                        <li><strong>Dropbox:</strong> Mudah, gratis, cocok untuk backup dan sinkronisasi berkala.</li>
+                        <li><strong>WebDAV:</strong> Untuk Anda yang punya server sendiri (Nextcloud/CasaOS) demi privasi maksimal.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Mengaktifkan Portal Wali Santri (Hybrid Bridge)',
+                color: 'blue',
+                content: (
+                    <div className="bg-blue-50 p-3 rounded border border-blue-200 text-sm">
+                        <p className="font-bold mb-1 text-blue-900"><i className="bi bi-globe2"></i> Fitur Portal Wali</p>
+                        <p className="mb-2 text-blue-800">Jika Anda ingin wali santri bisa mengecek nilai dan tagihan secara online:</p>
+                        <ol className="list-decimal pl-5 mt-1 space-y-1 text-blue-800">
+                            <li>Di menu <strong>Pengaturan &gt; Sync Cloud</strong>, gulir ke bagian bawah "Fitur Publik & Portal".</li>
+                            <li>Centang <strong>"Portal Wali Santri"</strong>.</li>
+                            <li>Jika Anda menggunakan Dropbox/WebDAV, Anda <strong>wajib login dengan Google (Firebase)</strong> di bagian tersebut. Ini berfungsi sebagai "Jembatan" agar data sensitif di Dropbox Anda tetap aman, dan hanya data ringkas yang dikirim ke Firebase untuk dilihat wali.</li>
+                            <li>Klik <strong>"Update Data Portal"</strong> untuk mengirim data terbaru ke portal.</li>
+                        </ol>
+                    </div>
+                )
+            },
             {
                 title: 'Konsep: Pusat (Hub) & Cabang (Spoke)',
                 color: 'black',
@@ -348,7 +538,7 @@ export const panduanData: PanduanSectionData[] = [
                         <ol className="list-decimal pl-5 space-y-2 text-sm mt-1">
                             <li><strong>Buat Akun Petugas:</strong> Admin membuat user baru dengan role 'Staff' dan akses hanya ke modul 'Kesehatan'.</li>
                             <li><strong>Input di Klinik:</strong> Petugas Poskestren login di laptop klinik. Saat ada santri sakit, input data di menu <strong>Rekam Medis</strong>.</li>
-                            <li><strong>Sync Data:</strong> Sore hari, Petugas klik "Kirim Perubahan". Admin pusat akan menerima data rekam medis tersebut.</li>
+                            <li><strong>Sync Data:</strong> Jika menggunakan Cloud Sync (Dropbox), Petugas klik "Kirim Perubahan". Jika menggunakan <strong>Firebase</strong>, data otomatis terkirim secara real-time.</li>
                         </ol>
                     </>
                 )
@@ -388,7 +578,7 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="bg-gray-100 p-3 rounded border border-gray-300 text-sm">
                         Agar tidak membebani Admin Kantor, <strong>buatkan akun khusus untuk Satpam</strong> dengan akses hanya ke modul 'Buku Tamu'.
-                        <br/>Satpam bisa menggunakan HP/Laptop di pos jaga. Pastikan melakukan <strong>Sync Cloud</strong> (Kirim Perubahan) saat pergantian shift.
+                        <br/>Satpam bisa menggunakan HP/Laptop di pos jaga. Jika menggunakan Cloud Sync, lakukan <strong>Kirim Perubahan</strong> saat pergantian shift. Jika menggunakan <strong>Firebase</strong>, data tersinkron otomatis.
                     </div>
                 )
             }
@@ -420,8 +610,8 @@ export const panduanData: PanduanSectionData[] = [
                         <div className="bg-teal-50 p-3 rounded border border-teal-200">
                             <ol className="list-decimal pl-5 space-y-2 text-sm">
                                 <li><strong>Konselor Pakai Laptop Sendiri:</strong> Jangan mencatat BK di komputer utama kantor.</li>
-                                <li><strong>Gunakan Cloud Sync:</strong> Hubungkan laptop Konselor ke Dropbox pondok.</li>
-                                <li><strong>Input & Kirim:</strong> Konselor mencatat sesi di laptopnya (offline/online), lalu klik "Kirim Perubahan". Data akan terenkripsi dan aman sampai ke Admin Pusat.</li>
+                                <li><strong>Gunakan Sync Cloud:</strong> Hubungkan laptop Konselor ke Dropbox atau <strong>Firebase</strong> pondok.</li>
+                                <li><strong>Input & Sync:</strong> Konselor mencatat sesi di laptopnya. Jika menggunakan Dropbox, klik "Kirim Perubahan". Jika menggunakan <strong>Firebase</strong>, data tersimpan secara real-time dan aman.</li>
                             </ol>
                         </div>
                     </>
@@ -454,8 +644,8 @@ export const panduanData: PanduanSectionData[] = [
                         <p>Agar tidak bergantung pada satu komputer Admin (Admin Sentris), sangat disarankan mengaktifkan <strong>Sync Cloud (Dropbox)</strong>.</p>
                         <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                             <li><strong>Gunakan Perangkat Masing-masing:</strong> Guru/Musyrif bisa mengabsen langsung di kelas/asrama menggunakan HP atau Laptop mereka sendiri.</li>
-                            <li><strong>Akuntabilitas (Multi-User):</strong> Setiap guru login dengan akun masing-masing yang dibuatkan Admin, sehingga sistem mencatat siapa yang melakukan absensi.</li>
-                            <li><strong>Sinkronisasi:</strong> Setelah mengabsen (offline), guru cukup melakukan "Kirim Perubahan" agar data masuk ke Admin Pusat.</li>
+                            <li><strong>Akuntabilitas (Multi-User):</strong> Setiap guru login dengan akun masing-masing yang dibuatkan Admin.</li>
+                            <li><strong>Sinkronisasi:</strong> Jika menggunakan Dropbox, klik "Kirim Perubahan" setelah selesai. Jika menggunakan <strong>Firebase</strong>, data otomatis masuk ke pusat secara real-time.</li>
                         </ul>
                     </>
                 )
@@ -505,8 +695,8 @@ export const panduanData: PanduanSectionData[] = [
                             <ol className="list-decimal pl-5 space-y-2 text-sm">
                                 <li><strong>Muhaffizh Login di HP/Tablet Sendiri:</strong> Admin membuatkan akun staff untuk setiap muhaffizh.</li>
                                 <li><strong>Input Saat Menyimak:</strong> Muhaffizh membuka menu <em>Tahfizh &gt; Input Setoran</em> saat santri maju setoran.</li>
-                                <li><strong>Otomatis Lanjut Ayat:</strong> Sistem otomatis menyarankan ayat lanjutan berdasarkan setoran terakhir, sehingga input sangat cepat.</li>
-                                <li><strong>Sync Data:</strong> Setelah halaqah selesai, Muhaffizh klik tombol "Kirim Perubahan" (jika menggunakan Cloud Sync).</li>
+                                <li><strong>Otomatis Lanjut Ayat:</strong> Sistem otomatis menyarankan ayat lanjutan berdasarkan setoran terakhir.</li>
+                                <li><strong>Sync Data:</strong> Jika menggunakan Dropbox, klik "Kirim Perubahan". Jika menggunakan <strong>Firebase</strong>, data langsung tersinkron secara real-time.</li>
                             </ol>
                         </div>
                     </>
@@ -640,7 +830,7 @@ export const panduanData: PanduanSectionData[] = [
                         <ul className="list-disc pl-5 mt-1 space-y-1">
                             <li>Buat akun khusus untuk Bendahara (Role: Staff, Akses: Keuangan Write).</li>
                             <li><strong>Wajib Multi-User:</strong> Aktifkan di Pengaturan agar setiap transaksi (SPP/Gaji) tercatat <em>siapa</em> yang menginputnya (Audit Trail).</li>
-                            <li><strong>Wajib Cloud Sync:</strong> Data keuangan adalah data vital. Sinkronisasi ke Dropbox/WebDAV memastikan data tidak hilang jika laptop rusak atau terkena virus.</li>
+                            <li><strong>Wajib Sync Cloud:</strong> Data keuangan adalah data vital. Sinkronisasi ke Dropbox atau <strong>Firebase</strong> memastikan data aman dan selalu ter-backup di cloud.</li>
                         </ul>
                     </div>
                 )

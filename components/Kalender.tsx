@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { CalendarEvent, PondokSettings, PiketSchedule, Santri } from '../types';
-import { printToPdfNative } from '../utils/pdfGenerator';
+import { printToPdfNative, generatePdf } from '../utils/pdfGenerator';
 import { CalendarPrintTemplate } from './kalender/CalendarPrintTemplate';
 import { BulkEventModal } from './kalender/modals/BulkEventModal';
 import { formatDate, getHijriDate, findStartOfHijriMonth } from '../utils/formatters';
@@ -136,12 +136,13 @@ interface PrintModalProps {
     isOpen: boolean;
     onClose: () => void;
     onPrint: (theme: any, layout: any, primarySystem: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => void;
+    onExportPdf: (theme: any, layout: any, primarySystem: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => void;
     settings: PondokSettings;
     events: CalendarEvent[];
     year: number;
 }
 
-const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, settings, events, year }) => {
+const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExportPdf, settings, events, year }) => {
     const [theme, setTheme] = useState<'classic' | 'modern' | 'bold' | 'dark' | 'ceria'>('classic');
     const [layout, setLayout] = useState<'1_sheet' | '3_sheets' | '4_sheets'>('1_sheet');
     const [primarySystem, setPrimarySystem] = useState<'Masehi' | 'Hijriah'>('Masehi');
@@ -309,12 +310,18 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, setti
                             )}
                         </div>
 
-                        <div className="p-4 border-t bg-gray-50">
+                        <div className="p-4 border-t bg-gray-50 flex flex-col gap-2">
                             <button 
                                 onClick={() => onPrint(theme, layout, primarySystem, showKop, customImage, imagePosition)} 
                                 className="w-full py-3 bg-teal-600 text-white rounded-lg font-bold shadow-lg hover:bg-teal-700 transition-all flex items-center justify-center gap-2"
                             >
-                                <i className="bi bi-printer-fill"></i> Cetak / Download PDF
+                                <i className="bi bi-printer-fill"></i> Cetak Kalender
+                            </button>
+                            <button 
+                                onClick={() => onExportPdf(theme, layout, primarySystem, showKop, customImage, imagePosition)} 
+                                className="w-full py-3 bg-red-600 text-white rounded-lg font-bold shadow-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+                            >
+                                <i className="bi bi-file-earmark-pdf-fill"></i> Export PDF
                             </button>
                         </div>
                     </div>
@@ -824,6 +831,17 @@ const Kalender: React.FC = () => {
         }, 500);
     };
 
+    const handleExportPdfRequest = (theme: any, layout: any, system: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => {
+        setPrintConfig({ theme, layout, primarySystem: system, showKop, customImage, imagePosition });
+        setIsPrintModalOpen(false);
+        setTimeout(() => {
+            generatePdf('calendar-print-area', {
+                fileName: `Kalender_Akademik_${anchorDate.getFullYear()}.pdf`,
+                paperSize: 'A4'
+            });
+        }, 1000);
+    };
+
     const renderCalendarGrid = () => {
         const gridCells = [];
         if (calendarDays.length === 0) return null;
@@ -1053,15 +1071,16 @@ const Kalender: React.FC = () => {
                 isOpen={isPrintModalOpen} 
                 onClose={() => setIsPrintModalOpen(false)} 
                 onPrint={handlePrintRequest}
+                onExportPdf={handleExportPdfRequest}
                 settings={settings}
                 events={events}
                 year={anchorDate.getFullYear()}
             />
 
-            {/* Hidden Print Area */}
-            <div className="hidden print:block">
+            {/* Hidden Print Area - Accessible by html2canvas but invisible to user */}
+            <div className="fixed -left-[10000px] top-0 -z-[100] pointer-events-none h-auto w-auto">
                 {printConfig && (
-                    <div id="calendar-print-area">
+                    <div id="calendar-print-area" className="bg-white">
                         <CalendarPrintTemplate 
                             year={anchorDate.getFullYear()} 
                             events={events} 
@@ -1074,6 +1093,23 @@ const Kalender: React.FC = () => {
                             imagePosition={printConfig.imagePosition}
                         />
                     </div>
+                )}
+            </div>
+
+            {/* Native Print Area - Only for browser print */}
+            <div className="hidden print:block">
+                {printConfig && (
+                    <CalendarPrintTemplate 
+                        year={anchorDate.getFullYear()} 
+                        events={events} 
+                        settings={settings} 
+                        theme={printConfig.theme}
+                        layout={printConfig.layout}
+                        primarySystem={printConfig.primarySystem}
+                        showKop={printConfig.showKop}
+                        customImage={printConfig.customImage}
+                        imagePosition={printConfig.imagePosition}
+                    />
                 )}
             </div>
         </div>

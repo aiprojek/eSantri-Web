@@ -5,9 +5,11 @@ import { db } from '../db';
 import { hashString } from '../services/authService';
 import { updateAccountFromCloud } from '../services/syncService';
 import { User } from '../types';
+import { useFirebase } from '../contexts/FirebaseContext';
 
 export const LoginScreen: React.FC = () => {
     const { login, showToast, settings } = useAppContext();
+    const { fbUser, login: fbLogin, isFbLoading } = useFirebase();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -20,6 +22,29 @@ export const LoginScreen: React.FC = () => {
     const [recoveryKeyInput, setRecoveryKeyInput] = useState('');
     const [targetUser, setTargetUser] = useState<User | null>(null);
     const [newPassword, setNewPassword] = useState('');
+
+    const handleGoogleLogin = async () => {
+        setIsLoading(true);
+        try {
+            const result = await fbLogin();
+            const email = result.user.email;
+            
+            // Match user by email in local database
+            const user = await db.users.where('email').equals(email).first();
+            if (user) {
+                await db.users.update(user.id, { lastLogin: new Date().toISOString() });
+                login(user);
+                showToast(`Selamat datang, ${user.fullName || user.username}!`, 'success');
+            } else {
+                showToast('Email Google Anda tidak terdaftar di sistem eSantri ini. Hubungi Admin.', 'error');
+            }
+        } catch (error) {
+            console.error("Google Login Error:", error);
+            showToast('Gagal login dengan Google.', 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -184,6 +209,25 @@ export const LoginScreen: React.FC = () => {
                                 {isLoading ? <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span> : 'Masuk'}
                             </button>
                         </form>
+
+                        {settings.cloudSyncConfig?.provider === 'firebase' && (
+                            <div className="mt-4">
+                                <div className="relative flex items-center justify-center mb-4">
+                                    <div className="flex-grow border-t border-gray-300"></div>
+                                    <span className="flex-shrink mx-4 text-gray-400 text-xs uppercase">Atau</span>
+                                    <div className="flex-grow border-t border-gray-300"></div>
+                                </div>
+                                <button 
+                                    onClick={handleGoogleLogin}
+                                    disabled={isLoading}
+                                    className="w-full bg-white border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                                >
+                                    <i className="bi bi-google text-red-500"></i>
+                                    Masuk dengan Google
+                                </button>
+                            </div>
+                        )}
+
                         <div className="mt-6 flex flex-col gap-2 text-center">
                             <button onClick={() => setView('forgot')} className="text-sm text-teal-600 hover:underline">Lupa Password?</button>
                             <button onClick={() => setView('emergency')} className="text-xs text-red-500 hover:text-red-700 font-medium mt-1">Gunakan Kunci Darurat (Admin)</button>
@@ -203,6 +247,14 @@ export const LoginScreen: React.FC = () => {
             <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
                 <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-8">
                     <h2 className="text-xl font-bold text-gray-800 mb-4">Pemulihan Akun</h2>
+                    
+                    {settings.cloudSyncConfig?.provider === 'firebase' && (
+                        <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-lg text-xs text-teal-800">
+                            <i className="bi bi-info-circle-fill mr-1"></i>
+                            <strong>Info Firebase:</strong> Jika Anda menggunakan Login Google, silakan reset password melalui akun Google Anda. Tombol di bawah hanya untuk akun lokal.
+                        </div>
+                    )}
+
                     {!targetUser ? (
                         <div className="space-y-4">
                             <p className="text-sm text-gray-600">Masukkan username Anda untuk melanjutkan.</p>

@@ -22,6 +22,7 @@ interface AppContextType {
   settings: PondokSettings;
   backupModal: any;
   onSaveSettings: (newSettings: PondokSettings) => Promise<void>;
+  onUpdateSettings: (newSettings: PondokSettings) => Promise<void>;
   downloadBackup: () => Promise<void>;
   triggerBackupCheck: (forceAction?: boolean) => void;
   closeBackupModal: () => void;
@@ -125,7 +126,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const triggerManualSync = async (action: 'up' | 'down' | 'admin_publish') => {
         const config = sets.settings.cloudSyncConfig;
-        if (!config || config.provider === 'none') return;
+        if (!config || config.provider === 'none' || config.provider === 'firebase') return;
 
         setSyncStatus('syncing');
         try {

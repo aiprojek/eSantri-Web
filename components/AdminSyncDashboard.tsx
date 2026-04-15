@@ -173,6 +173,31 @@ export const AdminSyncDashboard: React.FC = () => {
         );
     }
 
+    if (config.provider === 'firebase') {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 bg-teal-50 rounded-xl border border-teal-200 text-center">
+                <div className="w-20 h-20 bg-teal-100 rounded-full flex items-center justify-center mb-4">
+                    <i className="bi bi-cloud-check-fill text-4xl text-teal-600"></i>
+                </div>
+                <h2 className="text-xl font-bold text-teal-800 mb-2">Sinkronisasi Real-Time Aktif</h2>
+                <p className="text-teal-700 max-w-md">
+                    Anda sedang menggunakan <strong>Firebase Realtime</strong>. Data disinkronkan secara otomatis dan instan antar perangkat.
+                </p>
+                <div className="mt-6 p-4 bg-white rounded-lg border border-teal-100 text-left text-sm text-gray-600 max-w-lg">
+                    <p className="font-bold text-teal-800 mb-2"><i className="bi bi-info-circle"></i> Mengapa halaman ini kosong?</p>
+                    <p>Halaman "Pusat Sinkronisasi" hanya digunakan untuk metode <strong>Hub & Spoke</strong> (Dropbox/WebDAV) yang memerlukan penggabungan data secara manual.</p>
+                    <p className="mt-2">Dengan Firebase, Anda tidak perlu lagi melakukan "Gabung Data" atau "Publikasikan Master". Semua perubahan langsung tersimpan di Cloud dan diterima oleh staff lain saat itu juga.</p>
+                </div>
+                <button 
+                    onClick={() => window.location.hash = '#/settings'} 
+                    className="mt-8 text-teal-600 font-medium hover:underline text-sm"
+                >
+                    Lihat Konfigurasi di Pengaturan Cloud
+                </button>
+            </div>
+        );
+    }
+
     const providerLabel = config.provider === 'webdav' ? 'WebDAV / Nextcloud' : 'Dropbox';
     const providerIcon = config.provider === 'webdav' ? 'bi-hdd-network text-orange-600' : 'bi-dropbox text-blue-600';
     const providerBg = config.provider === 'webdav' ? 'bg-orange-50 border-orange-200 text-orange-800' : 'bg-blue-50 border-blue-200 text-blue-800';

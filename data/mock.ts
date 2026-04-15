@@ -92,6 +92,7 @@ export const initialSettings: PondokSettings = {
     ],
     multiUserMode: false,
     nisSettings: {
+        useIndependentSettings: false,
         generationMethod: 'global',
         format: '{TH}{KODE}{NO_URUT}',
         jenjangConfig: [],

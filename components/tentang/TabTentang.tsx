@@ -51,7 +51,7 @@ export const TabTentang: React.FC = () => {
                     <h2 className="text-2xl font-bold text-teal-800">eSantri Web</h2>
                     <p className="mt-2 text-base text-teal-700 max-w-xl mx-auto">
                         Sistem Manajemen Pondok Pesantren Modern & Gratis. <br/>
-                        Aman, Cepat, Offline-First.
+                        Aman, Cepat, Offline-First & Real-time Sync.
                     </p>
                 </div>
             </div>

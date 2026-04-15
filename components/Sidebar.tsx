@@ -138,6 +138,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           setPage(Page.Pengaturan);
           return;
       }
+      
+      if (config.provider === 'firebase') {
+          showToast('Firebase Real-time aktif. Data disinkronkan secara otomatis.', 'info');
+          return;
+      }
+      
       setShowSyncOptions(true);
   };
 
@@ -156,6 +162,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
   };
 
   const renderSyncStatus = () => {
+      if (settings.cloudSyncConfig?.provider === 'firebase') {
+          return <><i className="bi bi-cloud-check-fill mr-2 text-teal-300"></i><span>Firebase Aktif</span></>;
+      }
       if (syncStatus === 'syncing' || isSyncing) return <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span><span>Menyimpan...</span></>;
       if (syncStatus === 'success') return <><i className="bi bi-cloud-check-fill mr-2 text-green-300"></i><span>Tersinkron</span></>;
       if (syncStatus === 'error') return <><i className="bi bi-exclamation-triangle-fill mr-2 text-red-400 animate-pulse"></i><span>Gagal Sync</span></>;
@@ -241,7 +250,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
                                                         className={`flex items-center p-2 rounded-lg transition-colors duration-200 group ${currentPage === item.page ? 'bg-teal-600 text-white shadow-sm font-medium' : 'text-teal-200 hover:bg-teal-700/30 hover:text-white'}`}
                                                     >
                                                         <i className={`${item.icon} text-base w-6 text-center opacity-80 group-hover:opacity-100`}></i>
-                                                        <span className="ms-3 text-sm">{item.label || (item.page === 'SyncAdmin' ? 'Pusat Sync' : item.page)}</span>
+                                                        <span className="ms-3 text-sm">
+                                                            {item.label || (
+                                                                item.page === 'SyncAdmin' 
+                                                                    ? (settings.cloudSyncConfig?.provider === 'firebase' ? 'Status Firebase' : 'Pusat Sync') 
+                                                                    : item.page
+                                                            )}
+                                                        </span>
                                                     </a>
                                                 </li>
                                             ))}

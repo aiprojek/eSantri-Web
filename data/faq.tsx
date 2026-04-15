@@ -20,6 +20,20 @@ export const faqData: FaqCategoryData[] = [
         colorClass: "bg-purple-50 border-purple-500 text-purple-900",
         items: [
             {
+                question: "Bagaimana cara menangani data santri yang sudah lulus agar tidak memenuhi penyimpanan?",
+                answer: (
+                    <div>
+                        <p className="mb-2"><strong>Sangat disarankan untuk TIDAK MENGHAPUS data santri yang sudah lulus.</strong> Berikut adalah strategi pengarsipan (Archiving Strategy) yang kami rekomendasikan:</p>
+                        <ol className="list-decimal pl-5 space-y-2">
+                            <li><strong>Gunakan Status "Lulus" atau "Alumni":</strong> Ubah status santri menjadi Lulus. Filter default aplikasi hanya menampilkan santri "Aktif", sehingga data alumni tidak akan memperlambat pencarian harian Anda.</li>
+                            <li><strong>Alasan Keuangan & Akademik:</strong> Data santri lulus tetap diperlukan untuk melacak histori keuangan (terutama jika masih ada tunggakan) dan histori akademik (jika santri meminta legalisir ijazah/rapor di kemudian hari).</li>
+                            <li><strong>Kapasitas Penyimpanan:</strong> Kapasitas penyimpanan lokal browser (IndexedDB) bisa mencapai 10GB, sangat besar untuk data teks. Anda bisa menyimpan ratusan ribu data santri tanpa masalah. Yang memakan tempat biasanya adalah foto, pastikan foto sudah dikompresi.</li>
+                            <li><strong>Pemisahan Database (Cold Storage):</strong> Jika data alumni sudah mencapai puluhan ribu dan dirasa berat, gunakan fitur "Ekspor ke Excel" khusus untuk alumni tahun tertentu, simpan file tersebut dengan aman, lalu baru Anda boleh menghapusnya dari aplikasi.</li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
                 question: "Apa manfaat mengaktifkan Mode Multi-User?",
                 answer: (
                     <div>
@@ -48,7 +62,7 @@ export const faqData: FaqCategoryData[] = [
             },
             {
                 question: "Apakah aplikasi ini butuh internet?",
-                answer: "Secara umum TIDAK. Aplikasi ini berkonsep 'Offline-First'. Anda bisa input data, bayar SPP, dan cetak laporan tanpa internet. Internet HANYA dibutuhkan saat Anda ingin melakukan Sinkronisasi Cloud (Dropbox/WebDAV), menggunakan fitur AI Magic Draft, atau mengirim Formulir Online (PSB/Rapor)."
+                answer: "Secara umum TIDAK. Aplikasi ini berkonsep 'Offline-First'. Anda bisa input data, bayar SPP, dan cetak laporan tanpa internet. Internet HANYA dibutuhkan saat Anda ingin melakukan Sinkronisasi Cloud (Dropbox/WebDAV/Firebase), menggunakan fitur AI Magic Draft, atau mengirim Formulir Online (PSB/Rapor)."
             },
             {
                 question: "Apa yang terjadi jika saya 'Clear Cache' browser?",
@@ -183,7 +197,7 @@ export const faqData: FaqCategoryData[] = [
                         <ul className="list-disc pl-5 space-y-1 mt-1 text-sm">
                             <li>Guru bisa login di HP/Laptop masing-masing menggunakan akun staff.</li>
                             <li>Guru melakukan absensi langsung di kelas (tidak perlu antri di komputer Admin).</li>
-                            <li>Setelah selesai, Guru cukup klik "Kirim Perubahan" agar data masuk ke Admin Pusat.</li>
+                            <li>Jika menggunakan Dropbox, klik "Kirim Perubahan". Jika menggunakan <strong>Firebase</strong>, data otomatis masuk ke pusat secara real-time.</li>
                         </ul>
                     </div>
                 )
@@ -206,7 +220,7 @@ export const faqData: FaqCategoryData[] = [
                         <p className="mb-2">Sangat aman, namun kami <strong>SANGAT MEREKOMENDASIKAN</strong> dua hal ini untuk Bendahara:</p>
                         <ul className="list-disc pl-5 space-y-1">
                             <li><strong>Multi-User:</strong> Aktifkan di Pengaturan. Buat akun khusus untuk Bendahara agar setiap transaksi tercatat atas nama petugas (Audit Trail).</li>
-                            <li><strong>Cloud Sync:</strong> Data keuangan adalah data vital. Sinkronisasi ke Dropbox/WebDAV memastikan data tidak hilang jika laptop rusak atau terkena virus.</li>
+                            <li><strong>Sync Cloud:</strong> Data keuangan adalah data vital. Sinkronisasi ke Dropbox atau <strong>Firebase</strong> memastikan data aman dan selalu ter-backup di cloud.</li>
                         </ul>
                     </div>
                 )
@@ -218,17 +232,31 @@ export const faqData: FaqCategoryData[] = [
         ]
     },
     {
-        title: "Sinkronisasi Tim",
+        title: "Sinkronisasi Tim & Portal Wali",
         icon: "bi-cloud-arrow-up-fill",
         colorClass: "bg-gray-50 border-gray-500 text-gray-900",
         items: [
+            {
+                question: "Apa itu Portal Wali Santri (Hybrid Bridge)?",
+                answer: (
+                    <div>
+                        <p className="mb-2">Portal Wali Santri adalah fitur yang memungkinkan orang tua/wali untuk melihat perkembangan anak mereka secara online (seperti absensi, nilai, dan tagihan).</p>
+                        <p className="mb-2"><strong>Hybrid Bridge</strong> adalah teknologi yang kami gunakan jika Anda menyimpan data utama di Dropbox/WebDAV. Karena Dropbox menyimpan seluruh data pondok (termasuk data sensitif), kita tidak boleh memberikan akses Dropbox ke wali santri.</p>
+                        <p>Oleh karena itu, fitur ini akan "menjembatani" data ringkas yang aman dari Dropbox Anda, lalu mengirimkannya ke <strong>Firebase</strong>. Wali santri nantinya hanya akan mengakses Firebase ini, sehingga privasi data internal pondok tetap terjaga 100%.</p>
+                    </div>
+                )
+            },
+            {
+                question: "Bagaimana cara mengaktifkan Portal Wali Santri?",
+                answer: "Buka menu Pengaturan > Sync Cloud. Gulir ke bawah ke bagian 'Fitur Publik & Portal'. Centang 'Portal Wali Santri'. Jika Anda menggunakan Dropbox/WebDAV, Anda akan diminta login dengan Google (Firebase) sebagai jembatan. Setelah terhubung, klik tombol 'Update Data Portal' untuk mengirim data terbaru ke portal."
+            },
             {
                 question: "Apa bedanya 'Kirim Perubahan' dan 'Ambil Master'?",
                 answer: "Kirim Perubahan (Upload) mengirim pekerjaan Anda ke Cloud. Ambil Master (Download) mengambil data terbaru yang sudah disahkan Admin Pusat. Staff wajib melakukan Ambil Master setiap pagi."
             },
             {
                 question: "Apakah bisa real-time collaboration?",
-                answer: "Tidak real-time (seperti Google Docs). Sistem ini menggunakan model Hub & Spoke. Staff bekerja offline, lalu menyetor data ke Admin Pusat untuk digabungkan. Ini mencegah konflik data dan memungkinkan kerja tanpa internet."
+                answer: "BISA. Jika Anda menggunakan provider **Firebase Realtime**, data akan tersinkronisasi secara instan antar perangkat. Namun jika menggunakan Dropbox/WebDAV, sistem menggunakan model Hub & Spoke (setor/tarik manual)."
             },
             {
                 question: "Apa fungsi 'Kode Pairing' di menu Sync?",

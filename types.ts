@@ -62,7 +62,8 @@ export interface User {
     username: string;
     passwordHash: string;
     fullName: string;
-    role: 'admin' | 'staff';
+    email?: string;
+    role: 'admin' | 'staff' | 'wali_kelas';
     permissions: UserPermissions;
     securityQuestion?: string;
     securityAnswerHash?: string;
@@ -208,7 +209,8 @@ export interface Rombel {
     id: number;
     nama: string;
     kelasId: number;
-    waliKelasId?: number;
+    waliKelasId?: number; // TenagaPengajar ID
+    waliKelasUserId?: number; // User ID for login access
 }
 
 export interface ConfigGaji {
@@ -231,8 +233,12 @@ export interface RiwayatJabatan {
 export interface TenagaPengajar {
     id: number;
     nama: string;
+    kodeGuru?: string; // Kode guru untuk legenda jadwal
     riwayatJabatan: RiwayatJabatan[];
-    hariMasuk?: number[]; // Days available
+    hariMasuk?: number[]; // Days available (0=Ahad, 1=Senin, ...)
+    jamMasuk?: number[]; // Jam Ke available (1, 2, 3, ...)
+    availableRombelIds?: number[];
+    availableKelasIds?: number[];
     kompetensiMapelIds?: number[];
     configGaji?: ConfigGaji;
 }
@@ -270,11 +276,17 @@ export interface Kamar {
 
 export interface NisJenjangConfig {
     jenjangId: number;
+    method: 'custom' | 'global' | 'dob';
+    format: string;
+    prefix: string;
+    useYearPrefix: boolean;
+    useJenjangCode: boolean;
     startNumber: number;
     padding: number;
 }
 
 export interface NisSettings {
+    useIndependentSettings: boolean;
     generationMethod: 'custom' | 'global' | 'dob';
     format: string;
     jenjangConfig: NisJenjangConfig[];
@@ -293,7 +305,7 @@ export interface NisSettings {
     dobPadding: number;
 }
 
-export type SyncProvider = 'none' | 'dropbox' | 'webdav';
+export type SyncProvider = 'none' | 'dropbox' | 'webdav' | 'firebase';
 
 export interface CloudSyncConfig {
     provider: SyncProvider;
@@ -305,8 +317,15 @@ export interface CloudSyncConfig {
     webdavUrl?: string;
     webdavUsername?: string;
     webdavPassword?: string;
+    firebasePairedTenantId?: string; // New field for Firebase Multi-User
+    firebaseApiKey?: string;
+    firebaseAuthDomain?: string;
+    firebaseProjectId?: string;
+    firebaseAppId?: string;
+    firebaseDatabaseId?: string;
     lastSync?: string;
     autoSync?: boolean;
+    portalEnabled?: boolean;
 }
 
 export type BackupFrequency = 'daily' | 'weekly' | 'never';
@@ -388,6 +407,9 @@ export interface PsbConfig {
 export interface RaporTemplate {
     id: string;
     name: string;
+    jenjangId?: number; // Lock to specific Marhalah
+    kelasId?: number;   // Lock to specific Kelas
+    rombelId?: number;  // Lock to specific Rombel
     rowCount: number;
     colCount: number;
     cells: GridCell[][];
@@ -911,6 +933,7 @@ export interface ProdukKoperasi {
     satuan: string;
     barcode?: string;
     minStok?: number;
+    supplierId?: number;
     
     hasVarian?: boolean;
     varian?: VarianProduk[];
@@ -1009,6 +1032,25 @@ export interface Diskon {
     tipe: 'Persen' | 'Nominal';
     nilai: number;
     aktif: boolean;
+}
+
+export interface Supplier {
+    id: number;
+    nama: string;
+    kontak?: string;
+    alamat?: string;
+    keterangan?: string;
+    lastModified?: number;
+}
+
+export interface PembayaranHutang {
+    id: number;
+    transaksiId: number;
+    tanggal: string;
+    jumlah: number;
+    metode: 'Tunai' | 'Tabungan' | 'Non-Tunai';
+    operator: string;
+    catatan?: string;
 }
 
 export enum ReportType {

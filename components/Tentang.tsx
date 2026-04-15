@@ -32,8 +32,16 @@ const TabButton: React.FC<{
     </button>
 );
 
-const Tentang: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan'>('tentang');
+const Tentang: React.FC<{ 
+    initialTab?: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan';
+    initialSection?: string | null;
+}> = ({ initialTab = 'tentang', initialSection }) => {
+    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan'>(initialTab);
+
+    // Update active tab if initialTab changes (e.g. from global event)
+    React.useEffect(() => {
+        setActiveTab(initialTab);
+    }, [initialTab]);
 
     return (
         <div>
@@ -62,7 +70,7 @@ const Tentang: React.FC = () => {
                 <div className="mt-6">
                     {activeTab === 'tentang' && <TabTentang />}
                     {activeTab === 'layanan' && <TabLayanan />}
-                    {activeTab === 'panduan' && <TabPanduan />}
+                    {activeTab === 'panduan' && <TabPanduan initialSection={initialSection} />}
                     {activeTab === 'faq' && <TabFaq />}
                     {activeTab === 'rilis' && <TabRilis />}
                     {activeTab === 'lisensi' && <TabLisensi />}

@@ -49,10 +49,30 @@ const PanduanLangkah: React.FC<{ number: number; title: string; children: React.
     );
 };
 
-export const TabPanduan: React.FC = () => {
+export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initialSection }) => {
     const { showConfirmation, onDeleteSampleData, showToast } = useAppContext();
     const [sampleDataDeleted, setSampleDataDeleted] = useState(false);
     const [openSectionId, setOpenSectionId] = useState<string | null>('setup'); // Default open first section
+
+    const toggleSection = (id: string) => {
+        setOpenSectionId(prev => prev === id ? null : id);
+    };
+
+    const handleTocClick = (id: string) => {
+        setOpenSectionId(id);
+        setTimeout(() => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
+    };
+
+    useEffect(() => {
+        if (initialSection) {
+            handleTocClick(initialSection);
+        }
+    }, [initialSection]);
 
     useEffect(() => {
         const deleted = localStorage.getItem('eSantriSampleDataDeleted') === 'true';
@@ -91,20 +111,6 @@ export const TabPanduan: React.FC = () => {
             yellow: 'bg-yellow-500',
          };
          return map[color] || 'bg-teal-600';
-    };
-
-    const handleTocClick = (id: string) => {
-        setOpenSectionId(id);
-        setTimeout(() => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }, 100);
-    };
-
-    const toggleSection = (id: string) => {
-        setOpenSectionId(prev => prev === id ? null : id);
     };
 
     // Helper untuk menghitung nomor urut langkah secara kumulatif
@@ -181,7 +187,7 @@ export const TabPanduan: React.FC = () => {
                                 </button>
 
                                 {/* Body (Collapsible) */}
-                                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isOpen ? 'max-h-[8000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                                     <div className="p-6 pt-0 border-t border-gray-100">
                                         <div className="h-4"></div> {/* Spacer */}
                                         
@@ -189,7 +195,8 @@ export const TabPanduan: React.FC = () => {
                                         {section.id === 'sop' && (
                                             <div className="bg-yellow-50 p-3 rounded border border-yellow-200 text-sm mb-6 text-yellow-900 animate-fade-in">
                                                 <i className="bi bi-info-circle-fill mr-2"></i>
-                                                <strong>PENTING:</strong> Aplikasi ini <em>Offline-First</em>. Data tidak berubah secara real-time (seperti Google Docs). Anda harus mengikuti SOP ini agar data antar komputer sinkron.
+                                                <strong>INFO SINKRONISASI:</strong> Jika menggunakan <strong>Dropbox/WebDAV</strong>, aplikasi ini bersifat <em>Offline-First</em> (perlu kirim/terima manual). 
+                                                Namun jika menggunakan <strong>Firebase</strong>, data akan berubah secara <strong>Real-Time</strong> otomatis.
                                             </div>
                                         )}
                                         

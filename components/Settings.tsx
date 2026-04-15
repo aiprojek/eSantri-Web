@@ -31,7 +31,16 @@ const Settings: React.FC = () => {
 
         localSettings.jenjang.forEach(j => {
             if (!jenjangIdsInConfig.has(j.id)) {
-                newConfigs.push({ jenjangId: j.id, startNumber: 1, padding: 3 });
+                newConfigs.push({ 
+                    jenjangId: j.id, 
+                    startNumber: 1, 
+                    padding: 3,
+                    method: 'global',
+                    format: '{TM}{KODE}{NO_URUT}',
+                    prefix: '',
+                    useYearPrefix: true,
+                    useJenjangCode: true
+                });
             }
         });
 

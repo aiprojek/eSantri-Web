@@ -6,6 +6,7 @@ import { FinanceProvider } from './contexts/FinanceContext';
 import { UIProvider } from './contexts/UIContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
+import { FirebaseProvider } from './contexts/FirebaseContext';
 
 import Sidebar from './components/Sidebar';
 import ConfirmModal from './components/ConfirmModal';
@@ -186,6 +187,8 @@ const AppContent: React.FC = () => {
     } = useAppContext();
 
     const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
+    const [tentangTab, setTentangTab] = useState<'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan'>('tentang');
+    const [panduanSection, setPanduanSection] = useState<string | null>(null);
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [showWelcomeModal, setShowWelcomeModal] = useState(false);
     const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
@@ -229,6 +232,19 @@ const AppContent: React.FC = () => {
             window.location.reload();
             refreshing = true;
         });
+    }, []);
+
+    useEffect(() => {
+        const handleOpenPanduan = (e: any) => {
+            setCurrentPage(Page.Tentang);
+            setTentangTab('panduan');
+            if (e.detail) {
+                setPanduanSection(e.detail);
+            }
+        };
+
+        window.addEventListener('open-panduan', handleOpenPanduan);
+        return () => window.removeEventListener('open-panduan', handleOpenPanduan);
     }, []);
 
     const handleCloseWelcomeModal = () => {
@@ -318,7 +334,7 @@ const AppContent: React.FC = () => {
                         case Page.SyncAdmin:
                             return currentUser?.role === 'admin' ? <AdminSyncDashboard /> : <AccessDenied />;
                         case Page.Tentang:
-                            return <Tentang />;
+                            return <Tentang initialTab={tentangTab} initialSection={panduanSection} />;
                         default:
                             return <Dashboard navigateTo={handleNavigate} />;
                     }
@@ -411,15 +427,17 @@ const App: React.FC = () => {
     <ErrorBoundary>
         <UIProvider>
             <SettingsProvider>
-                <AuthProvider>
-                    <SantriProvider>
-                        <FinanceProvider>
-                            <AppProvider>
-                                <AppContent />
-                            </AppProvider>
-                        </FinanceProvider>
-                    </SantriProvider>
-                </AuthProvider>
+                <FirebaseProvider>
+                    <AuthProvider>
+                        <SantriProvider>
+                            <FinanceProvider>
+                                <AppProvider>
+                                    <AppContent />
+                                </AppProvider>
+                            </FinanceProvider>
+                        </SantriProvider>
+                    </AuthProvider>
+                </FirebaseProvider>
             </SettingsProvider>
         </UIProvider>
     </ErrorBoundary>

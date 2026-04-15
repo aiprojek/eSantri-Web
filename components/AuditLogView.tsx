@@ -110,7 +110,15 @@ export const AuditLogView: React.FC = () => {
             <div className="mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">Log Aktivitas Sistem</h1>
                 <p className="text-sm text-gray-500 mt-1">
-                    <span className="text-blue-600 font-semibold"><i className="bi bi-hdd-fill"></i> Mode Lokal (Offline/File-Sync)</span>
+                    {settings.cloudSyncConfig?.provider === 'firebase' ? (
+                        <span className="text-teal-600 font-semibold flex items-center gap-1">
+                            <i className="bi bi-cloud-check-fill"></i> Mode Firebase Realtime (Sinkronisasi Otomatis)
+                        </span>
+                    ) : (
+                        <span className="text-blue-600 font-semibold flex items-center gap-1">
+                            <i className="bi bi-hdd-fill"></i> Mode Lokal (Offline / File-Sync)
+                        </span>
+                    )}
                 </p>
             </div>
             

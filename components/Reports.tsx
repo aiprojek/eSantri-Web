@@ -168,7 +168,7 @@ const Reports: React.FC = () => {
           }
 
           // Special logic for Rombel grouping (Flattened in hook, but handled here)
-          const perRombelReports = [ReportType.DaftarRombel, ReportType.LembarKedatangan, ReportType.LembarNilai, ReportType.LembarAbsensi, ReportType.LembarRapor];
+          const perRombelReports = [ReportType.DaftarRombel, ReportType.LembarKedatangan, ReportType.LembarNilai, ReportType.LembarAbsensi, ReportType.LembarRapor, ReportType.RaporLengkap];
           let generatedPages: any[] = [];
 
           if (perRombelReports.includes(activeReportType)) {

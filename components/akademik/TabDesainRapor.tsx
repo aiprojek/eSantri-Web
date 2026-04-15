@@ -65,6 +65,76 @@ export const TabDesainRapor: React.FC = () => {
         setZoomScale(1);
     };
 
+    const handleCreateSampleTemplate = () => {
+        const newTemplate: RaporTemplate = {
+            id: 'tpl_sample_' + Date.now(),
+            name: 'Sample Rapor Dinamis (Terbilang & Rank)',
+            rowCount: 10,
+            colCount: 6,
+            cells: createInitialGrid(10, 6),
+            lastModified: new Date().toISOString()
+        };
+        const setBorderOn = (cell: GridCell) => ({ ...cell, borders: { top: true, right: true, bottom: true, left: true } });
+
+        // Title
+        newTemplate.cells[0][0] = { ...newTemplate.cells[0][0], value: 'LAPORAN HASIL BELAJAR', type: 'label', colSpan: 6, align: 'center' };
+        for(let c=1; c<6; c++) newTemplate.cells[0][c].hidden = true;
+
+        // Info
+        newTemplate.cells[2][0] = { ...newTemplate.cells[2][0], value: 'Nama:', type: 'label', align: 'left' };
+        newTemplate.cells[2][1] = { ...newTemplate.cells[2][1], value: '$NAMA', type: 'data', align: 'left', colSpan: 2 };
+        newTemplate.cells[2][2].hidden = true;
+        newTemplate.cells[2][4] = { ...newTemplate.cells[2][4], value: 'Kelas:', type: 'label', align: 'left' };
+        newTemplate.cells[2][5] = { ...newTemplate.cells[2][5], value: '$ROMBEL', type: 'data', align: 'left' };
+
+        // Table Headers
+        newTemplate.cells[4][0] = setBorderOn({ ...newTemplate.cells[4][0], value: 'NO', type: 'label' });
+        newTemplate.cells[4][1] = setBorderOn({ ...newTemplate.cells[4][1], value: 'MATA PELAJARAN', type: 'label', colSpan: 2 });
+        newTemplate.cells[4][2].hidden = true;
+        newTemplate.cells[4][3] = setBorderOn({ ...newTemplate.cells[4][3], value: 'NILAI', type: 'label' });
+        newTemplate.cells[4][4] = setBorderOn({ ...newTemplate.cells[4][4], value: 'TERBILANG', type: 'label' });
+        newTemplate.cells[4][5] = setBorderOn({ ...newTemplate.cells[4][5], value: 'KETERANGAN', type: 'label' });
+
+        // Table Rows
+        newTemplate.cells[5][0] = setBorderOn({ ...newTemplate.cells[5][0], value: '1', type: 'label' });
+        newTemplate.cells[5][1] = setBorderOn({ ...newTemplate.cells[5][1], value: 'Matematika', type: 'label', colSpan: 2, align: 'left' });
+        newTemplate.cells[5][2].hidden = true;
+        newTemplate.cells[5][3] = setBorderOn({ ...newTemplate.cells[5][3], value: '', type: 'input', key: 'MTK' });
+        newTemplate.cells[5][4] = setBorderOn({ ...newTemplate.cells[5][4], value: '=TERBILANG($MTK)', type: 'formula', key: 'TB_MTK' });
+        newTemplate.cells[5][5] = setBorderOn({ ...newTemplate.cells[5][5], value: '=IF($MTK>=75, "Lulus", "Remidi")', type: 'formula', key: 'KET_MTK' });
+
+        newTemplate.cells[6][0] = setBorderOn({ ...newTemplate.cells[6][0], value: '2', type: 'label' });
+        newTemplate.cells[6][1] = setBorderOn({ ...newTemplate.cells[6][1], value: 'Pend. Agama Islam', type: 'label', colSpan: 2, align: 'left' });
+        newTemplate.cells[6][2].hidden = true;
+        newTemplate.cells[6][3] = setBorderOn({ ...newTemplate.cells[6][3], value: '', type: 'input', key: 'PAI' });
+        newTemplate.cells[6][4] = setBorderOn({ ...newTemplate.cells[6][4], value: '=TERBILANG($PAI)', type: 'formula', key: 'TB_PAI' });
+        newTemplate.cells[6][5] = setBorderOn({ ...newTemplate.cells[6][5], value: '=IF($PAI>=75, "Lulus", "Remidi")', type: 'formula', key: 'KET_PAI' });
+
+        // Summary
+        newTemplate.cells[7][1] = setBorderOn({ ...newTemplate.cells[7][1], value: 'TOTAL NILAI', type: 'label', colSpan: 2, align: 'right' });
+        newTemplate.cells[7][2].hidden = true;
+        newTemplate.cells[7][3] = setBorderOn({ ...newTemplate.cells[7][3], value: '=SUM($MTK, $PAI)', type: 'formula', key: 'TOTAL' });
+        newTemplate.cells[7][4] = setBorderOn({ ...newTemplate.cells[7][4], value: '', type: 'label', colSpan: 2 });
+        newTemplate.cells[7][5].hidden = true;
+
+        newTemplate.cells[8][1] = setBorderOn({ ...newTemplate.cells[8][1], value: 'RATA-RATA', type: 'label', colSpan: 2, align: 'right' });
+        newTemplate.cells[8][2].hidden = true;
+        newTemplate.cells[8][3] = setBorderOn({ ...newTemplate.cells[8][3], value: '=RATA2($MTK, $PAI)', type: 'formula', key: 'RATA' });
+        newTemplate.cells[8][4] = setBorderOn({ ...newTemplate.cells[8][4], value: '', type: 'label', colSpan: 2 });
+        newTemplate.cells[8][5].hidden = true;
+
+        newTemplate.cells[9][1] = setBorderOn({ ...newTemplate.cells[9][1], value: 'PERINGKAT KELAS', type: 'label', colSpan: 2, align: 'right' });
+        newTemplate.cells[9][2].hidden = true;
+        newTemplate.cells[9][3] = setBorderOn({ ...newTemplate.cells[9][3], value: '=RANK($TOTAL)', type: 'formula', key: 'RANKING' });
+        newTemplate.cells[9][4] = setBorderOn({ ...newTemplate.cells[9][4], value: '', type: 'label', colSpan: 2 });
+        newTemplate.cells[9][5].hidden = true;
+
+        setActiveTemplate(newTemplate);
+        setIsEditing(true);
+        setSelectedCells([]);
+        setZoomScale(1);
+    };
+
     const handleEditTemplate = (tpl: RaporTemplate) => {
         setActiveTemplate(JSON.parse(JSON.stringify(tpl)));
         setIsEditing(true);
@@ -282,12 +352,15 @@ export const TabDesainRapor: React.FC = () => {
         return (
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-gray-700">Daftar Template</h3>
+                    <h3 className="font-bold text-gray-700">Daftar Template Rapor</h3>
                     {canWrite && (
                         <div className="flex gap-2">
                             <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls, .ods, .csv" className="hidden" />
                             <button onClick={() => fileInputRef.current?.click()} className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm flex items-center gap-2">
                                 <i className="bi bi-file-earmark-spreadsheet"></i> Import Excel/ODS/CSV
+                            </button>
+                            <button onClick={handleCreateSampleTemplate} className="bg-purple-600 text-white px-4 py-2 rounded shadow hover:bg-purple-700 text-sm flex items-center gap-2">
+                                <i className="bi bi-magic"></i> Buat Sample (Demo)
                             </button>
                             <button onClick={handleCreateTemplate} className="bg-teal-600 text-white px-4 py-2 rounded shadow hover:bg-teal-700 text-sm flex items-center gap-2">
                                 <i className="bi bi-plus-lg"></i> Buat Baru
@@ -299,7 +372,17 @@ export const TabDesainRapor: React.FC = () => {
                     {templates.map(tpl => (
                         <div key={tpl.id} className="border p-4 rounded-lg bg-white shadow-sm hover:shadow-md transition">
                             <div className="font-bold text-teal-800 text-lg mb-1">{tpl.name}</div>
-                            <div className="text-xs text-gray-500">Dimensi: {tpl.rowCount} Baris x {tpl.colCount} Kolom</div>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                <div className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">Dimensi: {tpl.rowCount}x{tpl.colCount}</div>
+                                {tpl.jenjangId && (
+                                    <div className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 font-medium">
+                                        <i className="bi bi-lock-fill mr-1"></i>
+                                        {settings.jenjang.find(j => j.id === tpl.jenjangId)?.nama || 'Marhalah Terhapus'}
+                                        {tpl.kelasId && ` > ${settings.kelas.find(k => k.id === tpl.kelasId)?.nama || 'Kelas Terhapus'}`}
+                                        {tpl.rombelId && ` > ${settings.rombel.find(r => r.id === tpl.rombelId)?.nama || 'Rombel Terhapus'}`}
+                                    </div>
+                                )}
+                            </div>
                             <div className="text-xs text-gray-400 mt-2">{new Date(tpl.lastModified).toLocaleDateString()}</div>
                             {canWrite && <div className="mt-3 flex gap-2 justify-end">
                                 <button onClick={() => handleDuplicateTemplate(tpl.id)} className="bg-green-50 text-green-600 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1" title="Duplikasi Template"><i className="bi bi-copy"></i> Copy</button>
@@ -323,8 +406,46 @@ export const TabDesainRapor: React.FC = () => {
         <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-250px)]">
              <div className="flex-grow flex flex-col bg-gray-100 rounded-lg border overflow-hidden">
                 <div className="bg-white border-b p-2 flex flex-wrap items-center gap-2">
-                    <input type="text" value={activeTemplate?.name} onChange={e => setActiveTemplate(t => t ? {...t, name: e.target.value} : null)} className="border rounded px-2 py-1 text-sm font-bold w-48 focus:ring-2 focus:ring-teal-500" placeholder="Nama Template" />
-                    <div className="h-6 w-px bg-gray-300 mx-2"></div>
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Nama Template</label>
+                        <input type="text" value={activeTemplate?.name} onChange={e => setActiveTemplate(t => t ? {...t, name: e.target.value} : null)} className="border rounded px-2 py-1 text-sm font-bold w-48 focus:ring-2 focus:ring-teal-500" placeholder="Nama Template" />
+                    </div>
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Kunci Marhalah (Opsional)</label>
+                        <select 
+                            value={activeTemplate?.jenjangId || ''} 
+                            onChange={e => setActiveTemplate(t => t ? {...t, jenjangId: e.target.value ? parseInt(e.target.value) : undefined, kelasId: undefined, rombelId: undefined} : null)}
+                            className="border rounded px-2 py-1 text-sm w-40 focus:ring-2 focus:ring-teal-500"
+                        >
+                            <option value="">-- Semua --</option>
+                            {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Kunci Kelas (Opsional)</label>
+                        <select 
+                            value={activeTemplate?.kelasId || ''} 
+                            onChange={e => setActiveTemplate(t => t ? {...t, kelasId: e.target.value ? parseInt(e.target.value) : undefined, rombelId: undefined} : null)}
+                            disabled={!activeTemplate?.jenjangId}
+                            className="border rounded px-2 py-1 text-sm w-40 focus:ring-2 focus:ring-teal-500 disabled:bg-gray-50"
+                        >
+                            <option value="">-- Semua --</option>
+                            {settings.kelas.filter(k => k.jenjangId === activeTemplate?.jenjangId).map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Kunci Rombel (Opsional)</label>
+                        <select 
+                            value={activeTemplate?.rombelId || ''} 
+                            onChange={e => setActiveTemplate(t => t ? {...t, rombelId: e.target.value ? parseInt(e.target.value) : undefined} : null)}
+                            disabled={!activeTemplate?.kelasId}
+                            className="border rounded px-2 py-1 text-sm w-40 focus:ring-2 focus:ring-teal-500 disabled:bg-gray-50"
+                        >
+                            <option value="">-- Semua --</option>
+                            {settings.rombel.filter(r => r.kelasId === activeTemplate?.kelasId).map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                        </select>
+                    </div>
+                    <div className="h-10 w-px bg-gray-300 mx-2 hidden md:block"></div>
                     <button onClick={mergeCells} className="p-1.5 hover:bg-gray-100 rounded text-gray-700" title="Merge Cells"><i className="bi bi-intersect"></i></button>
                     <button onClick={unmergeCells} className="p-1.5 hover:bg-gray-100 rounded text-gray-700" title="Unmerge Cells"><i className="bi bi-union"></i></button>
                     <div className="h-6 w-px bg-gray-300 mx-2"></div>
@@ -476,6 +597,7 @@ export const TabDesainRapor: React.FC = () => {
                                             <li><code>MAX($A, $B)</code> : Nilai tertinggi</li>
                                             <li><code>MIN($A, $B)</code> : Nilai terendah</li>
                                             <li><code>IF($A&gt;75, "Lulus", "Remidi")</code> : Logika IF</li>
+                                            <li><code>TERBILANG($A)</code> : Mengubah angka jadi teks</li>
                                             <li><code>RANK($TOTAL)</code> : Peringkat otomatis</li>
                                         </ul>
                                     </details>

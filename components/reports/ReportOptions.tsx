@@ -478,13 +478,19 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                 </div>
             );
         case ReportType.LembarRapor:
+        case ReportType.RaporLengkap:
              return (
                 <div className="pt-4 border-t">
-                    <h3 className="text-md font-semibold text-gray-700">Opsi Lembar Rapor</h3>
+                    <h3 className="text-md font-semibold text-gray-700">Opsi {activeReport === ReportType.LembarRapor ? 'Lembar Rapor' : 'Rapor Lengkap'}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label htmlFor="semester" className="block mb-1 text-sm font-medium text-gray-700">Semester</label><select id="semester" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select></div>
                         <div><label htmlFor="tahun-ajaran" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label><input type="text" id="tahun-ajaran" value={options.tahunAjaran} onChange={e => options.setTahunAjaran(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: 1446/1447 H" /></div>
                     </div>
+                    {activeReport === ReportType.RaporLengkap && (
+                        <p className="mt-3 text-xs text-gray-500 italic">
+                            *Pastikan data nilai sudah diimpor di menu Akademik untuk periode yang dipilih.
+                        </p>
+                    )}
                 </div>
             );
         default:

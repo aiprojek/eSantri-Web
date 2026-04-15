@@ -73,3 +73,28 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     koperasi: 'write', // Staff usually handles sales
     syncAdmin: false,
 };
+
+// Default Permissions for Wali Kelas
+export const DEFAULT_WALI_KELAS_PERMISSIONS = {
+    santri: 'read',
+    psb: 'none',
+    akademik: 'write', 
+    absensi: 'write', 
+    tahfizh: 'write',
+    sarpras: 'none', 
+    kalender: 'read',
+    perpustakaan: 'none',
+    kesehatan: 'read', 
+    bk: 'read', 
+    bukutamu: 'none',
+    datamaster: 'none',
+    keuangan: 'none',
+    keasramaan: 'none',
+    bukukas: 'none',
+    surat: 'none',
+    laporan: 'read',
+    auditlog: 'none',
+    pengaturan: 'none',
+    koperasi: 'none',
+    syncAdmin: false,
+};

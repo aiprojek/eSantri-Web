@@ -83,7 +83,11 @@ export const TabImportNilai: React.FC = () => {
                         placeholder="Paste kode RAPOR_V2_START dari WA..."
                     ></textarea>
                 ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
+                        <div className="bg-blue-50 border border-blue-100 p-3 rounded text-[11px] text-blue-700 leading-relaxed">
+                            <i className="bi bi-info-circle-fill mr-1"></i>
+                            <b>Cara Kerja:</b> Sistem akan memanggil fungsi <code>doGet</code> pada link Google Script Anda untuk menarik seluruh data yang ada di Spreadsheet, lalu mencocokkannya dengan ID Santri di aplikasi ini secara otomatis.
+                        </div>
                         <label className="block text-xs font-bold text-gray-700">URL Web App (Google Script)</label>
                         <input 
                             type="text" 
@@ -92,7 +96,7 @@ export const TabImportNilai: React.FC = () => {
                             placeholder="https://script.google.com/macros/s/..." 
                             className="w-full border rounded p-2 text-xs font-mono"
                         />
-                        <p className="text-[10px] text-gray-500">Pastikan script yang digunakan mendukung fungsi <code>doGet</code> (Lihat panduan di tab Generator).</p>
+                        <p className="text-[10px] text-gray-500 italic">Pastikan script yang digunakan mendukung fungsi <code>doGet</code> (Lihat panduan di tab Generator).</p>
                     </div>
                 )}
 

@@ -7,13 +7,23 @@ export const generateNis = (
 ): string => {
     const { nisSettings } = settings;
 
+    if (nisSettings.useIndependentSettings && currentSantri.jenjangId) {
+        const jc = nisSettings.jenjangConfig.find(c => c.jenjangId === currentSantri.jenjangId);
+        if (jc) {
+            const method = jc.method || 'global';
+            if (method === 'custom') return generateNisCustom(settings, santriList, currentSantri, jc);
+            if (method === 'global') return generateNisGlobal(settings, santriList, currentSantri, jc);
+            if (method === 'dob') return generateNisDob(settings, santriList, currentSantri, jc);
+        }
+    }
+
     switch (nisSettings.generationMethod) {
         case 'custom':
-            return generateNisCustom(settings, santriList, currentSantri);
+            return generateNisCustom(settings, santriList, currentSantri, nisSettings);
         case 'global':
-            return generateNisGlobal(settings, santriList, currentSantri);
+            return generateNisGlobal(settings, santriList, currentSantri, nisSettings);
         case 'dob':
-            return generateNisDob(settings, santriList, currentSantri);
+            return generateNisDob(settings, santriList, currentSantri, nisSettings);
         default:
             throw new Error('Metode pembuatan NIS tidak valid. Harap periksa Pengaturan.');
     }
@@ -22,7 +32,8 @@ export const generateNis = (
 const generateNisCustom = (
     settings: PondokSettings,
     santriList: Santri[],
-    currentSantri: Santri
+    currentSantri: Santri,
+    config: any
 ): string => {
     if (!currentSantri.jenjangId || !currentSantri.tanggalMasuk) {
         throw new Error('Harap lengkapi Jenjang dan Tanggal Masuk untuk membuat NIS.');
@@ -32,10 +43,11 @@ const generateNisCustom = (
     if (!jenjang || !jenjang.kode) {
         throw new Error('Data jenjang atau kode jenjang tidak ditemukan. Harap periksa Pengaturan.');
     }
-    const jenjangConfig = nisSettings.jenjangConfig.find(jc => jc.jenjangId === jenjang.id);
-    if (!jenjangConfig) {
-        throw new Error(`Pengaturan NIS untuk jenjang ${jenjang.nama} belum diatur. Harap atur di menu Pengaturan.`);
-    }
+
+    const format = config.format || nisSettings.format || '{TM}{KODE}{NO_URUT}';
+    const startNumber = config.startNumber !== undefined ? config.startNumber : 1;
+    const padding = config.padding !== undefined ? config.padding : 3;
+
     const masehiYear = nisSettings.masehiYearSource === 'manual'
         ? nisSettings.manualMasehiYear
         : new Date(currentSantri.tanggalMasuk).getFullYear();
@@ -44,59 +56,106 @@ const generateNisCustom = (
         : Math.round((masehiYear - 622) * 1.0307);
     const tm = masehiYear.toString().slice(-2);
     const th = hijriYear.toString().slice(-2);
-    const santriInSameJenjangAndYear = santriList.filter(s => {
-        if (s.id === currentSantri.id) return false;
-        const sJenjangId = s.jenjangId;
-        const sTahunMasuk = nisSettings.masehiYearSource === 'manual'
-            ? nisSettings.manualMasehiYear
-            : s.tanggalMasuk ? new Date(s.tanggalMasuk).getFullYear() : 0;
-        return sJenjangId === jenjang.id && sTahunMasuk === masehiYear;
-    });
-    const nextSeqNumber = jenjangConfig.startNumber + santriInSameJenjangAndYear.length;
-    const noUrut = nextSeqNumber.toString().padStart(jenjangConfig.padding, '0');
     
-    return nisSettings.format
+    // Split format into prefix and suffix around {NO_URUT}
+    const parts = format.split('{NO_URUT}');
+    const prefixFormat = parts[0] || '';
+    const suffixFormat = parts[1] || '';
+
+    const prefix = prefixFormat
         .replace('{TM}', tm)
         .replace('{TH}', th)
-        .replace('{KODE}', jenjang.kode)
-        .replace('{NO_URUT}', noUrut);
+        .replace('{KODE}', jenjang.kode);
+    
+    const suffix = suffixFormat
+        .replace('{TM}', tm)
+        .replace('{TH}', th)
+        .replace('{KODE}', jenjang.kode);
+
+    // Escape for regex
+    const escapedPrefix = prefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const escapedSuffix = suffix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`^${escapedPrefix}(\\d+)${escapedSuffix}$`);
+    
+    // Find max sequence number among existing santri
+    let maxSeq = 0;
+    santriList.forEach(s => {
+        if (s.id === currentSantri.id || !s.nis) return;
+        
+        // Only consider santri of same jenjang to avoid cross-jenjang numbering issues
+        // unless we are in a global mode (but this is custom per jenjang usually)
+        if (s.jenjangId !== currentSantri.jenjangId) return;
+
+        const match = s.nis.match(regex);
+        if (match) {
+            const seq = parseInt(match[1], 10);
+            if (seq > maxSeq) maxSeq = seq;
+        }
+    });
+
+    let nextSeqNumber = maxSeq === 0 ? startNumber : maxSeq + 1;
+    
+    // Safety loop to ensure uniqueness in current list
+    let finalNis = '';
+    let attempts = 0;
+    while (attempts < 100) {
+        const noUrut = nextSeqNumber.toString().padStart(padding, '0');
+        finalNis = prefix + noUrut + suffix;
+        
+        const isDuplicate = santriList.some(s => s.id !== currentSantri.id && s.nis === finalNis);
+        if (!isDuplicate) break;
+        
+        nextSeqNumber++;
+        attempts++;
+    }
+    
+    return finalNis;
 };
 
 const generateNisGlobal = (
     settings: PondokSettings,
     santriList: Santri[],
-    currentSantri: Santri
+    currentSantri: Santri,
+    config: any
 ): string => {
     if (!currentSantri.tanggalMasuk || !currentSantri.jenjangId) {
         throw new Error('Tanggal masuk dan data pendidikan (Jenjang) harus diisi untuk membuat NIS.');
     }
     const { nisSettings } = settings;
-    const { globalPrefix, globalUseYearPrefix, globalUseJenjangCode, globalStartNumber, globalPadding } = nisSettings;
+    
+    const prefixStr = config.prefix !== undefined ? config.prefix : nisSettings.globalPrefix;
+    const useYearPrefix = config.useYearPrefix !== undefined ? config.useYearPrefix : nisSettings.globalUseYearPrefix;
+    const useJenjangCode = config.useJenjangCode !== undefined ? config.useJenjangCode : nisSettings.globalUseJenjangCode;
+    const startNumber = config.startNumber !== undefined ? config.startNumber : nisSettings.globalStartNumber;
+    const padding = config.padding !== undefined ? config.padding : nisSettings.globalPadding;
     
     const jenjang = settings.jenjang.find(j => j.id === currentSantri.jenjangId);
 
-    if (globalUseJenjangCode && (!jenjang || !jenjang.kode)) {
+    if (useJenjangCode && (!jenjang || !jenjang.kode)) {
         throw new Error('Kode jenjang tidak ditemukan untuk santri ini. Harap periksa Pengaturan.');
     }
 
     const entryYear = new Date(currentSantri.tanggalMasuk).getFullYear();
-    const yearPart = globalUseYearPrefix ? entryYear.toString() : '';
-    const jenjangCodePart = (globalUseJenjangCode && jenjang) ? jenjang.kode : '';
-    const prefix = yearPart + globalPrefix + jenjangCodePart;
+    const yearPart = useYearPrefix ? entryYear.toString() : '';
+    const jenjangCodePart = (useJenjangCode && jenjang) ? jenjang.kode : '';
+    const prefix = yearPart + prefixStr + jenjangCodePart;
 
     let maxSeq = 0;
     const relevantSantri = santriList.filter(s => {
-        if (s.id === currentSantri.id) return false;
+        if (s.id === currentSantri.id || !s.nis) return false;
 
         const sJenjangId = s.jenjangId;
-        const isSameJenjang = globalUseJenjangCode ? sJenjangId === jenjang?.id : true;
+        const isSameJenjang = useJenjangCode ? sJenjangId === jenjang?.id : true;
         const sEntryYear = s.tanggalMasuk ? new Date(s.tanggalMasuk).getFullYear() : 0;
-        const isSameYear = globalUseYearPrefix ? sEntryYear === entryYear : true;
+        const isSameYear = useYearPrefix ? sEntryYear === entryYear : true;
         
         return isSameJenjang && isSameYear;
     });
 
-    const regex = new RegExp(`^${prefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}(\\d{${globalPadding}})$`);
+    // Regex to match prefix + digits
+    const escapedPrefix = prefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`^${escapedPrefix}(\\d+)$`);
+    
     relevantSantri.forEach(s => {
         const match = s.nis.match(regex);
         if (match) {
@@ -105,24 +164,41 @@ const generateNisGlobal = (
         }
     });
 
-    const nextSeq = maxSeq === 0 ? globalStartNumber : maxSeq + 1;
-    return prefix + nextSeq.toString().padStart(globalPadding, '0');
+    let nextSeq = maxSeq === 0 ? startNumber : maxSeq + 1;
+    
+    // Safety loop to ensure uniqueness
+    let finalNis = '';
+    let attempts = 0;
+    while (attempts < 100) {
+        finalNis = prefix + nextSeq.toString().padStart(padding, '0');
+        const isDuplicate = santriList.some(s => s.id !== currentSantri.id && s.nis === finalNis);
+        if (!isDuplicate) break;
+        nextSeq++;
+        attempts++;
+    }
+    
+    return finalNis;
 };
 
 const generateNisDob = (
     settings: PondokSettings,
     santriList: Santri[],
-    currentSantri: Santri
+    currentSantri: Santri,
+    config: any
 ): string => {
     if (!currentSantri.tanggalLahir || !currentSantri.jenjangId) {
         throw new Error('Tanggal lahir dan data pendidikan (Jenjang) harus diisi untuk membuat NIS.');
     }
     const { nisSettings } = settings;
-    const { dobFormat, dobSeparator, dobUseJenjangCode, dobPadding } = nisSettings;
     
+    const useJenjangCode = config.useJenjangCode !== undefined ? config.useJenjangCode : nisSettings.dobUseJenjangCode;
+    const padding = config.padding !== undefined ? config.padding : nisSettings.dobPadding;
+    const separator = config.dobSeparator !== undefined ? config.dobSeparator : nisSettings.dobSeparator;
+    const format = config.dobFormat !== undefined ? config.dobFormat : nisSettings.dobFormat;
+
     const jenjang = settings.jenjang.find(j => j.id === currentSantri.jenjangId);
 
-    if (dobUseJenjangCode && (!jenjang || !jenjang.kode)) {
+    if (useJenjangCode && (!jenjang || !jenjang.kode)) {
         throw new Error('Kode jenjang tidak ditemukan untuk santri ini. Harap periksa Pengaturan.');
     }
 
@@ -132,22 +208,30 @@ const generateNisDob = (
     const year = dob.getFullYear().toString();
     
     let datePart = '';
-    if (dobFormat === 'YYYYMMDD') datePart = year + month + day;
-    else if (dobFormat === 'DDMMYY') datePart = day + month + year.slice(-2);
-    else if (dobFormat === 'YYMMDD') datePart = year.slice(-2) + month + day;
+    if (format === 'YYYYMMDD') datePart = year + month + day;
+    else if (format === 'DDMMYY') datePart = day + month + year.slice(-2);
+    else if (format === 'YYMMDD') datePart = year.slice(-2) + month + day;
     
-    const santriWithSameDob = santriList.filter(s => {
-      if (s.id === currentSantri.id || !s.tanggalLahir || s.tanggalLahir !== currentSantri.tanggalLahir) {
-          return false;
-      }
-      if (dobUseJenjangCode) {
-          return s.jenjangId === jenjang?.id;
-      }
-      return true;
+    const jenjangCodePart = (useJenjangCode && jenjang) ? jenjang.kode : '';
+    const prefix = datePart + separator + jenjangCodePart;
+
+    const santriWithSamePrefix = santriList.filter(s => {
+      if (s.id === currentSantri.id || !s.nis) return false;
+      return s.nis.startsWith(prefix);
     });
 
-    const nextDobSeq = santriWithSameDob.length + 1;
-    const jenjangCodePart = (dobUseJenjangCode && jenjang) ? jenjang.kode : '';
+    let nextDobSeq = santriWithSamePrefix.length + 1;
+    
+    // Safety loop to ensure uniqueness
+    let finalNis = '';
+    let attempts = 0;
+    while (attempts < 100) {
+        finalNis = prefix + nextDobSeq.toString().padStart(padding, '0');
+        const isDuplicate = santriList.some(s => s.id !== currentSantri.id && s.nis === finalNis);
+        if (!isDuplicate) break;
+        nextDobSeq++;
+        attempts++;
+    }
 
-    return datePart + dobSeparator + jenjangCodePart + nextDobSeq.toString().padStart(dobPadding, '0');
+    return finalNis;
 };

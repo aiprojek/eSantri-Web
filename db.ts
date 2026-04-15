@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -41,11 +41,13 @@ export class ESantriDatabase extends Dexie {
   riwayatStok!: Table<RiwayatStok, number>; 
   keuanganKoperasi!: Table<KeuanganKoperasi, number>;
   pendingOrders!: Table<PendingOrder, number>;
-  diskon!: Table<Diskon, number>; // NEW
+  diskon!: Table<Diskon, number>;
+  suppliers!: Table<Supplier, number>;
+  pembayaranHutang!: Table<PembayaranHutang, number>;
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(44).stores({ // Bump version
+    (this as any).version(46).stores({ // Bump version
       santri: '++id, nis, namaLengkap, kamarId',
       settings: '++id',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status',
@@ -60,7 +62,7 @@ export class ESantriDatabase extends Dexie {
       auditLogs: 'id, table_name, operation, created_at',
       users: '++id, username, role',
       syncHistory: 'id, fileId, mergedAt',
-      raporRecords: '++id, santriId, [santriId+tahunAjaran+semester], [tahunAjaran+semester], rombelId',
+      raporRecords: '++id, santriId, [santriId+tahunAjaran+semester], [tahunAjaran+semester], [tahunAjaran+semester+rombelId], rombelId',
       absensi: '++id, santriId, [rombelId+tanggal], tanggal',
       tahfizh: '++id, santriId, tanggal, tipe',
       inventaris: '++id, kode, nama, jenis, kategori, lokasi',
@@ -75,12 +77,14 @@ export class ESantriDatabase extends Dexie {
       arsipJadwal: '++id, tahunAjaran, semester, jenjangId',
       payrollRecords: '++id, guruId, [bulan+tahun], tanggalBayar',
       piketSchedules: '++id, tanggal, sholat',
-      produkKoperasi: '++id, nama, barcode, kategori',
-      transaksiKoperasi: '++id, tanggal, tipePembeli, statusTransaksi',
+      produkKoperasi: '++id, nama, barcode, kategori, supplierId',
+      transaksiKoperasi: '++id, tanggal, tipePembeli, statusTransaksi, pembeliId',
       riwayatStok: '++id, produkId, tanggal, tipe',
       keuanganKoperasi: '++id, tanggal, jenis',
       pendingOrders: '++id, customerName, timestamp',
-      diskon: '++id, nama, aktif' // NEW
+      diskon: '++id, nama, aktif',
+      suppliers: '++id, nama',
+      pembayaranHutang: '++id, transaksiId, tanggal'
     }).upgrade(async (tx: any) => {
        // Migration logic if needed
     });

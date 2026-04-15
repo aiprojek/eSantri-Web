@@ -29,6 +29,9 @@ export const BackupReminderModal: React.FC<BackupReminderModalProps> = ({ isOpen
                     <div>
                         <h3 className="font-bold text-gray-800">{title}</h3>
                         <p className="text-sm text-gray-600 mt-1">{message}</p>
+                        <p className="text-[10px] text-teal-600 mt-2 italic flex items-center gap-1">
+                            <i className="bi bi-cloud-check"></i> Meskipun Sinkronisasi Cloud aktif, backup manual tetap disarankan untuk arsip fisik.
+                        </p>
                     </div>
                 </div>
                 <button onClick={onClose} className="text-gray-400 hover:text-gray-600">

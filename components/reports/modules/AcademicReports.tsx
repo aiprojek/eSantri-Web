@@ -321,7 +321,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             );
         };
     } else if (type === 'Rapor') {
-        title = "LEMBAR PENGAMBILAN DAN PENGUMPULAN RAPOR";
+        title = "LEMBAR PENGAMBILAN DAN PENGEMBALIAN RAPOR";
         orientation = 'portrait';
         tableHeader = (
             <thead className="text-xs uppercase bg-gray-200 text-center">

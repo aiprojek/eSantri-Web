@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserPermissions, AccessLevel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
-import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS } from '../../../services/authService';
+import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS } from '../../../services/authService';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -16,7 +16,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     const [username, setUsername] = useState('');
     const [fullName, setFullName] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'admin' | 'staff'>('staff');
+    const [role, setRole] = useState<'admin' | 'staff' | 'wali_kelas'>('staff');
     const [permissions, setPermissions] = useState<UserPermissions>(DEFAULT_STAFF_PERMISSIONS as UserPermissions);
     
     // Security Recovery
@@ -149,8 +149,22 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                         </div>
                         <div>
                             <label className="block mb-1 text-sm font-medium text-gray-700">Role / Peran</label>
-                            <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'staff')} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" disabled={userData?.isDefaultAdmin}>
+                            <select 
+                                value={role} 
+                                onChange={e => {
+                                    const newRole = e.target.value as 'admin' | 'staff' | 'wali_kelas';
+                                    setRole(newRole);
+                                    if (newRole === 'wali_kelas') {
+                                        setPermissions(DEFAULT_WALI_KELAS_PERMISSIONS as UserPermissions);
+                                    } else if (newRole === 'staff') {
+                                        setPermissions(DEFAULT_STAFF_PERMISSIONS as UserPermissions);
+                                    }
+                                }} 
+                                className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" 
+                                disabled={userData?.isDefaultAdmin}
+                            >
                                 <option value="staff">Staff Biasa</option>
+                                <option value="wali_kelas">Wali Kelas</option>
                                 <option value="admin">Administrator</option>
                             </select>
                         </div>
@@ -200,8 +214,8 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                         </div>
                     </div>
 
-                    {/* Permissions Table (Only for Staff) */}
-                    {role === 'staff' && (
+                    {/* Permissions Table (Only for Staff & Wali Kelas) */}
+                    {(role === 'staff' || role === 'wali_kelas') && (
                         <div className="border rounded-lg overflow-hidden">
                             <div className="bg-gray-100 px-4 py-2 border-b flex justify-between items-center">
                                 <span className="font-semibold text-sm text-gray-700">Hak Akses Modul</span>

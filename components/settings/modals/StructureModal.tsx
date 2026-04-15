@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Jenjang, Kelas, Rombel, TenagaPengajar } from '../../../types';
+import { Jenjang, Kelas, Rombel, TenagaPengajar, User } from '../../../types';
 import { useAppContext } from '../../../AppContext';
+import { db } from '../../../db';
 
 type StructureItem = Jenjang | Kelas | Rombel;
 
@@ -24,9 +25,19 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
     const [kode, setKode] = useState('');
     const [parentId, setParentId] = useState('');
     const [assignmentId, setAssignmentId] = useState('');
+    const [waliKelasUserId, setWaliKelasUserId] = useState<string>('');
+    const [users, setUsers] = useState<User[]>([]);
     
     const parentList = useMemo(() => listName === 'kelas' ? 'jenjang' : listName === 'rombel' ? 'kelas' : null, [listName]);
     
+    useEffect(() => {
+        const fetchUsers = async () => {
+            const allUsers = await db.users.toArray();
+            setUsers(allUsers);
+        };
+        if (isOpen) fetchUsers();
+    }, [isOpen]);
+
     useEffect(() => {
         if (isOpen) {
             setNama(item?.nama || '');
@@ -42,6 +53,12 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
             if (listName === 'jenjang' && 'mudirId' in (item || {})) initialAssignmentId = (item as Jenjang).mudirId?.toString() || '';
             else if (listName === 'rombel' && 'waliKelasId' in (item || {})) initialAssignmentId = (item as Rombel).waliKelasId?.toString() || '';
             setAssignmentId(initialAssignmentId);
+
+            if (listName === 'rombel' && 'waliKelasUserId' in (item || {})) {
+                setWaliKelasUserId((item as Rombel).waliKelasUserId?.toString() || '');
+            } else {
+                setWaliKelasUserId('');
+            }
         }
     }, [isOpen, item, listName, parentList, settings]);
 
@@ -55,13 +72,11 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
             return;
         }
 
-        // --- START of new validation logic ---
         if (listName === 'jenjang') {
             if (!kode.trim()) {
                 showAlert('Input Tidak Lengkap', 'Kode Jenjang tidak boleh kosong.');
                 return;
             }
-            // Check for duplicate Jenjang name or code
             const isDuplicate = settings.jenjang.some(
                 j => j.id !== item?.id && (j.nama.toLowerCase() === nama.trim().toLowerCase() || j.kode?.toLowerCase() === kode.trim().toLowerCase())
             );
@@ -74,7 +89,6 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
                 showAlert('Input Tidak Lengkap', 'Induk Jenjang harus dipilih.');
                 return;
             }
-            // Check for duplicate Kelas name within the same Jenjang
             const isDuplicate = settings.kelas.some(
                 k => k.id !== item?.id && k.nama.toLowerCase() === nama.trim().toLowerCase() && k.jenjangId === parseInt(parentId, 10)
             );
@@ -87,7 +101,6 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
                 showAlert('Input Tidak Lengkap', 'Induk Kelas harus dipilih.');
                 return;
             }
-            // Check for duplicate Rombel name within the same Kelas
             const isDuplicate = settings.rombel.some(
                 r => r.id !== item?.id && r.nama.toLowerCase() === nama.trim().toLowerCase() && r.kelasId === parseInt(parentId, 10)
             );
@@ -106,9 +119,13 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
         if (listName === 'kelas') {
             newItem = { ...baseItem, jenjangId: parseInt(parentId, 10) };
         } else if (listName === 'rombel') {
-            newItem = { ...baseItem, kelasId: parseInt(parentId, 10), waliKelasId: assignmentId ? parseInt(assignmentId) : undefined };
+            newItem = { 
+                ...baseItem, 
+                kelasId: parseInt(parentId, 10), 
+                waliKelasId: assignmentId ? parseInt(assignmentId) : undefined,
+                waliKelasUserId: waliKelasUserId ? parseInt(waliKelasUserId) : undefined
+            };
         } else {
-            // listName === 'jenjang'
             newItem = { ...baseItem, kode: kode.trim(), mudirId: assignmentId ? parseInt(assignmentId) : undefined };
         }
         
@@ -142,7 +159,6 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
                             <select value={parentId} onChange={(e) => setParentId(e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5">
                                 {settings[parentList].map(p => {
                                     let label = p.nama;
-                                    // IMPROVEMENT: Jika sedang memilih kelas induk untuk rombel, tampilkan jenjangnya
                                     if (listName === 'rombel') {
                                         const parentJenjang = settings.jenjang.find(j => j.id === (p as Kelas).jenjangId);
                                         if (parentJenjang) label = `${p.nama} (${parentJenjang.nama})`;
@@ -154,11 +170,21 @@ export const StructureModal: React.FC<StructureModalProps> = ({ isOpen, onClose,
                     )}
                      {(listName === 'jenjang' || listName === 'rombel') && (
                         <div>
-                            <label className="block mb-1 text-sm font-medium text-gray-700">{listName === 'jenjang' ? 'Mudir Marhalah' : 'Wali Kelas'}</label>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">{listName === 'jenjang' ? 'Mudir Marhalah' : 'Wali Kelas (Data Pengajar)'}</label>
                             <select value={assignmentId} onChange={(e) => setAssignmentId(e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5">
                                 <option value="">-- Tidak Ditugaskan --</option>
                                 {activeTeachers.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                             </select>
+                        </div>
+                    )}
+                    {listName === 'rombel' && (
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Akun Login Wali Kelas (User)</label>
+                            <select value={waliKelasUserId} onChange={(e) => setWaliKelasUserId(e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5">
+                                <option value="">-- Pilih Akun User --</option>
+                                {users.map(u => <option key={u.id} value={u.id}>{u.fullName} ({u.username})</option>)}
+                            </select>
+                            <p className="text-[10px] text-gray-500 mt-1">Pilih akun yang akan digunakan wali kelas untuk login dan input nilai.</p>
                         </div>
                     )}
                 </div>

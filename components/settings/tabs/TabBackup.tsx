@@ -1,13 +1,124 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { PondokSettings, BackupFrequency } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { db } from '../../../db';
+import { formatBytes } from '../../../utils/formatters';
 
 interface TabBackupProps {
     localSettings: PondokSettings;
     setLocalSettings: React.Dispatch<React.SetStateAction<PondokSettings>>;
 }
+
+const HealthDashboard: React.FC = () => {
+    const [stats, setStats] = useState<{
+        dbStatus: 'OK' | 'NOT';
+        checkTime: string;
+        used: number;
+        quota: number;
+        counts: Record<string, number>;
+    } | null>(null);
+
+    const refreshHealth = async () => {
+        try {
+            // Check DB Status
+            const dbStatus = db.isOpen() ? 'OK' : 'NOT';
+            
+            // Check Storage Quota
+            let used = 0;
+            let quota = 10240 * 1024 * 1024; // Default fallback 10GB
+            if (navigator.storage && navigator.storage.estimate) {
+                const estimate = await navigator.storage.estimate();
+                used = estimate.usage || 0;
+                quota = estimate.quota || quota;
+            }
+
+            // Get Record Counts
+            const counts = {
+                'Santri': await db.santri.count(),
+                'Keuangan (Kas)': await db.transaksiKas.count(),
+                'Tagihan': await db.tagihan.count(),
+                'Pembayaran': await db.pembayaran.count(),
+                'Pendaftar (PSB)': await db.pendaftar.count(),
+                'Rapor': await db.raporRecords.count(),
+                'Absensi': await db.absensi.count(),
+                'Tahfizh': await db.tahfizh.count(),
+                'Inventaris': await db.inventaris.count(),
+                'Audit Logs': await db.auditLogs.count(),
+            };
+
+            setStats({
+                dbStatus,
+                checkTime: new Date().toLocaleString(),
+                used,
+                quota,
+                counts
+            });
+        } catch (err) {
+            console.error("Failed to fetch health stats", err);
+        }
+    };
+
+    useEffect(() => {
+        refreshHealth();
+    }, []);
+
+    if (!stats) return <div className="animate-pulse bg-gray-100 h-40 rounded-lg"></div>;
+
+    return (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                    <i className="bi bi-heart-pulse text-red-500"></i> Dashboard Kesehatan Penyimpanan Lokal
+                </h3>
+                <button onClick={refreshHealth} className="text-xs text-blue-600 hover:underline">
+                    <i className="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className={stats.dbStatus === 'OK' ? 'text-green-600' : 'text-red-600'}>
+                            {stats.dbStatus === 'OK' ? '✔' : '✘'} Database: {stats.dbStatus} (IndexedDB Mounted)
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <span>🕒 Waktu Cek: {stats.checkTime}</span>
+                    </div>
+                    <div className="pt-2">
+                        <div className="flex justify-between mb-1">
+                            <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
+                                💾 Storage Browser
+                            </span>
+                            <span className="text-xs text-gray-500">
+                                {formatBytes(stats.used)} / {formatBytes(stats.quota)}
+                            </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                            <div 
+                                className="bg-blue-600 h-1.5 rounded-full" 
+                                style={{ width: `${Math.min((stats.used / stats.quota) * 100, 100)}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-3 rounded border border-gray-200">
+                    <h4 className="text-xs font-bold text-gray-500 mb-2 border-b pb-1">TOTAL RECORD</h4>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {Object.entries(stats.counts).map(([label, count]) => (
+                            <div key={label} className="flex justify-between text-[11px]">
+                                <span className="text-gray-600">{label}:</span>
+                                <span className="font-bold text-gray-800">{count.toLocaleString()}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSettings }) => {
     const { downloadBackup, showConfirmation, showToast } = useAppContext();
@@ -82,6 +193,9 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
     return (
         <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
             <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Cadangkan & Pulihkan Data Lokal</h2>
+            
+            <HealthDashboard />
+
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <h3 className="text-lg font-semibold text-gray-800">Cadangkan Data (Manual)</h3>

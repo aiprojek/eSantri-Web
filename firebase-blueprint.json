@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "Santri": {
+      "title": "Santri",
+      "description": "Data santri pondok pesantren",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "namaLengkap": { "type": "string" },
+        "nis": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "namaLengkap", "nis"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Data pengguna aplikasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "username": { "type": "string" },
+        "role": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "username", "role"]
+    }
+  },
+  "firestore": {
+    "tenants/{tenantId}/santri": {
+      "schema": "Santri",
+      "description": "Koleksi data santri per tenant"
+    },
+    "tenants/{tenantId}/users": {
+      "schema": "User",
+      "description": "Koleksi data user per tenant"
+    },
+    "tenants/{tenantId}/settings": {
+      "schema": "object",
+      "description": "Pengaturan aplikasi per tenant"
+    }
+  }
+}

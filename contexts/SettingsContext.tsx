@@ -10,6 +10,7 @@ interface SettingsContextType {
     isLoading: boolean;
     backupModal: BackupModalState;
     onSaveSettings: (newSettings: PondokSettings) => Promise<void>;
+    onUpdateSettings: (newSettings: PondokSettings) => Promise<void>;
     downloadBackup: () => Promise<void>;
     triggerBackupCheck: (forceAction?: boolean) => void;
     closeBackupModal: () => void;
@@ -94,8 +95,25 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const id = settings.id;
         const settingsWithId = { ...newSettings, id, lastModified: Date.now() };
         await db.settings.put(settingsWithId);
+        
+        // Sync Firebase Custom Config to localStorage for firebase.ts
+        if (newSettings.cloudSyncConfig?.firebaseApiKey && newSettings.cloudSyncConfig?.firebaseProjectId) {
+            const config = {
+                apiKey: newSettings.cloudSyncConfig.firebaseApiKey,
+                authDomain: newSettings.cloudSyncConfig.firebaseAuthDomain,
+                projectId: newSettings.cloudSyncConfig.firebaseProjectId,
+                appId: newSettings.cloudSyncConfig.firebaseAppId,
+                firestoreDatabaseId: newSettings.cloudSyncConfig.firebaseDatabaseId || '(default)'
+            };
+            localStorage.setItem('esantri_custom_firebase_config', JSON.stringify(config));
+        } else {
+            localStorage.removeItem('esantri_custom_firebase_config');
+        }
+
         await logActivity('settings', 'UPDATE', id?.toString() || '1', null, newSettings);
     };
+
+    const onUpdateSettings = onSaveSettings;
 
     const downloadBackup = async () => {
         const data = {
@@ -160,7 +178,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return (
         <SettingsContext.Provider value={{
             settings, isLoading, backupModal,
-            onSaveSettings, downloadBackup, triggerBackupCheck, closeBackupModal, logActivity
+            onSaveSettings, onUpdateSettings, downloadBackup, triggerBackupCheck, closeBackupModal, logActivity
         }}>
             {children}
         </SettingsContext.Provider>

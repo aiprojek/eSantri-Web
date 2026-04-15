@@ -2,6 +2,7 @@
 import { CloudSyncConfig, SyncFileRecord, ConflictItem } from '../types';
 import { db } from '../db';
 import { createClient, WebDAVClient } from 'webdav';
+import { db as fdb, collection, getDocs, query } from '../firebase';
 
 const MASTER_FILENAME = 'master_data.json';
 const MASTER_CONFIG_FILENAME = 'master_config.json';
@@ -291,7 +292,11 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
             calendarEvents: await db.calendarEvents.toArray(),
             jadwalPelajaran: await db.jadwalPelajaran.toArray(), 
             arsipJadwal: await db.arsipJadwal.toArray(),
-            piketSchedules: await db.piketSchedules.toArray()
+            piketSchedules: await db.piketSchedules.toArray(),
+            pendingOrders: await db.pendingOrders.toArray(),
+            diskon: await db.diskon.toArray(),
+            suppliers: await db.suppliers.toArray(),
+            pembayaranHutang: await db.pembayaranHutang.toArray()
         }
     };
     
@@ -373,7 +378,8 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
         'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules'
+        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules',
+        'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang'
     ];
 
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
@@ -492,7 +498,8 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
         'suratTemplates', 'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules'
+        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules',
+        'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang'
     ];
 
     if (resolvedConflicts) {
@@ -612,7 +619,11 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         calendarEvents: await db.calendarEvents.toArray(),
         jadwalPelajaran: await db.jadwalPelajaran.toArray(),
         arsipJadwal: await db.arsipJadwal.toArray(),
-        piketSchedules: await db.piketSchedules.toArray()
+        piketSchedules: await db.piketSchedules.toArray(),
+        pendingOrders: await db.pendingOrders.toArray(),
+        diskon: await db.diskon.toArray(),
+        suppliers: await db.suppliers.toArray(),
+        pembayaranHutang: await db.pembayaranHutang.toArray()
     };
 
     const masterConfig = {
@@ -656,8 +667,20 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
 };
 
 export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
-    let data;
-    if (config.provider === 'dropbox') {
+    let data: any = null;
+    
+    if (config.provider === 'firebase') {
+        const tenantId = config.firebasePairedTenantId;
+        if (!tenantId) throw new Error("Tenant ID tidak ditemukan. Harap hubungkan Firebase terlebih dahulu.");
+        
+        const path = `tenants/${tenantId}/users`;
+        const q = query(collection(fdb, path));
+        const snapshot = await getDocs(q);
+        const users = snapshot.docs.map(doc => doc.data());
+        if (users.length > 0) {
+            data = { users };
+        }
+    } else if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
         const response = await fetchWithRetry('https://content.dropboxapi.com/2/files/download', {
             method: 'POST',
@@ -667,7 +690,6 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
             }
         });
         
-        // UPDATE: Handle Decompression
         const buffer = await response.arrayBuffer();
         data = await decompressData(buffer);
 

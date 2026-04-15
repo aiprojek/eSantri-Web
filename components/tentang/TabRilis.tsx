@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { APP_VERSION } from '../../version';
 
 export const TabRilis: React.FC = () => {
     return (
@@ -28,5 +29,5 @@ export const TabRilis: React.FC = () => {
 };
 
 // Export placeholder variables to satisfy imports in Tentang.tsx.
-export const latestVersion = "20260106"; 
+export const latestVersion = APP_VERSION; 
 export const latestUpdateDate = "GitHub";

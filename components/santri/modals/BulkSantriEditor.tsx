@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Santri, Alamat } from '../../../types';
 import { useAppContext } from '../../../AppContext';
+import { useSantriContext } from '../../../contexts/SantriContext';
+import { generateNis } from '../../../utils/nisGenerator';
 
 interface BulkSantriEditorProps {
     isOpen: boolean;
@@ -14,7 +16,8 @@ interface BulkSantriEditorProps {
 type EditableRow = Partial<Santri> & { tempId: number };
 
 export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onClose, mode, initialData, onSave }) => {
-    const { settings, showToast } = useAppContext();
+    const { settings, showToast, showAlert } = useAppContext();
+    const { santriList } = useSantriContext();
     const [rows, setRows] = useState<EditableRow[]>([]);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -167,6 +170,64 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         }));
     };
 
+    const handleGenerateNis = (tempId: number) => {
+        const row = rows.find(r => r.tempId === tempId);
+        if (!row) return;
+
+        try {
+            // Prepare a temporary santri object for the generator
+            const tempSantri: Santri = {
+                ...row,
+                id: mode === 'edit' ? (row.id || 0) : row.tempId,
+                tanggalMasuk: toStorageDate(row.tanggalMasuk),
+                tanggalLahir: toStorageDate(row.tanggalLahir),
+            } as Santri;
+
+            const newNis = generateNis(settings, santriList, tempSantri);
+            updateRow(tempId, 'nis', newNis);
+        } catch (error) {
+            showAlert('Gagal Membuat NIS', (error as Error).message);
+        }
+    };
+
+    const handleGenerateAllNis = () => {
+        let currentSantriList = [...santriList];
+        const newRows = [...rows];
+        let successCount = 0;
+        let errorMsg = '';
+
+        for (let i = 0; i < newRows.length; i++) {
+            const row = newRows[i];
+            if (!row.namaLengkap) continue;
+
+            try {
+                const tempSantri: Santri = {
+                    ...row,
+                    id: mode === 'edit' ? (row.id || 0) : row.tempId,
+                    tanggalMasuk: toStorageDate(row.tanggalMasuk),
+                    tanggalLahir: toStorageDate(row.tanggalLahir),
+                } as Santri;
+
+                const newNis = generateNis(settings, currentSantriList, tempSantri);
+                newRows[i] = { ...row, nis: newNis };
+                
+                // Add to temporary list to prevent duplicates within the bulk batch
+                currentSantriList.push({ ...tempSantri, nis: newNis });
+                successCount++;
+            } catch (error) {
+                errorMsg = (error as Error).message;
+            }
+        }
+
+        setRows(newRows);
+        if (successCount > 0) {
+            showToast(`${successCount} NIS berhasil dibuat otomatis`, 'success');
+        }
+        if (errorMsg && successCount === 0) {
+            showAlert('Gagal Membuat NIS', errorMsg);
+        }
+    };
+
     const handleSave = async () => {
         // Basic Validation
         const validRows = rows.filter(r => r.namaLengkap?.trim());
@@ -222,6 +283,13 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                     </p>
                 </div>
                 <div className="flex gap-3">
+                    <button 
+                        onClick={handleGenerateAllNis}
+                        className="px-4 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg font-medium transition-colors flex items-center gap-2 border border-teal-200"
+                        title="Generate NIS untuk semua baris yang memiliki nama"
+                    >
+                        <i className="bi bi-magic"></i> Generate Semua NIS
+                    </button>
                     <button onClick={onClose} className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors">Batal</button>
                     <button 
                         onClick={handleSave} 
@@ -259,7 +327,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                     
                                     {/* Identitas */}
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[150px] bg-blue-50/30">Nama Hijrah</th>
-                                    <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[120px] bg-blue-50/30">NIS</th>
+                                    <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[160px] bg-blue-50/30">NIS</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[130px] bg-blue-50/30">NIK</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[120px] bg-blue-50/30">NISN</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[100px] bg-blue-50/30">Gender</th>
@@ -331,7 +399,18 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
 
                                             {/* Identitas */}
                                             <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.namaHijrah} onChange={e => updateRow(row.tempId, 'namaHijrah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.nis} onChange={e => updateRow(row.tempId, 'nis', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                             <td className="px-2 py-2 bg-blue-50/10">
+                                                <div className="flex gap-1">
+                                                    <input type="text" value={row.nis} onChange={e => updateRow(row.tempId, 'nis', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" />
+                                                    <button 
+                                                        onClick={() => handleGenerateNis(row.tempId)}
+                                                        className="px-2 bg-teal-50 text-teal-600 border border-teal-200 rounded hover:bg-teal-100 transition-colors"
+                                                        title="Generate NIS"
+                                                    >
+                                                        <i className="bi bi-magic"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
                                             <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.nik} onChange={e => updateRow(row.tempId, 'nik', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.nisn} onChange={e => updateRow(row.tempId, 'nisn', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-blue-50/10">

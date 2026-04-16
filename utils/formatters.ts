@@ -42,13 +42,18 @@ export const getHijriDate = (date: Date, adjustment: number = 0) => {
             month: 'long',
             year: 'numeric'
         });
+
+        const numericFormatter = new Intl.DateTimeFormat('id-ID-u-ca-islamic-umalqura', {
+            month: 'numeric'
+        });
         
         const parts = formatter.formatToParts(adjustedDate);
         const day = parts.find(p => p.type === 'day')?.value || '';
         const month = parts.find(p => p.type === 'month')?.value || '';
         const year = parts.find(p => p.type === 'year')?.value || '';
+        const monthIndex = parseInt(numericFormatter.format(adjustedDate)) - 1;
 
-        return { day, month, year, full: `${day} ${month} ${year}` };
+        return { day, month, year, monthIndex, full: `${day} ${month} ${year}` };
     } catch (e) {
         return { day: '', month: '', year: '', full: '' };
     }

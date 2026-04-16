@@ -89,8 +89,12 @@ export const generateSantriCsvTemplate = (): string => {
 // New function to generate Contact CSV (Google Contact Format compatible)
 export const generateContactCsv = (santriList: Santri[], settings: PondokSettings): string => {
     let csvContent = "data:text/csv;charset=utf-8,";
-    // Standard Google CSV Headers subset that is widely compatible
-    const headers = ['Name', 'Given Name', 'Phone 1 - Type', 'Phone 1 - Value', 'Organization 1 - Name', 'Organization 1 - Title', 'Notes'];
+    // Standard Google CSV Headers (Full list for better compatibility)
+    const headers = [
+        'Name', 'Given Name', 'Additional Name', 'Family Name', 'Yomi Name', 'Given Name Yomi', 'Additional Name Yomi', 'Family Name Yomi', 'Name Prefix', 'Name Suffix', 'Initials', 'Nickname', 'Short Name', 'Maiden Name', 'Birthday', 'Gender', 'Location', 'Billing Information', 'Directory Server', 'Mileage', 'Occupation', 'Hobby', 'Sensitivity', 'Priority', 'Subject', 'Notes', 'Language', 'Photo', 'Group Membership',
+        'Phone 1 - Type', 'Phone 1 - Value',
+        'Organization 1 - Type', 'Organization 1 - Name', 'Organization 1 - Yomi Name', 'Organization 1 - Title', 'Organization 1 - Department', 'Organization 1 - Symbol', 'Organization 1 - Location', 'Organization 1 - Job Description'
+    ];
     csvContent += headers.join(",") + "\r\n";
 
     santriList.forEach(santri => {
@@ -112,9 +116,6 @@ export const generateContactCsv = (santriList: Santri[], settings: PondokSetting
 
         // Clean up phone number
         phone = phone ? phone.replace(/[^0-9+]/g, '') : '';
-
-        // If no phone number, skip or include? Let's include with empty phone for now, but usually contacts need a value.
-        // If phone is empty, this entry is less useful as a contact, but might still be wanted.
         
         // Format Name: "Nama Wali (Wali Nama Santri)" to make it searchable
         const displayName = parentName 
@@ -123,20 +124,22 @@ export const generateContactCsv = (santriList: Santri[], settings: PondokSetting
 
         const rombelName = settings.rombel.find(r => r.id === santri.rombelId)?.nama || '';
         
-        const rowData = [
-            displayName, // Name (Full)
-            parentName || relation, // Given Name
-            'Mobile', // Phone Type
-            phone, // Phone Value
-            settings.namaPonpes, // Organization
-            'Wali Santri', // Title
-            `NIS: ${santri.nis} | Kelas: ${rombelName}` // Notes
-        ];
+        // Map to Google Headers
+        const rowData = new Array(headers.length).fill('');
+        rowData[0] = displayName; // Name
+        rowData[1] = parentName || relation; // Given Name
+        rowData[25] = `NIS: ${santri.nis} | Kelas: ${rombelName} | Santri: ${santri.namaLengkap}`; // Notes
+        rowData[28] = 'Imported eSantri'; // Group Membership
+        rowData[29] = 'Mobile'; // Phone 1 - Type
+        rowData[30] = phone; // Phone 1 - Value
+        rowData[31] = 'Work'; // Organization 1 - Type
+        rowData[32] = settings.namaPonpes; // Organization 1 - Name
+        rowData[34] = 'Wali Santri'; // Organization 1 - Title
 
         const processedRow = rowData.map(val => {
             if (val === undefined || val === null) return "";
             const stringValue = String(val);
-            if (stringValue.includes(',') || stringValue.includes('"')) {
+            if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
                 return `"${stringValue.replace(/"/g, '""')}"`;
             }
             return stringValue;

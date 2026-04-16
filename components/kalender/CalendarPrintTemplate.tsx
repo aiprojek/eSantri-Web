@@ -5,6 +5,10 @@ import { formatDate, getHijriDate } from '../../utils/formatters';
 
 interface CalendarPrintTemplateProps {
     year: number;
+    startMonth?: number;
+    startYear?: number;
+    endMonth?: number;
+    endYear?: number;
     events: CalendarEvent[];
     settings: PondokSettings;
     layout: '1_sheet' | '3_sheets' | '4_sheets';
@@ -27,7 +31,8 @@ interface MonthData {
 }
 
 export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({ 
-    year, events, settings, layout, theme, 
+    year, startMonth, startYear, endMonth, endYear,
+    events, settings, layout, theme, 
     primarySystem = 'Masehi', showKop = true, 
     customImage, imagePosition = 'none' 
 }) => {
@@ -102,145 +107,255 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
         if (primarySystem === 'Masehi') {
             const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
             
+            // Determine range
+            let monthsToRender: { month: number, year: number }[] = [];
+            if (startYear !== undefined && startMonth !== undefined && endYear !== undefined && endMonth !== undefined) {
+                let currM = startMonth;
+                let currY = startYear;
+                while (currY < endYear || (currY === endYear && currM <= endMonth)) {
+                    monthsToRender.push({ month: currM, year: currY });
+                    currM++;
+                    if (currM > 11) {
+                        currM = 0;
+                        currY++;
+                    }
+                }
+            } else {
+                for (let i = 0; i < 12; i++) monthsToRender.push({ month: i, year });
+            }
+
+            if (monthsToRender.length === 0) return [];
+
             // Hitung rentang Hijriah untuk Header (Masehi Mode)
-            const startH = getHijriDate(new Date(year, 0, 1), hijriAdjustment);
-            const endH = getHijriDate(new Date(year, 11, 31), hijriAdjustment);
+            const firstM = monthsToRender[0];
+            const lastM = monthsToRender[monthsToRender.length - 1];
+            const startH = getHijriDate(new Date(firstM.year, firstM.month, 1), hijriAdjustment);
+            const endH = getHijriDate(new Date(lastM.year, lastM.month + 1, 0), hijriAdjustment);
             const hijriRange = startH.year === endH.year ? `${startH.year} H` : `${startH.year} - ${endH.year} H`;
 
-            for (let i = 0; i < 12; i++) {
-                const date = new Date(year, i, 1);
+            monthsToRender.forEach((mInfo, idx) => {
+                const i = mInfo.month;
+                const y = mInfo.year;
+                const date = new Date(y, i, 1);
                 const firstDayIndex = date.getDay(); 
-                const daysInMonth = new Date(year, i + 1, 0).getDate();
+                const daysInMonth = new Date(y, i + 1, 0).getDate();
                 
                 const days: (Date | null)[] = [];
                 for (let j = 0; j < firstDayIndex; j++) days.push(null);
-                for (let j = 1; j <= daysInMonth; j++) days.push(new Date(year, i, j));
+                for (let j = 1; j <= daysInMonth; j++) days.push(new Date(y, i, j));
 
-                const start = new Date(year, i, 1);
-                const end = new Date(year, i + 1, 0);
+                const start = new Date(y, i, 1);
+                const end = new Date(y, i + 1, 0);
                 const hStart = getHijriDate(start, hijriAdjustment);
                 const hEnd = getHijriDate(end, hijriAdjustment);
                 
-                // Masehi: 1 Bulan Utama, Hijriah: Range
                 const titleMain = monthNames[i].toUpperCase();
                 const hijriHeader = hStart.month === hEnd.month ? hStart.month : `${hStart.month} - ${hEnd.month}`;
                 const titleSub = `${hijriHeader} ${hStart.year}`.toUpperCase();
 
                 results.push({ 
-                    index: i, days, titleMain, titleSub, start, end,
-                    yearLabel: year.toString(),
+                    index: idx, days, titleMain, titleSub, start, end,
+                    yearLabel: y === firstM.year && y === lastM.year ? y.toString() : `${firstM.year}-${lastM.year}`,
                     secondaryYearLabel: hijriRange
                 });
-            }
+            });
 
         } else {
-            // Hijriah Logic: Generate 1 Full Hijri Year (Muharram to Dzulhijjah)
-            
-            // 1. Tentukan Tahun Hijriah Target (Berdasarkan 1 Januari tahun yang dipilih)
-            const refDate = new Date(year, 0, 1);
-            const refHijri = getHijriDate(refDate, hijriAdjustment);
-            const targetHijriYear = parseInt(refHijri.year); // misal 1446
-
-            // 2. Cari tanggal Masehi untuk 1 Muharram tahun tersebut
-            // Mundur dari refDate sampai ketemu 1 Muharram
-            let cursorDate = new Date(refDate);
-            // Safety: cari mundur maksimal 360 hari
-            let foundStart = false;
-            for(let k=0; k<360; k++) {
-                const h = getHijriDate(cursorDate, hijriAdjustment);
-                if (h.month === 'Muharram' && h.day === '1' && parseInt(h.year) === targetHijriYear) {
-                    foundStart = true;
-                    break;
-                }
-                // Jika mundur terlalu jauh ke tahun sebelumnya, berarti kita harus maju (kasus jarang terjadi tapi mungkin)
-                if (parseInt(h.year) < targetHijriYear) {
-                    cursorDate.setDate(cursorDate.getDate() + 2); // Koreksi maju
-                    break; 
-                }
-                cursorDate.setDate(cursorDate.getDate() - 1);
-            }
-            // Jika tidak ketemu persis (karena konversi), pakai yang terakhir di loop (mendekati)
-
-            // Hitung rentang Masehi untuk Header
-            // 1 Muharram s.d 29/30 Dzulhijjah akan mencakup 2 tahun Masehi biasanya
-            const mStartYear = cursorDate.getFullYear();
-            // Estimasi akhir tahun (tambah 354 hari)
-            const estimEnd = new Date(cursorDate);
-            estimEnd.setDate(estimEnd.getDate() + 354);
-            const mEndYear = estimEnd.getFullYear();
-            const masehiRange = mStartYear === mEndYear ? mStartYear.toString() : `${mStartYear} - ${mEndYear}`;
-
-            // 3. Generate 12 Bulan Hijriah
-            for (let i = 0; i < 12; i++) {
-                const currentMonthStart = new Date(cursorDate);
-                const hStart = getHijriDate(currentMonthStart, hijriAdjustment);
-                const targetMonthName = hStart.month;
-
-                const days: (Date | null)[] = [];
-                // Padding awal
-                const firstDayIndex = currentMonthStart.getDay();
-                for (let j = 0; j < firstDayIndex; j++) days.push(null);
-
-                const currentMonthDays: Date[] = [];
-                let tempD = new Date(currentMonthStart);
+            // Hijriah Logic
+            // If custom range is provided in Hijri mode, we need to map those Hijri months to Masehi dates
+            // For now, if no custom range, use the existing 1 full Hijri year logic
+            if (startYear !== undefined && startMonth !== undefined && endYear !== undefined && endMonth !== undefined) {
+                // Custom Hijri Range
+                // We need to find the Masehi start date for the first Hijri month
+                let currHM = startMonth;
+                let currHY = startYear;
                 
-                // Loop hari dalam bulan Hijriah ini
-                // Loop sampai bulan berubah
-                while (true) {
-                    const hCheck = getHijriDate(tempD, hijriAdjustment);
-                    if (hCheck.month !== targetMonthName) break;
-                    
-                    currentMonthDays.push(new Date(tempD));
-                    days.push(new Date(tempD));
-                    tempD.setDate(tempD.getDate() + 1);
-                    
-                    // Safety break loop infinite
-                    if (currentMonthDays.length > 32) break; 
+                // Find Masehi start for first month
+                // Hijri year 1 is approx 622 AD. Hijri year H is approx H * 0.97 + 622 AD.
+                let estimatedYear = Math.floor(currHY * 0.97 + 621);
+                let cursorDate = new Date(estimatedYear, 0, 1);
+                
+                // Refine cursor to find the exact start of the Hijri month
+                let found = false;
+                for(let k=0; k<1000; k++) {
+                    const h = getHijriDate(cursorDate, hijriAdjustment);
+                    if (parseInt(h.year) === currHY && h.monthIndex === currHM && h.day === '1') {
+                        found = true;
+                        break;
+                    }
+                    cursorDate.setDate(cursorDate.getDate() + 1);
                 }
 
-                // Sub Title (Rentang Masehi)
-                const mStart = currentMonthDays[0];
-                const mEnd = currentMonthDays[currentMonthDays.length - 1];
-                const mStartName = mStart.toLocaleString('id-ID', { month: 'long' });
-                const mEndName = mEnd.toLocaleString('id-ID', { month: 'long' });
-                const mYearStr = mStart.getFullYear() === mEnd.getFullYear() ? mStart.getFullYear() : `${mStart.getFullYear()}/${mEnd.getFullYear()}`;
-                
-                const titleMain = `${hStart.month}`.toUpperCase(); // Nama Bulan Hijriah
-                const masehiHeader = mStartName === mEndName ? mStartName : `${mStartName} - ${mEndName}`;
-                const titleSub = `${masehiHeader} ${mYearStr}`.toUpperCase();
+                // If not found, try searching backwards a bit
+                if (!found) {
+                    cursorDate = new Date(estimatedYear, 0, 1);
+                    for(let k=0; k<1000; k++) {
+                        cursorDate.setDate(cursorDate.getDate() - 1);
+                        const h = getHijriDate(cursorDate, hijriAdjustment);
+                        if (parseInt(h.year) === currHY && h.monthIndex === currHM && h.day === '1') {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
 
-                results.push({ 
-                    index: i, 
-                    days, 
-                    titleMain, 
-                    titleSub, 
-                    start: mStart, 
-                    end: mEnd,
-                    yearLabel: `${targetHijriYear} H`,
-                    secondaryYearLabel: `PERIODE MASEHI ${masehiRange}`
-                });
+                const mStartYear = cursorDate.getFullYear();
 
-                // Siapkan cursor untuk bulan berikutnya
-                cursorDate = new Date(tempD);
+                let idx = 0;
+                const tempResults: MonthData[] = [];
+                while (currHY < endYear || (currHY === endYear && currHM <= endMonth)) {
+                    const currentMonthStart = new Date(cursorDate);
+                    const hStart = getHijriDate(currentMonthStart, hijriAdjustment);
+                    const targetMonthName = hStart.month;
+
+                    const days: (Date | null)[] = [];
+                    const firstDayIndex = currentMonthStart.getDay();
+                    for (let j = 0; j < firstDayIndex; j++) days.push(null);
+
+                    const currentMonthDays: Date[] = [];
+                    let tempD = new Date(currentMonthStart);
+                    while (true) {
+                        const hCheck = getHijriDate(tempD, hijriAdjustment);
+                        if (hCheck.month !== targetMonthName) break;
+                        currentMonthDays.push(new Date(tempD));
+                        days.push(new Date(tempD));
+                        tempD.setDate(tempD.getDate() + 1);
+                        if (currentMonthDays.length > 32) break; 
+                    }
+
+                    const mStart = currentMonthDays[0];
+                    const mEnd = currentMonthDays[currentMonthDays.length - 1];
+                    const mStartName = mStart.toLocaleString('id-ID', { month: 'long' });
+                    const mEndName = mEnd.toLocaleString('id-ID', { month: 'long' });
+                    const mYearStr = mStart.getFullYear() === mEnd.getFullYear() ? mStart.getFullYear() : `${mStart.getFullYear()}/${mEnd.getFullYear()}`;
+                    
+                    const titleMain = `${hStart.month}`.toUpperCase();
+                    const masehiHeader = mStartName === mEndName ? mStartName : `${mStartName} - ${mEndName}`;
+                    const titleSub = `${masehiHeader} ${mYearStr}`.toUpperCase();
+
+                    tempResults.push({ 
+                        index: idx++, days, titleMain, titleSub, start: mStart, end: mEnd,
+                        yearLabel: `${startYear === endYear ? startYear : startYear + '-' + endYear} H`,
+                        secondaryYearLabel: '' // Will be filled after loop
+                    });
+
+                    cursorDate = new Date(tempD);
+                    currHM++;
+                    if (currHM > 11) {
+                        currHM = 0;
+                        currHY++;
+                    }
+                }
+
+                // Calculate Masehi Range for the whole results
+                if (tempResults.length > 0) {
+                    const firstM = tempResults[0];
+                    const lastM = tempResults[tempResults.length - 1];
+                    const mStartYearRange = firstM.start.getFullYear();
+                    const mEndYearRange = lastM.end.getFullYear();
+                    const masehiRange = mStartYearRange === mEndYearRange ? mStartYearRange.toString() : `${mStartYearRange} - ${mEndYearRange}`;
+                    
+                    tempResults.forEach(res => {
+                        res.secondaryYearLabel = `PERIODE MASEHI ${masehiRange}`;
+                        results.push(res);
+                    });
+                }
+            } else {
+                // Existing 1 Full Hijri Year logic
+                const refDate = new Date(year, 0, 1);
+                const refHijri = getHijriDate(refDate, hijriAdjustment);
+                const targetHijriYear = parseInt(refHijri.year);
+
+                let cursorDate = new Date(refDate);
+                let foundStart = false;
+                for(let k=0; k<360; k++) {
+                    const h = getHijriDate(cursorDate, hijriAdjustment);
+                    if (h.month === 'Muharram' && h.day === '1' && parseInt(h.year) === targetHijriYear) {
+                        foundStart = true;
+                        break;
+                    }
+                    if (parseInt(h.year) < targetHijriYear) {
+                        cursorDate.setDate(cursorDate.getDate() + 2);
+                        break; 
+                    }
+                    cursorDate.setDate(cursorDate.getDate() - 1);
+                }
+
+                const mStartYear = cursorDate.getFullYear();
+                const estimEnd = new Date(cursorDate);
+                estimEnd.setDate(estimEnd.getDate() + 354);
+                const mEndYear = estimEnd.getFullYear();
+                const masehiRange = mStartYear === mEndYear ? mStartYear.toString() : `${mStartYear} - ${mEndYear}`;
+
+                for (let i = 0; i < 12; i++) {
+                    const currentMonthStart = new Date(cursorDate);
+                    const hStart = getHijriDate(currentMonthStart, hijriAdjustment);
+                    const targetMonthName = hStart.month;
+
+                    const days: (Date | null)[] = [];
+                    const firstDayIndex = currentMonthStart.getDay();
+                    for (let j = 0; j < firstDayIndex; j++) days.push(null);
+
+                    const currentMonthDays: Date[] = [];
+                    let tempD = new Date(currentMonthStart);
+                    while (true) {
+                        const hCheck = getHijriDate(tempD, hijriAdjustment);
+                        if (hCheck.month !== targetMonthName) break;
+                        currentMonthDays.push(new Date(tempD));
+                        days.push(new Date(tempD));
+                        tempD.setDate(tempD.getDate() + 1);
+                        if (currentMonthDays.length > 32) break; 
+                    }
+
+                    const mStart = currentMonthDays[0];
+                    const mEnd = currentMonthDays[currentMonthDays.length - 1];
+                    const mStartName = mStart.toLocaleString('id-ID', { month: 'long' });
+                    const mEndName = mEnd.toLocaleString('id-ID', { month: 'long' });
+                    const mYearStr = mStart.getFullYear() === mEnd.getFullYear() ? mStart.getFullYear() : `${mStart.getFullYear()}/${mEnd.getFullYear()}`;
+                    
+                    const titleMain = `${hStart.month}`.toUpperCase();
+                    const masehiHeader = mStartName === mEndName ? mStartName : `${mStartName} - ${mEndName}`;
+                    const titleSub = `${masehiHeader} ${mYearStr}`.toUpperCase();
+
+                    results.push({ 
+                        index: i, days, titleMain, titleSub, start: mStart, end: mEnd,
+                        yearLabel: `${targetHijriYear} H`,
+                        secondaryYearLabel: `PERIODE MASEHI ${masehiRange}`
+                    });
+                    cursorDate = new Date(tempD);
+                }
             }
         }
         return results;
-    }, [year, primarySystem, hijriAdjustment]);
+    }, [year, startMonth, startYear, endMonth, endYear, primarySystem, hijriAdjustment]);
 
 
     // Calculate chunks based on layout
-    const chunks: MonthData[][] = [];
-    if (layout === '1_sheet') chunks.push(monthsData);
-    else if (layout === '3_sheets') {
-        chunks.push(monthsData.slice(0, 4));
-        chunks.push(monthsData.slice(4, 8));
-        chunks.push(monthsData.slice(8, 12));
-    } else { // 4_sheets
-        chunks.push(monthsData.slice(0, 3));
-        chunks.push(monthsData.slice(3, 6));
-        chunks.push(monthsData.slice(6, 9));
-        chunks.push(monthsData.slice(9, 12));
-    }
+    const chunks: MonthData[][] = useMemo(() => {
+        const results: MonthData[][] = [];
+        if (monthsData.length === 0) return [];
+
+        if (layout === '1_sheet') {
+            // Chunk by 12 months
+            for (let i = 0; i < monthsData.length; i += 12) {
+                results.push(monthsData.slice(i, i + 12));
+            }
+        } else if (layout === '3_sheets') {
+            for (let i = 0; i < monthsData.length; i += 4) {
+                results.push(monthsData.slice(i, i + 4));
+            }
+        } else if (layout === '4_sheets') {
+            for (let i = 0; i < monthsData.length; i += 3) {
+                results.push(monthsData.slice(i, i + 3));
+            }
+        } else {
+            // Default 1 month per page
+            for (let i = 0; i < monthsData.length; i++) {
+                results.push([monthsData[i]]);
+            }
+        }
+        return results;
+    }, [monthsData, layout]);
 
     const getGridClass = () => {
         if (layout === '1_sheet') return "grid grid-cols-3 gap-4 text-[8px]"; // Compact
@@ -330,11 +445,10 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                                     <div className={`grid grid-cols-7 text-center py-2 font-bold ${currentTheme.dayHeader} items-center border-b ${currentTheme.border}`}>
                                         {dayNames.map(d => <div key={d} className="flex items-center justify-center h-full leading-none">{d}</div>)}
                                     </div>
-                                    <div className="grid grid-cols-7 text-center flex-grow">
+                                    <div className="grid grid-cols-7 text-center flex-grow border-l border-t" style={{ borderColor: currentTheme.border.replace('border-', '#') }}>
                                         {monthData.days.map((date, idx) => {
                                             if (!date) {
-                                                const isLastColumn = idx % 7 === 6;
-                                                return <div key={idx} className={`p-1 ${isLastColumn ? '' : 'border-r'} ${currentTheme.border} opacity-0`}></div>;
+                                                return <div key={idx} className="p-1 border-r border-b bg-gray-50/30" style={{ borderColor: currentTheme.border.replace('border-', '#') }}></div>;
                                             }
                                             const hijri = getHijriDate(date, hijriAdjustment);
                                             
@@ -357,11 +471,9 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                                             let textColor = isSunday ? 'text-red-600' : 'inherit';
 
                                             const cellMinHeight = layout === '1_sheet' ? 'min-h-[28px]' : 'min-h-[35px]';
-                                            const isLastColumn = idx % 7 === 6;
-                                            const isLastRow = idx >= monthData.days.length - 7;
 
                                             return (
-                                                <div key={idx} className={`p-1 ${!isLastColumn ? 'border-r' : ''} ${!isLastRow ? 'border-b' : ''} ${currentTheme.border} relative h-full ${cellMinHeight} flex flex-col items-center justify-start transition-colors`}>
+                                                <div key={idx} className={`p-1 border-r border-b relative h-full ${cellMinHeight} flex flex-col items-center justify-start transition-colors`} style={{ borderColor: currentTheme.border.replace('border-', '#') }}>
                                                     <div className="flex justify-between w-full px-0.5 mb-1">
                                                         {/* Primary Number (Always Large) */}
                                                         <span className={`z-10 relative ${textColor} text-xs font-bold leading-none`}>
@@ -394,21 +506,25 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                     </div>
 
                     {/* Footer / Legend */}
-                    <div className={`mt-4 pt-4 border-t text-xs relative z-10 bg-white/80 backdrop-blur-sm rounded-lg p-2 ${layout === '1_sheet' ? 'max-h-[120px] overflow-hidden' : ''}`}>
-                        <h4 className="font-bold mb-1">Agenda Penting Periode Ini:</h4>
-                        <ul className={`grid ${layout === '1_sheet' ? 'grid-cols-3' : 'grid-cols-2'} gap-x-4 gap-y-1`}>
+                    <div className={`mt-auto pt-4 border-t text-xs relative z-10 bg-white/80 backdrop-blur-sm rounded-lg p-3 ${layout === '1_sheet' ? 'max-h-[150px]' : ''}`}>
+                        <h4 className="font-bold mb-2 text-sm border-b pb-1">Agenda Penting Periode Ini:</h4>
+                        <div className={`grid ${layout === '1_sheet' ? 'grid-cols-3' : 'grid-cols-2'} gap-x-6 gap-y-2`}>
                              {events.filter(e => {
                                  const start = new Date(e.startDate);
-                                 // Simple approximate filter for legend to avoid showing too many
                                  return start >= chunk[0].start && start <= chunk[chunk.length-1].end;
-                             }).slice(0, layout === '1_sheet' ? 15 : 10).map(e => ( 
-                                 <li key={e.id} className="flex items-center gap-2 truncate text-[9px]">
-                                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${e.color.startsWith('#') ? '' : e.color}`} style={e.color.startsWith('#') ? { backgroundColor: e.color } : {}}></span>
-                                     <span className="font-mono text-[8px] opacity-70">{formatDate(e.startDate).split(' ')[0]}</span>
-                                     <span className="truncate">{e.title}</span>
-                                 </li>
+                             }).slice(0, layout === '1_sheet' ? 18 : 12).map(e => ( 
+                                 <div key={e.id} className="flex items-start gap-2 text-[10px] leading-tight">
+                                     <div 
+                                        className={`w-2.5 h-2.5 rounded-full shrink-0 mt-0.5 border border-black/10 ${e.color.startsWith('#') ? '' : e.color}`} 
+                                        style={e.color.startsWith('#') ? { backgroundColor: e.color } : {}}
+                                     ></div>
+                                     <div className="flex flex-col overflow-hidden">
+                                        <span className="font-mono text-[9px] font-bold text-gray-500 leading-none mb-0.5">{formatDate(e.startDate).split(' ')[0]}</span>
+                                        <span className="truncate font-semibold text-gray-900 leading-tight">{e.title}</span>
+                                     </div>
+                                 </div>
                              ))}
-                        </ul>
+                        </div>
                     </div>
                     
                     {/* App Footer */}

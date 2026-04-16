@@ -169,7 +169,7 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
     styles += `
     <style>
         @media print {
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; }
             @page { margin: 0; size: A4 portrait; }
             .printable-content-wrapper { 
                 width: 21cm !important; 
@@ -178,15 +178,18 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
                 transform: none !important; 
                 margin: 0 auto !important; 
                 box-shadow: none !important; 
-                page-break-after: always;
-                page-break-inside: avoid;
+                page-break-after: always !important;
+                page-break-inside: avoid !important;
                 overflow: hidden !important;
+                display: flex !important;
+                flex-direction: column !important;
+                background-color: white !important;
             }
             /* Reset shadows for print */
             .shadow-lg, .shadow-md, .shadow-xl { box-shadow: none !important; }
+            * { transition: none !important; }
         }
         body { background-color: white; margin: 0; padding: 0; }
-        /* Ensure grid/flex layouts work inside the iframe context */
         .printable-content-wrapper { transform: none !important; margin: 0 auto; }
     </style>`;
 
@@ -208,6 +211,14 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
                         window.print();
                     }, 1000);
                 };
+                // Fallback if onload takes too long
+                setTimeout(() => {
+                    if (!window.printCalled) {
+                        window.focus();
+                        window.print();
+                        window.printCalled = true;
+                    }
+                }, 5000);
             </script>
         </body>
         </html>

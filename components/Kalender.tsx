@@ -137,18 +137,39 @@ interface PrintModalProps {
     onClose: () => void;
     onPrint: (theme: any, layout: any, primarySystem: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => void;
     onExportPdf: (theme: any, layout: any, primarySystem: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => void;
+    onExportPdfTable: (options: any, mode?: 'print' | 'pdf') => void;
     settings: PondokSettings;
     events: CalendarEvent[];
     year: number;
 }
 
-const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExportPdf, settings, events, year }) => {
+const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExportPdf, onExportPdfTable, settings, events, year }) => {
     const [theme, setTheme] = useState<'classic' | 'modern' | 'bold' | 'dark' | 'ceria'>('classic');
     const [layout, setLayout] = useState<'1_sheet' | '3_sheets' | '4_sheets'>('1_sheet');
     const [primarySystem, setPrimarySystem] = useState<'Masehi' | 'Hijriah'>('Masehi');
     const [showKop, setShowKop] = useState(true);
-    const [activeTab, setActiveTab] = useState<'settings' | 'theme' | 'images'>('settings');
+    const [activeTab, setActiveTab] = useState<'settings' | 'theme' | 'images' | 'range'>('settings');
     const [zoomScale, setZoomScale] = useState(0.4);
+
+    // Range State
+    const [startMonth, setStartMonth] = useState(0);
+    const [startYear, setStartYear] = useState(year);
+    const [endMonth, setEndMonth] = useState(11);
+    const [endYear, setEndYear] = useState(year);
+
+    // Sync years when system changes
+    useEffect(() => {
+        if (primarySystem === 'Hijriah') {
+            const h = getHijriDate(new Date(), settings.hijriAdjustment || 0);
+            const hYear = parseInt(h.year);
+            setStartYear(hYear);
+            setEndYear(hYear);
+        } else {
+            const mYear = new Date().getFullYear();
+            setStartYear(mYear);
+            setEndYear(mYear);
+        }
+    }, [primarySystem, settings.hijriAdjustment]);
 
     // Image State
     const [customImage, setCustomImage] = useState<string>('');
@@ -174,7 +195,7 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
     const TabButton = ({ id, label, icon }: { id: string, label: string, icon: string }) => (
         <button
             onClick={() => setActiveTab(id as any)}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 transition-colors ${activeTab === id ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
+            className={`flex-shrink-0 px-6 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 transition-colors ${activeTab === id ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
         >
             <i className={`bi ${icon}`}></i> {label}
         </button>
@@ -194,10 +215,11 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
                 <div className="flex flex-col lg:flex-row h-full overflow-hidden">
                     {/* Left: Configuration Panel */}
                     <div className="w-full lg:w-1/3 border-r flex flex-col bg-white">
-                        <div className="flex border-b">
+                        <div className="flex border-b overflow-x-auto no-scrollbar">
                             <TabButton id="settings" label="Pengaturan" icon="bi-sliders" />
                             <TabButton id="theme" label="Tampilan" icon="bi-palette" />
                             <TabButton id="images" label="Gambar" icon="bi-image" />
+                            <TabButton id="range" label="Rentang PDF" icon="bi-calendar-range" />
                         </div>
                         
                         <div className="p-6 overflow-y-auto flex-grow space-y-6">
@@ -308,6 +330,102 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
                                     )}
                                 </div>
                             )}
+
+                            {activeTab === 'range' && (
+                                <div className="space-y-5 animate-fade-in">
+                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <h4 className="text-sm font-bold text-blue-800 mb-2">Cetak Rentang Custom (Vector Mode)</h4>
+                                        <p className="text-xs text-blue-700 mb-4">Gunakan fitur ini untuk mencetak kalender dengan rentang bulan tertentu secara akurat dan tajam (Vector).</p>
+                                        
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-2">Sistem Acuan Rentang</label>
+                                                <div className="flex bg-white p-1 rounded-lg border">
+                                                    <button onClick={() => setPrimarySystem('Masehi')} className={`flex-1 py-1.5 text-xs font-bold rounded ${primarySystem === 'Masehi' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Masehi</button>
+                                                    <button onClick={() => setPrimarySystem('Hijriah')} className={`flex-1 py-1.5 text-xs font-bold rounded ${primarySystem === 'Hijriah' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Hijriah</button>
+                                                </div>
+                                            </div>
+
+                                            {primarySystem === 'Masehi' ? (
+                                                <>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Mulai</label>
+                                                            <select value={startMonth} onChange={e => setStartMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                                {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Mulai</label>
+                                                            <input type="number" value={startYear} onChange={e => setStartYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Selesai</label>
+                                                            <select value={endMonth} onChange={e => setEndMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                                {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Selesai</label>
+                                                            <input type="number" value={endYear} onChange={e => setEndYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Hijriah Mulai</label>
+                                                            <select value={startMonth} onChange={e => setStartMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                                {["Muharram", "Safar", "Rabi'ul Awwal", "Rabi'ul Akhir", "Jumadil Ula", "Jumadil Akhira", "Rajab", "Sya'ban", "Ramadhan", "Syawwal", "Dzulqa'dah", "Dzulhijjah"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Hijriah Mulai</label>
+                                                            <input type="number" value={startYear} onChange={e => setStartYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Hijriah Selesai</label>
+                                                            <select value={endMonth} onChange={e => setEndMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                                {["Muharram", "Safar", "Rabi'ul Awwal", "Rabi'ul Akhir", "Jumadil Ula", "Jumadil Akhira", "Rajab", "Sya'ban", "Ramadhan", "Syawwal", "Dzulqa'dah", "Dzulhijjah"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Hijriah Selesai</label>
+                                                            <input type="number" value={endYear} onChange={e => setEndYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button 
+                                                    onClick={() => onExportPdfTable({
+                                                        startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
+                                                    }, 'print')}
+                                                    className="py-3 bg-blue-600 text-white rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <i className="bi bi-printer-fill"></i> Cetak
+                                                </button>
+                                                <button 
+                                                    onClick={() => onExportPdfTable({
+                                                        startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
+                                                    }, 'pdf')}
+                                                    className="py-3 bg-red-600 text-white rounded-lg font-bold shadow-md hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <i className="bi bi-file-earmark-pdf-fill"></i> PDF
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="p-4 border-t bg-gray-50 flex flex-col gap-2">
@@ -349,6 +467,10 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
                                     showKop={showKop}
                                     customImage={customImage}
                                     imagePosition={imagePosition}
+                                    startMonth={startMonth}
+                                    startYear={startYear}
+                                    endMonth={endMonth}
+                                    endYear={endYear}
                                 />
                             </div>
                         </div>
@@ -647,7 +769,11 @@ const Kalender: React.FC = () => {
         primarySystem: 'Masehi' | 'Hijriah',
         showKop: boolean,
         customImage?: string,
-        imagePosition?: 'banner' | 'watermark' | 'none'
+        imagePosition?: 'banner' | 'watermark' | 'none',
+        startMonth?: number,
+        startYear?: number,
+        endMonth?: number,
+        endYear?: number
     } | null>(null);
 
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.kalender === 'write';
@@ -826,9 +952,10 @@ const Kalender: React.FC = () => {
     const handlePrintRequest = (theme: any, layout: any, system: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => {
         setPrintConfig({ theme, layout, primarySystem: system, showKop, customImage, imagePosition });
         setIsPrintModalOpen(false);
+        // Longer timeout to ensure React has finished rendering the print area
         setTimeout(() => {
             printToPdfNative('calendar-print-area', `Kalender_Akademik_${anchorDate.getFullYear()}`);
-        }, 500);
+        }, 1000);
     };
 
     const handleExportPdfRequest = (theme: any, layout: any, system: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => {
@@ -840,6 +967,32 @@ const Kalender: React.FC = () => {
                 paperSize: 'A4'
             });
         }, 1000);
+    };
+
+    const handleExportPdfTableRequest = (options: any, mode: 'print' | 'pdf' = 'print') => {
+        setPrintConfig({ 
+            theme: options.theme, 
+            layout: options.layout, 
+            primarySystem: options.primarySystem, 
+            showKop: options.showKop,
+            startMonth: options.startMonth,
+            startYear: options.startYear,
+            endMonth: options.endMonth,
+            endYear: options.endYear,
+            customImage: options.customImage,
+            imagePosition: options.imagePosition
+        });
+        setIsPrintModalOpen(false);
+        setTimeout(() => {
+            if (mode === 'pdf') {
+                generatePdf('calendar-print-area', {
+                    fileName: `Kalender_Akademik_Custom.pdf`,
+                    paperSize: 'A4'
+                });
+            } else {
+                printToPdfNative('calendar-print-area', `Kalender_Akademik_Custom`);
+            }
+        }, 1500);
     };
 
     const renderCalendarGrid = () => {
@@ -1072,6 +1225,7 @@ const Kalender: React.FC = () => {
                 onClose={() => setIsPrintModalOpen(false)} 
                 onPrint={handlePrintRequest}
                 onExportPdf={handleExportPdfRequest}
+                onExportPdfTable={handleExportPdfTableRequest}
                 settings={settings}
                 events={events}
                 year={anchorDate.getFullYear()}
@@ -1083,6 +1237,10 @@ const Kalender: React.FC = () => {
                     <div id="calendar-print-area" className="bg-white">
                         <CalendarPrintTemplate 
                             year={anchorDate.getFullYear()} 
+                            startMonth={printConfig.startMonth}
+                            startYear={printConfig.startYear}
+                            endMonth={printConfig.endMonth}
+                            endYear={printConfig.endYear}
                             events={events} 
                             settings={settings} 
                             theme={printConfig.theme}
@@ -1101,6 +1259,10 @@ const Kalender: React.FC = () => {
                 {printConfig && (
                     <CalendarPrintTemplate 
                         year={anchorDate.getFullYear()} 
+                        startMonth={printConfig.startMonth}
+                        startYear={printConfig.startYear}
+                        endMonth={printConfig.endMonth}
+                        endYear={printConfig.endYear}
                         events={events} 
                         settings={settings} 
                         theme={printConfig.theme}

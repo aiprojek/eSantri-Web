@@ -60,6 +60,7 @@ export const FEATURE_DATA: FeatureCategory[] = [
         color: 'text-purple-600',
         icon: 'bi-cpu-fill',
         items: [
+            { icon: 'bi-cloud-check-fill', title: 'Firebase Cloud Database', desc: 'Penyimpanan data aman di cloud dengan sinkronisasi real-time.' },
             { icon: 'bi-cloud-arrow-up-fill', title: 'Cloud Sync (Hub & Spoke)', desc: 'Sinkronisasi data antar Admin dan Staff menggunakan Dropbox/WebDAV dengan sistem Pairing Code.' },
             { icon: 'bi-file-earmark-person-fill', title: 'PSB Online', desc: 'Formulir pendaftaran custom, integrasi WhatsApp, dan Google Sheet.' },
             { icon: 'bi-envelope-paper-fill', title: 'Surat Menyurat', desc: 'Buat surat massal dengan placeholder otomatis dan arsip digital.' },

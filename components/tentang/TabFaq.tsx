@@ -97,19 +97,44 @@ export const TabFaq: React.FC = () => {
             </div>
 
             <div className="flex flex-col lg:flex-row gap-8">
-                {/* Left: Category Navigation (Hidden when searching to allow full list) */}
+                {/* Mobile Dropdown - Visible only on small screens */}
                 {!searchTerm && (
-                    <div className="w-full lg:w-64 flex-shrink-0">
+                    <div className="block lg:hidden mb-6">
+                        <label htmlFor="faq-category-selector" className="block text-sm font-semibold text-gray-700 mb-2">Pilih Kategori Pertanyaan:</label>
+                        <div className="relative">
+                            <select 
+                                id="faq-category-selector"
+                                value={activeCategory}
+                                onChange={(e) => setActiveCategory(e.target.value)}
+                                className="w-full pl-10 pr-10 py-3 bg-white border border-gray-300 rounded-xl shadow-sm appearance-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-medium text-gray-700"
+                            >
+                                {faqData.map(cat => (
+                                    <option key={cat.title} value={cat.title}>{cat.title}</option>
+                                ))}
+                            </select>
+                            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-teal-600">
+                                <i className={`bi ${faqData.find(c => c.title === activeCategory)?.icon || 'bi-question-circle'}`}></i>
+                            </div>
+                            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                                <i className="bi bi-chevron-down"></i>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Left: Category Navigation (Hidden on mobile and when searching) */}
+                {!searchTerm && (
+                    <div className="hidden lg:block w-full lg:w-64 flex-shrink-0">
                         <div className="lg:sticky lg:top-4 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
                             <div className="p-3 bg-gray-50 border-b border-gray-200 font-bold text-gray-700 text-xs uppercase tracking-wide">
                                 Kategori Topik
                             </div>
-                            <div className="p-2 flex flex-row lg:flex-col overflow-x-auto lg:overflow-visible gap-1 custom-scrollbar">
+                            <div className="p-2 flex flex-col gap-1">
                                 {faqData.map((cat) => (
                                     <button
                                         key={cat.title}
                                         onClick={() => setActiveCategory(cat.title)}
-                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all whitespace-nowrap lg:whitespace-normal text-left ${activeCategory === cat.title ? `bg-teal-50 text-teal-700 font-semibold ring-1 ring-teal-200` : 'text-gray-600 hover:bg-gray-50'}`}
+                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all text-left ${activeCategory === cat.title ? `bg-teal-50 text-teal-700 font-semibold ring-1 ring-teal-200` : 'text-gray-600 hover:bg-gray-50'}`}
                                     >
                                         <i className={`bi ${cat.icon} ${activeCategory === cat.title ? 'text-teal-600' : 'text-gray-400'}`}></i>
                                         <span>{cat.title}</span>

@@ -52,25 +52,15 @@ const PanduanLangkah: React.FC<{ number: number; title: string; children: React.
 export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initialSection }) => {
     const { showConfirmation, onDeleteSampleData, showToast } = useAppContext();
     const [sampleDataDeleted, setSampleDataDeleted] = useState(false);
-    const [openSectionId, setOpenSectionId] = useState<string | null>('setup'); // Default open first section
-
-    const toggleSection = (id: string) => {
-        setOpenSectionId(prev => prev === id ? null : id);
-    };
+    const [activeSectionId, setActiveSectionId] = useState<string>('setup'); // Default active section
 
     const handleTocClick = (id: string) => {
-        setOpenSectionId(id);
-        setTimeout(() => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }, 100);
+        setActiveSectionId(id);
     };
 
     useEffect(() => {
-        if (initialSection) {
-            handleTocClick(initialSection);
+        if (initialSection && panduanData.some(s => s.id === initialSection)) {
+            setActiveSectionId(initialSection);
         }
     }, [initialSection]);
 
@@ -113,8 +103,7 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
          return map[color] || 'bg-teal-600';
     };
 
-    // Helper untuk menghitung nomor urut langkah secara kumulatif
-    let cumulativeStepCount = 0;
+    const activeSection = panduanData.find(s => s.id === activeSectionId) || panduanData[0];
 
     return (
         <div className="text-left">
@@ -137,10 +126,30 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                 </div>
             )}
 
+            {/* --- MOBILE DROPDOWN --- */}
+            <div className="block lg:hidden mb-6">
+                <label htmlFor="panduan-selector" className="block text-sm font-semibold text-gray-700 mb-2">Pilih Topik Panduan:</label>
+                <div className="relative">
+                    <select 
+                        id="panduan-selector"
+                        value={activeSectionId}
+                        onChange={(e) => setActiveSectionId(e.target.value)}
+                        className="w-full pl-4 pr-10 py-3 bg-white border border-gray-300 rounded-xl shadow-sm appearance-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-medium text-gray-700"
+                    >
+                        {panduanData.map(s => (
+                            <option key={s.id} value={s.id}>{s.title}</option>
+                        ))}
+                    </select>
+                    <div className="absolute right-4 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                        <i className="bi bi-chevron-down"></i>
+                    </div>
+                </div>
+            </div>
+
             <div className="flex flex-col lg:flex-row gap-8 items-start">
                 
                 {/* --- TABLE OF CONTENTS (Sticky Sidebar) --- */}
-                <nav className="w-full lg:w-64 lg:sticky lg:top-4 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden shrink-0 order-1 lg:order-1">
+                <nav className="hidden lg:block w-full lg:w-64 lg:sticky lg:top-4 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden shrink-0 order-1 lg:order-1">
                     <div className="p-4 bg-gray-50 border-b border-gray-200">
                         <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Daftar Isi</h3>
                     </div>
@@ -149,84 +158,71 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                             <li key={section.id}>
                                 <button 
                                     onClick={() => handleTocClick(section.id)}
-                                    className={`w-full text-left px-4 py-2.5 text-sm border-l-4 transition-all hover:bg-gray-50 flex items-center justify-between group ${openSectionId === section.id ? `border-${section.badgeColor}-500 bg-${section.badgeColor}-50 text-gray-900 font-semibold` : 'border-transparent text-gray-500'}`}
+                                    className={`w-full text-left px-4 py-2.5 text-sm border-l-4 transition-all hover:bg-gray-50 flex items-center justify-between group ${activeSectionId === section.id ? `border-${section.badgeColor}-500 bg-${section.badgeColor}-50 text-gray-900 font-semibold` : 'border-transparent text-gray-500'}`}
                                 >
                                     <span>{section.title}</span>
-                                    {openSectionId === section.id && <i className={`bi bi-chevron-right text-${section.badgeColor}-500`}></i>}
+                                    {activeSectionId === section.id && <i className={`bi bi-chevron-right text-${section.badgeColor}-500`}></i>}
                                 </button>
                             </li>
                         ))}
                     </ul>
                 </nav>
 
-                {/* --- CONTENT (Collapsible Sections) --- */}
-                <div className="flex-1 space-y-4 order-2 lg:order-2 w-full">
-                    {panduanData.map(section => {
-                        const startNumber = cumulativeStepCount;
-                        cumulativeStepCount += section.steps.length;
-                        const isOpen = openSectionId === section.id;
+                {/* --- CONTENT (Selected Section Only) --- */}
+                <div className="flex-1 order-2 lg:order-2 w-full animate-fade-in">
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden transition-all duration-300">
+                        {/* Section Header */}
+                        <div className="p-6 bg-gray-50 border-b border-gray-100 flex items-center gap-4">
+                            <span className={`${getColorClass(activeSection.badgeColor)} text-white w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg transform -rotate-3`}>
+                                {typeof activeSection.badge === 'string' ? <i className="bi bi-info-lg"></i> : activeSection.badge}
+                            </span>
+                            <div>
+                                <h2 className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">{activeSection.title}</h2>
+                                <p className="text-sm text-gray-500 font-medium">Langkah-langkah panduan detail</p>
+                            </div>
+                        </div>
 
-                        return (
-                            <div 
-                                key={section.id} 
-                                id={section.id} 
-                                className={`bg-white rounded-lg border shadow-sm transition-all duration-300 ${isOpen ? 'ring-2 ring-teal-500/20 shadow-md' : 'hover:border-gray-300'}`}
-                            >
-                                {/* Header (Clickable) */}
-                                <button 
-                                    onClick={() => toggleSection(section.id)}
-                                    className="w-full flex items-center justify-between p-4 focus:outline-none"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className={`${getColorClass(section.badgeColor)} text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm`}>
-                                            {typeof section.badge === 'string' ? <i className="bi bi-info-lg"></i> : section.badge}
-                                        </span>
-                                        <h2 className="text-lg font-bold text-gray-800 text-left">{section.title}</h2>
-                                    </div>
-                                    <i className={`bi bi-chevron-down text-gray-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}></i>
-                                </button>
-
-                                {/* Body (Collapsible) */}
-                                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isOpen ? 'max-h-[8000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                                    <div className="p-6 pt-0 border-t border-gray-100">
-                                        <div className="h-4"></div> {/* Spacer */}
-                                        
-                                        {/* Optional Info Boxes */}
-                                        {section.id === 'sop' && (
-                                            <div className="bg-yellow-50 p-3 rounded border border-yellow-200 text-sm mb-6 text-yellow-900 animate-fade-in">
-                                                <i className="bi bi-info-circle-fill mr-2"></i>
-                                                <strong>INFO SINKRONISASI:</strong> Jika menggunakan <strong>Dropbox/WebDAV</strong>, aplikasi ini bersifat <em>Offline-First</em> (perlu kirim/terima manual). 
-                                                Namun jika menggunakan <strong>Firebase</strong>, data akan berubah secara <strong>Real-Time</strong> otomatis.
-                                            </div>
-                                        )}
-                                        
-                                        {section.id === 'absensi' && (
-                                            <div className="bg-teal-50 p-3 rounded mb-4 text-sm text-teal-900 border border-teal-200 flex items-start gap-2 animate-fade-in">
-                                                <i className="bi bi-cloud-check-fill mt-1 text-lg"></i>
-                                                <div>
-                                                    <strong>Rekomendasi Optimal:</strong> Gunakan fitur ini bersama <strong>Sync Cloud</strong> aktif.
-                                                    Ini memungkinkan Guru/Musyrif menggunakan <em>perangkat masing-masing</em> untuk mengabsen (tidak harus di komputer Admin).
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Steps */}
-                                        {section.steps.map((step, idx) => (
-                                            <PanduanLangkah 
-                                                key={idx}
-                                                number={startNumber + idx + 1}
-                                                title={step.title} 
-                                                color={(step as any).color || section.badgeColor}
-                                                isLast={idx === section.steps.length - 1}
-                                            >
-                                                {step.content}
-                                            </PanduanLangkah>
-                                        ))}
+                        {/* Section Body */}
+                        <div className="p-6 md:p-8">
+                            {/* Optional Info Boxes */}
+                            {activeSection.id === 'sop' && (
+                                <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 text-sm mb-8 text-yellow-900 flex gap-3 items-start shadow-sm border-l-4">
+                                    <i className="bi bi-info-circle-fill text-xl text-yellow-500"></i>
+                                    <div>
+                                        <strong className="block mb-1">INFO SINKRONISASI:</strong> 
+                                        Jika menggunakan <strong>Dropbox/WebDAV</strong>, aplikasi ini bersifat <em>Offline-First</em> (perlu kirim/terima manual). 
+                                        Namun jika menggunakan <strong>Firebase</strong>, data akan berubah secara <strong>Real-Time</strong> otomatis.
                                     </div>
                                 </div>
+                            )}
+                            
+                            {activeSection.id === 'absensi' && (
+                                <div className="bg-teal-50 p-4 rounded-xl mb-8 text-sm text-teal-900 border border-teal-200 flex items-start gap-3 shadow-sm border-l-4">
+                                    <i className="bi bi-cloud-check-fill text-xl text-teal-500"></i>
+                                    <div>
+                                        <strong className="block mb-1">REKOMENDASI OPTIMAL:</strong> 
+                                        Gunakan fitur ini bersama <strong>Sync Cloud</strong> aktif.
+                                        Ini memungkinkan Guru/Musyrif menggunakan <em>perangkat masing-masing</em> untuk mengabsen (tidak harus di komputer Admin).
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Steps */}
+                            <div className="space-y-2">
+                                {activeSection.steps.map((step, idx) => (
+                                    <PanduanLangkah 
+                                        key={idx}
+                                        number={idx + 1}
+                                        title={step.title} 
+                                        color={(step as any).color || activeSection.badgeColor}
+                                        isLast={idx === activeSection.steps.length - 1}
+                                    >
+                                        {step.content}
+                                    </PanduanLangkah>
+                                ))}
                             </div>
-                        );
-                    })}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -115,11 +115,11 @@ export const TabLayanan: React.FC = () => {
                     price="Rp 350rb"
                     period="sekali bayar"
                     icon="bi-tools"
-                    description="Kami bantu install aplikasi di komputer/laptop Anda (via Remote/Zoom) dan migrasi data Excel lama ke sistem baru."
+                    description="Kami bantu install aplikasi di komputer/laptop Anda (via Remote/video call) dan migrasi data Excel lama ke sistem baru."
                     features={[
                         "Instalasi di Localhost/Laptop",
                         "Import Data Santri dari Excel",
-                        "Training Penggunaan via Zoom/GMeet",
+                        "Training Penggunaan via Video Call/GMeet",
                         "Setup Logo & Kop Surat",
                         "Konsultasi Kendala Awal"
                     ]}

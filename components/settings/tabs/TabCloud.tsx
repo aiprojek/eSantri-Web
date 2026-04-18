@@ -191,7 +191,8 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     };
 
     const handleOpenDropboxAuth = () => {
-        const appKey = localSettings.cloudSyncConfig.dropboxAppKey;
+        // App Key might be in UI state (localSettings) or saved in DB (settings)
+        const appKey = localSettings.cloudSyncConfig.dropboxAppKey || settings.cloudSyncConfig.dropboxAppKey;
         if (!appKey) {
             showToast('Harap isi App Key terlebih dahulu.', 'error');
             return;
@@ -229,16 +230,6 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             await onSaveSettings({ ...localSettings, cloudSyncConfig: fullyUpdatedConfig });
             setManualAuthCode('');
             
-            // SECURITY: Clear keys from local UI state after successful connection
-            setLocalSettings(prev => ({
-                ...prev,
-                cloudSyncConfig: {
-                    ...prev.cloudSyncConfig,
-                    dropboxAppKey: '',
-                    dropboxAppSecret: ''
-                }
-            }));
-
             showToast('Berhasil terhubung dengan Dropbox! Kredensial telah disembunyikan demi keamanan.', 'success');
         } catch (error) {
             showToast(`Verifikasi Gagal: ${(error as Error).message}`, 'error');
@@ -271,6 +262,12 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     const handleGeneratePairingCode = () => {
         // Use localSettings so it reflects current entries and most recent saves
         const config = localSettings.cloudSyncConfig;
+        
+        // Merge with context settings for sensitive values that might be empty in UI
+        const effectiveAppKey = config.dropboxAppKey || settings.cloudSyncConfig.dropboxAppKey;
+        const effectiveAppSecret = config.dropboxAppSecret || settings.cloudSyncConfig.dropboxAppSecret;
+        const effectiveWebdavPassword = config.webdavPassword || settings.cloudSyncConfig.webdavPassword;
+
         let payloadString = '';
 
         if (config.provider === 'dropbox') {
@@ -278,19 +275,19 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                 showToast('Dropbox belum terhubung. Pastikan status sudah "Terhubung" sebelum membagikan akses.', 'error');
                 return;
             }
-            if (!config.dropboxAppKey || !config.dropboxAppSecret) {
+            if (!effectiveAppKey || !effectiveAppSecret) {
                 showToast('App Key atau App Secret belum diisi. Keduanya wajib ada bagi Admin untuk membagikan akses kepada Staff.', 'error');
                 return;
             }
             // Include REFRESH TOKEN. This allows session cloning.
             payloadString = JSON.stringify({
                 p: 'dropbox',
-                k: config.dropboxAppKey,
-                s: config.dropboxAppSecret,
+                k: effectiveAppKey,
+                s: effectiveAppSecret,
                 r: config.dropboxRefreshToken
             });
         } else if (config.provider === 'webdav') {
-            if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
+            if (!config.webdavUrl || !config.webdavUsername || !effectiveWebdavPassword) {
                 showToast('Konfigurasi WebDAV belum lengkap. Harap isi URL, Username, dan Password.', 'error');
                 return;
             }
@@ -298,7 +295,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                 p: 'webdav',
                 u: config.webdavUrl,
                 n: config.webdavUsername,
-                w: config.webdavPassword
+                w: effectiveWebdavPassword
             });
         } else if (config.provider === 'firebase' && fbUser) {
             payloadString = JSON.stringify({
@@ -712,7 +709,8 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                                 </div>
                             ) : (
                                 <div className="border-t border-blue-200 pt-4">
-                                    {(!localSettings.cloudSyncConfig.dropboxAppKey || !localSettings.cloudSyncConfig.dropboxAppSecret) && (
+                                    {(!(localSettings.cloudSyncConfig.dropboxAppKey || settings.cloudSyncConfig.dropboxAppKey) || 
+                                      !(localSettings.cloudSyncConfig.dropboxAppSecret || settings.cloudSyncConfig.dropboxAppSecret)) && (
                                         <div className="mb-3 p-3 bg-red-50 border border-red-100 rounded text-[11px] text-red-700">
                                             <i className="bi bi-exclamation-triangle-fill mr-1"></i>
                                             <strong>Perhatian:</strong> Karena Anda pengguna lama, kolom <strong>App Key</strong> dan <strong>App Secret</strong> mungkin kosong. Harap isi kembali di atas lalu klik <strong>"Simpan Perubahan"</strong> di bawah agar bisa membagikan Pairing Code.

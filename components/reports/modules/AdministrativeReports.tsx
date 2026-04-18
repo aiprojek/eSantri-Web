@@ -115,7 +115,12 @@ export const DaftarWaliKelasTemplate: React.FC<{ settings: PondokSettings }> = (
             const rombelInKelas = settings.rombel.filter(r => r.kelasId === kelas.id);
             for (const rombel of rombelInKelas) {
                 const wali = settings.tenagaPengajar.find(t => t.id === rombel.waliKelasId);
-                rombelData.push({ kelas: kelas.nama, rombel: rombel.nama, wali: wali ? wali.nama : '-' });
+                rombelData.push({ 
+                    kelas: kelas.nama, 
+                    rombel: rombel.nama, 
+                    wali: wali ? wali.nama : '-',
+                    kontak: wali?.telepon || '-' 
+                });
             }
         }
         return { jenjang: jenjang.nama, rombels: rombelData };
@@ -132,8 +137,26 @@ export const DaftarWaliKelasTemplate: React.FC<{ settings: PondokSettings }> = (
                             <h4 className="font-bold text-lg mb-2 text-gray-800 border-b border-gray-400 pb-1">{group.jenjang}</h4>
                             {group.rombels.length > 0 ? (
                                 <table className="w-full text-left border-collapse border border-black text-sm">
-                                    <thead className="bg-gray-100"><tr><th className="p-2 border border-black w-10 text-center">No</th><th className="p-2 border border-black w-32">Kelas</th><th className="p-2 border border-black w-48">Rombel</th><th className="p-2 border border-black">Nama Wali Kelas</th></tr></thead>
-                                    <tbody>{group.rombels.map((row, rIdx) => (<tr key={rIdx}><td className="p-2 border border-black text-center">{rIdx + 1}</td><td className="p-2 border border-black">{row.kelas}</td><td className="p-2 border border-black">{row.rombel}</td><td className="p-2 border border-black font-semibold">{row.wali}</td></tr>))}</tbody>
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="p-2 border border-black w-10 text-center">No</th>
+                                            <th className="p-2 border border-black w-32">Kelas</th>
+                                            <th className="p-2 border border-black w-48">Rombel</th>
+                                            <th className="p-2 border border-black">Nama Wali Kelas</th>
+                                            <th className="p-2 border border-black w-40 text-center">Kontak/HP</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {group.rombels.map((row, rIdx) => (
+                                            <tr key={rIdx}>
+                                                <td className="p-2 border border-black text-center">{rIdx + 1}</td>
+                                                <td className="p-2 border border-black">{row.kelas}</td>
+                                                <td className="p-2 border border-black">{row.rombel}</td>
+                                                <td className="p-2 border border-black font-semibold">{row.wali}</td>
+                                                <td className="p-2 border border-black text-center font-mono">{row.kontak}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
                                 </table>
                             ) : <p className="text-sm italic text-gray-500 pl-2">Belum ada data rombel.</p>}
                         </div>
@@ -151,7 +174,7 @@ export const LaporanKontakTemplate: React.FC<{ santriList: Santri[], settings: P
         <div>
             <PrintHeader settings={settings} title="LAPORAN KONTAK WALI SANTRI" />
             <table className="w-full text-left border-collapse border border-black text-sm">
-                <thead className="bg-gray-200 uppercase"><tr><th className="p-2 border border-black w-8 text-center">No</th><th className="p-2 border border-black w-24 text-center">NIS</th><th className="p-2 border border-black">Nama Santri</th><th className="p-2 border border-black">Rombel</th><th className="p-2 border border-black">Nama Wali</th><th className="p-2 border border-black text-center">No. HP</th></tr></thead>
+                <thead className="bg-gray-200 uppercase"><tr><th className="p-2 border border-black w-8 text-center">No</th><th className="p-2 border border-black w-24 text-center">NIS</th><th className="p-2 border border-black">Nama Santri</th><th className="p-2 border border-black">Rombel</th><th className="p-2 border border-black">Nama Wali</th><th className="p-2 border border-black text-center">No. HP Wali</th></tr></thead>
                 <tbody>
                     {santriList.map((s, i) => (
                         <tr key={s.id}><td className="p-2 border border-black text-center">{i + 1}</td><td className="p-2 border border-black text-center">{s.nis}</td><td className="p-2 border border-black">{s.namaLengkap}</td><td className="p-2 border border-black">{settings.rombel.find(r => r.id === s.rombelId)?.nama || '-'}</td><td className="p-2 border border-black">{s.namaWali || s.namaAyah}</td><td className="p-2 border border-black text-center font-mono">{s.teleponWali || s.teleponAyah || '-'}</td></tr>
@@ -162,6 +185,99 @@ export const LaporanKontakTemplate: React.FC<{ santriList: Santri[], settings: P
         <ReportFooter />
     </div>
 );
+
+export const LaporanKontakStafTemplate: React.FC<{ settings: PondokSettings }> = ({ settings }) => (
+    <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+        <div>
+            <PrintHeader settings={settings} title="LAPORAN KONTAK TENAGA PENDIDIK & STAF" />
+            <table className="w-full text-left border-collapse border border-black text-sm">
+                <thead className="bg-gray-200 uppercase">
+                    <tr>
+                        <th className="p-2 border border-black w-8 text-center">No</th>
+                        <th className="p-2 border border-black">Nama Lengkap</th>
+                        <th className="p-2 border border-black">Jabatan Terakhir</th>
+                        <th className="p-2 border border-black text-center">No. Telepon/WA</th>
+                        <th className="p-2 border border-black">Email</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {settings.tenagaPengajar.map((t, i) => {
+                        const activeJabatan = t.riwayatJabatan
+                            ?.filter(r => !r.tanggalSelesai)
+                            .sort((a, b) => new Date(b.tanggalMulai).getTime() - new Date(a.tanggalMulai).getTime())[0] 
+                            || t.riwayatJabatan?.[0];
+                        
+                        return (
+                            <tr key={t.id}>
+                                <td className="p-2 border border-black text-center">{i + 1}</td>
+                                <td className="p-2 border border-black font-semibold">{t.nama}</td>
+                                <td className="p-2 border border-black">{activeJabatan?.jabatan || '-'}</td>
+                                <td className="p-2 border border-black text-center font-mono">{t.telepon || '-'}</td>
+                                <td className="p-2 border border-black">{t.email || '-'}</td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+        <ReportFooter />
+    </div>
+);
+
+// --- MATA PELAJARAN ---
+export const LaporanMapelTemplate: React.FC<{ settings: PondokSettings }> = ({ settings }) => {
+    const dataByJenjang = settings.jenjang.map(jenjang => {
+        const mapels = settings.mataPelajaran.filter(m => m.jenjangId === jenjang.id);
+        return { jenjang: jenjang.nama, mapels };
+    });
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="DAFTAR KURIKULUM & MATA PELAJARAN" />
+                <div className="space-y-8 mt-4">
+                    {dataByJenjang.map((group, idx) => (
+                        <div key={idx} style={{ breakInside: 'avoid' }}>
+                            <h4 className="font-bold text-lg mb-2 text-gray-800 border-b-2 border-teal-600 pb-1 flex justify-between items-center">
+                                <span>{group.jenjang}</span>
+                                <span className="text-sm font-normal text-gray-500">Total: {group.mapels.length} Mapel</span>
+                            </h4>
+                            {group.mapels.length > 0 ? (
+                                <table className="w-full text-left border-collapse border border-black text-sm">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="p-2 border border-black w-8 text-center">No</th>
+                                            <th className="p-2 border border-black">Nama Mata Pelajaran</th>
+                                            <th className="p-2 border border-black w-12 text-center">KKM</th>
+                                            <th className="p-2 border border-black">Modul / Kitab</th>
+                                            <th className="p-2 border border-black text-xs">Link (Unduh/Beli)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {group.mapels.map((row, mIdx) => (
+                                            <tr key={mIdx}>
+                                                <td className="p-2 border border-black text-center">{mIdx + 1}</td>
+                                                <td className="p-2 border border-black font-semibold">{row.nama}</td>
+                                                <td className="p-2 border border-black text-center">{row.kkm || '-'}</td>
+                                                <td className="p-2 border border-black">{row.modul || '-'}</td>
+                                                <td className="p-2 border border-black text-[9px] text-gray-600 truncate max-w-[150px]">
+                                                    {row.linkUnduh && <div className="truncate"><i className="bi bi-download mr-1"></i>{row.linkUnduh}</div>}
+                                                    {row.linkPembelian && <div className="truncate"><i className="bi bi-cart mr-1"></i>{row.linkPembelian}</div>}
+                                                    {!row.linkUnduh && !row.linkPembelian && '-'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : <p className="text-sm italic text-gray-500 pl-2">Belum ada data mata pelajaran.</p>}
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
 
 // --- ASRAMA ---
 export const LaporanAsramaTemplate: React.FC<{ settings: PondokSettings; santriList: Santri[]; gedungList: GedungAsrama[]; }> = ({ settings, santriList, gedungList }) => {

@@ -16,7 +16,17 @@ const Settings: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup'>('umum');
 
     useEffect(() => {
-        setLocalSettings(settings);
+        // When settings from context change, update local state
+        // but keep sensitive keys empty in the UI (since they are already in the DB)
+        setLocalSettings({
+            ...settings,
+            cloudSyncConfig: {
+                ...settings.cloudSyncConfig,
+                dropboxAppKey: '',
+                dropboxAppSecret: '',
+                webdavPassword: ''
+            }
+        });
     }, [settings]);
 
     useEffect(() => {
@@ -80,8 +90,34 @@ const Settings: React.FC = () => {
             async () => {
                 setIsSaving(true);
                 try {
-                    await onSaveSettings(localSettings);
-                    showToast('Pengaturan berhasil disimpan!', 'success');
+                    // Smart merge for sensitive cloud keys:
+                    // If the UI version is empty, retain the existing version from DB (settings)
+                    const dataToSave = { ...localSettings };
+                    
+                    if (!dataToSave.cloudSyncConfig.dropboxAppKey && settings.cloudSyncConfig.dropboxAppKey) {
+                        dataToSave.cloudSyncConfig.dropboxAppKey = settings.cloudSyncConfig.dropboxAppKey;
+                    }
+                    if (!dataToSave.cloudSyncConfig.dropboxAppSecret && settings.cloudSyncConfig.dropboxAppSecret) {
+                        dataToSave.cloudSyncConfig.dropboxAppSecret = settings.cloudSyncConfig.dropboxAppSecret;
+                    }
+                    if (!dataToSave.cloudSyncConfig.webdavPassword && settings.cloudSyncConfig.webdavPassword) {
+                        dataToSave.cloudSyncConfig.webdavPassword = settings.cloudSyncConfig.webdavPassword;
+                    }
+
+                    await onSaveSettings(dataToSave);
+                    
+                    // After successful save, clear the keys from local state (UI) for security
+                    setLocalSettings(prev => ({
+                        ...prev,
+                        cloudSyncConfig: {
+                            ...prev.cloudSyncConfig,
+                            dropboxAppKey: '',
+                            dropboxAppSecret: '',
+                            webdavPassword: ''
+                        }
+                    }));
+
+                    showToast('Pengaturan berhasil disimpan! Kredensial disembunyikan demi keamanan.', 'success');
                 } catch (error) {
                     console.error("Failed to save settings:", error);
                     showToast('Gagal menyimpan pengaturan.', 'error');

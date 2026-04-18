@@ -66,7 +66,9 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
                 { id: ReportType.LaporanAsrama, title: 'Data Keasramaan', description: "Penghuni kamar & gedung.", icon: 'bi-building', color: 'text-gray-600' },
                 { id: ReportType.FormulirIzin, title: 'Surat Izin Pulang', description: "Formulir perizinan resmi.", icon: 'bi-box-arrow-right', color: 'text-gray-600' },
                 { id: ReportType.DaftarWaliKelas, title: 'Daftar Wali Kelas', description: "Rekap pengajar wali kelas.", icon: 'bi-person-lines-fill', color: 'text-gray-600' },
-                { id: ReportType.LaporanKontak, title: 'Ekspor Kontak HP', description: "CSV kontak wali untuk HP.", icon: 'bi-phone', color: 'text-green-600' },
+                { id: ReportType.LaporanMapel, title: 'Kurikulum & Mapel', description: "Daftar mata pelajaran & modul.", icon: 'bi-book-half', color: 'text-indigo-600' },
+                { id: ReportType.LaporanKontak, title: 'Ekspor Kontak Wali', description: "CSV kontak wali untuk HP.", icon: 'bi-phone', color: 'text-green-600' },
+                { id: ReportType.LaporanKontakStaf, title: 'Daftar Kontak Staf', description: "List kontak pengajar & staf.", icon: 'bi-person-lines-fill', color: 'text-indigo-600' },
                 { id: ReportType.LembarKedatangan, title: 'Ceklis Kedatangan', description: "Absensi kedatangan liburan.", icon: 'bi-calendar2-check', color: 'text-gray-600' },
             ]
         }

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { TenagaPengajar, RiwayatJabatan } from '../../../types';
+import { TenagaPengajar, RiwayatJabatan, KetersediaanPengajar, Jenjang, Kelas, Rombel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 
 interface TeacherModalProps {
@@ -32,7 +32,10 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
         if (isOpen) {
             setTeacher(item || {
                 nama: '',
+                telepon: '',
+                email: '',
                 riwayatJabatan: [{ id: Date.now(), jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0] }],
+                ketersediaanPengajar: [],
                 hariMasuk: [], 
                 jamMasuk: [],
                 availableRombelIds: [],
@@ -101,7 +104,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
         }
     };
 
-    const handleRiwayatChange = (index: number, field: keyof RiwayatJabatan, value: string) => {
+    const handleRiwayatChange = (index: number, field: keyof RiwayatJabatan, value: any) => {
         const updatedRiwayat = [...(teacher.riwayatJabatan || [])];
         updatedRiwayat[index] = { ...updatedRiwayat[index], [field]: value };
         handleTeacherChange('riwayatJabatan', updatedRiwayat);
@@ -121,21 +124,57 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
         handleTeacherChange('riwayatJabatan', updatedRiwayat);
     }
 
+    // --- NEW KETERSEDIAAN LOGIC ---
+    const addKetersediaan = () => {
+        const newKet: KetersediaanPengajar = {
+            id: Date.now(),
+            jenjangId: 0,
+            kelasId: 0,
+            rombelId: 0
+        };
+        handleTeacherChange('ketersediaanPengajar', [...(teacher.ketersediaanPengajar || []), newKet]);
+    }
+
+    const updateKetersediaan = (index: number, field: keyof KetersediaanPengajar, value: number) => {
+        const updated = [...(teacher.ketersediaanPengajar || [])];
+        const item = { ...updated[index], [field]: value };
+        
+        // Reset children if parent changes
+        if (field === 'jenjangId') {
+            item.kelasId = 0;
+            item.rombelId = 0;
+        } else if (field === 'kelasId') {
+            item.rombelId = 0;
+        }
+        
+        updated[index] = item;
+        handleTeacherChange('ketersediaanPengajar', updated);
+    }
+
+    const removeKetersediaan = (index: number) => {
+        const updated = (teacher.ketersediaanPengajar || []).filter((_, i) => i !== index);
+        handleTeacherChange('ketersediaanPengajar', updated);
+    }
+
     const handleSave = () => {
         if (!teacher.nama?.trim()) {
             showAlert('Input Tidak Lengkap', 'Nama tenaga pendidik tidak boleh kosong.');
             return;
         }
         
-        const teacherToSave = {
+        const teacherToSave: TenagaPengajar = {
             id: item?.id || Date.now(),
-            nama: teacher.nama,
+            nama: teacher.nama || '',
+            telepon: teacher.telepon,
+            email: teacher.email,
+            kodeGuru: teacher.kodeGuru,
             riwayatJabatan: teacher.riwayatJabatan || [],
-            hariMasuk: teacher.hariMasuk,
-            jamMasuk: teacher.jamMasuk,
-            availableRombelIds: teacher.availableRombelIds,
-            availableKelasIds: teacher.availableKelasIds,
-            kompetensiMapelIds: teacher.kompetensiMapelIds
+            ketersediaanPengajar: teacher.ketersediaanPengajar || [],
+            hariMasuk: teacher.hariMasuk || [],
+            jamMasuk: teacher.jamMasuk || [],
+            availableRombelIds: teacher.availableRombelIds || [],
+            availableKelasIds: teacher.availableKelasIds || [],
+            kompetensiMapelIds: teacher.kompetensiMapelIds || []
         };
         onSave(teacherToSave);
     }
@@ -150,7 +189,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                 
                 <div className="p-6 space-y-6 overflow-y-auto flex-grow">
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div>
+                         <div className="md:col-span-2">
                              <label className="block mb-1 text-sm font-medium text-gray-700">Nama Lengkap</label>
                              <input type="text" value={teacher.nama || ''} onChange={(e) => handleTeacherChange('nama', e.target.value)} autoFocus className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: Ust. Ahmad, S.Pd.I" />
                          </div>
@@ -158,154 +197,256 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                              <label className="block mb-1 text-sm font-medium text-gray-700">Kode Guru (Opsional)</label>
                              <input type="text" value={teacher.kodeGuru || ''} onChange={(e) => handleTeacherChange('kodeGuru', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: AH, 01, dll (Untuk Jadwal)" />
                          </div>
+                         <div>
+                             <label className="block mb-1 text-sm font-medium text-gray-700">No. Telepon/WA</label>
+                             <input type="tel" value={teacher.telepon || ''} onChange={(e) => handleTeacherChange('telepon', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: 08123456789" />
+                         </div>
                      </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Hari Availability */}
-                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                            <label className="block mb-2 text-sm font-bold text-blue-800">Hari Ketersediaan Mengajar</label>
-                            <p className="text-xs text-blue-600 mb-2">Pilih hari dimana guru ini BISA mengajar. Jika tidak ada yang dipilih, dianggap tersedia setiap hari.</p>
-                            <div className="flex flex-wrap gap-2">
-                                {days.map(day => {
-                                    const isSelected = (teacher.hariMasuk || []).includes(day.val);
-                                    return (
-                                        <button
-                                            key={day.val}
-                                            onClick={() => handleDayToggle(day.val)}
-                                            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
-                                        >
-                                            {day.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
+                    {/* KETERSEDIAAN PENGAJARAN (SIMPLIFIED) */}
+                    <div className="bg-teal-50 p-4 rounded-lg border border-teal-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-3">
+                            <h4 className="text-sm font-bold text-teal-800 flex items-center gap-2">
+                                <i className="bi bi-person-workspace text-teal-600"></i> Ketersediaan Pengajaran (Opsional)
+                            </h4>
+                            <button 
+                                onClick={addKetersediaan}
+                                className="text-[10px] bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700 transition-colors flex items-center gap-1"
+                            >
+                                <i className="bi bi-plus-lg"></i> Tambah KBM
+                            </button>
                         </div>
-
-                        {/* Jam Availability */}
-                        <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
-                            <label className="block mb-2 text-sm font-bold text-purple-800">Jam Masuk (Urutan)</label>
-                            <p className="text-xs text-purple-600 mb-2">Pilih jam ke berapa saja guru ini bersedia mengajar.</p>
-                            <div className="flex flex-wrap gap-2">
-                                {[1,2,3,4,5,6,7,8,9,10].map(jam => {
-                                    const isSelected = (teacher.jamMasuk || []).includes(jam);
-                                    return (
-                                        <button
-                                            key={jam}
-                                            onClick={() => handleJamToggle(jam)}
-                                            className={`w-8 h-8 rounded-md text-xs font-medium border transition-colors ${isSelected ? 'bg-purple-600 text-white border-purple-600 shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
-                                        >
-                                            {jam}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Rombel & Kelas Availability */}
-                        <div className="bg-orange-50 p-3 rounded-lg border border-orange-200 md:col-span-2">
-                            <label className="block mb-2 text-sm font-bold text-orange-800">Ketersediaan Kelas & Rombel</label>
-                            <p className="text-xs text-orange-600 mb-3">Batasi guru ini hanya bisa mengajar di kelas atau rombel tertentu. Jika kosong, dianggap bisa di semua kelas.</p>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <h5 className="text-xs font-bold text-gray-500 mb-2 uppercase border-b pb-1">Berdasarkan Kelas</h5>
-                                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
-                                        {settings.kelas.map(k => {
-                                            const isChecked = (teacher.availableKelasIds || []).includes(k.id);
-                                            return (
-                                                <button
-                                                    key={k.id}
-                                                    onClick={() => handleKelasToggle(k.id)}
-                                                    className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${isChecked ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-gray-600 border-gray-300'}`}
-                                                >
-                                                    {k.nama}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                                <div>
-                                    <h5 className="text-xs font-bold text-gray-500 mb-2 uppercase border-b pb-1">Berdasarkan Rombel</h5>
-                                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
-                                        {settings.rombel.map(r => {
-                                            const isChecked = (teacher.availableRombelIds || []).includes(r.id);
-                                            return (
-                                                <button
-                                                    key={r.id}
-                                                    onClick={() => handleRombelToggle(r.id)}
-                                                    className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors ${isChecked ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-gray-600 border-gray-300'}`}
-                                                >
-                                                    {r.nama}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                         {/* Kompetensi Mapel */}
-                         <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                            <label className="block mb-2 text-sm font-bold text-green-800">Kompetensi Mata Pelajaran</label>
-                            <p className="text-xs text-green-600 mb-2">Mapel apa saja yang dikuasai guru ini? (Untuk saran jadwal).</p>
-                            <div className="max-h-40 overflow-y-auto pr-1 custom-scrollbar space-y-3">
-                                {mapelByJenjang.length > 0 ? mapelByJenjang.map(group => (
-                                    <div key={group.jenjang.id}>
-                                        <h5 className="text-xs font-bold text-gray-500 mb-1 uppercase border-b border-green-200 pb-1">{group.jenjang.nama}</h5>
-                                        <div className="flex flex-wrap gap-2">
-                                            {group.mapel.map(m => {
-                                                const isChecked = (teacher.kompetensiMapelIds || []).includes(m.id);
-                                                return (
-                                                    <label key={m.id} className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer border transition-colors ${isChecked ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300 hover:border-green-400'}`}>
-                                                        <input 
-                                                            type="checkbox" 
-                                                            className="hidden" 
-                                                            checked={isChecked} 
-                                                            onChange={() => handleMapelToggle(m.id)} 
-                                                        />
-                                                        {isChecked && <i className="bi bi-check"></i>}
-                                                        <span>{m.nama}</span>
-                                                    </label>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-                                )) : <p className="text-xs text-gray-400 italic">Belum ada mata pelajaran.</p>}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="pt-2 border-t mt-4">
-                        <div className="flex justify-between items-center mb-2">
-                             <h4 className="text-md font-semibold text-gray-700">Riwayat Jabatan</h4>
-                             <button onClick={addRiwayat} className="text-xs text-teal-600 hover:text-teal-800 font-bold bg-teal-50 px-2 py-1 rounded border border-teal-200">+ Tambah Jabatan</button>
-                        </div>
+                        <p className="text-[10px] text-teal-600 mb-3 italic">Tentukan Marhalah & Rombel yang bisa diajar oleh pengajar ini.</p>
                         
-                        <div className="space-y-3">
-                            {teacher.riwayatJabatan?.map((riwayat, index) => (
-                                <div key={index} className="p-3 border rounded-lg bg-gray-50 space-y-3 relative group">
-                                    <button onClick={() => removeRiwayat(index)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full p-1 shadow-sm border border-red-100" aria-label="Hapus riwayat jabatan"><i className="bi bi-trash-fill"></i></button>
-                                    <div>
-                                        <label className="block mb-1 text-xs font-medium text-gray-600">Jabatan</label>
-                                        <input type="text" value={riwayat.jabatan} onChange={e => handleRiwayatChange(index, 'jabatan', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" placeholder="cth: Wali Kelas" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block mb-1 text-xs font-medium text-gray-600">Tanggal Mulai</label>
-                                            <input type="date" value={riwayat.tanggalMulai} onChange={e => handleRiwayatChange(index, 'tanggalMulai', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" />
+                        <div className="space-y-2">
+                            {teacher.ketersediaanPengajar?.map((ket, idx) => {
+                                const availableKelas = settings.kelas.filter(k => k.jenjangId === ket.jenjangId);
+                                const availableRombel = settings.rombel.filter(r => r.kelasId === ket.kelasId);
+                                
+                                return (
+                                    <div key={ket.id} className="grid grid-cols-12 gap-2 p-2 bg-white rounded border border-teal-200 relative group animate-fade-in">
+                                        <div className="col-span-11 grid grid-cols-3 gap-2">
+                                            <select 
+                                                value={ket.jenjangId} 
+                                                onChange={e => updateKetersediaan(idx, 'jenjangId', parseInt(e.target.value))}
+                                                className="text-xs bg-gray-50 border border-teal-100 rounded p-1.5"
+                                            >
+                                                <option value={0}>-- Marhalah --</option>
+                                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                            </select>
+                                            <select 
+                                                value={ket.kelasId} 
+                                                onChange={e => updateKetersediaan(idx, 'kelasId', parseInt(e.target.value))}
+                                                disabled={!ket.jenjangId}
+                                                className="text-xs bg-gray-50 border border-teal-100 rounded p-1.5 disabled:opacity-50"
+                                            >
+                                                <option value={0}>-- Kelas --</option>
+                                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                            </select>
+                                            <select 
+                                                value={ket.rombelId} 
+                                                onChange={e => updateKetersediaan(idx, 'rombelId', parseInt(e.target.value))}
+                                                disabled={!ket.kelasId}
+                                                className="text-xs bg-gray-50 border border-teal-100 rounded p-1.5 disabled:opacity-50"
+                                            >
+                                                <option value={0}>-- Rombel/Grup --</option>
+                                                {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                                            </select>
                                         </div>
-                                        <div>
-                                            <label className="block mb-1 text-xs font-medium text-gray-600">Tanggal Selesai (Kosongkan jika aktif)</label>
-                                            <input type="date" value={riwayat.tanggalSelesai || ''} onChange={e => handleRiwayatChange(index, 'tanggalSelesai', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" />
+                                        <div className="col-span-1 flex justify-center items-center">
+                                            <button 
+                                                onClick={() => removeKetersediaan(idx)}
+                                                className="text-red-400 hover:text-red-600 transition-colors"
+                                            >
+                                                <i className="bi bi-x-circle-fill"></i>
+                                            </button>
                                         </div>
                                     </div>
+                                );
+                            })}
+                            
+                            {(!teacher.ketersediaanPengajar || teacher.ketersediaanPengajar.length === 0) && (
+                                <div className="text-center py-4 border border-dashed border-teal-200 rounded text-xs text-teal-400 bg-white/50">
+                                    Belum ada batas ketersediaan. (Dapat mengajar di semua kelas)
                                 </div>
-                            ))}
-                            {(!teacher.riwayatJabatan || teacher.riwayatJabatan.length === 0) && (
-                                <p className="text-center text-gray-400 text-xs py-4 border rounded-lg border-dashed">Belum ada riwayat jabatan.</p>
                             )}
                         </div>
                     </div>
+
+                    <div className="pt-2 border-t mt-4 lg:grid lg:grid-cols-12 lg:gap-6 space-y-6 lg:space-y-0 text-white">
+                        <div className="lg:col-span-12">
+                            <div className="flex justify-between items-center mb-3">
+                                 <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                                     <i className="bi bi-briefcase text-blue-600"></i> Riwayat & Tugas Jabatan
+                                 </h4>
+                                 <button onClick={addRiwayat} className="text-xs text-blue-600 hover:text-blue-800 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-200 flex items-center gap-1 shadow-sm">
+                                     <i className="bi bi-plus-lg"></i> Tambah Jabatan
+                                 </button>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                {teacher.riwayatJabatan?.map((riwayat, index) => {
+                                    const availableRombels = settings.rombel.map(r => {
+                                        const kelas = settings.kelas.find(k => k.id === r.kelasId);
+                                        const jenjang = settings.jenjang.find(j => j.id === kelas?.jenjangId);
+                                        return { ...r, label: `${jenjang?.nama || ''} ${kelas?.nama || ''} - ${r.nama}` };
+                                    });
+
+                                    return (
+                                        <div key={index} className="p-4 border rounded-lg bg-gray-50 space-y-4 relative group hover:border-blue-300 transition-all border-gray-200">
+                                            <button onClick={() => removeRiwayat(index)} className="absolute top-2 right-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full p-1 shadow-sm border border-red-100" aria-label="Hapus riwayat jabatan"><i className="bi bi-trash-fill"></i></button>
+                                            
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-800">
+                                                <div>
+                                                    <label className="block mb-1 text-xs font-bold text-gray-600 uppercase tracking-wider">Pilih Jabatan</label>
+                                                    <select 
+                                                        value={riwayat.jabatan === 'Wali Kelas' || riwayat.jabatan === 'Guru Mapel' ? riwayat.jabatan : (riwayat.jabatan ? 'Lainnya' : '')} 
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            if (val === 'Lainnya') {
+                                                                handleRiwayatChange(index, 'jabatan', '');
+                                                            } else {
+                                                                handleRiwayatChange(index, 'jabatan', val);
+                                                            }
+                                                        }}
+                                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                                    >
+                                                        <option value="">-- Pilih Jabatan --</option>
+                                                        <option value="Wali Kelas">Wali Kelas (Homeroom Teacher)</option>
+                                                        <option value="Guru Mapel">Guru Mata Pelajaran</option>
+                                                        <option value="Lainnya">Lainnya (Ketik Manual)</option>
+                                                    </select>
+                                                </div>
+
+                                                {(riwayat.jabatan === 'Wali Kelas') && (
+                                                    <div>
+                                                        <label className="block mb-1 text-xs font-bold text-gray-600 uppercase tracking-wider">Pilih Rombel (Wali Kelas)</label>
+                                                        <select 
+                                                            value={riwayat.rombelId || ''} 
+                                                            onChange={e => handleRiwayatChange(index, 'rombelId', e.target.value ? parseInt(e.target.value) : undefined)}
+                                                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                                        >
+                                                            <option value="">-- Pilih Rombel --</option>
+                                                            {availableRombels.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                {(riwayat.jabatan === '' || (riwayat.jabatan !== 'Wali Kelas' && riwayat.jabatan !== 'Guru Mapel')) && (
+                                                    <div>
+                                                        <label className="block mb-1 text-xs font-bold text-gray-600 uppercase tracking-wider">Ketik Nama Jabatan</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={riwayat.jabatan} 
+                                                            onChange={e => handleRiwayatChange(index, 'jabatan', e.target.value)} 
+                                                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                                                            placeholder="contoh: Mudir Marhalah, Bagian Keamanan, dsb" 
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 text-gray-800">
+                                                <div>
+                                                    <label className="block mb-1 text-xs font-bold text-gray-600 uppercase tracking-wider">Tanggal Mulai</label>
+                                                    <input type="date" value={riwayat.tanggalMulai} onChange={e => handleRiwayatChange(index, 'tanggalMulai', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" />
+                                                </div>
+                                                <div>
+                                                    <label className="block mb-1 text-xs font-bold text-gray-600 uppercase tracking-wider">Tanggal Selesai</label>
+                                                    <input type="date" value={riwayat.tanggalSelesai || ''} onChange={e => handleRiwayatChange(index, 'tanggalSelesai', e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2" placeholder="Masih Aktif" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {(!teacher.riwayatJabatan || teacher.riwayatJabatan.length === 0) && (
+                                    <p className="text-center text-gray-400 text-xs py-6 border border-dashed rounded-lg bg-gray-50">Belum ada riwayat jabatan.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <details className="pt-4 border-t group">
+                        <summary className="text-sm font-bold text-gray-500 cursor-pointer hover:text-gray-700 flex items-center justify-between">
+                            <span>Opsi Lanjutan & Kompetensi Mapel</span>
+                            <i className="bi bi-chevron-down transition-transform group-open:rotate-180"></i>
+                        </summary>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 animate-fade-in">
+                            {/* Hari Availability */}
+                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                <label className="block mb-2 text-sm font-bold text-blue-800">Hari Masuk</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {days.map(day => {
+                                        const isSelected = (teacher.hariMasuk || []).includes(day.val);
+                                        return (
+                                            <button
+                                                key={day.val}
+                                                type="button"
+                                                onClick={() => handleDayToggle(day.val)}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+                                            >
+                                                {day.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Jam Availability */}
+                            <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                                <label className="block mb-2 text-sm font-bold text-purple-800">Jam Masuk (Urutan)</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {[1,2,3,4,5,6,7,8,9,10].map(jam => {
+                                        const isSelected = (teacher.jamMasuk || []).includes(jam);
+                                        return (
+                                            <button
+                                                key={jam}
+                                                type="button"
+                                                onClick={() => handleJamToggle(jam)}
+                                                className={`w-8 h-8 rounded-md text-xs font-medium border transition-colors ${isSelected ? 'bg-purple-600 text-white border-purple-600 shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+                                            >
+                                                {jam}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Rombel & Kelas Availability OLD (HIDDEN IN SUMMARY BUT KEPT) */}
+                            <div className="hidden">
+                                {/* Keeping logic here but hidden from user as they asked for a simplified flow */}
+                            </div>
+
+                             {/* Kompetensi Mapel */}
+                             <div className="bg-green-50 p-3 rounded-lg border border-green-200 md:col-span-2">
+                                <label className="block mb-2 text-sm font-bold text-green-800">Kompetensi Mata Pelajaran</label>
+                                <div className="max-h-40 overflow-y-auto pr-1 space-y-3">
+                                    {mapelByJenjang.length > 0 ? mapelByJenjang.map(group => (
+                                        <div key={group.jenjang.id}>
+                                            <h5 className="text-[10px] font-bold text-gray-400 mb-1 uppercase border-b border-green-200 pb-1">{group.jenjang.nama}</h5>
+                                            <div className="flex flex-wrap gap-2">
+                                                {group.mapel.map(m => {
+                                                    const isChecked = (teacher.kompetensiMapelIds || []).includes(m.id);
+                                                    return (
+                                                        <label key={m.id} className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] cursor-pointer border transition-colors ${isChecked ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300 hover:border-green-400'}`}>
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="hidden" 
+                                                                checked={isChecked} 
+                                                                onChange={() => handleMapelToggle(m.id)} 
+                                                            />
+                                                            {isChecked && <i className="bi bi-check"></i>}
+                                                            <span>{m.nama}</span>
+                                                        </label>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )) : <p className="text-xs text-gray-400 italic">Belum ada mata pelajaran.</p>}
+                                </div>
+                            </div>
+                        </div>
+                    </details>
                 </div>
                 
                 <div className="p-4 border-t flex justify-end space-x-2 bg-gray-50 rounded-b-lg shrink-0">

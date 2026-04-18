@@ -40,12 +40,61 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
         const { listName, mode } = structureModalData;
         
         const list = localSettings[listName];
+        let updatedList: any[];
+        
         if (mode === 'add') {
              const newItem = { ...item, id: list.length > 0 ? Math.max(...list.map((i: any) => i.id)) + 1 : 1 };
-             handleInputChange(listName, [...list, newItem] as any);
+             updatedList = [...list, newItem];
         } else {
-             handleInputChange(listName, list.map((i: any) => i.id === item.id ? item : i) as any);
+             updatedList = list.map((i: any) => i.id === item.id ? item : i);
         }
+
+        // SYNC LOGIC: From Rombel to Teacher
+        if (listName === 'rombel') {
+            const rombel = item as Rombel;
+            const teachers = [...localSettings.tenagaPengajar];
+            let teachersChanged = false;
+
+            const updatedTeachers = teachers.map(t => {
+                const currentJabatan = t.riwayatJabatan || [];
+                const matchingJabatanIdx = currentJabatan.findIndex(r => r.jabatan === 'Wali Kelas' && r.rombelId === rombel.id && !r.tanggalSelesai);
+                
+                // Case 1: This teacher IS now assigned as Wali Kelas for this rombel
+                if (t.id === rombel.waliKelasId) {
+                    if (matchingJabatanIdx === -1) {
+                        // Add new jabatan
+                        teachersChanged = true;
+                        return {
+                            ...t,
+                            riwayatJabatan: [...currentJabatan, {
+                                id: Date.now(),
+                                jabatan: 'Wali Kelas' as any,
+                                rombelId: rombel.id,
+                                tanggalMulai: new Date().toISOString().split('T')[0]
+                            }]
+                        };
+                    }
+                } 
+                // Case 2: This teacher WAS Wali Kelas but IS NOT anymore
+                else if (matchingJabatanIdx !== -1) {
+                    teachersChanged = true;
+                    return {
+                        ...t,
+                        riwayatJabatan: currentJabatan.map((r, idx) => 
+                            idx === matchingJabatanIdx ? { ...r, tanggalSelesai: new Date().toISOString().split('T')[0] } : r
+                        )
+                    };
+                }
+                
+                return t;
+            });
+
+            if (teachersChanged) {
+                handleInputChange('tenagaPengajar', updatedTeachers);
+            }
+        }
+
+        handleInputChange(listName, updatedList as any);
         setStructureModalData(null);
     };
 
@@ -56,12 +105,44 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
         const list = localSettings[listName];
         let nextId = list.length > 0 ? Math.max(...list.map((i: any) => i.id)) + 1 : 1;
 
-        const newItems = data.map(item => {
-            return {
-                ...item,
-                id: nextId++
-            };
-        });
+        const newItems = data.map(item => ({
+            ...item,
+            id: nextId++
+        }));
+
+        // SYNC LOGIC for Bulk Add Rombel
+        if (listName === 'rombel') {
+            const teachers = [...localSettings.tenagaPengajar];
+            let teachersChanged = false;
+
+            newItems.forEach(rombel => {
+                if (rombel.waliKelasId) {
+                    const teacherIdx = teachers.findIndex(t => t.id === rombel.waliKelasId);
+                    if (teacherIdx !== -1) {
+                        const t = teachers[teacherIdx];
+                        const currentJabatan = t.riwayatJabatan || [];
+                        const hasJabatan = currentJabatan.some(r => r.jabatan === 'Wali Kelas' && r.rombelId === rombel.id && !r.tanggalSelesai);
+                        
+                        if (!hasJabatan) {
+                            teachersChanged = true;
+                            teachers[teacherIdx] = {
+                                ...t,
+                                riwayatJabatan: [...currentJabatan, {
+                                    id: Date.now() + Math.random(),
+                                    jabatan: 'Wali Kelas' as any,
+                                    rombelId: rombel.id,
+                                    tanggalMulai: new Date().toISOString().split('T')[0]
+                                }]
+                            };
+                        }
+                    }
+                }
+            });
+
+            if (teachersChanged) {
+                handleInputChange('tenagaPengajar', teachers);
+            }
+        }
 
         handleInputChange(listName, [...list, ...newItems] as any);
         setBulkMode(null);

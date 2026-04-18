@@ -4,7 +4,7 @@ import { Santri, PondokSettings, ReportType, RiwayatStatus } from '../types';
 import { generateBiodataReports, generateCardReports, generateLabelReports } from '../components/reports/modules/IdentityReports';
 import { generateNilaiReports, generateTableReport, generateRaporLengkapReports } from '../components/reports/modules/AcademicReports';
 import { FinanceSummaryTemplate, LaporanArusKasTemplate, RekeningKoranSantriTemplate } from '../components/reports/modules/FinancialReports';
-import { DaftarWaliKelasTemplate, LaporanKontakTemplate, LaporanAsramaTemplate, LaporanMutasiTemplate, LembarPembinaanTemplate, FormulirIzinTemplate, DashboardSummaryTemplate } from '../components/reports/modules/AdministrativeReports';
+import { DaftarWaliKelasTemplate, LaporanKontakTemplate, LaporanKontakStafTemplate, LaporanMapelTemplate, LaporanAsramaTemplate, LaporanMutasiTemplate, LembarPembinaanTemplate, FormulirIzinTemplate, DashboardSummaryTemplate } from '../components/reports/modules/AdministrativeReports';
 import { chunkArray } from '../components/reports/modules/Common';
 
 export const useReportGenerator = (settings: PondokSettings) => {
@@ -71,6 +71,12 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 break;
             case ReportType.LaporanKontak:
                 chunkArray(data, 25).forEach(pageData => previews.push({ content: <LaporanKontakTemplate santriList={pageData} settings={settings} />, orientation: 'portrait' }));
+                break;
+            case ReportType.LaporanKontakStaf:
+                previews.push({ content: <LaporanKontakStafTemplate settings={settings} />, orientation: 'portrait' });
+                break;
+            case ReportType.LaporanMapel:
+                previews.push({ content: <LaporanMapelTemplate settings={settings} />, orientation: 'portrait' });
                 break;
             case ReportType.LaporanAsrama:
                 previews.push({ content: <LaporanAsramaTemplate settings={settings} santriList={data} gedungList={options.filteredGedung} />, orientation: 'portrait' });

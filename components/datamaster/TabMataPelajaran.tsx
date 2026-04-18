@@ -42,7 +42,11 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
         const newItems: MataPelajaran[] = data.map(item => ({
             id: nextId++,
             nama: item.nama,
-            jenjangId: item.jenjangId
+            jenjangId: item.jenjangId,
+            kkm: item.kkm ? parseInt(item.kkm) : undefined,
+            modul: item.modul,
+            linkUnduh: item.linkUnduh,
+            linkPembelian: item.linkPembelian
         }));
 
         handleInputChange('mataPelajaran', [...list, ...newItems]);
@@ -70,8 +74,14 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
                             {mapelList.length > 0 ? (
                                 <ul className="divide-y">
                                     {mapelList.map(mapel => (
-                                        <li key={mapel.id} className="flex justify-between items-center p-2 hover:bg-gray-50 group transition-colors">
-                                            <p className="text-sm text-gray-700">{mapel.nama}</p>
+                                        <li key={mapel.id} className="flex justify-between items-center p-3 hover:bg-gray-50 group transition-colors">
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-800">{mapel.nama}</p>
+                                                <div className="flex gap-3 mt-1">
+                                                    {mapel.kkm && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-medium">KKM: {mapel.kkm}</span>}
+                                                    {mapel.modul && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 font-medium"><i className="bi bi-book mr-1"></i>{mapel.modul}</span>}
+                                                </div>
+                                            </div>
                                             {canWrite && (
                                                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button onClick={() => setMapelModalData({ mode: 'edit', jenjangId: jenjang.id, item: mapel })} className="text-blue-500 hover:text-blue-700 text-xs" aria-label={`Edit mata pelajaran ${mapel.nama}`}><i className="bi bi-pencil-square"></i></button>

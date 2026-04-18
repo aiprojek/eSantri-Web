@@ -38,37 +38,86 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
         if (!teacherModalData) return;
         const { mode } = teacherModalData;
 
-        const list = localSettings.tenagaPengajar;
+        const teacherList = localSettings.tenagaPengajar;
+        const rombelList = [...localSettings.rombel];
+        let updatedTeachers: TenagaPengajar[];
+        
         if (mode === 'add') {
-            const newItem = { ...teacher, id: list.length > 0 ? Math.max(...list.map(t => t.id)) + 1 : 1 };
-            handleInputChange('tenagaPengajar', [...list, newItem]);
+            const newItem = { ...teacher, id: teacherList.length > 0 ? Math.max(...teacherList.map(t => t.id)) + 1 : 1 };
+            updatedTeachers = [...teacherList, newItem];
         } else {
-            handleInputChange('tenagaPengajar', list.map(t => t.id === teacher.id ? teacher : t));
+            updatedTeachers = teacherList.map(t => t.id === teacher.id ? teacher : t);
         }
+
+        // SYNC LOGIC: From Teacher to Rombel
+        // 1. Find all active Wali Kelas roles for the CURRENT teacher being saved
+        const activeWaliRombelIds = teacher.riwayatJabatan
+            .filter(r => r.jabatan === 'Wali Kelas' && r.rombelId && !r.tanggalSelesai)
+            .map(r => r.rombelId as number);
+
+        // 2. Update Romblons: 
+        // - If a rombel is in activeWaliRombelIds, set its waliKelasId to this teacher.id
+        // - If a rombel currently has this teacher.id as its waliKelasId but IS NOT in activeWaliRombelIds, clear its waliKelasId
+        const finalRombels = rombelList.map(r => {
+            if (activeWaliRombelIds.includes(r.id)) {
+                return { ...r, waliKelasId: teacher.id };
+            } else if (r.waliKelasId === teacher.id) {
+                return { ...r, waliKelasId: undefined };
+            }
+            return r;
+        });
+
+        // 3. Update both lists in state
+        handleInputChange('tenagaPengajar', updatedTeachers);
+        handleInputChange('rombel', finalRombels);
+        
         setTeacherModalData(null);
+        showToast(`Data ${teacher.nama} berhasil disimpan.`, 'success');
     };
 
     const handleBulkSave = (data: any[]) => {
-        const list = localSettings.tenagaPengajar;
-        let nextId = list.length > 0 ? Math.max(...list.map(t => t.id)) + 1 : 1;
+        const teacherList = localSettings.tenagaPengajar;
+        const rombelList = [...localSettings.rombel];
+        let nextId = teacherList.length > 0 ? Math.max(...teacherList.map(t => t.id)) + 1 : 1;
         
+        let rombelsChanged = false;
+
         const newItems: TenagaPengajar[] = data.map(item => {
             const riwayat: RiwayatJabatan[] = [];
             if (item.jabatan) {
                 riwayat.push({
                     id: Date.now() + Math.random(),
                     jabatan: item.jabatan,
+                    rombelId: item.rombelId,
                     tanggalMulai: item.tanggalMulai || new Date().toISOString().split('T')[0]
                 });
             }
+            
+            const teacherId = nextId++;
+
+            // Sync to Rombel if Wali Kelas
+            if (item.jabatan === 'Wali Kelas' && item.rombelId) {
+                const rombelIdx = rombelList.findIndex(r => r.id === item.rombelId);
+                if (rombelIdx !== -1) {
+                    rombelsChanged = true;
+                    rombelList[rombelIdx] = { ...rombelList[rombelIdx], waliKelasId: teacherId };
+                }
+            }
+
             return {
-                id: nextId++,
+                id: teacherId,
                 nama: item.nama,
+                telepon: item.telepon,
+                email: item.email,
                 riwayatJabatan: riwayat
             };
         });
 
-        handleInputChange('tenagaPengajar', [...list, ...newItems]);
+        handleInputChange('tenagaPengajar', [...teacherList, ...newItems]);
+        if (rombelsChanged) {
+            handleInputChange('rombel', rombelList);
+        }
+
         setIsBulkOpen(false);
         showToast(`${newItems.length} tenaga pendidik berhasil ditambahkan.`, 'success');
     };

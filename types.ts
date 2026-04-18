@@ -226,15 +226,27 @@ export interface ConfigGaji {
 export interface RiwayatJabatan {
     id: number;
     jabatan: string;
+    rombelId?: number; // Added for Wali Kelas link
     tanggalMulai: string;
     tanggalSelesai?: string;
+    keterangan?: string; // For manual input "Lainnya"
+}
+
+export interface KetersediaanPengajar {
+    id: number;
+    jenjangId: number;
+    kelasId: number;
+    rombelId: number;
 }
 
 export interface TenagaPengajar {
     id: number;
     nama: string;
+    telepon?: string;
+    email?: string;
     kodeGuru?: string; // Kode guru untuk legenda jadwal
     riwayatJabatan: RiwayatJabatan[];
+    ketersediaanPengajar?: KetersediaanPengajar[];
     hariMasuk?: number[]; // Days available (0=Ahad, 1=Senin, ...)
     jamMasuk?: number[]; // Jam Ke available (1, 2, 3, ...)
     availableRombelIds?: number[];
@@ -247,6 +259,10 @@ export interface MataPelajaran {
     id: number;
     nama: string;
     jenjangId: number;
+    modul?: string;
+    linkUnduh?: string;
+    linkPembelian?: string;
+    kkm?: number;
 }
 
 export interface Biaya {
@@ -1095,6 +1111,8 @@ export enum ReportType {
   FormulirIzin = 'FormulirIzin',
   DaftarWaliKelas = 'DaftarWaliKelas',
   LaporanKontak = 'LaporanKontak',
+  LaporanKontakStaf = 'LaporanKontakStaf',
+  LaporanMapel = 'LaporanMapel',
   LembarKedatangan = 'LembarKedatangan',
   LembarRapor = 'LembarRapor',
   RaporLengkap = 'RaporLengkap',

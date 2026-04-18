@@ -202,6 +202,7 @@ const PsbFormViewer: React.FC<{ settings: PondokSettings, config: PsbConfig, ten
                         const fieldLabel = config.customFields?.find(f => f.id === fieldId)?.label || fieldId;
                         const safeLabel = fieldLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
                         const safeName = (fields['namaLengkap'] || 'TanpaNama').replace(/[^a-z0-9]/gi, '_');
+                        // Format: Nama_Dokumen-Nama_Santri-Waktu
                         const filename = `${safeLabel}-${safeName}-${Date.now()}`;
                         const storageRef = ref(storage, `tenants/${tenantId}/psb/${filename}`);
                         const uploadTask = uploadBytes(storageRef, value).then(async (snapshot: any) => {

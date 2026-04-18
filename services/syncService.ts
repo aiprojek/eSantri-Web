@@ -61,6 +61,12 @@ const decompressData = async (input: ArrayBuffer | string): Promise<any> => {
     }
 };
 
+const getTime = (val: any) => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    return new Date(val).getTime();
+};
+
 // --- HELPER: RETRY FETCH & VALIDATION ---
 
 const fetchWithRetry = async (url: string, options: RequestInit, retries: number = 3, backoff: number = 500): Promise<Response> => {
@@ -740,11 +746,15 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
         }
         if (data.settings && data.settings.length > 0) {
             const localSettings = await db.settings.toArray();
+            const cloudSettings = data.settings[0];
+            
             if (localSettings.length > 0) {
-                // Merge cloud settings into local, keeping identity but updating master data
-                await db.settings.update(localSettings[0].id!, data.settings[0]);
+                // Ensure we ALWAYS overwrite the core settings data during a fresh pairing/config update
+                // to make sure multiUserMode etc are picked up immediately.
+                const { id, ...rest } = cloudSettings;
+                await db.settings.update(localSettings[0].id!, rest);
             } else {
-                await db.settings.add(data.settings[0]);
+                await db.settings.add(cloudSettings);
             }
         }
     }

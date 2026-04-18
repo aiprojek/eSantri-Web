@@ -77,7 +77,8 @@ export const startFirebaseSync = (tenantId: string) => {
                         if (result) {
                             const local = await db.settings.toArray();
                             if (local.length > 0) {
-                                await db.settings.update(local[0].id!, result);
+                                const { id, ...rest } = result;
+                                await db.settings.update(local[0].id!, rest);
                             } else {
                                 await db.settings.add(result);
                             }

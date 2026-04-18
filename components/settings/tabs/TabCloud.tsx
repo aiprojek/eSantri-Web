@@ -404,10 +404,11 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
         // If multi-user is already enabled in the synced settings, 
         // we should redirect to login instead of just reloading to home
         const checkAndRedirect = async () => {
-            const settings = await db.settings.toArray();
-            const config = settings[0];
+            // Re-fetch from DB to get the LATEST synced settings
+            const settingsList = await db.settings.toArray();
+            const syncedConfig = settingsList[0];
             
-            if (config?.multiUserMode) {
+            if (syncedConfig?.multiUserMode) {
                 // Clear any existing session to be safe
                 localStorage.removeItem('eSantriCurrentUser');
                 window.location.href = '/login';

@@ -10,20 +10,25 @@ interface BulkMasterEditorProps {
     mode: MasterType;
     settings: PondokSettings;
     onSave: (data: any[]) => void;
+    initialData?: any[];
 }
 
 export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({ 
-    isOpen, onClose, mode, settings, onSave 
+    isOpen, onClose, mode, settings, onSave, initialData 
 }) => {
     const [rows, setRows] = useState<any[]>([]);
 
     useEffect(() => {
         if (isOpen) {
-            // Inisialisasi dengan 3 baris kosong
-            const initialRows = Array.from({ length: 3 }).map((_, i) => createEmptyRow(i));
-            setRows(initialRows);
+            if (initialData && initialData.length > 0) {
+                setRows(initialData.map((item, i) => ({ ...item, tempId: Date.now() + i })));
+            } else {
+                // Inisialisasi dengan 3 baris kosong
+                const initialRows = Array.from({ length: 3 }).map((_, i) => createEmptyRow(i));
+                setRows(initialRows);
+            }
         }
-    }, [isOpen, mode]);
+    }, [isOpen, mode, initialData]);
 
     const createEmptyRow = (index: number) => {
         const base = { tempId: Date.now() + index, nama: '' };
@@ -75,13 +80,15 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
     if (!isOpen) return null;
 
     const getTitle = () => {
+        const isEdit = initialData && initialData.length > 0;
+        const prefix = isEdit ? 'Edit' : 'Tambah';
         switch(mode) {
-            case 'pendidik': return 'Tambah Tenaga Pendidik Massal';
-            case 'jenjang': return 'Tambah Jenjang Pendidikan Massal';
-            case 'kelas': return 'Tambah Kelas Massal';
-            case 'rombel': return 'Tambah Rombel Massal';
-            case 'mapel': return 'Tambah Mata Pelajaran Massal';
-            default: return 'Bulk Add';
+            case 'pendidik': return `${prefix} Tenaga Pendidik Massal`;
+            case 'jenjang': return `${prefix} Jenjang Pendidikan Massal`;
+            case 'kelas': return `${prefix} Kelas Massal`;
+            case 'rombel': return `${prefix} Rombel Massal`;
+            case 'mapel': return `${prefix} Mata Pelajaran Massal`;
+            default: return `${prefix} Data Massal`;
         }
     };
 

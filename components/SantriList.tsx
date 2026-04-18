@@ -77,10 +77,11 @@ const SantriList: React.FC = () => {
 
     // Bulk Actions
     const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const currentPageIds = paginatedSantri.map(s => s.id);
         if (e.target.checked) {
-            setSelectedIds(paginatedSantri.map(s => s.id));
+            setSelectedIds(prev => Array.from(new Set([...prev, ...currentPageIds])));
         } else {
-            setSelectedIds([]);
+            setSelectedIds(prev => prev.filter(id => !currentPageIds.includes(id)));
         }
     };
 
@@ -241,7 +242,15 @@ const SantriList: React.FC = () => {
             {/* Bulk Actions Toolbar */}
             {selectedIds.length > 0 && canWrite && (
                 <div className="bg-teal-50 border border-teal-200 p-3 rounded-lg flex items-center justify-between animate-fade-in-down shadow-sm">
-                    <span className="text-sm font-bold text-teal-800">{selectedIds.length} santri dipilih</span>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm font-bold text-teal-800">{selectedIds.length} santri dipilih</span>
+                        <button 
+                            onClick={() => setSelectedIds([])}
+                            className="text-xs text-red-600 hover:text-red-800 font-medium underline"
+                        >
+                            Batalkan Pilihan
+                        </button>
+                    </div>
                     <div className="flex gap-2">
                         <button onClick={() => setIsBulkStatusOpen(true)} className="px-3 py-1.5 bg-white border border-teal-300 text-teal-700 text-xs font-bold rounded hover:bg-teal-100 transition-colors">Ubah Status</button>
                         <button onClick={() => setIsBulkMoveOpen(true)} className="px-3 py-1.5 bg-white border border-teal-300 text-teal-700 text-xs font-bold rounded hover:bg-teal-100 transition-colors">Pindah Kelas</button>
@@ -254,7 +263,14 @@ const SantriList: React.FC = () => {
                 <table className="w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
                         <tr>
-                            <th className="p-4 w-10 text-center"><input type="checkbox" onChange={handleSelectAll} checked={selectedIds.length > 0 && selectedIds.length === paginatedSantri.length} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" /></th>
+                            <th className="p-4 w-10 text-center">
+                                <input 
+                                    type="checkbox" 
+                                    onChange={handleSelectAll} 
+                                    checked={paginatedSantri.length > 0 && paginatedSantri.every(s => selectedIds.includes(s.id))} 
+                                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" 
+                                />
+                            </th>
                             <th className="p-4">Nama Santri</th>
                             <th className="p-4">NIS / NISN</th>
                             <th className="p-4">Kelas</th>

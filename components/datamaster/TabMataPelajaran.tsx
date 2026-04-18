@@ -20,6 +20,46 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
     } | null>(null);
 
     const [isBulkOpen, setIsBulkOpen] = useState(false);
+    const [bulkInitialData, setBulkInitialData] = useState<any[] | undefined>(undefined);
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+    const handleBulkDelete = () => {
+        if (selectedIds.length === 0) return;
+        showConfirmation(
+            `Hapus ${selectedIds.length} Mata Pelajaran`,
+            `Apakah Anda yakin ingin menghapus ${selectedIds.length} mata pelajaran yang terpilih?`,
+            () => {
+                const newList = localSettings.mataPelajaran.filter(m => !selectedIds.includes(m.id));
+                handleInputChange('mataPelajaran', newList);
+                setSelectedIds([]);
+                showToast(`${selectedIds.length} mata pelajaran berhasil dihapus.`, 'success');
+            },
+            { confirmColor: 'red' }
+        );
+    };
+
+    const handleBulkEditMapel = () => {
+        const selected = localSettings.mataPelajaran.filter(m => selectedIds.includes(m.id));
+        setBulkInitialData(selected);
+        setIsBulkOpen(true);
+    };
+
+    const toggleSelectAll = (ids: number[]) => {
+        const allSelected = ids.every(id => selectedIds.includes(id));
+        if (allSelected) {
+            setSelectedIds(prev => prev.filter(id => !ids.includes(id)));
+        } else {
+            setSelectedIds(prev => Array.from(new Set([...prev, ...ids])));
+        }
+    };
+
+    const toggleSelectOne = (id: number) => {
+        if (selectedIds.includes(id)) {
+            setSelectedIds(prev => prev.filter(i => i !== id));
+        } else {
+            setSelectedIds(prev => [...prev, id]);
+        }
+    };
 
     const handleSaveMapel = (mapel: MataPelajaran) => {
         if (!mapelModalData) return;
@@ -36,50 +76,88 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
     };
 
     const handleBulkSaveMapel = (data: any[]) => {
-        const list = localSettings.mataPelajaran;
+        const list = [...localSettings.mataPelajaran];
         let nextId = list.length > 0 ? Math.max(...list.map(m => m.id)) + 1 : 1;
         
-        const newItems: MataPelajaran[] = data.map(item => ({
-            id: nextId++,
-            nama: item.nama,
-            jenjangId: item.jenjangId,
-            kkm: item.kkm ? parseInt(item.kkm) : undefined,
-            modul: item.modul,
-            linkUnduh: item.linkUnduh,
-            linkPembelian: item.linkPembelian
-        }));
+        data.forEach(item => {
+            const isEdit = !!item.id;
+            const mapelData: MataPelajaran = {
+                id: isEdit ? item.id : nextId++,
+                nama: item.nama,
+                jenjangId: item.jenjangId,
+                kkm: item.kkm ? parseInt(item.kkm) : undefined,
+                modul: item.modul,
+                linkUnduh: item.linkUnduh,
+                linkPembelian: item.linkPembelian
+            };
 
-        handleInputChange('mataPelajaran', [...list, ...newItems]);
+            if (isEdit) {
+                const idx = list.findIndex(m => m.id === item.id);
+                if (idx !== -1) list[idx] = mapelData;
+            } else {
+                list.push(mapelData);
+            }
+        });
+
+        handleInputChange('mataPelajaran', list);
         setIsBulkOpen(false);
-        showToast(`${newItems.length} mata pelajaran berhasil ditambahkan.`, 'success');
+        setBulkInitialData(undefined);
+        setSelectedIds([]);
+        showToast(`Operasi massal mata pelajaran berhasil.`, 'success');
     };
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md mb-6">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
-                <h2 className="text-xl font-bold text-gray-700">Mata Pelajaran per Jenjang</h2>
-                {canWrite && <button onClick={() => setIsBulkOpen(true)} className="text-sm bg-teal-600 text-white hover:bg-teal-700 px-3 py-1.5 rounded flex items-center gap-2"><i className="bi bi-table"></i> Tambah Massal (Semua Jenjang)</button>}
+                <div className="flex items-center gap-4">
+                    <h2 className="text-xl font-bold text-gray-700">Mata Pelajaran per Jenjang</h2>
+                    {selectedIds.length > 0 && (
+                        <div className="flex items-center gap-3 animate-fade-in pl-4 border-l">
+                            <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-100">{selectedIds.length} dipilih</span>
+                            <button onClick={() => setSelectedIds([])} className="text-xs text-gray-400 hover:text-gray-600 underline">Batal</button>
+                            <button onClick={handleBulkEditMapel} className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 font-bold"><i className="bi bi-pencil-square mr-1"></i> Edit Massal</button>
+                            <button onClick={handleBulkDelete} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded border border-red-200 font-bold"><i className="bi bi-trash mr-1"></i> Hapus Massal</button>
+                        </div>
+                    )}
+                </div>
+                {canWrite && <button onClick={() => { setBulkInitialData(undefined); setIsBulkOpen(true); }} className="text-sm bg-teal-600 text-white hover:bg-teal-700 px-3 py-1.5 rounded flex items-center gap-2"><i className="bi bi-table"></i> Tambah Massal (Semua Jenjang)</button>}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {localSettings.jenjang.map(jenjang => {
                     const mapelList = localSettings.mataPelajaran.filter(m => m.jenjangId === jenjang.id);
+                    const mapelIds = mapelList.map(m => m.id);
+                    const isAllSelected = mapelIds.length > 0 && mapelIds.every(id => selectedIds.includes(id));
+
                     return (
                     <div key={jenjang.id} className="p-4 border border-gray-200 rounded-lg bg-gray-50/50">
-                        <div className="flex items-center gap-2 mb-3">
-                            <i className="bi bi-book text-teal-600"></i>
-                            <h3 className="text-md font-bold text-gray-800">{jenjang.nama}</h3>
+                        <div className="flex justify-between items-center mb-3">
+                            <div className="flex items-center gap-2">
+                                <i className="bi bi-book text-teal-600"></i>
+                                <h3 className="text-md font-bold text-gray-800">{jenjang.nama}</h3>
+                            </div>
+                            {mapelList.length > 0 && (
+                                <label className="flex items-center gap-2 text-[10px] text-gray-500 cursor-pointer">
+                                    <input type="checkbox" checked={isAllSelected} onChange={() => toggleSelectAll(mapelIds)} className="w-3.5 h-3.5 text-teal-600 rounded" />
+                                    Pilih Semua
+                                </label>
+                            )}
                         </div>
                         <div className="border bg-white rounded-lg max-h-60 overflow-y-auto">
                             {mapelList.length > 0 ? (
                                 <ul className="divide-y">
-                                    {mapelList.map(mapel => (
-                                        <li key={mapel.id} className="flex justify-between items-center p-3 hover:bg-gray-50 group transition-colors">
-                                            <div>
-                                                <p className="text-sm font-semibold text-gray-800">{mapel.nama}</p>
-                                                <div className="flex gap-3 mt-1">
-                                                    {mapel.kkm && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-medium">KKM: {mapel.kkm}</span>}
-                                                    {mapel.modul && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 font-medium"><i className="bi bi-book mr-1"></i>{mapel.modul}</span>}
+                                    {mapelList.map(mapel => {
+                                        const isSelected = selectedIds.includes(mapel.id);
+                                        return (
+                                        <li key={mapel.id} className={`flex justify-between items-center p-3 hover:bg-gray-50 group transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
+                                            <div className="flex items-center gap-3">
+                                                <input type="checkbox" checked={isSelected} onChange={() => toggleSelectOne(mapel.id)} className="w-4 h-4 text-teal-600 rounded cursor-pointer" />
+                                                <div>
+                                                    <p className="text-sm font-semibold text-gray-800">{mapel.nama}</p>
+                                                    <div className="flex gap-3 mt-1">
+                                                        {mapel.kkm && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-medium">KKM: {mapel.kkm}</span>}
+                                                        {mapel.modul && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 font-medium"><i className="bi bi-book mr-1"></i>{mapel.modul}</span>}
+                                                    </div>
                                                 </div>
                                             </div>
                                             {canWrite && (
@@ -89,7 +167,7 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
                                                 </div>
                                             )}
                                         </li>
-                                    ))}
+                                    )})}
                                 </ul>
                             ) : <p className="text-sm text-gray-400 p-4 text-center italic">Belum ada mata pelajaran.</p>}
                         </div>
@@ -117,6 +195,7 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
                 mode="mapel"
                 settings={localSettings}
                 onSave={handleBulkSaveMapel}
+                initialData={bulkInitialData}
             />
         </div>
     );

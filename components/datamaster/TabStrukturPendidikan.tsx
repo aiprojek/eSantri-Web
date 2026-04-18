@@ -25,6 +25,12 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
 
     // Bulk Add State
     const [bulkMode, setBulkMode] = useState<'jenjang' | 'kelas' | 'rombel' | null>(null);
+    const [bulkInitialData, setBulkInitialData] = useState<any[] | undefined>(undefined);
+
+    // Selection state for each list
+    const [selectedJenjangIds, setSelectedJenjangIds] = useState<number[]>([]);
+    const [selectedKelasIds, setSelectedKelasIds] = useState<number[]>([]);
+    const [selectedRombelIds, setSelectedRombelIds] = useState<number[]>([]);
 
     // Calculate active teachers for dropdowns (Mudir, Wali Kelas)
     const activeTeachers = useMemo(() => {
@@ -102,20 +108,30 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
         if (!bulkMode) return;
         const listName = bulkMode;
         
-        const list = localSettings[listName];
+        const list = [...localSettings[listName]];
         let nextId = list.length > 0 ? Math.max(...list.map((i: any) => i.id)) + 1 : 1;
 
-        const newItems = data.map(item => ({
-            ...item,
-            id: nextId++
-        }));
+        data.forEach(item => {
+            const isEdit = !!item.id;
+            const finalItem = {
+                ...item,
+                id: isEdit ? item.id : nextId++
+            };
 
-        // SYNC LOGIC for Bulk Add Rombel
+            if (isEdit) {
+                const idx = list.findIndex((i: any) => i.id === item.id);
+                if (idx !== -1) list[idx] = finalItem;
+            } else {
+                list.push(finalItem);
+            }
+        });
+
+        // SYNC LOGIC for Rombel updates in bulk
         if (listName === 'rombel') {
             const teachers = [...localSettings.tenagaPengajar];
             let teachersChanged = false;
 
-            newItems.forEach(rombel => {
+            data.forEach(rombel => {
                 if (rombel.waliKelasId) {
                     const teacherIdx = teachers.findIndex(t => t.id === rombel.waliKelasId);
                     if (teacherIdx !== -1) {
@@ -144,9 +160,16 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
             }
         }
 
-        handleInputChange(listName, [...list, ...newItems] as any);
+        handleInputChange(listName, list as any);
         setBulkMode(null);
-        showToast(`${newItems.length} data berhasil ditambahkan ke ${listName}.`, 'success');
+        setBulkInitialData(undefined);
+        
+        // Reset selection for that list
+        if (listName === 'jenjang') setSelectedJenjangIds([]);
+        if (listName === 'kelas') setSelectedKelasIds([]);
+        if (listName === 'rombel') setSelectedRombelIds([]);
+
+        showToast(`Operasi massal pada ${listName} berhasil diterapkan.`, 'success');
     };
 
     const renderListManager = (
@@ -156,6 +179,46 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
     ) => {
         const list = localSettings[listName];
         
+        const selectionState = listName === 'jenjang' ? selectedJenjangIds : listName === 'kelas' ? selectedKelasIds : selectedRombelIds;
+        const setSelectionState = listName === 'jenjang' ? setSelectedJenjangIds : listName === 'kelas' ? setSelectedKelasIds : setSelectedRombelIds;
+
+        const handleBulkDelete = () => {
+            if (selectionState.length === 0) return;
+            showConfirmation(
+                `Hapus ${selectionState.length} ${itemName}`,
+                `Yakin ingin menghapus ${selectionState.length} data ${itemName} ini secara massal? Tindakan ini tidak dapat dibatalkan.`,
+                () => {
+                    const newList = list.filter((i: any) => !selectionState.includes(i.id));
+                    handleInputChange(listName, newList as any);
+                    setSelectionState([]);
+                    showToast(`${selectionState.length} data berhasil dihapus.`, 'success');
+                },
+                { confirmColor: 'red' }
+            );
+        };
+
+        const handleBulkEdit = () => {
+             const selectedItems = list.filter((i: any) => selectionState.includes(i.id));
+             setBulkInitialData(selectedItems);
+             setBulkMode(listName);
+        };
+
+        const toggleSelectAll = () => {
+            if (selectionState.length === list.length) {
+                setSelectionState([]);
+            } else {
+                setSelectionState(list.map((i: any) => i.id));
+            }
+        };
+
+        const toggleSelectOne = (id: number) => {
+            if (selectionState.includes(id)) {
+                setSelectionState(prev => prev.filter(i => i !== id));
+            } else {
+                setSelectionState(prev => [...prev, id]);
+            }
+        };
+
         const handleRemoveItem = (id: number) => {
             const itemToDelete = list.find((item: any) => item.id === id);
             if (!itemToDelete) return;
@@ -217,53 +280,71 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
         };
 
         return (
-            <div className="mb-4 flex flex-col h-full">
-                <h3 className="text-lg font-semibold text-gray-700 mb-2 capitalize flex items-center gap-2">
-                    {listName === 'jenjang' && <i className="bi bi-layers text-teal-600"></i>}
-                    {listName === 'kelas' && <i className="bi bi-bar-chart-steps text-teal-600"></i>}
-                    {listName === 'rombel' && <i className="bi bi-people text-teal-600"></i>}
-                    {itemName}
-                </h3>
-                <div className="border rounded-lg max-h-60 overflow-y-auto bg-gray-50 flex-grow">
+            <div className="mb-4 flex flex-col h-full bg-white border border-gray-100 rounded-xl shadow-sm p-4 overflow-hidden">
+                <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-md font-bold text-gray-700 capitalize flex items-center gap-2">
+                        {listName === 'jenjang' && <i className="bi bi-layers text-teal-600"></i>}
+                        {listName === 'kelas' && <i className="bi bi-bar-chart-steps text-teal-600"></i>}
+                        {listName === 'rombel' && <i className="bi bi-people text-teal-600"></i>}
+                        {itemName}
+                    </h3>
+                    {selectionState.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                            <button onClick={handleBulkEdit} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-100 font-bold" title="Edit Massal"><i className="bi bi-pencil-square mr-1"></i> Edit</button>
+                            <button onClick={handleBulkDelete} className="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded border border-red-100 font-bold" title="Hapus Massal"><i className="bi bi-trash"></i></button>
+                            <button onClick={() => setSelectionState([])} className="text-[10px] text-gray-400 hover:text-gray-600 underline">Batal</button>
+                        </div>
+                    )}
+                </div>
+                
+                <div className="border rounded-lg max-h-60 overflow-y-auto bg-gray-50 flex-grow scrollbar-thin">
                     {list.length > 0 ? (
                         <ul className="divide-y">
-                            {list.map((item: any) => (
-                                <li key={item.id} className="flex justify-between items-center p-2 hover:bg-white group transition-colors">
-                                    <div className="text-sm">
-                                        <p className="font-medium">{item.nama} {(item as Jenjang).kode && <span className="font-normal text-gray-500">({(item as Jenjang).kode})</span>}</p>
-                                        <div className="text-xs text-gray-500 space-x-2">
-                                            {parentList && (
-                                                <span>
-                                                    Induk: {(() => {
-                                                        const parent = localSettings[parentList].find(p => p.id === (item as any)[`${parentList}Id`]);
-                                                        let label = parent?.nama || 'N/A';
-                                                        // Jika Rombel, tampilkan jenjang dari induk kelasnya
-                                                        if (listName === 'rombel' && parent) {
-                                                            const grandParent = localSettings.jenjang.find(j => j.id === (parent as Kelas).jenjangId);
-                                                            if (grandParent) label += ` (${grandParent.nama})`;
-                                                        }
-                                                        return label;
-                                                    })()}
-                                                </span>
-                                            )}
-                                            {getAssignmentName(item) && <span className="text-blue-600"><i className="bi bi-person-check mr-1"></i>{getAssignmentName(item)}</span>}
+                            <li className="bg-gray-100/80 p-1.5 flex items-center sticky top-0 z-10 border-b">
+                                <input type="checkbox" checked={list.length > 0 && selectionState.length === list.length} onChange={toggleSelectAll} className="w-3.5 h-3.5 text-teal-600 rounded mr-2 cursor-pointer" />
+                                <span className="text-[10px] font-bold text-gray-400 uppercase">Pilih Semua</span>
+                            </li>
+                            {list.map((item: any) => {
+                                const isSelected = selectionState.includes(item.id);
+                                return (
+                                <li key={item.id} className={`flex justify-between items-center p-2 hover:bg-white group transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
+                                    <div className="flex items-center gap-2">
+                                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelectOne(item.id)} className="w-3.5 h-3.5 text-teal-600 rounded cursor-pointer" />
+                                        <div className="text-sm">
+                                            <p className="font-medium">{item.nama} {(item as Jenjang).kode && <span className="font-normal text-gray-500">({(item as Jenjang).kode})</span>}</p>
+                                            <div className="text-[10px] text-gray-500 flex flex-wrap gap-x-2">
+                                                {parentList && (
+                                                    <span>
+                                                        Induk: {(() => {
+                                                            const parent = localSettings[parentList].find(p => p.id === (item as any)[`${parentList}Id`]);
+                                                            let label = parent?.nama || 'N/A';
+                                                            if (listName === 'rombel' && parent) {
+                                                                const grandParent = localSettings.jenjang.find(j => j.id === (parent as Kelas).jenjangId);
+                                                                if (grandParent) label += ` (${grandParent.nama})`;
+                                                            }
+                                                            return label;
+                                                        })()}
+                                                    </span>
+                                                )}
+                                                {getAssignmentName(item) && <span className="text-blue-600 font-medium"><i className="bi bi-person-check mr-1"></i>{getAssignmentName(item)}</span>}
+                                            </div>
                                         </div>
                                     </div>
                                     {canWrite && (
-                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                             <button onClick={() => setStructureModalData({ mode: 'edit', listName, item })} className="text-blue-500 hover:text-blue-700 text-xs" aria-label={`Edit ${itemName} ${item.nama}`}><i className="bi bi-pencil-square"></i></button>
-                                             <button onClick={() => handleRemoveItem(item.id)} className="text-red-500 hover:text-red-700 text-xs" aria-label={`Hapus ${itemName} ${item.nama}`}><i className="bi bi-trash"></i></button>
+                                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                             <button onClick={() => setStructureModalData({ mode: 'edit', listName, item })} className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50" aria-label={`Edit ${itemName} ${item.nama}`}><i className="bi bi-pencil-square"></i></button>
+                                             <button onClick={() => handleRemoveItem(item.id)} className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50" aria-label={`Hapus ${itemName} ${item.nama}`}><i className="bi bi-trash"></i></button>
                                         </div>
                                     )}
                                 </li>
-                            ))}
+                            )})}
                         </ul>
                     ) : <p className="text-sm text-gray-400 p-3 text-center">Data kosong.</p>}
                 </div>
                 {canWrite && (
                     <div className="flex gap-2 mt-2">
                          <button onClick={() => setStructureModalData({ mode: 'add', listName })} className="flex-1 text-sm bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 py-1.5 rounded font-medium"><i className="bi bi-plus"></i> Tambah</button>
-                         <button onClick={() => setBulkMode(listName)} className="flex-none px-3 py-1.5 text-sm bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200 rounded font-medium" title="Tambah Banyak (Bulk)"><i className="bi bi-table"></i></button>
+                         <button onClick={() => { setBulkInitialData(undefined); setBulkMode(listName); }} className="flex-none px-3 py-1.5 text-sm bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200 rounded font-medium" title="Tambah Banyak (Bulk)"><i className="bi bi-table"></i></button>
                     </div>
                 )}
             </div>
@@ -288,6 +369,7 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                     mode={bulkMode}
                     settings={localSettings}
                     onSave={handleBulkSave}
+                    initialData={bulkInitialData}
                 />
             )}
         </div>

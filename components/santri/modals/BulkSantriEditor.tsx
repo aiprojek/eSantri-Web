@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Santri, Alamat } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { useSantriContext } from '../../../contexts/SantriContext';
 import { generateNis } from '../../../utils/nisGenerator';
+import * as XLSX from 'xlsx';
 
 interface BulkSantriEditorProps {
     isOpen: boolean;
@@ -20,6 +21,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
     const { santriList } = useSantriContext();
     const [rows, setRows] = useState<EditableRow[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Helper to convert YYYY-MM-DD to DD/MM/YYYY
     const toDisplayDate = (isoDate?: string) => {
@@ -256,6 +258,88 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
             setIsSaving(false);
         }
     };
+
+    const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const bstr = evt.target?.result;
+                const wb = XLSX.read(bstr, { type: 'binary' });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = XLSX.utils.sheet_to_json(ws);
+
+                if (data.length === 0) {
+                    showToast('File kosong atau format tidak dikenali.', 'error');
+                    return;
+                }
+
+                // Smart Mapping Logic
+                const newImportedRows: EditableRow[] = data.map((item: any, idx: number) => {
+                    const findVal = (keywords: string[]) => {
+                        const key = Object.keys(item).find(k => 
+                            keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase()))
+                        );
+                        return key ? String(item[key]) : '';
+                    };
+
+                    const empty = createEmptyRow(idx);
+                    
+                    // Basic Identity
+                    const nama = findVal(['nama', 'name', 'lengkap']);
+                    if (!nama) return null; // Skip if no name
+
+                    return {
+                        ...empty,
+                        namaLengkap: nama,
+                        namaHijrah: findVal(['hijrah', 'panggilan']),
+                        nis: findVal(['nis', 'nomer induk', 'nomor induk']),
+                        nik: findVal(['nik', 'ktp', 'kependudukan']),
+                        nisn: findVal(['nisn']),
+                        jenisKelamin: findVal(['kelamin', 'gender', 'sex']).toLowerCase().startsWith('p') ? 'Perempuan' : 'Laki-laki',
+                        tempatLahir: findVal(['tempat', 'lahir', 'tmp']),
+                        tanggalLahir: toDisplayDate(findVal(['tgl', 'tanggal', 'ultah'])),
+                        
+                        // Address
+                        alamat: {
+                            ...empty.alamat,
+                            detail: findVal(['alamat', 'rumah', 'jalan', 'rt', 'rw']),
+                            desaKelurahan: findVal(['desa', 'lurah']),
+                            kecamatan: findVal(['kecamatan']),
+                            kabupatenKota: findVal(['kabupaten', 'kota']),
+                            provinsi: findVal(['provinsi']),
+                            kodePos: findVal(['pos', 'zip'])
+                        },
+
+                        // Parents
+                        namaAyah: findVal(['ayah', 'bapak', 'father']),
+                        teleponAyah: findVal(['hp ayah', 'telp ayah', 'wa ayah']),
+                        namaIbu: findVal(['ibu', 'mother']),
+                        teleponIbu: findVal(['hp ibu', 'telp ibu', 'wa ibu']),
+                        namaWali: findVal(['wali', 'guardian']),
+                        teleponWali: findVal(['hp wali', 'telp wali', 'wa wali']),
+                        
+                        jenisSantri: findVal(['jenis', 'tipe', 'status mondok']) || 'Mondok - Baru'
+                    } as EditableRow;
+                }).filter(Boolean) as EditableRow[];
+
+                if (newImportedRows.length > 0) {
+                    setRows(prev => mode === 'add' ? [...newImportedRows] : [...prev, ...newImportedRows]);
+                    showToast(`${newImportedRows.length} data berhasil diimpor & dipetakan secara otomatis.`, 'success');
+                } else {
+                    showToast('Tidak ada data yang cocok untuk diimpor.', 'info');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Gagal memproses file. Pastikan format Excel/CSV benar.', 'error');
+            }
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        };
+        reader.readAsBinaryString(file);
+    };
     
     const pendidikanOptions = ['SD/Sederajat', 'SLTP/Sederajat', 'SLTA/Sederajat', 'Diploma', 'Sarjana (S1)', 'Pascasarjana (S2/S3)', 'Tidak Sekolah'];
     const statusHidupOptions = ['Hidup', 'Meninggal', 'Cerai'];
@@ -283,6 +367,24 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                     </p>
                 </div>
                 <div className="flex gap-3">
+                    {mode === 'add' && (
+                        <>
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                onChange={handleImportFile} 
+                                accept=".csv, .xlsx, .xls" 
+                                className="hidden" 
+                            />
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-4 py-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg font-medium transition-colors flex items-center gap-2 border border-blue-200"
+                                title="Impor data dari Excel atau CSV"
+                            >
+                                <i className="bi bi-file-earmark-spreadsheet"></i> Smart Import
+                            </button>
+                        </>
+                    )}
                     <button 
                         onClick={handleGenerateAllNis}
                         className="px-4 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg font-medium transition-colors flex items-center gap-2 border border-teal-200"

@@ -222,7 +222,11 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             };
             
             // Save immediately
-            await onSaveSettings({ ...settings, cloudSyncConfig: updatedConfig });
+            const fullyUpdatedConfig = {
+                ...localSettings.cloudSyncConfig,
+                ...updatedConfig
+            };
+            await onSaveSettings({ ...localSettings, cloudSyncConfig: fullyUpdatedConfig });
             setManualAuthCode('');
             showToast('Berhasil terhubung dengan Dropbox!', 'success');
         } catch (error) {
@@ -254,12 +258,17 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     // --- PAIRING LOGIC (Universal for Dropbox & WebDAV) ---
 
     const handleGeneratePairingCode = () => {
-        const config = settings.cloudSyncConfig;
+        // Use localSettings so it reflects current entries and most recent saves
+        const config = localSettings.cloudSyncConfig;
         let payloadString = '';
 
         if (config.provider === 'dropbox') {
-             if (!config.dropboxRefreshToken || !config.dropboxAppKey || !config.dropboxAppSecret) {
-                showToast('Cloud belum terhubung. Pastikan status sudah "Terhubung" sebelum membagikan akses.', 'error');
+             if (!config.dropboxRefreshToken) {
+                showToast('Dropbox belum terhubung. Pastikan status sudah "Terhubung" sebelum membagikan akses.', 'error');
+                return;
+            }
+            if (!config.dropboxAppKey || !config.dropboxAppSecret) {
+                showToast('App Key atau App Secret belum diisi. Keduanya wajib ada bagi Admin untuk membagikan akses kepada Staff.', 'error');
                 return;
             }
             // Include REFRESH TOKEN. This allows session cloning.
@@ -271,7 +280,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             });
         } else if (config.provider === 'webdav') {
             if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
-                showToast('Konfigurasi WebDAV belum lengkap.', 'error');
+                showToast('Konfigurasi WebDAV belum lengkap. Harap isi URL, Username, dan Password.', 'error');
                 return;
             }
              payloadString = JSON.stringify({
@@ -693,7 +702,15 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                                 </>
                             ) : (
                                 <div>
-                                    <div className="text-xs text-gray-500 mb-2">Terhubung dengan App Key: <strong>{settings.cloudSyncConfig.dropboxAppKey}</strong></div>
+                                    <div className="text-xs text-gray-500 mb-2">Terhubung dengan App Key: <strong>{settings.cloudSyncConfig.dropboxAppKey || '(Tidak ada)'}</strong></div>
+                                    
+                                    {(!localSettings.cloudSyncConfig.dropboxAppKey || !localSettings.cloudSyncConfig.dropboxAppSecret) && (
+                                        <div className="mb-3 p-3 bg-red-50 border border-red-100 rounded text-[11px] text-red-700">
+                                            <i className="bi bi-exclamation-triangle-fill mr-1"></i>
+                                            <strong>Perhatian:</strong> App Key dan App Secret wajib diisi di atas agar Anda bisa membagikan Pairing Code ke Staff. Jika Anda tidak tahu nilainya, Anda mungkin perlu menghubungkan ulang Dropbox.
+                                        </div>
+                                    )}
+
                                     <button onClick={handleGeneratePairingCode} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm">
                                         <i className="bi bi-qr-code"></i> Bagikan Sesi (Pairing Code)
                                     </button>

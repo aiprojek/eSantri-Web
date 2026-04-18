@@ -607,9 +607,43 @@ function doPost(e) {
                                 <option value="whatsapp">WhatsApp (Teks Langsung)</option>
                                 <option value="google_sheet">Google Sheet (Web App)</option>
                                 <option value="hybrid">Hybrid (Sheet + WA Backup)</option>
+                                <option value="portal">Firebase Portal (Direct Cloud)</option>
                             </select>
                         </div>
-                        {submissionMethod !== 'whatsapp' && (
+
+                        {submissionMethod === 'portal' && (
+                            <div className="p-3 bg-teal-50 border border-teal-200 rounded-lg">
+                                <label className="block text-[10px] font-bold text-teal-700 uppercase tracking-wider mb-1">URL Portal PSB Anda</label>
+                                {settings.cloudSyncConfig?.firebasePairedTenantId ? (
+                                    <div className="space-y-2">
+                                        <div className="flex gap-1">
+                                            <input 
+                                                readOnly 
+                                                value={`${window.location.origin}/psb/${settings.cloudSyncConfig.firebasePairedTenantId}${activeTemplateId ? '/' + activeTemplateId : ''}`}
+                                                className="flex-1 text-[10px] bg-white border border-teal-200 p-1.5 rounded truncate font-mono"
+                                            />
+                                            <button 
+                                                onClick={() => {
+                                                    const url = `${window.location.origin}/psb/${settings.cloudSyncConfig.firebasePairedTenantId}${activeTemplateId ? '/' + activeTemplateId : ''}`;
+                                                    navigator.clipboard.writeText(url);
+                                                    showToast('Link PSB disalin!', 'success');
+                                                }}
+                                                className="bg-teal-600 text-white px-2 rounded hover:bg-teal-700"
+                                            >
+                                                <i className="bi bi-clipboard text-xs"></i>
+                                            </button>
+                                        </div>
+                                        <p className="text-[9px] text-teal-600 italic">Data pendaftar akan masuk langsung ke database Firebase (Cloud) dan tersinkron ke aplikasi lokal.</p>
+                                    </div>
+                                ) : (
+                                    <div className="text-[10px] text-red-600 font-medium">
+                                        <i className="bi bi-exclamation-triangle"></i> Hubungkan Cloud Firebase terlebih dahulu di menu Pengaturan.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {submissionMethod !== 'whatsapp' && submissionMethod !== 'portal' && (
                             <div className="p-2 bg-gray-50 rounded border text-xs">
                                 <label className="font-bold block mb-1">URL Google Script</label>
                                 <input type="text" value={googleScriptUrl} onChange={e => setGoogleScriptUrl(e.target.value)} placeholder="https://script.google.com/..." className="w-full border rounded p-1 mb-1" />

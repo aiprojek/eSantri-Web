@@ -6,6 +6,7 @@ import { db } from '../../db';
 import { fetchPsbFromDropbox, getValidDropboxToken } from '../../services/syncService';
 import { PendaftarModal } from './modals/PendaftarModal';
 import { BulkPendaftarEditor } from './modals/BulkPendaftarEditor';
+import JSZip from 'jszip';
 
 interface PsbRekapProps {
     pendaftarList: Pendaftar[];
@@ -27,6 +28,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const [isPendaftarModalOpen, setIsPendaftarModalOpen] = useState(false);
     const [editingPendaftar, setEditingPendaftar] = useState<Pendaftar | null>(null);
     const [isBulkEditorOpen, setIsBulkEditorOpen] = useState(false);
+    const [isArchiving, setIsArchiving] = useState(false);
 
     // Submission method from settings
     const method = settings.psbConfig.submissionMethod;
@@ -370,6 +372,66 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         showToast('Data pendaftar diperbarui', 'success');
     }
 
+    const handleDownloadArchive = async () => {
+        if (pendaftarList.length === 0) {
+            showAlert('Kosong', 'Tidak ada data pendaftar untuk diarsipkan.');
+            return;
+        }
+
+        setIsArchiving(true);
+        const zip = new JSZip();
+        let fileCount = 0;
+
+        try {
+            showToast('Menyiapkan arsip dokumen...', 'info');
+            
+            for (const p of pendaftarList) {
+                const customData = p.customData ? JSON.parse(p.customData) : {};
+                const files = Object.keys(customData).filter(key => {
+                    const val = customData[key];
+                    return typeof val === 'string' && (val.startsWith('data:') || val.startsWith('http'));
+                });
+
+                if (files.length === 0) continue;
+
+                const folder = zip.folder(p.namaLengkap.replace(/[^a-zA-Z0-9]/g, '_'));
+                
+                for (const fKey of files) {
+                    const val = customData[fKey];
+                    try {
+                        const response = await fetch(val);
+                        const blob = await response.blob();
+                        const extension = val.includes('image/') ? 'jpg' : 'pdf'; // Guess if not clear
+                        const fileName = `${fKey.replace(/ /g, '_')}.${extension}`;
+                        folder?.file(fileName, blob);
+                        fileCount++;
+                    } catch (e) {
+                        console.error(`Failed to download ${fKey} for ${p.namaLengkap}`, e);
+                    }
+                }
+            }
+
+            if (fileCount === 0) {
+                showAlert('Tidak Ada Dokumen', 'Tidak ditemukan berkas yang bisa diunduh dari daftar pendaftar saat ini.');
+                return;
+            }
+
+            const content = await zip.generateAsync({ type: "blob" });
+            const url = window.URL.createObjectURL(content);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Arsip_PSB_${new Date().toISOString().split('T')[0]}.zip`;
+            link.click();
+            window.URL.revokeObjectURL(url);
+            
+            showToast(`Berhasil mengarsipkan ${fileCount} dokumen.`, 'success');
+        } catch (error: any) {
+            showAlert('Gagal Arsip', `Terjadi kesalahan saat membuat arsip: ${error.message}`);
+        } finally {
+            setIsArchiving(false);
+        }
+    };
+
     const handleBulkSave = async (data: Partial<Pendaftar>[]) => {
         const newItems = data.map(d => ({
             ...d,
@@ -432,6 +494,16 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                             >
                                 {isSyncing ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-cloud-download"></i>}
                                 Sync Sesama Admin
+                            </button>
+
+                            <button 
+                                onClick={handleDownloadArchive} 
+                                disabled={isArchiving}
+                                className="flex-grow lg:flex-grow-0 bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg text-sm hover:bg-amber-100 flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                                title="Unduh semua dokumen pendaftar sebagai file ZIP"
+                            >
+                                {isArchiving ? <i className="bi bi-arrow-repeat animate-spin"></i> : <i className="bi bi-file-earmark-zip-fill"></i>}
+                                Arsip Offline (ZIP)
                             </button>
 
                             <button onClick={() => setIsWaModalOpen(true)} className="flex-grow lg:flex-grow-0 bg-green-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-600 flex items-center justify-center gap-2">

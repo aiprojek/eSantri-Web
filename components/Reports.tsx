@@ -15,9 +15,10 @@ const Reports: React.FC = () => {
   const { santriList } = useSantriContext();
   const { tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList } = useFinanceContext();
   
-  // -- Navigation State --
+  // -- Nav & UI State --
   const [currentView, setCurrentView] = useState<'home' | 'detail'>('home');
   const [activeReportType, setActiveReportType] = useState<ReportType | null>(null);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
   // -- Filter State (Lifted Up) --
   const [filters, setFilters] = useState({
@@ -229,11 +230,21 @@ const Reports: React.FC = () => {
               <h1 className="text-2xl font-bold text-gray-800">Laporan & Cetak Dokumen</h1>
               <p className="text-sm text-gray-500">Pusat pencetakan dokumen resmi pesantren.</p>
           </div>
-          {currentView === 'detail' && (
-              <button onClick={handleBackToHome} className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center gap-2">
-                  <i className="bi bi-arrow-left"></i> Kembali ke Menu
-              </button>
-          )}
+          <div className="flex gap-2">
+              {currentView === 'detail' && (
+                  <>
+                      <button 
+                          onClick={() => setIsFilterDrawerOpen(true)} 
+                          className="bg-teal-50 text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-100 transition-colors font-medium flex items-center gap-2 border border-teal-200"
+                      >
+                          <i className="bi bi-funnel-fill"></i> <span className="hidden sm:inline">Filter & Opsi</span>
+                      </button>
+                      <button onClick={handleBackToHome} className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center gap-2">
+                          <i className="bi bi-arrow-left"></i> <span className="hidden sm:inline">Kembali</span>
+                      </button>
+                  </>
+              )}
+          </div>
       </div>
 
       {/* Content Area */}
@@ -243,36 +254,55 @@ const Reports: React.FC = () => {
                   <ReportSelectionHome onSelectReport={handleSelectReport} />
               </div>
           ) : (
-              <div className="flex flex-col lg:flex-row gap-6 h-full">
-                  {/* Left: Configuration Panel */}
-                  <div className="w-full lg:w-1/3 xl:w-1/4 h-full flex flex-col">
-                      <div className="bg-teal-50 border border-teal-200 p-3 rounded-lg mb-3 flex items-center gap-3 shrink-0">
-                          <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center text-teal-600">
-                              <i className="bi bi-file-text-fill text-xl"></i>
-                          </div>
-                          <div>
-                              <div className="text-xs text-teal-600 font-bold uppercase tracking-wider">Laporan Aktif</div>
-                              <div className="font-bold text-gray-800 leading-tight">{getReportTitle()}</div>
-                          </div>
+              <div className="flex h-full relative">
+                  {/* Overlay for Drawer */}
+                  {isFilterDrawerOpen && (
+                      <div 
+                          className="fixed inset-0 bg-black/50 z-[60] no-print"
+                          onClick={() => setIsFilterDrawerOpen(false)}
+                      ></div>
+                  )}
+
+                  {/* Left: Configuration Panel (Drawer Mode) */}
+                  <div className={`fixed top-0 right-0 h-full w-80 bg-white z-[70] shadow-2xl transition-transform duration-300 no-print ${isFilterDrawerOpen ? 'translate-x-0' : 'translate-x-full'} flex flex-col`}>
+                      <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                          <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                              <i className="bi bi-funnel text-teal-600"></i> Kontrol Laporan
+                          </h3>
+                          <button onClick={() => setIsFilterDrawerOpen(false)} className="text-gray-400 hover:text-gray-600">
+                              <i className="bi bi-x-lg"></i>
+                          </button>
                       </div>
-                      
-                      <ReportFilterPanel 
-                          activeReport={activeReportType!}
-                          settings={settings}
-                          filters={filters}
-                          onFilterChange={handleFilterChange}
-                          reportConfig={reportConfig}
-                          filteredSantri={filteredSantri}
-                          availableKelas={availableKelas}
-                          availableRombel={availableRombel}
-                          onGenerate={handleGenerate}
-                          isGenerating={isGenerating}
-                          canGenerate={reportConfig.canGenerate}
-                      />
+
+                      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                          <div className="bg-teal-50 border border-teal-200 p-3 rounded-lg flex items-center gap-3">
+                              <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 shrink-0">
+                                  <i className="bi bi-file-text-fill text-xl"></i>
+                              </div>
+                              <div>
+                                  <div className="text-xs text-teal-600 font-bold uppercase tracking-wider">Laporan Aktif</div>
+                                  <div className="font-bold text-gray-800 leading-tight">{getReportTitle()}</div>
+                              </div>
+                          </div>
+                   
+                          <ReportFilterPanel 
+                              activeReport={activeReportType!}
+                              settings={settings}
+                              filters={filters}
+                              onFilterChange={handleFilterChange}
+                              reportConfig={reportConfig}
+                              filteredSantri={filteredSantri}
+                              availableKelas={availableKelas}
+                              availableRombel={availableRombel}
+                              onGenerate={() => { handleGenerate(); setIsFilterDrawerOpen(false); }}
+                              isGenerating={isGenerating}
+                              canGenerate={reportConfig.canGenerate}
+                          />
+                      </div>
                   </div>
 
-                  {/* Right: Preview Panel */}
-                  <div className="w-full lg:w-2/3 xl:w-3/4 h-full bg-gray-100 rounded-xl overflow-hidden border border-gray-300">
+                  {/* Main: Preview Panel (Full width now) */}
+                  <div className="w-full h-full bg-gray-100 rounded-xl overflow-hidden border border-gray-300">
                       <ReportPreviewPanel 
                           previewContent={previewContent}
                           activeReport={activeReportType!}

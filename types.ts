@@ -363,7 +363,7 @@ export interface JamPelajaran {
 // PSB Types
 export type PsbDesignStyle = 'classic' | 'modern' | 'bold' | 'dark' | 'ceria';
 export type PsbFieldType = 'text' | 'paragraph' | 'radio' | 'checkbox' | 'file' | 'section' | 'statement';
-export type PsbSubmissionMethod = 'whatsapp' | 'google_sheet' | 'hybrid';
+export type PsbSubmissionMethod = 'whatsapp' | 'google_sheet' | 'hybrid' | 'portal';
 
 export interface PsbCustomField {
     id: string;

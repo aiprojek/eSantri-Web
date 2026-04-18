@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Pendaftar, PondokSettings } from '../../../types';
 import { useAppContext } from '../../../AppContext';
+import { storage } from '../../../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface PendaftarModalProps {
     isOpen: boolean;
@@ -72,6 +74,8 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         customData: '{}'
     });
 
+    const [isUploading, setIsUploading] = useState<string | null>(null);
+
     useEffect(() => {
         if (isOpen) {
             if (pendaftarData) {
@@ -135,6 +139,37 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         setParsedCustomData(updated);
         // Sync back to formData string immediately
         setFormData((prev: any) => ({ ...prev, customData: JSON.stringify(updated) }));
+    };
+
+    const handleFileUpload = async (fieldName: string, file: File) => {
+        if (!formData.namaLengkap) {
+            showAlert('Nama Wajib Diisi', 'Mohon isi nama lengkap santri terlebih dahulu untuk penamaan file otomatis.');
+            return;
+        }
+
+        setIsUploading(fieldName);
+        try {
+            // Requirement: Rename file to documentName-santriName
+            const cleanSantriName = formData.namaLengkap.replace(/[^a-zA-Z0-9]/g, '_');
+            const extension = file.name.split('.').pop();
+            const newFileName = `${fieldName}-${cleanSantriName}.${extension}`;
+            
+            const storagePath = `psb/${Date.now()}_${newFileName}`;
+            const fileRef = ref(storage);
+            
+            // Note: In typical Firebase environments, storage usually needs a path
+            const psbRef = ref(storage, storagePath);
+            const snapshot = await uploadBytes(psbRef, file);
+            const downloadUrl = await getDownloadURL(snapshot.ref);
+            
+            handleCustomDataChange(fieldName, downloadUrl);
+            showAlert('Berhasil', `Dokumen ${fieldName} berhasil diunggah.`);
+        } catch (error: any) {
+            console.error("Upload failed:", error);
+            showAlert('Gagal Unggah', `Gagal mengunggah file: ${error.message}`);
+        } finally {
+            setIsUploading(null);
+        }
     };
 
     const handleSave = () => {
@@ -497,6 +532,49 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                     </div>
                                 </div>
                             )}
+
+                            <div className="mt-8 pt-4 border-t border-dashed">
+                                <h5 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
+                                    <i className="bi bi-cloud-upload text-teal-600"></i>
+                                    Unggah Berkas Baru ke Firebase
+                                </h5>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {['Kartu Keluarga', 'Akte Kelahiran', 'KTP Orang Tua', 'Ijazah Terakhir', 'Pas Foto'].map(docName => (
+                                        <div key={docName} className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{docName}</label>
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="file" 
+                                                    id={`upload-${docName}`}
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) handleFileUpload(docName, file);
+                                                    }}
+                                                />
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => document.getElementById(`upload-${docName}`)?.click()}
+                                                    disabled={!!isUploading}
+                                                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors border border-gray-300 disabled:opacity-50"
+                                                >
+                                                    {isUploading === docName ? (
+                                                        <i className="bi bi-arrow-repeat animate-spin"></i>
+                                                    ) : (
+                                                        <i className="bi bi-upload"></i>
+                                                    )}
+                                                    {isUploading === docName ? 'Mengunggah...' : `Pilih File ${docName}`}
+                                                </button>
+                                            </div>
+                                            {parsedCustomData[docName] && (
+                                                <div className="mt-2 text-[10px] text-green-600 font-medium flex items-center gap-1">
+                                                    <i className="bi bi-check-circle-fill"></i> Sudah terunggah
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>

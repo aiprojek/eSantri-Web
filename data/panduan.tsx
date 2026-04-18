@@ -210,6 +210,7 @@ export const panduanData: PanduanSectionData[] = [
                         <div className="border-l-4 border-blue-500 pl-3 py-1 bg-blue-50">
                             <h4 className="font-bold text-blue-800 text-sm">2. Sisi Staff (Pengurus)</h4>
                             <p className="text-xs">Staff login dengan <strong>akun Google mereka sendiri</strong>, lalu masukkan Pairing Code dari Admin di kolom "Setup Cepat".</p>
+                            <p className="text-[10px] mt-1 text-blue-700"><strong>OTOMATIS LOGIN:</strong> Jika Admin Utama mengaktifkan fitur <em>Multi-User</em>, maka setelah Pairing berhasil, Staff akan otomatis diarahkan ke halaman Login agar tidak bisa sembarang masuk menu.</p>
                         </div>
                         <p className="text-[10px] text-gray-500 italic">* Metode ini lebih aman karena Staff tidak perlu tahu password akun Google Admin.</p>
                     </div>
@@ -1071,9 +1072,10 @@ export const panduanData: PanduanSectionData[] = [
                     <>
                         <div className="mb-2">Gunakan menu <strong>PSB</strong> untuk mengelola pendaftaran santri baru secara online/offline.</div>
                         <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                             <li><strong>Portal PSB (Firebase):</strong> Pendaftaran kini bisa melalui Portal khusus yang terintegrasi dengan Firebase Firestore. Data pendaftar masuk secara real-time.</li>
+                             <li><strong>Upload Berkas:</strong> Berkas yang diunggah pendaftar akan otomatis diubah namanya menjadi <code>[Nama-Dokumen]-[Nama-Santri]-[Waktu].[ext]</code> agar rapi untuk diarsip secara offline.</li>
                              <li><strong>Desain Formulir:</strong> Buat formulir pendaftaran custom di menu <em>Desain Formulir Online</em>.</li>
-                             <li><strong>Smart Script:</strong> Anda cukup menggunakan <strong>SATU Google Apps Script</strong> untuk banyak jenis formulir. Sistem akan otomatis memisahkan data ke Tab (Sheet) yang berbeda di Google Spreadsheet berdasarkan nama formulir.</li>
-                             <li><strong>Metode Hybrid:</strong> Pilih metode "Hybrid" agar data tersimpan otomatis ke Cloud (Google Sheet) sekaligus mengirim notifikasi & data backup ke WhatsApp Admin.</li>
+                             <li><strong>Smart Script:</strong> Jika menggunakan Google Spreadsheet, Anda cukup menggunakan satu script untuk banyak jenis formulir.</li>
                              <li><strong>Rekap & Seleksi:</strong> Kelola data masuk di menu <em>Rekap Pendaftar</em>. Klik tombol "Terima" untuk memindahkan pendaftar resmi menjadi Santri Aktif secara otomatis.</li>
                         </ul>
                     </>

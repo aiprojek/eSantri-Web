@@ -17,8 +17,16 @@ service cloud.firestore {
 
     // Tenant Data
     match /tenants/{tenantId} {
-      allow read, write: if isTenantMember(tenantId);
+      // Allow public read of basic settings for the portal
+      allow read: if true; 
+      allow write: if isTenantMember(tenantId);
       
+      // PSB Registrations - Allow public create
+      match /pendaftar/{pendaftarId} {
+        allow create: if true;
+        allow read, update, delete: if isTenantMember(tenantId);
+      }
+
       match /{allSubcollections=**} {
         allow read, write: if isTenantMember(tenantId);
       }

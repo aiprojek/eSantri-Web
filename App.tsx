@@ -40,6 +40,7 @@ const Kesehatan = React.lazy(() => import('./components/Kesehatan'));
 const BK = React.lazy(() => import('./components/BK'));
 const BukuTamu = React.lazy(() => import('./components/BukuTamu')); 
 const Koperasi = React.lazy(() => import('./components/Koperasi')); 
+const PublicPortal = React.lazy(() => import('./components/portal/PublicPortal').then(module => ({ default: module.PublicPortal })));
 
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
 const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
@@ -343,6 +344,18 @@ const AppContent: React.FC = () => {
         );
     };
     
+    const isPortal = window.location.pathname.startsWith('/portal/') || window.location.pathname.startsWith('/psb/');
+
+    if (isPortal) {
+        return (
+            <div className="min-h-screen bg-gray-100">
+                <Suspense fallback={<LoadingFallback />}>
+                    <PublicPortal />
+                </Suspense>
+            </div>
+        );
+    }
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100">

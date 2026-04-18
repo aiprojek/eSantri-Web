@@ -41,7 +41,7 @@ export const CustomFieldEditor: React.FC<{ fields: PsbCustomField[], onChange: (
                         <button onClick={() => removeField(index)} className="p-1 text-red-500 hover:text-red-700" title="Hapus"><i className="bi bi-trash"></i></button>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2 pr-20">
+                    <div className="grid grid-cols-1 gap-3 mb-2 pr-20">
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Tipe Field</label>
                             <select 

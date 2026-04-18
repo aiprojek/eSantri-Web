@@ -87,3 +87,4 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Export common firestore functions for easier use
 export { doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocs, writeBatch, serverTimestamp };
+export { ref, uploadBytes, getDownloadURL };

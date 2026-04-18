@@ -379,7 +379,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
         'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules',
-        'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang'
+        'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'settings', 'users', 'auditLogs'
     ];
 
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
@@ -410,7 +410,23 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         };
 
         for (const tableName of tablesToMerge) {
-            await mergeTable(tableName, masterData[tableName]);
+            if (tableName === 'settings' && masterData.settings) {
+                // Special handle for settings singleton
+                const mSettings = masterData.settings[0];
+                if (mSettings) {
+                    const localSettings = await db.settings.toArray();
+                    if (localSettings.length > 0) {
+                        const lSettings = localSettings[0];
+                        if (getTime(mSettings.lastModified) >= getTime(lSettings.lastModified)) {
+                            await db.settings.update(lSettings.id!, mSettings);
+                        }
+                    } else {
+                        await db.settings.add(mSettings);
+                    }
+                }
+            } else {
+                await mergeTable(tableName, masterData[tableName]);
+            }
         }
     });
 
@@ -499,7 +515,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         'suratTemplates', 'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
         'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules',
-        'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang'
+        'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'settings'
     ];
 
     if (resolvedConflicts) {
@@ -574,6 +590,20 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
             if (tableName === 'users' && data.users) {
                 const staffUpdates = data.users.filter((u: any) => !u.isDefaultAdmin);
                 await checkAndMerge('users', staffUpdates);
+            } else if (tableName === 'settings' && data.settings) {
+                // Special handle for settings to avoid duplicating the single record
+                const incomingSettings = data.settings[0];
+                if (incomingSettings) {
+                    const localSettings = await db.settings.toArray();
+                    if (localSettings.length > 0) {
+                        const local = localSettings[0];
+                        if (getTime(incomingSettings.lastModified) > getTime(local.lastModified)) {
+                            await db.settings.update(local.id!, incomingSettings);
+                        }
+                    } else {
+                        await db.settings.add(incomingSettings);
+                    }
+                }
             } else {
                 await checkAndMerge(tableName, data[tableName]);
             }
@@ -623,7 +653,8 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         pendingOrders: await db.pendingOrders.toArray(),
         diskon: await db.diskon.toArray(),
         suppliers: await db.suppliers.toArray(),
-        pembayaranHutang: await db.pembayaranHutang.toArray()
+        pembayaranHutang: await db.pembayaranHutang.toArray(),
+        settings: await db.settings.toArray()
     };
 
     const masterConfig = {
@@ -702,9 +733,20 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
         data = await decompressData(contents as any);
     }
 
-    if (data && data.users) {
-        await db.users.clear();
-        await db.users.bulkPut(data.users);
+    if (data) {
+        if (data.users) {
+            await db.users.clear();
+            await db.users.bulkPut(data.users);
+        }
+        if (data.settings && data.settings.length > 0) {
+            const localSettings = await db.settings.toArray();
+            if (localSettings.length > 0) {
+                // Merge cloud settings into local, keeping identity but updating master data
+                await db.settings.update(localSettings[0].id!, data.settings[0]);
+            } else {
+                await db.settings.add(data.settings[0]);
+            }
+        }
     }
     return true;
 };

@@ -23,6 +23,20 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "username", "role"]
+    },
+    "Pendaftar": {
+      "title": "Pendaftar",
+      "description": "Data pendaftaran santri baru",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "namaLengkap": { "type": "string" },
+        "tanggalDaftar": { "type": "string" },
+        "status": { "type": "string" },
+        "customData": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "namaLengkap", "status"]
     }
   },
   "firestore": {
@@ -33,6 +47,10 @@
     "tenants/{tenantId}/users": {
       "schema": "User",
       "description": "Koleksi data user per tenant"
+    },
+    "tenants/{tenantId}/pendaftar": {
+      "schema": "Pendaftar",
+      "description": "Koleksi data pendaftar PSB per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

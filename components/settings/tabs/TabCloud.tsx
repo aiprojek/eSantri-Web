@@ -5,7 +5,7 @@ import { useAppContext } from '../../../AppContext';
 import { db } from '../../../db';
 import { useFirebase } from '../../../contexts/FirebaseContext';
 import { getCloudStorageStats, exchangeCodeForToken, downloadAndMergeMaster, updateAccountFromCloud } from '../../../services/syncService';
-import { pushAllToFirebase } from '../../../services/firebaseSyncService';
+import { pushAllToFirebase, downloadAllFromFirebase } from '../../../services/firebaseSyncService';
 import { formatBytes } from '../../../utils/formatters';
 
 const StorageIndicator: React.FC<{ stats: StorageStats | null, isLoading: boolean, provider: SyncProvider }> = ({ stats, isLoading, provider }) => {
@@ -382,7 +382,13 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             
             // 4. Download Master Data (Santri, Transaksi, dll)
             setPairingStep('downloading_data');
-            await downloadAndMergeMaster(updatedConfig);
+            if (updatedConfig.provider === 'firebase') {
+                if (updatedConfig.firebasePairedTenantId) {
+                    await downloadAllFromFirebase(updatedConfig.firebasePairedTenantId);
+                }
+            } else {
+                await downloadAndMergeMaster(updatedConfig);
+            }
             
             // 5. Success
             setPairingStep('success');
@@ -395,7 +401,22 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     };
 
     const handleFinishPairing = () => {
-        window.location.reload();
+        // If multi-user is already enabled in the synced settings, 
+        // we should redirect to login instead of just reloading to home
+        const checkAndRedirect = async () => {
+            const settings = await db.settings.toArray();
+            const config = settings[0];
+            
+            if (config?.multiUserMode) {
+                // Clear any existing session to be safe
+                localStorage.removeItem('eSantriCurrentUser');
+                window.location.href = '/login';
+            } else {
+                window.location.reload();
+            }
+        };
+
+        checkAndRedirect();
     };
 
     return (

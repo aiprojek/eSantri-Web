@@ -20,7 +20,7 @@ const TABLES_TO_SYNC = [
     'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
     'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
     'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules', 'users',
-    'auditLogs', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang'
+    'auditLogs', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'settings'
 ];
 
 let unsubscribers: (() => void)[] = [];
@@ -43,47 +43,64 @@ export const startFirebaseSync = (tenantId: string) => {
         // 1. Listen for changes in Firestore and update Dexie
         TABLES_TO_SYNC.forEach(tableName => {
             const path = `tenants/${actualId}/${tableName}`;
-            const q = query(collection(fdb, path));
+            const isSettings = tableName === 'settings';
+            
+            // For settings, it's a specific document 'main'
+            const target = isSettings ? doc(fdb, path, 'main') : query(collection(fdb, path));
 
-            const unsub = onSnapshot(q, async (snapshot) => {
+            const unsub = onSnapshot(target as any, async (snap: any) => {
                 isSyncingFromCloud = true;
-                const batch: any[] = [];
-                const idsToDelete: any[] = [];
+                
+                const processDoc = async (docData: any, docId: string) => {
+                    if (tableName === 'users' && docData.isDefaultAdmin) return null;
+                    
+                    const localItem = await (db as any)[tableName].get(isSettings ? (await (db as any)[tableName].toArray())[0]?.id : (docData.id || docData.santriId || docId));
+                    const cloudTime = getTime(docData.lastModified);
+                    const localTime = localItem ? getTime(localItem.lastModified) : 0;
 
-                for (const change of snapshot.docChanges()) {
-                    const data = change.doc.data();
-                    const docId = change.doc.id;
-
-                    if (change.type === "added" || change.type === "modified") {
-                        if (tableName === 'users' && data.isDefaultAdmin) continue;
-                        
-                        // Check lastModified to avoid overwriting newer local data
-                        const localItem = await (db as any)[tableName].get(data.id || data.santriId || docId);
-                        if (!localItem || getTime(data.lastModified) > getTime(localItem.lastModified)) {
-                            batch.push(data);
+                    if (!localItem || cloudTime > localTime) {
+                        return docData;
+                    } else if (cloudTime === localTime) {
+                        const { lastModified: t1, ...c1 } = docData;
+                        const { lastModified: t2, ...c2 } = localItem;
+                        if (JSON.stringify(c1) !== JSON.stringify(c2)) {
+                            return docData;
                         }
-                    } else if (change.type === "removed") {
-                        idsToDelete.push(data.id || data.santriId || docId);
                     }
-                }
+                    return null;
+                };
 
-                if (batch.length > 0) {
-                    try {
-                        await (db as any)[tableName].bulkPut(batch);
-                    } catch (err) {
-                        console.error(`Error syncing ${tableName} from Firebase:`, err);
+                if (isSettings) {
+                    if (snap.exists()) {
+                        const data = snap.data();
+                        const result = await processDoc(data, 'main');
+                        if (result) {
+                            const local = await db.settings.toArray();
+                            if (local.length > 0) {
+                                await db.settings.update(local[0].id!, result);
+                            } else {
+                                await db.settings.add(result);
+                            }
+                        }
                     }
-                }
-
-                if (idsToDelete.length > 0) {
-                    try {
-                        await (db as any)[tableName].bulkDelete(idsToDelete);
-                    } catch (err) {
-                        console.error(`Error deleting ${tableName} from local Dexie:`, err);
+                } else {
+                    const batch: any[] = [];
+                    const idsToDelete: any[] = [];
+                    for (const change of snap.docChanges()) {
+                        const data = change.doc.data();
+                        if (change.type === "added" || change.type === "modified") {
+                            const result = await processDoc(data, change.doc.id);
+                            if (result) batch.push(result);
+                        } else if (change.type === "removed") {
+                            idsToDelete.push(data.id || data.santriId || change.doc.id);
+                        }
                     }
+                    if (batch.length > 0) await (db as any)[tableName].bulkPut(batch);
+                    if (idsToDelete.length > 0) await (db as any)[tableName].bulkDelete(idsToDelete);
                 }
+                
                 isSyncingFromCloud = false;
-            }, (error) => {
+            }, (error: any) => {
                 handleFirestoreError(error, OperationType.LIST, path);
             });
 
@@ -107,38 +124,45 @@ export const startFirebaseSync = (tenantId: string) => {
 
             table.hook('deleting', (primKey: any, obj: any) => {
                 if (isSyncingFromCloud) return;
-                deleteFromFirebase(actualId, tableName, primKey);
+                const docId = tableName === 'settings' ? 'main' : (primKey.toString());
+                deleteFromFirebase(actualId, tableName, docId);
             });
         });
+    });
+};
 
-        // Special sync for Settings
-        const settingsPath = `tenants/${actualId}/settings`;
-        const settingsUnsub = onSnapshot(doc(fdb, settingsPath, 'main'), async (snapshot) => {
-            if (snapshot.exists()) {
-                isSyncingFromCloud = true;
-                const cloudSettings = snapshot.data() as any;
-                const localSettings = await db.settings.toArray();
-                if (localSettings.length > 0) {
-                    const current = localSettings[0];
-                    if (getTime(cloudSettings.lastModified) > getTime(current.lastModified)) {
-                        await db.settings.update(current.id!, cloudSettings);
+export const downloadAllFromFirebase = async (tenantId: string) => {
+    isSyncingFromCloud = true;
+    try {
+        for (const tableName of TABLES_TO_SYNC) {
+            const path = `tenants/${tenantId}/${tableName}`;
+            const snapshot = await getDocs(collection(fdb, path));
+            const items = snapshot.docs.map(doc => doc.data() as any);
+            
+            if (items.length > 0) {
+                // For users, don't overwrite the default admin if it's already there
+                if (tableName === 'users') {
+                    const localUsers = await db.users.toArray();
+                    const filteredItems = items.filter(u => !u.isDefaultAdmin || !localUsers.some(lu => lu.isDefaultAdmin));
+                    await db.users.bulkPut(filteredItems);
+                } else if (tableName === 'settings') {
+                    const localSettings = await db.settings.toArray();
+                    if (localSettings.length > 0) {
+                        await db.settings.update(localSettings[0].id!, items[0]);
+                    } else {
+                        await db.settings.add(items[0]);
                     }
                 } else {
-                    await db.settings.add(cloudSettings);
+                    await (db as any)[tableName].bulkPut(items);
                 }
-                isSyncingFromCloud = false;
             }
-        }, (error) => {
-            handleFirestoreError(error, OperationType.GET, settingsPath);
-        });
-        unsubscribers.push(settingsUnsub);
-
-        // Settings Hook
-        db.settings.hook('updating', (mods: any, primKey: any, obj: any) => {
-            if (isSyncingFromCloud) return;
-            syncLocalToFirebase(actualId, 'settings', { ...obj, ...mods });
-        });
-    });
+        }
+    } catch (error) {
+        console.error("Error downloading all from Firebase:", error);
+        throw error;
+    } finally {
+        isSyncingFromCloud = false;
+    }
 };
 
 export const stopFirebaseSync = () => {
@@ -148,16 +172,21 @@ export const stopFirebaseSync = () => {
 
 export const syncLocalToFirebase = async (tenantId: string, tableName: string, data: any) => {
     const path = `tenants/${tenantId}/${tableName}`;
-    let docId = data.id?.toString() || data.santriId?.toString() || 'main';
+    let docId = 'main';
     
-    // Force 'main' for settings to ensure consistency with onSnapshot
-    if (tableName === 'settings') docId = 'main';
+    if (tableName !== 'settings') {
+        docId = data.id?.toString() || data.santriId?.toString() || data.nis?.toString();
+        if (!docId) {
+            console.warn(`Attempting to sync ${tableName} without valid ID`, data);
+            return;
+        }
+    }
     
     try {
         await setDoc(doc(fdb, path, docId), {
             ...data,
             lastModified: data.lastModified || Date.now()
-        });
+        }, { merge: true }); // Use merge to prevent partial data loss
     } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `${path}/${docId}`);
     }

@@ -342,6 +342,33 @@ export const panduanData: PanduanSectionData[] = [
                 )
             },
             {
+                title: 'Sinkronisasi Antar Admin (2 Perangkat)',
+                color: 'blue',
+                content: (
+                    <div className="bg-blue-50 p-3 rounded border border-blue-200 text-sm">
+                        <p className="mb-2">Jika ada 2 perangkat Admin (misal Laptop Kantor & Laptop Rumah) menggunakan Dropbox/WebDAV:</p>
+                        <ol className="list-decimal pl-5 space-y-2">
+                            <li><strong>Admin 1:</strong> Lakukan perubahan data, lalu klik tombol Sync di samping dan pilih <strong>"Publikasikan Master"</strong>.</li>
+                            <li><strong>Admin 2:</strong> Klik tombol Sync di samping dan pilih <strong>"Ambil Data Terbaru"</strong> untuk menarik perubahan dari Admin 1.</li>
+                        </ol>
+                        <p className="mt-2 text-xs text-blue-800 italic">* Jika menggunakan Firebase, data tersinkron otomatis secara real-time tanpa langkah ini.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Pembaruan Data Staff (Otomatis)',
+                color: 'teal',
+                content: (
+                    <div className="bg-teal-50 p-3 rounded border border-teal-200 text-sm">
+                        <p>Untuk memudahkan Staff, sistem telah dilengkapi fitur <strong>Auto-Pull on Login</strong>:</p>
+                        <ul className="list-disc pl-5 mt-2 space-y-1">
+                            <li>Setiap kali Staff <strong>Login</strong>, aplikasi akan otomatis menarik (Pull) data Master terbaru dari Cloud.</li>
+                            <li>Jika <em>Auto-Sync</em> aktif, sistem juga akan mengecek data baru tiap 5 menit.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
                 title: 'SOP Harian: Alur Kerja Staff',
                 color: 'black',
                 content: (

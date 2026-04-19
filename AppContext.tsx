@@ -88,6 +88,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const addTimestamp = (data: any) => ({ ...data, lastModified: Date.now() });
 
     // Sync Logic
+    // Effect for Auto-Pull on Login (First login in session)
+    useEffect(() => {
+        if (auth.currentUser && auth.currentUser.id !== 0 && sets.settings.cloudSyncConfig?.provider !== 'none') {
+            // Trigger pull to ensure staff has latest data from admin
+            console.log("Auto-pulling data on login...");
+            triggerManualSync('down');
+        }
+    }, [auth.currentUser?.id]); 
+
     useEffect(() => {
         if (sets.settings.cloudSyncConfig?.autoSync && sets.settings.cloudSyncConfig.provider !== 'none') {
             if (pullSyncIntervalRef.current) clearInterval(pullSyncIntervalRef.current);

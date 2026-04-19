@@ -261,49 +261,47 @@ export const fetchPsbFromDropbox = async (token: string): Promise<any[]> => {
     }
 };
 
+// Helper to filter data for incremental sync
+const getIncrementalData = async (tableName: string, since?: number) => {
+    const table = (db as any)[tableName];
+    if (!since) return await table.toArray();
+    return await table.where('lastModified').above(since).toArray();
+};
+
 // ... uploadStaffChanges ...
-export const uploadStaffChanges = async (config: CloudSyncConfig, username: string) => {
+export const uploadStaffChanges = async (config: CloudSyncConfig, username: string, forceFull: boolean = false) => {
+    const lastSyncTime = !forceFull && config.lastSync ? new Date(config.lastSync).getTime() : 0;
+    
+    const data: any = {};
+    const tablesToSync = [
+        'santri', 'settings', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 
+        'transaksiKas', 'chartOfAccounts', 'payrollRecords', 'produkKoperasi', 
+        'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi', 'suratTemplates', 
+        'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi', 
+        'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 
+        'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 
+        'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang'
+    ];
+
+    for (const table of tablesToSync) {
+        data[table] = await getIncrementalData(table, lastSyncTime);
+    }
+
+    // Always include settings if there's any update or force
+    if (data.settings.length === 0 && !forceFull) {
+        // Option: skip if no changes across most important tables? 
+        // For now, let's check if all tables are empty
+        const totalChanges = Object.values(data).reduce((acc: number, curr: any) => acc + curr.length, 0);
+        if (totalChanges === 0) {
+            return { skipped: true, timestamp: new Date().toISOString() };
+        }
+    }
+
     const payload = {
         sender: username,
         timestamp: new Date().toISOString(),
-        data: {
-            santri: await db.santri.toArray(),
-            settings: await db.settings.toArray(),
-            tagihan: await db.tagihan.toArray(),
-            pembayaran: await db.pembayaran.toArray(),
-            saldoSantri: await db.saldoSantri.toArray(),
-            transaksiSaldo: await db.transaksiSaldo.toArray(),
-            transaksiKas: await db.transaksiKas.toArray(),
-            chartOfAccounts: await db.chartOfAccounts.toArray(), // NEW
-            payrollRecords: await db.payrollRecords.toArray(),
-            produkKoperasi: await db.produkKoperasi.toArray(),
-            transaksiKoperasi: await db.transaksiKoperasi.toArray(),
-            riwayatStok: await db.riwayatStok.toArray(),
-            keuanganKoperasi: await db.keuanganKoperasi.toArray(),
-            suratTemplates: await db.suratTemplates.toArray(),
-            arsipSurat: await db.arsipSurat.toArray(),
-            pendaftar: await db.pendaftar.toArray(),
-            auditLogs: await db.auditLogs.toArray(),
-            users: await db.users.toArray(), 
-            raporRecords: await db.raporRecords.toArray(),
-            absensi: await db.absensi.toArray(),
-            tahfizh: await db.tahfizh.toArray(),
-            buku: await db.buku.toArray(),
-            sirkulasi: await db.sirkulasi.toArray(),
-            obat: await db.obat.toArray(),
-            kesehatanRecords: await db.kesehatanRecords.toArray(),
-            bkSessions: await db.bkSessions.toArray(),
-            bukuTamu: await db.bukuTamu.toArray(),
-            inventaris: await db.inventaris.toArray(),
-            calendarEvents: await db.calendarEvents.toArray(),
-            jadwalPelajaran: await db.jadwalPelajaran.toArray(), 
-            arsipJadwal: await db.arsipJadwal.toArray(),
-            piketSchedules: await db.piketSchedules.toArray(),
-            pendingOrders: await db.pendingOrders.toArray(),
-            diskon: await db.diskon.toArray(),
-            suppliers: await db.suppliers.toArray(),
-            pembayaranHutang: await db.pembayaranHutang.toArray()
-        }
+        isIncremental: lastSyncTime > 0,
+        data
     };
     
     // UPDATE: Compress Payload before upload
@@ -624,6 +622,31 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
 };
 
 // ... publishMasterData, updateAccountFromCloud ...
+export const getPendingChangesCount = async (config: CloudSyncConfig) => {
+    if (!config || config.provider === 'none') return 0;
+    const lastSyncTime = config.lastSync ? new Date(config.lastSync).getTime() : 0;
+    
+    const tablesToSync = [
+        'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 
+        'transaksiKas', 'chartOfAccounts', 'payrollRecords', 'produkKoperasi', 
+        'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi', 'suratTemplates', 
+        'arsipSurat', 'pendaftar', 'auditLogs', 'raporRecords', 'absensi', 
+        'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 
+        'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 
+        'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang'
+    ];
+
+    let total = 0;
+    for (const tableName of tablesToSync) {
+        const table = (db as any)[tableName];
+        if (table) {
+            const count = await table.where('lastModified').above(lastSyncTime).count();
+            total += count;
+        }
+    }
+    return total;
+};
+
 export const publishMasterData = async (config: CloudSyncConfig) => {
     const masterData = {
         timestamp: new Date().toISOString(),

@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
 import { Santri, Pendaftar, AbsensiRecord, TahfizhRecord, SantriFilters } from '../types';
 import { db } from '../db';
+import { logActivity } from '../services/logService';
 
 interface SantriContextType {
   santriList: Santri[];
@@ -41,17 +42,24 @@ export const SantriProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const onAddSantri = async (data: Omit<Santri, 'id'>) => {
     const id = generateUniqueId();
-    await db.santri.put(addTimestamp({ ...data, id }) as Santri);
+    const newSantri = addTimestamp({ ...data, id }) as Santri;
+    await db.santri.put(newSantri);
+    await logActivity('INSERT', 'santri', id, null, newSantri);
   };
 
   const onUpdateSantri = async (data: Santri) => {
-    await db.santri.put(addTimestamp(data));
+    const oldSantri = await db.santri.get(data.id);
+    const newSantri = addTimestamp(data);
+    await db.santri.put(newSantri);
+    await logActivity('UPDATE', 'santri', data.id, oldSantri, newSantri);
   };
 
   const onDeleteSantri = async (id: number) => {
-    const santri = santriList.find(s => s.id === id);
+    const santri = await db.santri.get(id);
     if (santri) {
-        await db.santri.put({ ...santri, deleted: true, lastModified: Date.now() });
+        const deletedSantri = { ...santri, deleted: true, lastModified: Date.now() };
+        await db.santri.put(deletedSantri);
+        await logActivity('DELETE', 'santri', id, santri, deletedSantri);
     }
   };
 

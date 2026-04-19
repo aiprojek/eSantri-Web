@@ -6,6 +6,7 @@ import { useSantriFilter } from '../hooks/useSantriFilter';
 import { Santri } from '../types';
 import { SantriModal } from './santri/SantriModal';
 import { BulkSantriEditor } from './santri/modals/BulkSantriEditor';
+import { sendManualWA, WA_TEMPLATES, formatWAMessage } from '../services/waService';
 import { parseSantriCsv, generateSantriCsvForUpdate, generateSantriCsvTemplate } from '../services/csvService';
 import { Pagination } from './common/Pagination';
 import { BulkStatusModal } from './santri/modals/BulkStatusModal';
@@ -189,6 +190,19 @@ const SantriList: React.FC = () => {
           return <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full border ${colors[status] || colors['Aktif']}`}>{status}</span>;
       };
 
+    const handleQuickWA = (santri: Santri) => {
+        const phone = santri.teleponAyah || santri.teleponIbu || santri.teleponWali;
+        if (!phone) {
+            showToast('Nomor telepon tidak tersedia', 'error');
+            return;
+        }
+        const message = formatWAMessage("Assalamualaikum, Bapak/Ibu [ortu]. Saya dari Pengurus Pondok ingin menyapa santri [nama_santri].", {
+            nama_santri: santri.namaLengkap,
+            ortu: santri.namaAyah || santri.namaIbu || 'Wali Santri'
+        });
+        sendManualWA(phone, message);
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -297,12 +311,21 @@ const SantriList: React.FC = () => {
                                 <td className="p-4 text-center"><span className={`px-2 py-0.5 rounded text-xs font-bold ${s.jenisKelamin === 'Laki-laki' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</span></td>
                                 <td className="p-4"><StatusBadge status={s.status} /></td>
                                 <td className="p-4 text-center">
-                                    {canWrite && (
-                                        <div className="flex justify-center gap-2">
-                                            <button onClick={() => handleEdit(s)} className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-2 rounded transition-colors" title="Edit"><i className="bi bi-pencil-square"></i></button>
-                                            <button onClick={() => handleDelete(s.id)} className="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors" title="Hapus"><i className="bi bi-trash"></i></button>
-                                        </div>
-                                    )}
+                                    <div className="flex justify-center gap-2">
+                                        <button 
+                                            onClick={() => handleQuickWA(s)}
+                                            className="text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 p-2 rounded transition-colors" 
+                                            title="Kirim WhatsApp"
+                                        >
+                                            <i className="bi bi-whatsapp"></i>
+                                        </button>
+                                        {canWrite && (
+                                            <>
+                                                <button onClick={() => handleEdit(s)} className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-2 rounded transition-colors" title="Edit"><i className="bi bi-pencil-square"></i></button>
+                                                <button onClick={() => handleDelete(s.id)} className="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors" title="Hapus"><i className="bi bi-trash"></i></button>
+                                            </>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}

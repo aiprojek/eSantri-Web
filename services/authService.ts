@@ -74,7 +74,69 @@ export const DEFAULT_STAFF_PERMISSIONS = {
     syncAdmin: false,
 };
 
-// Default Permissions for Wali Kelas
+// ROLE TEMPLATES for Quick Setup
+export const ROLE_TEMPLATES = [
+    {
+        id: 'kesantrian',
+        label: 'Kesantrian / Pengasuhan',
+        icon: 'bi-people-fill',
+        permissions: {
+            ...DEFAULT_STAFF_PERMISSIONS,
+            santri: 'write',
+            absensi: 'write',
+            tahfizh: 'write',
+            keasramaan: 'write',
+            kesehatan: 'write',
+            bk: 'write',
+            bukutamu: 'write'
+        }
+    },
+    {
+        id: 'bendahara',
+        label: 'Bendahara / Keuangan',
+        icon: 'bi-cash-stack',
+        permissions: {
+            ...DEFAULT_STAFF_PERMISSIONS,
+            keuangan: 'write',
+            bukukas: 'write',
+            koperasi: 'write',
+            santri: 'read'
+        }
+    },
+    {
+        id: 'akademik',
+        label: 'Tata Usaha / Akademik',
+        icon: 'bi-mortarboard-fill',
+        permissions: {
+            ...DEFAULT_STAFF_PERMISSIONS,
+            akademik: 'write',
+            surat: 'write',
+            psb: 'write',
+            kalender: 'write',
+            santri: 'write',
+            datamaster: 'read'
+        }
+    },
+    {
+        id: 'sarpras',
+        label: 'Sarpras & Aset',
+        icon: 'bi-building',
+        permissions: {
+            ...DEFAULT_STAFF_PERMISSIONS,
+            sarpras: 'write',
+            kalender: 'read'
+        }
+    },
+    {
+        id: 'perpus',
+        label: 'Perpustakaan',
+        icon: 'bi-book',
+        permissions: {
+            ...DEFAULT_STAFF_PERMISSIONS,
+            perpustakaan: 'write'
+        }
+    }
+];
 export const DEFAULT_WALI_KELAS_PERMISSIONS = {
     santri: 'read',
     psb: 'none',

@@ -288,6 +288,15 @@ export const AdminSyncDashboard: React.FC = () => {
             </div>
             
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                <p className="font-bold mb-1">Panduan Resolusi Konflik:</p>
+                <p className="mb-2">Jika terjadi bentrok data (misal Admin dan Staff mengedit santri yang sama), jendela resolusi akan muncul:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                    <li><strong>Versi Lokal:</strong> Gunakan data yang ada di komputer Anda sekarang.</li>
+                    <li><strong>Versi Staff:</strong> Terpilih otomatis jika data staff lebih baru.</li>
+                    <li><strong>Mix & Match:</strong> Anda bisa klik pada masing-masing baris data (misal Nama dari Staff, tapi Alamat dari Lokal) lalu klik "Simpan Hasil Campuran".</li>
+                </ul>
+            </div>
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800 mt-4">
                 <strong>Panduan Admin Pengepul:</strong>
                 <ol className="list-decimal pl-5 mt-1 space-y-1">
                     <li>Klik "Segarkan" untuk melihat file kiriman staff.</li>

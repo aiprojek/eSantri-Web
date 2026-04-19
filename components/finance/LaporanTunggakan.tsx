@@ -4,7 +4,8 @@ import { useFinanceContext } from '../../contexts/FinanceContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { useAppContext } from '../../AppContext';
 import { formatRupiah } from '../../utils/formatters';
-import { Tagihan } from '../../types';
+import { Tagihan, Santri } from '../../types';
+import { sendManualWA, formatWAMessage, WA_TEMPLATES } from '../../services/waService';
 
 export const LaporanTunggakan: React.FC = () => {
     const { tagihanList } = useFinanceContext();
@@ -72,6 +73,26 @@ export const LaporanTunggakan: React.FC = () => {
 
     const handlePrint = () => window.print();
 
+    const handleSendDuesWA = (santriId: number, total: number) => {
+        const santri = santriList.find(s => s.id === santriId);
+        if (!santri) return;
+
+        const phone = santri.teleponAyah || santri.teleponIbu || santri.teleponWali;
+        if (!phone) {
+            alert("Nomor telepon orang tua tidak tersedia!");
+            return;
+        }
+
+        const message = formatWAMessage(WA_TEMPLATES.TAGIHAN, {
+            nama_santri: santri.namaLengkap,
+            ortu: santri.namaAyah || santri.namaIbu || 'Wali Santri',
+            nominal: total.toLocaleString('id-ID'),
+            bulan: new Date().toLocaleString('id-ID', { month: 'long' })
+        });
+
+        sendManualWA(phone, message);
+    };
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
             <div className="flex justify-between items-center mb-6 no-print">
@@ -123,6 +144,7 @@ export const LaporanTunggakan: React.FC = () => {
                             <th className="p-3 border text-right bg-yellow-50">31 - 90 Hari</th>
                             <th className="p-3 border text-right bg-red-50">&gt; 90 Hari</th>
                             <th className="p-3 border text-right font-bold">Total Tunggakan</th>
+                            <th className="p-3 border text-center no-print">Aksi</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -133,7 +155,16 @@ export const LaporanTunggakan: React.FC = () => {
                                 <td className="p-3 border text-right text-gray-600">{item.lancar > 0 ? formatRupiah(item.lancar) : '-'}</td>
                                 <td className="p-3 border text-right text-yellow-700 font-medium">{item.kurangLancar > 0 ? formatRupiah(item.kurangLancar) : '-'}</td>
                                 <td className="p-3 border text-right text-red-600 font-bold">{item.macet > 0 ? formatRupiah(item.macet) : '-'}</td>
-                                <td className="p-3 border text-right font-bold">{formatRupiah(item.total)}</td>
+                                <td className="p-3 border text-right font-bold">{formatRupiah(item.total) }</td>
+                                <td className="p-3 border text-center no-print">
+                                    <button 
+                                        onClick={() => handleSendDuesWA(item.santriId, item.total)}
+                                        className="text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 p-1.5 rounded transition-colors"
+                                        title="Kirim Pengingat WA"
+                                    >
+                                        <i className="bi bi-whatsapp"></i>
+                                    </button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -144,6 +175,7 @@ export const LaporanTunggakan: React.FC = () => {
                             <td className="p-3 text-right">{formatRupiah(grandTotal.kurangLancar)}</td>
                             <td className="p-3 text-right text-red-600">{formatRupiah(grandTotal.macet)}</td>
                             <td className="p-3 text-right">{formatRupiah(grandTotal.total)}</td>
+                            <td className="p-3 text-center no-print"></td>
                         </tr>
                     </tfoot>
                 </table>

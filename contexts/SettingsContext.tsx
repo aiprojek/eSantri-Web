@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { PondokSettings, BackupModalState } from '../types';
 import { db, PondokSettingsWithId } from '../db';
 import { initialSettings, initialSantri } from '../data/mock';
+import { logActivity as logActivityHelper } from '../services/logService';
 
 interface SettingsContextType {
     settings: PondokSettingsWithId;
@@ -76,20 +77,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
     const logActivity = async (tableName: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', recordId: string, oldData?: any, newData?: any) => {
-        // Simple logging without user context (handled in UI layer or assumed system if called directly)
-        // Ideally user info should be passed, but for basic separation, we keep it simple here.
-        const log = {
-            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            table_name: tableName,
-            record_id: recordId,
-            operation,
-            old_data: oldData,
-            new_data: newData,
-            changed_by: 'System/User', // This needs AuthContext to be perfect, but circular dep risk.
-            username: 'System/User',
-            created_at: new Date().toISOString()
-        };
-        await db.auditLogs.add(log);
+        // Assume context is passed or default to System if unknown. 
+        // Real user info is usually injected at the AppContext level or passed here.
+        await logActivityHelper(operation, tableName, recordId, oldData, newData, 'Admin/System');
     };
 
     const onSaveSettings = async (newSettings: PondokSettings) => {

@@ -3,7 +3,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useLiveQuery } from "dexie-react-hooks";
 import { SuratTemplate, ArsipSurat, AuditLog, PondokSettings } from './types';
 import { db } from './db';
-import { uploadStaffChanges, downloadAndMergeMaster, publishMasterData } from './services/syncService';
+import { logActivity as logActivityHelper } from './services/logService';
+import { uploadStaffChanges, downloadAndMergeMaster, publishMasterData, getPendingChangesCount } from './services/syncService';
 import { initialSantri } from './data/mock';
 
 // Import New Contexts
@@ -58,6 +59,7 @@ interface AppContextType {
   onDeleteArsipSurat: (id: number) => Promise<void>;
   onDeleteSampleData: () => Promise<void>;
   triggerManualSync: (action: 'up' | 'down' | 'admin_publish') => Promise<void>;
+  pendingChanges: number;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -73,8 +75,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const suratTemplates = useLiveQuery(() => db.suratTemplates.filter((t: SuratTemplate) => !t.deleted).toArray(), []) || [];
     const arsipSuratList = useLiveQuery(() => db.arsipSurat.filter((a: ArsipSurat) => !a.deleted).toArray(), []) || [];
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+    const [pendingChanges, setPendingChanges] = useState(0);
     const autoSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pullSyncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    useEffect(() => {
+        const checkPending = async () => {
+            if (sets.settings.cloudSyncConfig?.provider !== 'none') {
+                const count = await getPendingChangesCount(sets.settings.cloudSyncConfig);
+                setPendingChanges(count);
+            }
+        };
+        checkPending();
+        const interval = setInterval(checkPending, 30000); // Check every 30s
+        return () => clearInterval(interval);
+    }, [sets.settings.cloudSyncConfig, syncStatus]);
 
     const generateUniqueId = (): number => {
         const timestamp = Date.now();
@@ -83,7 +98,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     // Helper Log
-    const logActivity = sets.logActivity;
+    const logActivity = useCallback(async (tableName: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', recordId: string, oldData?: any, newData?: any) => {
+        const username = auth.currentUser?.username || 'System';
+        await logActivityHelper(operation, tableName, recordId, oldData, newData, username);
+    }, [auth.currentUser]);
 
     const addTimestamp = (data: any) => ({ ...data, lastModified: Date.now() });
 
@@ -143,15 +161,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (auth.currentUser?.role !== 'admin' && !auth.currentUser?.permissions?.syncAdmin) {
                     throw new Error("Anda tidak memiliki izin untuk mempublikasikan master data.");
                 }
-                await publishMasterData(config);
+                const result = await publishMasterData(config);
+                
+                // Update lastSync
+                await db.settings.update(sets.settings.id!, { 
+                    cloudSyncConfig: { ...config, lastSync: new Date().toISOString() } 
+                });
+                
                 ui.showToast('Data Master berhasil dipublikasikan.', 'success');
             } else if (action === 'up') {
                 const username = auth.currentUser?.username || 'user';
-                await uploadStaffChanges(config, username);
-                ui.showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
+                const result = await uploadStaffChanges(config, username);
+                
+                if (!(result as any).skipped) {
+                    // Update lastSync
+                    await db.settings.update(sets.settings.id!, { 
+                        cloudSyncConfig: { ...config, lastSync: new Date().toISOString() } 
+                    });
+                    ui.showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
+                } else {
+                    ui.showToast('Tidak ada perubahan baru untuk dikirim.', 'info');
+                }
             } else {
                 const result = await downloadAndMergeMaster(config);
                 if (result.status === 'merged') {
+                    // Update lastSync
+                    await db.settings.update(sets.settings.id!, { 
+                        cloudSyncConfig: { ...config, lastSync: result.timestamp } 
+                    });
                     ui.showToast('Data terbaru dari Admin berhasil digabungkan.', 'success');
                     setTimeout(() => window.location.reload(), 1500);
                 } else if (result.status === 'no_master') {
@@ -204,7 +241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setSantriFilters: santriCtx.setSantriFilters,
 
             // Local
-            suratTemplates, arsipSuratList, syncStatus,
+            suratTemplates, arsipSuratList, syncStatus, pendingChanges,
             onSaveSuratTemplate, onDeleteSuratTemplate, onSaveArsipSurat, onDeleteArsipSurat,
             onDeleteSampleData, triggerManualSync
         }}>

@@ -173,8 +173,10 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                     <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden transition-all duration-300">
                         {/* Section Header */}
                         <div className="p-6 bg-gray-50 border-b border-gray-100 flex items-center gap-4">
-                            <span className={`${getColorClass(activeSection.badgeColor)} text-white w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg transform -rotate-3`}>
-                                {typeof activeSection.badge === 'string' ? <i className="bi bi-info-lg"></i> : activeSection.badge}
+                            <span className={`${getColorClass(activeSection.badgeColor)} text-white w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl shadow-lg transform -rotate-3 transition-transform hover:rotate-0`}>
+                                {typeof activeSection.badge === 'number' ? activeSection.badge : (
+                                    activeSection.badge === 'NEW' ? <i className="bi bi-stars"></i> : <i className="bi bi-info-lg"></i>
+                                )}
                             </span>
                             <div>
                                 <h2 className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">{activeSection.title}</h2>
@@ -203,6 +205,18 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                                         <strong className="block mb-1">REKOMENDASI OPTIMAL:</strong> 
                                         Gunakan fitur ini bersama <strong>Sync Cloud</strong> aktif.
                                         Ini memungkinkan Guru/Musyrif menggunakan <em>perangkat masing-masing</em> untuk mengabsen (tidak harus di komputer Admin).
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeSection.id === 'whatsapp' && (
+                                <div className="bg-green-50 p-4 rounded-xl mb-8 text-sm text-green-900 border border-green-200 flex items-start gap-3 shadow-sm border-l-4">
+                                    <i className="bi bi-shield-check text-xl text-green-500"></i>
+                                    <div>
+                                        <strong className="block mb-1">KEAMANAN NOMOR:</strong> 
+                                        Kami menggunakan metode <strong>Redirect Resmi</strong>. 
+                                        Aplikasi tidak meminta scan QR (pairing) yang berisiko pencurian session atau blokir spam. 
+                                        Nomor Anda tetap aman karena pesan dikirim melalui kendali WhatsApp Web/Desktop Anda sendiri.
                                     </div>
                                 </div>
                             )}

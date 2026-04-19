@@ -43,6 +43,7 @@ const Koperasi = React.lazy(() => import('./components/Koperasi'));
 const PublicPortal = React.lazy(() => import('./components/portal/PublicPortal').then(module => ({ default: module.PublicPortal })));
 
 const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
+const WhatsAppCenter = React.lazy(() => import('./components/WhatsAppCenter').then(module => ({ default: module.WhatsAppCenter })));
 const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
 
 // --- Alert Modal Component ---
@@ -332,6 +333,8 @@ const AppContent: React.FC = () => {
                             return checkAccess('laporan') ? <Reports /> : <AccessDenied />;
                         case Page.AuditLog:
                             return checkAccess('auditlog') ? <AuditLogView /> : <AccessDenied />;
+                        case Page.WhatsApp:
+                            return <WhatsAppCenter />;
                         case Page.SyncAdmin:
                             return currentUser?.role === 'admin' ? <AdminSyncDashboard /> : <AccessDenied />;
                         case Page.Tentang:

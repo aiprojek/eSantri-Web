@@ -6,6 +6,7 @@ import { Santri, PondokSettings, Page } from '../types';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { db } from '../db';
+import { ExecutiveDashboard } from './dashboard/ExecutiveDashboard';
 
 interface DashboardProps {
     navigateTo: (page: Page, filters?: any) => void;
@@ -98,7 +99,8 @@ const DashboardAvatar: React.FC<{ santri: Santri }> = ({ santri }) => {
 const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
   const { settings } = useAppContext();
   const { santriList } = useSantriContext();
-  const [totalTunggakan, setTotalTunggakan] = useState(0); // Lightweight stats
+  const [totalTunggakan, setTotalTunggakan] = useState(0); 
+  const [activeTab, setActiveTab] = useState<'ikhtisar' | 'analitik'>('ikhtisar');
   
   // Calculate tunggakan asynchronously to avoid heavy load on mount
   useEffect(() => {
@@ -179,22 +181,44 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
 
   return (
     <div id="dashboard-container" className="printable-content-wrapper">
-        <div className="flex justify-between items-center mb-6 no-print">
-            <div>
-                <h1 className="text-3xl font-bold text-gray-800 mb-2">Dashboard</h1>
-                <p className="text-gray-600">Selamat datang! Berikut adalah ringkasan data di {settings.namaPonpes}</p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 no-print border-b border-gray-200 pb-0 shadow-sm bg-white -mx-6 px-6 -mt-6 pt-6 sticky top-0 z-20">
+            <div className="w-full">
+                <div className="flex justify-between items-center sm:block">
+                    <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Dashboard</h1>
+                    <div className="sm:hidden">
+                        <button onClick={handlePrint} className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm" title="Cetak Dashboard">
+                            <i className="bi bi-printer text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                <nav className="flex gap-6 mt-4 overflow-x-auto whitespace-nowrap no-scrollbar">
+                    <button 
+                        onClick={() => setActiveTab('ikhtisar')}
+                        className={`pb-3 text-sm font-bold transition-all border-b-2 px-1 flex-shrink-0 ${activeTab === 'ikhtisar' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                    >
+                        <i className="bi bi-grid-fill mr-2"></i> Ikhtisar Umum
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('analitik')}
+                        className={`pb-3 text-sm font-bold transition-all border-b-2 px-1 flex-shrink-0 ${activeTab === 'analitik' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                    >
+                        <i className="bi bi-graph-up-arrow mr-2"></i> Analitik Strategis
+                        <span className="ml-2 text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">Pro</span>
+                    </button>
+                </nav>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 mb-8">
+                <button onClick={handlePrint} className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm" title="Cetak Dashboard">
+                    <i className="bi bi-printer"></i>
+                </button>
             </div>
         </div>
 
-        {/* Print Header (Visible only in print) */}
-        <div className="hidden print:block mb-8 text-center border-b pb-4">
-            <h1 className="text-2xl font-bold uppercase">{settings.namaPonpes}</h1>
-            <p className="text-sm text-gray-600">{settings.alamat}</p>
-            <h2 className="text-xl font-bold mt-4">LAPORAN RINGKASAN DASHBOARD</h2>
-            <p className="text-xs text-gray-500">Dicetak pada: {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 print:grid-cols-3 print:gap-4">
+        {activeTab === 'analitik' ? (
+            <ExecutiveDashboard />
+        ) : (
+            <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 print:grid-cols-3 print:gap-4">
             <StatCard title="Total Santri" value={totalSantri} icon={<i className="bi-people-fill text-2xl text-white"></i>} color="bg-blue-500" onClick={() => navigateTo(Page.Santri)} />
             <StatCard title="Santri Putra" value={totalPutra} icon={<i className="bi bi-person text-2xl text-white"></i>} color="bg-sky-500" onClick={() => navigateTo(Page.Santri, { gender: 'Laki-laki' })} />
             <StatCard title="Santri Putri" value={totalPutri} icon={<i className="bi bi-person text-2xl text-white"></i>} color="bg-pink-500" onClick={() => navigateTo(Page.Santri, { gender: 'Perempuan' })} />
@@ -313,6 +337,8 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                 </div>
             </div>
         </div>
+        </>
+        )}
     </div>
   );
 };

@@ -7,6 +7,7 @@ import { Santri, Tagihan } from '../../types';
 import { Pagination } from '../common/Pagination';
 import { GenerateTagihanModal } from './modals/GenerateTagihanModal';
 import { formatRupiah } from '../../utils/formatters';
+import { sendManualWA, formatWAMessage, WA_TEMPLATES } from '../../services/waService';
 
 interface StatusPembayaranViewProps {
     onBayarClick: (santri: Santri) => void;
@@ -117,12 +118,13 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                     const santri = d!.santri;
                     const phone = santri.teleponWali || santri.teleponAyah || santri.teleponIbu;
                     if (phone) {
-                        let message = settings.pesanWaTunggakan
-                            .replace('{NAMA_SANTRI}', santri.namaLengkap)
-                            .replace('{JUMLAH_TUNGGAKAN}', `Rp ${d!.tunggakan.total.toLocaleString('id-ID')}`)
-                            .replace('{NAMA_PONPES}', settings.namaPonpes);
-                        message += "\n\n_dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id_";
-                        window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
+                        const message = formatWAMessage(WA_TEMPLATES.TAGIHAN, {
+                            nama_santri: santri.namaLengkap,
+                            ortu: santri.namaAyah || santri.namaIbu || 'Wali Santri',
+                            nominal: d!.tunggakan.total.toLocaleString('id-ID'),
+                            bulan: new Date().toLocaleString('id-ID', { month: 'long' })
+                        });
+                        sendManualWA(phone, message);
                     }
                 });
             }, { confirmColor: 'green', confirmText: 'Ya, Buka WhatsApp' });
@@ -177,6 +179,22 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                                 <td className="px-4 py-3 font-semibold text-red-600">{formatRupiah(tunggakan.total)}</td>
                                 <td className="px-4 py-3">{tunggakan.count} tagihan</td>
                                 <td className="px-4 py-3 text-center space-x-2">
+                                    <button 
+                                        onClick={() => {
+                                            const phone = santri.teleponWali || santri.teleponAyah || santri.teleponIbu;
+                                            const message = formatWAMessage(WA_TEMPLATES.TAGIHAN, {
+                                                nama_santri: santri.namaLengkap,
+                                                ortu: santri.namaAyah || santri.namaIbu || 'Wali Santri',
+                                                nominal: tunggakan.total.toLocaleString('id-ID'),
+                                                bulan: new Date().toLocaleString('id-ID', { month: 'long' })
+                                            });
+                                            sendManualWA(phone, message);
+                                        }}
+                                        className="p-1 px-2.5 bg-green-50 text-green-600 rounded-md text-sm border border-green-200 hover:bg-green-100 transition-colors"
+                                        title="Kirim Notif WA"
+                                    >
+                                        <i className="bi bi-whatsapp"></i>
+                                    </button>
                                     {canWrite && <button onClick={() => onBayarClick(santri)} className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700">Bayar</button>}
                                     <button onClick={() => onHistoryClick(santri)} className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-xs font-semibold hover:bg-gray-300">Riwayat</button>
                                 </td>

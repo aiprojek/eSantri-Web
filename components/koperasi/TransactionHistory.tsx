@@ -107,16 +107,28 @@ export const TransactionHistory: React.FC = () => {
             </div>
 
             {/* FILTER & LIST */}
-            <div className="bg-white p-6 rounded-lg shadow-md flex-grow flex flex-col overflow-hidden">
-                <div className="flex flex-col md:flex-row justify-between items-center mb-4 shrink-0 gap-3">
-                    <div className="flex gap-2 items-center bg-gray-50 p-2 rounded border">
-                        <span className="text-xs font-bold text-gray-500 uppercase mr-2">Filter Periode:</span>
-                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border rounded p-1.5 text-sm" />
-                        <span className="text-gray-400">-</span>
-                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border rounded p-1.5 text-sm" />
+            <div className="bg-white p-2 sm:p-6 rounded-lg shadow-md flex-grow flex flex-col overflow-hidden">
+                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center mb-4 shrink-0 gap-3">
+                    <div className="flex flex-col xs:flex-row items-stretch xs:items-center bg-gray-50 p-2 rounded border gap-2 flex-grow sm:flex-grow-0">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase xs:inline-block">Filter Periode:</span>
+                        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 w-full xs:w-auto overflow-x-hidden">
+                            <input 
+                                type="date" 
+                                value={startDate} 
+                                onChange={e => setStartDate(e.target.value)} 
+                                className="border rounded px-1 py-1 sm:p-1.5 text-[10px] xs:text-sm min-w-0 bg-white" 
+                            />
+                            <span className="text-gray-400 text-xs px-0.5">-</span>
+                            <input 
+                                type="date" 
+                                value={endDate} 
+                                onChange={e => setEndDate(e.target.value)} 
+                                className="border rounded px-1 py-1 sm:p-1.5 text-[10px] xs:text-sm min-w-0 bg-white" 
+                            />
+                        </div>
                     </div>
-                    <button onClick={handleExport} className="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700 flex items-center gap-2">
-                        <i className="bi bi-file-earmark-spreadsheet"></i> Export Excel
+                    <button onClick={handleExport} className="bg-green-600 text-white px-3 py-2 sm:py-1.5 rounded text-[10px] xs:text-xs font-bold hover:bg-green-700 flex items-center gap-2 justify-center">
+                        <i className="bi bi-file-earmark-spreadsheet text-xs"></i> Export Excel
                     </button>
                 </div>
                 

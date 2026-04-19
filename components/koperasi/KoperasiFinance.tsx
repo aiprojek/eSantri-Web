@@ -125,19 +125,21 @@ export const KoperasiFinance: React.FC = () => {
     return (
         <div className="space-y-6 h-full flex flex-col">
             {/* Header & Filter */}
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm border">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border">
                 <div>
                     <h3 className="font-bold text-gray-800">Laporan Laba & Rugi</h3>
                     <p className="text-xs text-gray-500">Periode: {new Date(filterYear, filterMonth - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
                 </div>
-                <div className="flex gap-2">
-                    <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="border rounded p-2 text-sm">
-                        {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleDateString('id-ID', {month:'long'})}</option>)}
-                    </select>
-                    <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="border rounded p-2 text-sm w-24">
-                        {Array.from({length: 5}, (_, i) => <option key={i} value={new Date().getFullYear() - 2 + i}>{new Date().getFullYear() - 2 + i}</option>)}
-                    </select>
-                    <button onClick={() => { reset({ tanggal: new Date().toISOString().split('T')[0], jenis: 'Pengeluaran', jumlah: 0, deskripsi: '', kategori: '' }); setIsModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-teal-700 flex items-center gap-2">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                    <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+                        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="border rounded p-2 text-sm bg-white">
+                            {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleDateString('id-ID', {month:'long'})}</option>)}
+                        </select>
+                        <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="border rounded p-2 text-sm bg-white">
+                            {Array.from({length: 5}, (_, i) => <option key={i} value={new Date().getFullYear() - 2 + i}>{new Date().getFullYear() - 2 + i}</option>)}
+                        </select>
+                    </div>
+                    <button onClick={() => { reset({ tanggal: new Date().toISOString().split('T')[0], jenis: 'Pengeluaran', jumlah: 0, deskripsi: '', kategori: '' }); setIsModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-teal-700 flex items-center gap-2 w-full sm:w-auto justify-center">
                         <i className="bi bi-plus-circle"></i> Catat Transaksi
                     </button>
                 </div>

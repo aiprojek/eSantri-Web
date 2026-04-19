@@ -363,7 +363,8 @@ export const panduanData: PanduanSectionData[] = [
                         <p>Untuk memudahkan Staff, sistem telah dilengkapi fitur <strong>Auto-Pull on Login</strong>:</p>
                         <ul className="list-disc pl-5 mt-2 space-y-1">
                             <li>Setiap kali Staff <strong>Login</strong>, aplikasi akan otomatis menarik (Pull) data Master terbaru dari Cloud.</li>
-                            <li>Jika <em>Auto-Sync</em> aktif, sistem juga akan mengecek data baru tiap 5 menit.</li>
+                            <li><strong>Incremental Sync:</strong> Aplikasi hanya mengirim data yang berubah saja (Deltas), sehingga sinkronisasi jauh lebih cepat dan hemat data.</li>
+                            <li><strong>Pending Badge:</strong> Muncul indikator angka pada tombol Sync jika ada data baru yang belum terkirim ke Cloud.</li>
                         </ul>
                     </div>
                 )
@@ -798,9 +799,20 @@ export const panduanData: PanduanSectionData[] = [
         id: 'absensi',
         badge: 6,
         badgeColor: 'teal',
-        title: 'Manajemen Absensi',
+        title: 'Absensi & Kehadiran',
         steps: [
-             {
+            {
+                title: 'Alur Absensi Harian',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Absensi</strong>.</li>
+                        <li>Pilih Kelas dan Tanggal.</li>
+                        <li>Status default adalah 'Hadir' (H). Klik status santri untuk mengubah (Izin, Sakit, Alpa).</li>
+                        <li>Klik <strong>Simpan Absensi</strong>.</li>
+                    </ol>
+                )
+            },
+            {
                 title: 'Persiapan: Multi-User & Kolaborasi Cloud',
                 content: (
                     <>
@@ -1275,6 +1287,58 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
+        id: 'maintenance',
+        badge: 'NEW',
+        badgeColor: 'red',
+        title: 'Pemeliharaan & Diagnosa Sistem',
+        steps: [
+            {
+                title: 'Mengapa Perlu Diagnosa?',
+                content: (
+                    <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500 text-sm text-gray-700 space-y-3">
+                        <p>
+                            Database lokal (IndexedDB) di browser bersifat sangat cepat namun rentan terhadap interupsi. 
+                            <strong>Diagnosa Sistem</strong> membantu Anda mendeteksi ketidakkonsistenan data yang disebabkan oleh:
+                        </p>
+                        <ul className="list-disc pl-5 space-y-1 text-xs">
+                            <li>Browser atau Laptop mati mendadak saat proses simpan/sync.</li>
+                            <li>Pembersihan cache browser yang tidak sempurna.</li>
+                            <li>Bug pada versi aplikasi lama yang meninggalkan data "yatim".</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: 'Siapa yang Bertugas?',
+                content: (
+                    <div className="bg-gray-50 p-3 rounded border text-sm">
+                        <p>Fitur ini adalah <strong>Alat Admin (IT Tools)</strong>. Hanya Admin Utama atau Bagian IT yang disarankan menjalankan fitur ini.</p>
+                        <p className="mt-2 text-xs italic text-red-600 font-bold">WARNING: Selalu lakukan "Unduh Cadangan Data" (Backup) di tab Backup sebelum menjalankan perbaikan otomatis.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Penjelasan Tindakan Auto-Fix',
+                content: (
+                    <div className="space-y-4">
+                        <div className="bg-white p-3 rounded border shadow-sm">
+                            <h4 className="font-bold text-teal-700 text-xs uppercase mb-1">1. Perbaiki Saldo (Integritas Data)</h4>
+                            <p className="text-[11px]">Sistem mendeteksi santri yang tidak punya catatan saldo (biasanya karena gagal sinkronisasi). <br/><strong>Efek:</strong> Akan dibuatkan saldo Rp 0 agar fitur keuangan santri tersebut bisa digunakan kembali.</p>
+                        </div>
+                        <div className="bg-white p-3 rounded border shadow-sm">
+                            <h4 className="font-bold text-orange-700 text-xs uppercase mb-1">2. Re-Index Data (Kinerja Cloud)</h4>
+                            <p className="text-[11px]">Menambahkan timestamp sinkronisasi pada data-data versi lama. <br/><strong>Efek:</strong> Data lama akan diunggah ulang ke Cloud pada sinkronisasi berikutnya untuk memastikan data Cloud & Lokal seragam.</p>
+                        </div>
+                        <div className="bg-white p-3 rounded border shadow-sm">
+                            <h4 className="font-bold text-red-700 text-xs uppercase mb-1">3. Bersihkan Orphan (Kerapihan Database)</h4>
+                            <p className="text-[11px]">Menghapus transaksi yang kodenya merujuk ke santri yang sudah dihapus selamanya. <br/><strong>Efek:</strong> Database menjadi lebih ringan dan bersih dari data "hantu".</p>
+                        </div>
+                    </div>
+                )
+            }
+        ]
+    },
+    {
         id: 'fitur',
         badge: 15,
         badgeColor: 'teal',
@@ -1311,6 +1375,7 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Kesehatan & BK:</strong> Rekam medis santri dan bimbingan konseling (privat).</li>
                         <li><strong>Perpustakaan:</strong> Katalog buku, sirkulasi peminjaman, dan cetak label buku.</li>
                         <li><strong>Buku Tamu:</strong> Pencatatan kunjungan tamu dan pengawasan keamanan.</li>
+                        <li><strong>WhatsApp Center:</strong> Broadcast pesan massal ke wali santri untuk tagihan, pengumuman, dan laporan.</li>
                         <li><strong>Surat Menyurat:</strong> Pembuatan surat resmi, tagihan, dan arsip digital.</li>
                     </ul>
                 )
@@ -1326,6 +1391,108 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Portal Wali Santri:</strong> Akses informasi santri (Nilai, Absen, Keuangan) bagi orang tua secara online.</li>
                         <li><strong>Multi-Platform:</strong> Tersedia dalam versi Web, Desktop (Tauri), dan Android.</li>
                     </ul>
+                )
+            }
+        ]
+    },
+    {
+        id: 'whatsapp',
+        badge: 'NEW',
+        badgeColor: 'green',
+        title: 'Smart WhatsApp Automation',
+        steps: [
+            {
+                title: 'Konsep & Cara Kerja',
+                content: (
+                    <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500 text-sm text-gray-700 space-y-3">
+                        <p>
+                            <strong>Komunikasi Efektif:</strong> Fitur ini memungkinkan Anda mengirimkan pesan otomatis ke wali santri tanpa harus mengetik ulang atau menyimpan nomor satu per satu.
+                        </p>
+                        <p>
+                            <strong>Metode Semi-Otomatis (Redirect):</strong> Aplikasi menyusun pesan cerdas (menggunakan variabel), lalu mengarahkan Anda ke WhatsApp Web/Desktop. Anda tinggal menekan tombol <em>Send</em>. Metode ini 100% aman karena tidak menggunakan API ilegal yang berisiko blokir.
+                        </p>
+                    </div>
+                )
+            },
+            {
+                title: 'Penggunaan Template Cerdas',
+                content: (
+                    <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-800">Anda dapat menggunakan variabel di dalam pesan agar teks berubah otomatis sesuai data santri:</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div className="bg-white p-2 border rounded text-xs">
+                                <code className="text-teal-600">[nama_santri]</code>
+                                <p className="text-gray-500 mt-1">Nama lengkap santri.</p>
+                            </div>
+                            <div className="bg-white p-2 border rounded text-xs">
+                                <code className="text-teal-600">[ortu]</code>
+                                <p className="text-gray-500 mt-1">Nama Ayah atau Ibu santri.</p>
+                            </div>
+                            <div className="bg-white p-2 border rounded text-xs">
+                                <code className="text-teal-600">[nominal]</code>
+                                <p className="text-gray-500 mt-1">Nilai uang (misal: Tagihan/Saldo).</p>
+                            </div>
+                            <div className="bg-white p-2 border rounded text-xs">
+                                <code className="text-teal-600">[bulan]</code>
+                                <p className="text-gray-500 mt-1">Nama bulan saat ini.</p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Broadcast / Pengiriman Massal',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-2 text-sm mt-1 bg-gray-50 p-3 rounded border">
+                        <li>Buka menu <strong>WhatsApp Center</strong>.</li>
+                        <li>Pilih <strong>Template Pesan</strong> atau ketik pesan kustom.</li>
+                        <li>Gunakan <strong>Filter</strong> (Marhalah, Kelas, Rombel) di bagian atas tabel untuk mempersempit target penerima.</li>
+                        <li>Centang santri yang akan dikirimi pesan (atau centang header untuk pilih semua yang tampil).</li>
+                        <li>Klik tombol <strong>Kirim Ke [X] Santri</strong> di pojok kanan atas.</li>
+                        <li>Sistem akan membuka tab WhatsApp satu per satu. Anda cukup klik <strong>Send</strong> di setiap jendela yang terbuka.</li>
+                    </ol>
+                )
+            }
+        ]
+    },
+    {
+        id: 'koperasi_pro',
+        badge: 'NEW',
+        badgeColor: 'blue',
+        title: 'Koperasi Profesional (Warehouse & Vendor)',
+        steps: [
+            {
+                title: 'Multi-Warehouse (Gudang)',
+                content: (
+                    <div className="space-y-3">
+                        <p className="text-sm text-gray-700">Filter ini memungkinkan koperasi pondok mengelola stok di berbagai lokasi (misal: Toko Atas, Toko Bawah, Gudang Utama).</p>
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-xs text-blue-800">
+                            <strong>Penting:</strong> Setiap mutasi barang (Stok Masuk/Rusak) kini wajib memilih gudang tujuan agar data sebaran stok tetap akurat.
+                        </div>
+                        <ul className="list-disc pl-5 text-sm space-y-1">
+                            <li><strong>Tambah Gudang:</strong> Masukkan kode dan nama gudang di tab <em>Gudang</em>.</li>
+                            <li><strong>Sebaran Stok:</strong> Di form produk, tab <em>Stok Per Gudang</em> menampilkan jumlah barang di tiap lokasi.</li>
+                            <li><strong>Transfer Stok:</strong> Gunakan tombol <em>Transfer Stok</em> untuk memindahkan barang antar gudang tanpa mengubah total stok sistem.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: 'Vendor Management',
+                content: (
+                    <div className="space-y-3">
+                        <p className="text-sm text-gray-700">Kelola database pemasok barang secara profesional lengkap dengan data legalitas dan kategori.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-white p-3 border rounded-lg shadow-sm">
+                                <h5 className="font-bold text-xs mb-1 text-teal-700">Kategori Vendor</h5>
+                                <p className="text-[11px] text-gray-500">Grupkan vendor berdasarkan apa yang mereka pasok (misal: Alat Tulis, Konveksi, Sembako).</p>
+                            </div>
+                            <div className="bg-white p-3 border rounded-lg shadow-sm">
+                                <h5 className="font-bold text-xs mb-1 text-teal-700">Status Vendor</h5>
+                                <p className="text-[11px] text-gray-500">Filter vendor aktif atau non-aktif untuk menjaga kualitas rantai pasok pondok.</p>
+                            </div>
+                        </div>
+                    </div>
                 )
             }
         ]

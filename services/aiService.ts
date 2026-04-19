@@ -69,3 +69,32 @@ export const generatePosterPrompt = async (
     throw error;
   }
 };
+
+export const generateDashboardInsight = async (data: any): Promise<string> => {
+    try {
+        const prompt = `
+            Anda adalah konsultan manajemen Pondok Pesantren yang cerdas.
+            Berdasarkan data berikut, berikan 2-3 kalimat wawasan (insight) yang sangat singkat, padat, dan analitis.
+            
+            Data:
+            - Kesehatan (Keluhan Terbanyak): ${JSON.stringify(data.healthTrends)}
+            - Arus Kas (6 Bulan): ${JSON.stringify(data.cashflow)}
+            - Aktivitas Tahfizh: ${JSON.stringify(data.tahfizhProgress)}
+            - Status Santri: ${JSON.stringify(data.santriStats)}
+            
+            Aturan:
+            1. Jika data kosong (count 0), katakan data masih minim untuk analitik mendalam.
+            2. Gunakan Bahasa Indonesia profesional.
+            3. Maksimal 300 karakter.
+            4. Jangan gunakan pembukaan "Berdasarkan data...". Langsung poin intinya.
+        `;
+
+        const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
+        
+        if (!response.ok) return "Sistem siap menganalisis data Anda segera setelah aktivitas operasional tercatat.";
+        
+        return await response.text();
+    } catch (error) {
+        return "Gunakan aplikasi secara rutin untuk mendapatkan visualisasi tren dan wawasan cerdas.";
+    }
+};

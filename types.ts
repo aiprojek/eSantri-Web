@@ -3,7 +3,7 @@ export type Page =
   | 'Dashboard' | 'Santri' | 'Absensi' | 'Tahfizh' | 'Akademik' | 'Sarpras' 
   | 'Kalender' | 'Perpustakaan' | 'Kesehatan' | 'BK' | 'BukuTamu' | 'DataMaster' 
   | 'Keuangan' | 'Keasramaan' | 'BukuKas' | 'Koperasi' | 'Surat' | 'PSB' 
-  | 'Pengaturan' | 'Laporan' | 'AuditLog' | 'SyncAdmin' | 'Tentang';
+  | 'Pengaturan' | 'Laporan' | 'AuditLog' | 'WhatsApp' | 'SyncAdmin' | 'Tentang';
 
 export const Page = {
   Dashboard: 'Dashboard',
@@ -27,6 +27,7 @@ export const Page = {
   Pengaturan: 'Pengaturan',
   Laporan: 'Laporan',
   AuditLog: 'AuditLog',
+  WhatsApp: 'WhatsApp',
   SyncAdmin: 'SyncAdmin',
   Tentang: 'Tentang'
 } as const;
@@ -687,6 +688,7 @@ export interface AuditLog {
     changed_by: string;
     username?: string;
     created_at: string;
+    lastModified?: number;
 }
 
 export interface SyncHistory {
@@ -969,11 +971,14 @@ export interface ProdukKoperasi {
     kategori: string;
     hargaBeli: number;
     hargaJual: number;
-    stok: number;
+    stok: number; // Total stock across all warehouses
     satuan: string;
     barcode?: string;
     minStok?: number;
     supplierId?: number;
+    
+    // Multi-Warehouse Support
+    warehouseStocks?: Record<number, number>; // warehouseId -> qty
     
     hasVarian?: boolean;
     varian?: VarianProduk[];
@@ -1037,8 +1042,9 @@ export interface TransaksiKoperasi {
 export interface RiwayatStok {
     id?: number;
     produkId: number;
+    warehouseId?: number; // Target Warehouse
     tanggal: string;
-    tipe: 'Masuk' | 'Penjualan' | 'Koreksi' | 'Retur';
+    tipe: 'Masuk' | 'Penjualan' | 'Koreksi' | 'Retur' | 'Transfer';
     jumlah: number;
     stokAwal: number;
     stokAkhir: number;
@@ -1078,8 +1084,38 @@ export interface Supplier {
     id: number;
     nama: string;
     kontak?: string;
+    email?: string;
+    telepon?: string;
     alamat?: string;
+    npwp?: string;
+    kategori?: string[]; // e.g., ["Sembako", "Alat Tulis"]
     keterangan?: string;
+    status?: 'Aktif' | 'Non-Aktif';
+    lastModified?: number;
+}
+
+export interface Warehouse {
+    id: number;
+    nama: string;
+    kode: string;
+    lokasi?: string;
+    penanggungJawab?: string;
+    keterangan?: string;
+    isDefault?: boolean;
+    deleted?: boolean;
+    lastModified?: number;
+}
+
+export interface StockTransfer {
+    id: number;
+    tanggal: string;
+    produkId: number;
+    varian?: string;
+    dariWarehouseId: number;
+    keWarehouseId: number;
+    qty: number;
+    keterangan?: string;
+    operator: string;
     lastModified?: number;
 }
 

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserPermissions, AccessLevel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
-import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS } from '../../../services/authService';
+import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -213,6 +213,28 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
                             </div>
                         </div>
                     </div>
+
+                    {/* Role Templates for Staff */}
+                    {(role === 'staff') && (
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <h4 className="font-semibold text-gray-700 mb-3 text-sm flex items-center gap-2">
+                                <i className="bi bi-magic"></i> Template Izin Cepat
+                            </h4>
+                            <p className="text-[10px] text-gray-500 mb-3">Pilih template di bawah untuk mengisi konfigurasi izin secara otomatis sesuai divisi.</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                {ROLE_TEMPLATES.map(template => (
+                                    <button
+                                        key={template.id}
+                                        onClick={() => setPermissions(template.permissions as UserPermissions)}
+                                        className="flex flex-col items-center justify-center p-2 bg-white border border-gray-200 rounded-lg hover:border-teal-400 hover:bg-teal-50 transition-all group"
+                                    >
+                                        <i className={`bi ${template.icon} text-gray-400 group-hover:text-teal-600 mb-1`}></i>
+                                        <span className="text-[10px] font-bold text-gray-600 group-hover:text-teal-700 text-center">{template.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Permissions Table (Only for Staff & Wali Kelas) */}
                     {(role === 'staff' || role === 'wali_kelas') && (

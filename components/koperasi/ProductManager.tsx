@@ -12,6 +12,7 @@ export const ProductManager: React.FC = () => {
     const { showToast, showConfirmation, currentUser } = useAppContext();
     const products = useLiveQuery(() => db.produkKoperasi.filter(p => !p.deleted).toArray(), []) || [];
     const suppliers = useLiveQuery(() => db.suppliers.toArray(), []) || [];
+    const warehouses = useLiveQuery(() => db.warehouses.toArray(), []) || [];
     const history = useLiveQuery(() => db.riwayatStok.orderBy('tanggal').reverse().limit(200).toArray(), []) || [];
     
     // Tab State
@@ -19,7 +20,7 @@ export const ProductManager: React.FC = () => {
 
     // Modal States
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-    const [modalTab, setModalTab] = useState<'info' | 'varian' | 'grosir'>('info');
+    const [modalTab, setModalTab] = useState<'info' | 'varian' | 'grosir' | 'stok_gudang'>('info');
     
     const [isStockModalOpen, setIsStockModalOpen] = useState(false);
     const [isBulkEditorOpen, setIsBulkEditorOpen] = useState(false);
@@ -39,6 +40,7 @@ export const ProductManager: React.FC = () => {
 
     // Stock Form State
     const [selectedStockProduct, setSelectedStockProduct] = useState<ProdukKoperasi | null>(null);
+    const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | ''>('');
     const [stockSearchTerm, setStockSearchTerm] = useState('');
     const [stockQty, setStockQty] = useState<number>(1);
     const [stockNotes, setStockNotes] = useState('');
@@ -102,22 +104,37 @@ export const ProductManager: React.FC = () => {
         }
 
         try {
-            let newStock = selectedStockProduct.stok;
+            const whId = Number(selectedWarehouseId);
+            if (!whId) {
+                showToast('Pilih gudang tujuan.', 'error');
+                return;
+            }
+
+            let newTotalStock = selectedStockProduct.stok;
+            const newWarehouseStocks = { ...(selectedStockProduct.warehouseStocks || {}) };
+            
             if (stockActionType === 'Masuk') {
-                newStock += stockQty;
+                newTotalStock += stockQty;
+                newWarehouseStocks[whId] = (newWarehouseStocks[whId] || 0) + stockQty;
             } else {
-                newStock -= stockQty; 
+                newTotalStock -= stockQty; 
+                newWarehouseStocks[whId] = (newWarehouseStocks[whId] || 0) - stockQty;
             }
 
             await (db as any).transaction('rw', db.produkKoperasi, db.riwayatStok, async () => {
-                await db.produkKoperasi.update(selectedStockProduct.id, { stok: newStock, lastModified: Date.now() });
+                await db.produkKoperasi.update(selectedStockProduct.id, { 
+                    stok: newTotalStock, 
+                    warehouseStocks: newWarehouseStocks,
+                    lastModified: Date.now() 
+                });
                 await db.riwayatStok.add({
                     produkId: selectedStockProduct.id,
+                    warehouseId: whId,
                     tanggal: new Date().toISOString(),
                     tipe: stockActionType,
                     jumlah: stockQty,
                     stokAwal: selectedStockProduct.stok,
-                    stokAkhir: newStock,
+                    stokAkhir: newTotalStock,
                     keterangan: stockNotes || (stockActionType === 'Masuk' ? 'Restock Barang' : 'Barang Rusak/Hilang'),
                     operator: currentUser?.username || 'Admin'
                 } as RiwayatStok);
@@ -133,10 +150,16 @@ export const ProductManager: React.FC = () => {
     const onSubmitProduct = async (data: ProdukKoperasi) => {
         try {
             const hasVarian = tempVarian.length > 0;
-            // Jika ada varian, stok global dihitung dari total stok varian
+            
+            // Calculate total stock from warehouses if available
+            const totalWhStock = data.warehouseStocks 
+                ? Object.values(data.warehouseStocks).reduce((sum, q) => sum + (Number(q) || 0), 0)
+                : 0;
+
+            // Priority: Varian > Warehouse Stocks > Manual Input
             const totalStok = hasVarian 
                 ? tempVarian.reduce((sum, v) => sum + (Number(v.stok) || 0), 0) 
-                : Number(data.stok);
+                : (totalWhStock || Number(data.stok));
 
             const finalData = { 
                 ...data, 
@@ -440,6 +463,7 @@ export const ProductManager: React.FC = () => {
                             <button onClick={() => setModalTab('info')} className={`flex-1 py-3 text-sm font-medium ${modalTab === 'info' ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50' : 'text-gray-500 hover:bg-gray-50'}`}>Info Dasar</button>
                             <button onClick={() => setModalTab('varian')} className={`flex-1 py-3 text-sm font-medium ${modalTab === 'varian' ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50' : 'text-gray-500 hover:bg-gray-50'}`}>Varian</button>
                             <button onClick={() => setModalTab('grosir')} className={`flex-1 py-3 text-sm font-medium ${modalTab === 'grosir' ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50' : 'text-gray-500 hover:bg-gray-50'}`}>Harga Grosir</button>
+                            <button onClick={() => setModalTab('stok_gudang')} className={`flex-1 py-3 text-sm font-medium ${modalTab === 'stok_gudang' ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50' : 'text-gray-500 hover:bg-gray-50'}`}>Stok Per Gudang</button>
                         </div>
 
                         <form onSubmit={handleSubmit(onSubmitProduct)} className="flex-grow overflow-y-auto p-6">
@@ -518,6 +542,44 @@ export const ProductManager: React.FC = () => {
                                 </div>
                             )}
 
+                            {modalTab === 'stok_gudang' && (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h4 className="text-sm font-bold">Sebaran Stok di Gudang</h4>
+                                        <p className="text-[10px] text-gray-500 italic">* Masukkan jumlah stok fisik saat ini</p>
+                                    </div>
+                                    <div className="border rounded-lg overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="p-2 text-left">Nama Gudang</th>
+                                                    <th className="p-2 text-right">Qty</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y">
+                                                {warehouses.map(w => (
+                                                    <tr key={w.id}>
+                                                        <td className="p-2 font-medium">{w.nama} <span className="text-[10px] text-gray-400">({w.kode})</span></td>
+                                                        <td className="p-2 text-right">
+                                                            <input 
+                                                                type="number" 
+                                                                className="w-20 border rounded p-1 text-right"
+                                                                defaultValue={watch('warehouseStocks')?.[w.id] || 0}
+                                                                onChange={(e) => {
+                                                                    const val = parseInt(e.target.value) || 0;
+                                                                    const current = watch('warehouseStocks') || {};
+                                                                    setValue('warehouseStocks', { ...current, [w.id]: val });
+                                                                }}
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {warehouses.length === 0 && <tr><td colSpan={2} className="p-4 text-center text-gray-400 italic">Belum ada gudang yang terdaftar.</td></tr>}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
                         </form>
                         
                         <div className="p-4 border-t bg-gray-50 flex justify-end gap-2 rounded-b-lg">
@@ -576,13 +638,28 @@ export const ProductManager: React.FC = () => {
                             {selectedStockProduct && (
                                 <>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-600 mb-1">Jumlah {stockActionType}</label>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">Gudang Tujuan *</label>
+                                        <select 
+                                            value={selectedWarehouseId} 
+                                            onChange={e => setSelectedWarehouseId(Number(e.target.value))} 
+                                            className="w-full border rounded p-2 text-sm bg-white"
+                                        >
+                                            <option value="">-- Pilih Gudang --</option>
+                                            {warehouses.map(w => (
+                                                <option key={w.id} value={w.id}>
+                                                    {w.nama} (Stok: {selectedStockProduct.warehouseStocks?.[w.id] || 0})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">Jumlah {stockActionType} *</label>
                                         <div className="flex items-center gap-2">
                                             <input 
                                                 type="number" 
                                                 autoFocus
                                                 value={stockQty} 
-                                                onChange={e => setStockQty(parseInt(e.target.value))} 
+                                                onChange={e => setStockQty(parseInt(e.target.value) || 0)} 
                                                 className="w-full border rounded p-2 text-lg font-bold text-center" 
                                                 min={1} 
                                             />

@@ -72,27 +72,40 @@ export const AuditLogView: React.FC = () => {
     };
 
     const formatDiff = (oldData: any, newData: any) => {
-        if (!oldData && newData) return "Data Baru dibuat";
-        if (oldData && !newData) return "Data Dihapus";
+        if (!oldData && newData) return <span className="text-green-600 font-bold">Data Baru dibuat</span>;
+        if (oldData && !newData) return <span className="text-red-600 font-bold">Data Dihapus</span>;
         
-        const changes: string[] = [];
-        // Simple shallow comparison for display
-        if (typeof newData === 'object' && newData !== null) {
-            Object.keys(newData).forEach(key => {
-                if (JSON.stringify(newData[key]) !== JSON.stringify(oldData[key])) {
-                    // Ignore lengthy fields for clean UI
-                    if (key === 'updated_at' || key === 'created_at') return;
-                    let valOld = JSON.stringify(oldData[key]);
-                    let valNew = JSON.stringify(newData[key]);
-                    if (valOld?.length > 20) valOld = valOld.substring(0, 20) + '...';
-                    if (valNew?.length > 20) valNew = valNew.substring(0, 20) + '...';
-                    changes.push(`${key}: ${valOld} -> ${valNew}`);
-                }
-            });
-        }
+        const changes: JSX.Element[] = [];
+        const allKeys = new Set([...Object.keys(oldData || {}), ...Object.keys(newData || {})]);
         
-        if (changes.length === 0) return "Tidak ada perubahan signifikan (mungkin timestamp)";
-        return changes.join(', ');
+        allKeys.forEach(key => {
+            if (['lastModified', 'updatedAt', 'createdAt', 'updated_at', 'created_at'].includes(key)) return;
+            
+            const valOld = oldData?.[key];
+            const valNew = newData?.[key];
+            
+            if (JSON.stringify(valOld) !== JSON.stringify(valNew)) {
+                let displayOld = JSON.stringify(valOld);
+                let displayNew = JSON.stringify(valNew);
+                
+                if (displayOld?.length > 40) displayOld = displayOld.substring(0, 40) + '...';
+                if (displayNew?.length > 40) displayNew = displayNew.substring(0, 40) + '...';
+
+                changes.push(
+                    <div key={key} className="flex flex-wrap items-center gap-1 border-b border-gray-50 py-1 last:border-0">
+                        <span className="font-bold text-[10px] text-gray-400 uppercase w-16">{key}:</span>
+                        <div className="flex items-center gap-1">
+                            <span className="bg-red-50 text-red-700 px-1 rounded line-through decoration-red-300">{displayOld === 'undefined' ? '-' : displayOld}</span>
+                            <i className="bi bi-arrow-right text-gray-300"></i>
+                            <span className="bg-green-50 text-green-700 px-1 rounded font-bold">{displayNew === 'undefined' ? '-' : displayNew}</span>
+                        </div>
+                    </div>
+                );
+            }
+        });
+        
+        if (changes.length === 0) return <span className="text-gray-400 italic">Tidak ada perubahan field (mungkin metadata)</span>;
+        return <div className="space-y-0.5">{changes}</div>;
     };
 
     if (error) {

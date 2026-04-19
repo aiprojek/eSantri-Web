@@ -24,7 +24,7 @@ type NavGroup = {
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }) => {
-  const { settings, showToast, showConfirmation, currentUser, logout, triggerManualSync, syncStatus } = useAppContext();
+  const { settings, showToast, showConfirmation, currentUser, logout, triggerManualSync, syncStatus, pendingChanges } = useAppContext();
   const [isSyncing, setIsSyncing] = useState(false);
   const [showSyncOptions, setShowSyncOptions] = useState(false);
   
@@ -71,6 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           items: [
               { page: Page.BukuTamu, icon: 'bi-person-rolodex', show: canAccess('bukutamu'), label: 'Buku Tamu' },
               { page: Page.PSB, icon: 'bi-person-plus-fill', show: canAccess('psb') },
+              { page: Page.WhatsApp, icon: 'bi-whatsapp', show: true, label: 'WhatsApp Center' },
               { page: Page.Surat, icon: 'bi-envelope-paper-fill', show: canAccess('surat') },
               { page: Page.Laporan, icon: 'bi-printer-fill', show: canAccess('laporan') },
           ]
@@ -168,7 +169,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
       if (syncStatus === 'syncing' || isSyncing) return <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></span><span>Menyimpan...</span></>;
       if (syncStatus === 'success') return <><i className="bi bi-cloud-check-fill mr-2 text-green-300"></i><span>Tersinkron</span></>;
       if (syncStatus === 'error') return <><i className="bi bi-exclamation-triangle-fill mr-2 text-red-400 animate-pulse"></i><span>Gagal Sync</span></>;
-      return <><i className="bi bi-cloud-arrow-up-down mr-2 group-hover:text-white text-teal-200"></i><span>Sync Cloud</span></>;
+      
+      return (
+          <div className="flex items-center relative">
+              <i className="bi bi-cloud-arrow-up-down mr-2 group-hover:text-white text-teal-200"></i>
+              <span>Sync Cloud</span>
+              {pendingChanges > 0 && (
+                  <span className="absolute -top-4 -right-4 flex min-w-[20px] h-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white shadow-lg animate-pulse ring-2 ring-teal-900" title={`${pendingChanges} perubahan belum di-upload`}>
+                      {pendingChanges > 99 ? '99+' : pendingChanges}
+                  </span>
+              )}
+          </div>
+      );
   };
 
   const getButtonClass = () => {
@@ -293,7 +305,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
                         <>
                             <p className="text-sm text-gray-600 mb-2">{currentUser?.role === 'admin' ? "Anda login sebagai **Admin (Pusat)**." : "Anda memiliki hak akses **Wakil Admin**."} Kelola data master dan gabungkan perubahan dari staff.</p>
                             <div className="grid grid-cols-1 gap-2">
-                                <button onClick={() => executeSync('admin_publish')} className="w-full flex items-center p-3 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group text-left"><div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-4 group-hover:bg-blue-200"><i className="bi bi-cloud-arrow-up-fill text-xl"></i></div><div><h4 className="font-bold text-gray-800 group-hover:text-blue-700">Publikasikan Master</h4><p className="text-xs text-gray-500">Kirim database lokal ke Cloud.</p></div></button>
+                                <button onClick={() => executeSync('admin_publish')} className="w-full flex items-center p-3 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group text-left">
+                                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-4 group-hover:bg-blue-200"><i className="bi bi-cloud-arrow-up-fill text-xl"></i></div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="font-bold text-gray-800 group-hover:text-blue-700">Publikasikan Master</h4>
+                                            {pendingChanges > 0 && <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 rounded-full font-bold">Delta: {pendingChanges}</span>}
+                                        </div>
+                                        <p className="text-xs text-gray-500">Kirim database lokal ke Cloud.</p>
+                                    </div>
+                                </button>
                                 <button onClick={() => executeSync('down')} className="w-full flex items-center p-3 border rounded-lg hover:bg-orange-50 hover:border-orange-300 transition-colors group text-left"><div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 mr-4 group-hover:bg-orange-200"><i className="bi bi-cloud-download-fill text-xl"></i></div><div><h4 className="font-bold text-gray-800 group-hover:text-orange-700">Ambil Data Terbaru</h4><p className="text-xs text-gray-500">Unduh data master dari Admin lain.</p></div></button>
                                 <button onClick={() => { setShowSyncOptions(false); setPage(Page.SyncAdmin); }} className="w-full flex items-center p-3 border rounded-lg hover:bg-yellow-50 hover:border-yellow-300 transition-colors group text-left"><div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 mr-4 group-hover:bg-yellow-200"><i className="bi bi-inbox-fill text-xl"></i></div><div><h4 className="font-bold text-gray-800 group-hover:text-yellow-700">Kelola Inbox Staff</h4><p className="text-xs text-gray-500">Gabungkan update data dari Staff.</p></div></button>
                             </div>
@@ -301,7 +322,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
                     ) : (
                         <>
                             <p className="text-sm text-gray-600 mb-2">Anda login sebagai <strong>Staff</strong>. Kirim pekerjaan Anda atau ambil data terbaru dari pusat.</p>
-                            <button onClick={() => executeSync('up')} className="w-full flex items-center p-4 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group text-left"><div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-4 group-hover:bg-blue-200"><i className="bi bi-send-fill text-xl"></i></div><div><h4 className="font-bold text-gray-800 group-hover:text-blue-700">Kirim Perubahan</h4><p className="text-xs text-gray-500">Kirim data yang saya input ke Inbox Admin.</p></div></button>
+                            <button onClick={() => executeSync('up')} className="w-full flex items-center p-4 border rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors group text-left">
+                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-4 group-hover:bg-blue-200"><i className="bi bi-send-fill text-xl"></i></div>
+                                <div className="flex-1">
+                                    <div className="flex justify-between items-start">
+                                        <h4 className="font-bold text-gray-800 group-hover:text-blue-700">Kirim Perubahan</h4>
+                                        {pendingChanges > 0 && <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 rounded-full font-bold">Belum Kirim: {pendingChanges}</span>}
+                                    </div>
+                                    <p className="text-xs text-gray-500">Kirim data yang baru saya input ({pendingChanges} item).</p>
+                                </div>
+                            </button>
                             <button onClick={() => executeSync('down')} className="w-full flex items-center p-4 border rounded-lg hover:bg-orange-50 hover:border-orange-300 transition-colors group text-left"><div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 mr-4 group-hover:bg-orange-200"><i className="bi bi-cloud-download-fill text-xl"></i></div><div><h4 className="font-bold text-gray-800 group-hover:text-orange-700">Ambil Master Data</h4><p className="text-xs text-gray-500">Ambil data gabungan terbaru dari Admin.</p></div></button>
                         </>
                     )}

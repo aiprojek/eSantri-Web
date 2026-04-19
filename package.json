@@ -11,6 +11,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@types/uuid": "^9.0.8",
     "bootstrap-icons": "^1.11.3",
     "date-fns": "^3.3.1",
     "dexie": "^4.0.7",
@@ -24,6 +25,8 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.51.5",
     "react-virtuoso": "^4.7.1",
+    "recharts": "^3.8.1",
+    "uuid": "^9.0.1",
     "webdav": "^5.7.1",
     "xlsx": "^0.18.5"
   },

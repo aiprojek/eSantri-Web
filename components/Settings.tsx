@@ -8,12 +8,13 @@ import { TabNis } from './settings/tabs/TabNis';
 import { TabCloud } from './settings/tabs/TabCloud';
 import { TabBackup } from './settings/tabs/TabBackup';
 import { TabPortal } from './settings/tabs/TabPortal';
+import { TabDiagnostik } from './settings/tabs/TabDiagnostik';
 
 const Settings: React.FC = () => {
     const { settings, onSaveSettings, showConfirmation, showToast } = useAppContext();
     const [localSettings, setLocalSettings] = useState<PondokSettings>(settings);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup'>('umum');
+    const [activeTab, setActiveTab] = useState<'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup' | 'diagnostik'>('umum');
 
     useEffect(() => {
         // When settings from context change, update local state
@@ -130,7 +131,7 @@ const Settings: React.FC = () => {
     };
 
     const TabButton: React.FC<{
-        tabId: 'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup';
+        tabId: 'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup' | 'diagnostik';
         label: string;
         icon: string;
     }> = ({ tabId, label, icon }) => (
@@ -155,6 +156,7 @@ const Settings: React.FC = () => {
                     <TabButton tabId="portal" label="Portal Wali" icon="bi-globe2" />
                     <TabButton tabId="cloud" label="Sync Cloud" icon="bi-cloud-arrow-up" />
                     <TabButton tabId="backup" label="Backup & Restore" icon="bi-hdd-fill" />
+                    <TabButton tabId="diagnostik" label="Diagnosa" icon="bi-heart-pulse-fill" />
                 </nav>
             </div>
 
@@ -165,6 +167,7 @@ const Settings: React.FC = () => {
                 {activeTab === 'portal' && <TabPortal localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
                 {activeTab === 'cloud' && <TabCloud localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
                 {activeTab === 'backup' && <TabBackup localSettings={localSettings} setLocalSettings={setLocalSettings} />}
+                {activeTab === 'diagnostik' && <TabDiagnostik />}
             </div>
             
              <div className="mt-6 flex justify-end sticky bottom-4 z-10">

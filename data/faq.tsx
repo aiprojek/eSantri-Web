@@ -293,6 +293,29 @@ export const faqData: FaqCategoryData[] = [
         ]
     },
     {
+        title: "Smart WhatsApp Automation",
+        icon: "bi-whatsapp",
+        colorClass: "bg-green-50 border-green-500 text-green-900",
+        items: [
+            {
+                question: "Bagaimana cara mengirim pesan massal?",
+                answer: "Pilih template, tentukan penerima melalui daftar centang, lalu klik tombol 'Kirim Ke [X] Santri'. Karena aplikasi menggunakan metode redirect manual, Anda tetap perlu menekan tombol send di WhatsApp Web/Desktop satu per satu untuk memastikan keamanan nomor Anda."
+            },
+            {
+                question: "Apakah pesan ini otomatis terkirim tanpa saya buka WA?",
+                answer: "Metode default adalah Semi-Otomatis (Redirect). Anda diarahkan ke WA dengan pesan yang sudah jadi. Untuk pengiriman Otomatis Penuh di latar belakang, Anda memerlukan layanan API Gateway pihak ketiga yang bisa diintegrasikan di masa depan."
+            },
+            {
+                question: "Apakah variabel seperti [nama_santri] bekerja?",
+                answer: "Ya! Saat Anda menekan tombol kirim, sistem akan otomatis mengganti [nama_santri] dengan nama santri yang bersangkutan, [ortu] dengan nama Ayah/Ibu, dan [nominal] dengan nilai yang relevan."
+            },
+            {
+                question: "Data saya tidak muncul nomor WA-nya?",
+                answer: "Pastikan pada menu Manajemen Santri, kolom Nomor Telepon Ayah/Ibu sudah terisi dengan benar (diawali 08... atau 62...). Sistem akan otomatis memformatnya ke standar internasional."
+            }
+        ]
+    },
+    {
         title: "Kalender & Jadwal Ibadah",
         icon: "bi-calendar-range-fill",
         colorClass: "bg-yellow-50 border-yellow-500 text-yellow-900",
@@ -308,6 +331,35 @@ export const faqData: FaqCategoryData[] = [
              {
                 question: "Apakah penanda puasa Ramadhan di kalender akurat?",
                 answer: "Penanda puasa (Ramadhan/Sunnah) di kalender menggunakan metode **Hisab/Estimasi**. Untuk penetapan awal Ramadhan dan Hari Raya, tetap ikuti keputusan resmi pemerintah (Sidang Isbat). Anda bisa menyesuaikan selisih hari di menu **Pengaturan > Umum > Koreksi Tanggal Hijriah**."
+            }
+        ]
+    },
+    {
+        title: "Pemeliharaan & Diagnosa",
+        icon: "bi-heart-pulse-fill",
+        colorClass: "bg-red-50 border-red-200 text-red-900",
+        items: [
+            {
+                question: "Apa itu menu Diagnosa Sistem?",
+                answer: "Menu Diagnosa adalah fitur 'kesehatan' untuk database eSantri. Fitur ini memindai database lokal Anda untuk mencari data yang rusak, hilang kaitannya (orphan), atau tidak memiliki index sinkronisasi yang lengkap."
+            },
+            {
+                question: "Apakah aman mengklik tombol 'Perbaiki'? Berbahayakah bagi data?",
+                answer: (
+                    <div>
+                        <p className="mb-2"><strong>UMUMNYA AMAN.</strong> Fitur perbaikan otomatis (Auto-Fix) dirancang untuk menambal data yang kurang atau menghapus data sampah.</p>
+                        <ul className="list-disc pl-5 mt-1 space-y-1">
+                            <li><strong>Perbaiki Saldo:</strong> Menambah data (saldo 0), bukan menghapus.</li>
+                            <li><strong>Re-Index:</strong> Hanya memperbarui timestamp, tidak mengubah angka/teks.</li>
+                            <li><strong>Bersihkan Orphan:</strong> Menghapus data sampah yang sudah tidak punya pemilik.</li>
+                        </ul>
+                        <p className="mt-2 text-xs italic">Namun, sebagai SOP IT yang baik, <strong>selalu lakukan Backup (Ekspor JSON)</strong> sebelum menjalankan perbaikan apa pun.</p>
+                    </div>
+                )
+            },
+            {
+                question: "Kapan saya harus menjalankan Diagnosa?",
+                answer: "Kami menyarankan Admin melakukan scan diagnosa minimal satu bulan sekali, atau segera jika Anda merasa ada data yang tidak sinkron antara laptop staff dan laptop admin pusat."
             }
         ]
     }

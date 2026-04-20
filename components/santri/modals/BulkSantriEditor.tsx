@@ -316,8 +316,12 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
 
                         // Parents
                         namaAyah: findVal(['ayah', 'bapak', 'father']),
+                        tempatLahirAyah: findVal(['tempat lahir ayah', 'tmp lahir ayah', 'birthplace father']),
+                        tanggalLahirAyah: toDisplayDate(findVal(['tgl lahir ayah', 'tanggal lahir ayah', 'birthday father'])),
                         teleponAyah: findVal(['hp ayah', 'telp ayah', 'wa ayah']),
                         namaIbu: findVal(['ibu', 'mother']),
+                        tempatLahirIbu: findVal(['tempat lahir ibu', 'tmp lahir ibu', 'birthplace mother']),
+                        tanggalLahirIbu: toDisplayDate(findVal(['tgl lahir ibu', 'tanggal lahir ibu', 'birthday mother'])),
                         teleponIbu: findVal(['hp ibu', 'telp ibu', 'wa ibu']),
                         namaWali: findVal(['wali', 'guardian']),
                         teleponWali: findVal(['hp wali', 'telp wali', 'wa wali']),
@@ -417,8 +421,8 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                     <th colSpan={11} className="px-4 py-1 text-center font-bold text-gray-600 border-r border-b uppercase text-xs tracking-wider bg-blue-50">Identitas & Kependudukan</th>
                                     <th colSpan={5} className="px-4 py-1 text-center font-bold text-gray-600 border-r border-b uppercase text-xs tracking-wider bg-green-50">Akademik</th>
                                     <th colSpan={6} className="px-4 py-1 text-center font-bold text-gray-600 border-r border-b uppercase text-xs tracking-wider bg-yellow-50">Alamat Lengkap</th>
-                                    <th colSpan={7} className="px-4 py-1 text-center font-bold text-gray-600 border-r border-b uppercase text-xs tracking-wider bg-indigo-50">Data Ayah</th>
-                                    <th colSpan={7} className="px-4 py-1 text-center font-bold text-gray-600 border-r border-b uppercase text-xs tracking-wider bg-pink-50">Data Ibu</th>
+                                    <th colSpan={8} className="px-4 py-1 text-center font-bold text-gray-600 border-r border-b uppercase text-xs tracking-wider bg-indigo-50">Data Ayah</th>
+                                    <th colSpan={8} className="px-4 py-1 text-center font-bold text-gray-600 border-r border-b uppercase text-xs tracking-wider bg-pink-50">Data Ibu</th>
                                     <th colSpan={7} className="px-4 py-1 text-center font-bold text-gray-600 border-b uppercase text-xs tracking-wider bg-gray-200">Data Wali</th>
                                     {mode === 'add' && <th className="bg-gray-200 border-b"></th>}
                                 </tr>
@@ -458,6 +462,8 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                     {/* Data Ayah */}
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[160px] bg-indigo-50/30">Nama Ayah</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[120px] bg-indigo-50/30">Status Ayah</th>
+                                    <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[140px] bg-indigo-50/30">Tempat Lahir</th>
+                                    <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[130px] bg-indigo-50/30">Tgl Lahir</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[130px] bg-indigo-50/30">NIK Ayah</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[140px] bg-indigo-50/30">Pendidikan</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[140px] bg-indigo-50/30">Pekerjaan</th>
@@ -467,6 +473,8 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                     {/* Data Ibu */}
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[160px] bg-pink-50/30">Nama Ibu</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[120px] bg-pink-50/30">Status Ibu</th>
+                                    <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[140px] bg-pink-50/30">Tempat Lahir</th>
+                                    <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[130px] bg-pink-50/30">Tgl Lahir</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[130px] bg-pink-50/30">NIK Ibu</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[140px] bg-pink-50/30">Pendidikan</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[140px] bg-pink-50/30">Pekerjaan</th>
@@ -584,6 +592,8 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                                     <option value="">- Pilih -</option>{statusHidupOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
+                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.tempatLahirAyah} onChange={e => updateRow(row.tempId, 'tempatLahirAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" placeholder="dd/mm/yyyy" value={row.tanggalLahirAyah} onChange={e => updateRow(row.tempId, 'tanggalLahirAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
                                             <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.nikAyah} onChange={e => updateRow(row.tempId, 'nikAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-indigo-50/10">
                                                 <select value={row.pendidikanAyah} onChange={e => updateRow(row.tempId, 'pendidikanAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
@@ -605,6 +615,8 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                                     <option value="">- Pilih -</option>{statusHidupOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
+                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.tempatLahirIbu} onChange={e => updateRow(row.tempId, 'tempatLahirIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" placeholder="dd/mm/yyyy" value={row.tanggalLahirIbu} onChange={e => updateRow(row.tempId, 'tanggalLahirIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
                                             <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.nikIbu} onChange={e => updateRow(row.tempId, 'nikIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-pink-50/10">
                                                 <select value={row.pendidikanIbu} onChange={e => updateRow(row.tempId, 'pendidikanIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">

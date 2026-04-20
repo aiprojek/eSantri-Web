@@ -301,8 +301,26 @@ export const LaporanAsramaTemplate: React.FC<{ settings: PondokSettings; santriL
                                         <p className="text-xs text-gray-600 mb-1">Musyrif: {musyrif?.nama || '-'}</p>
                                         {penghuni.length > 0 ? (
                                             <table className="w-full text-xs border-collapse border border-black">
-                                                <thead className="bg-gray-200"><tr><th className="p-1 border border-black w-8">No</th><th className="p-1 border border-black">Nama</th><th className="p-1 border border-black">Rombel</th></tr></thead>
-                                                <tbody>{penghuni.map((s, i) => (<tr key={s.id}><td className="p-1 border border-black text-center">{i+1}</td><td className="p-1 border border-black">{s.namaLengkap}</td><td className="p-1 border border-black">{settings.rombel.find(r=>r.id===s.rombelId)?.nama}</td></tr>))}</tbody>
+                                                <thead className="bg-gray-200">
+                                                    <tr>
+                                                        <th className="p-1 border border-black w-8">No</th>
+                                                        <th className="p-1 border border-black w-24">NIS</th>
+                                                        <th className="p-1 border border-black">Nama Lengkap</th>
+                                                        <th className="p-1 border border-black w-10 text-center">L/P</th>
+                                                        <th className="p-1 border border-black w-32">Rombel</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {penghuni.map((s, i) => (
+                                                        <tr key={s.id}>
+                                                            <td className="p-1 border border-black text-center">{i+1}</td>
+                                                            <td className="p-1 border border-black text-center">{s.nis}</td>
+                                                            <td className="p-1 border border-black">{s.namaLengkap}</td>
+                                                            <td className="p-1 border border-black text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td>
+                                                            <td className="p-1 border border-black">{settings.rombel.find(r=>r.id===s.rombelId)?.nama || '-'}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
                                             </table>
                                         ) : <p className="text-xs italic text-gray-500">Kamar kosong.</p>}
                                     </div>

@@ -57,14 +57,14 @@ const BiodataTemplate: React.FC<{ santri: Santri; settings: PondokSettings; useH
                 </BiodataSection>
                 <BiodataSection title="B. KETERANGAN ORANG TUA KANDUNG">
                     <BiodataItem number="15." label="Nama Ayah" value={santri.namaAyah} /><BiodataItem number="16." label="Tempat, Tanggal Lahir Ayah" value={santri.tempatLahirAyah ? `${santri.tempatLahirAyah}, ${formatDate(santri.tanggalLahirAyah)}` : formatDate(santri.tanggalLahirAyah)} />
-                    <BiodataItem number="17." label="Pendidikan Terakhir Ayah" value={santri.pendidikanAyah} /><BiodataItem number="18." label="Pekerjaan Ayah" value={santri.pekerjaanAyah} /><BiodataItem number="19." label="Penghasilan Ayah" value={santri.penghasilanAyah} /><BiodataItem number="20." label="No. Telepon Ayah" value={santri.teleponAyah || (santri as any).nomorHpAyah || '-'} />
+                    <BiodataItem number="17." label="Pendidikan Terakhir Ayah" value={santri.pendidikanAyah} /><BiodataItem number="18." label="Pekerjaan Ayah" value={santri.pekerjaanAyah} /><BiodataItem number="20." label="No. Telepon Ayah" value={santri.teleponAyah || (santri as any).nomorHpAyah || '-'} />
                     <BiodataItem number="21." label="Nama Ibu" value={santri.namaIbu} /><BiodataItem number="22." label="Tempat, Tanggal Lahir Ibu" value={santri.tempatLahirIbu ? `${santri.tempatLahirIbu}, ${formatDate(santri.tanggalLahirIbu)}` : formatDate(santri.tanggalLahirIbu)} />
-                    <BiodataItem number="23." label="Pendidikan Terakhir Ibu" value={santri.pendidikanIbu} /><BiodataItem number="24." label="Pekerjaan Ibu" value={santri.pekerjaanIbu} /><BiodataItem number="25." label="Penghasilan Ibu" value={santri.penghasilanIbu} /><BiodataItem number="26." label="No. Telepon Ibu" value={santri.teleponIbu || (santri as any).nomorHpIbu || '-'} />
+                    <BiodataItem number="23." label="Pendidikan Terakhir Ibu" value={santri.pendidikanIbu} /><BiodataItem number="24." label="Pekerjaan Ibu" value={santri.pekerjaanIbu} /><BiodataItem number="26." label="No. Telepon Ibu" value={santri.teleponIbu || (santri as any).nomorHpIbu || '-'} />
                     <BiodataItem number="27." label="Alamat Orang Tua" value={formatAlamat(santri.alamatAyah) || formatAlamat(santri.alamatIbu) || formatAlamat(santri.alamat)} />
                 </BiodataSection>
                 {santri.namaWali && (
                 <BiodataSection title="C. KETERANGAN WALI">
-                    <BiodataItem number="28." label="Nama Wali" value={santri.namaWali} /><BiodataItem number="29." label="Hubungan dengan Santri" value={santri.statusWali} /><BiodataItem number="30." label="Pekerjaan Wali" value={santri.pekerjaanWali} /><BiodataItem number="31." label="Penghasilan Wali" value={santri.penghasilanWali} /><BiodataItem number="32." label="No. Telepon Wali" value={santri.teleponWali || (santri as any).nomorHpWali || '-'} /><BiodataItem number="33." label="Alamat Wali" value={formatAlamat(santri.alamatWali) || formatAlamat(santri.alamat)} />
+                    <BiodataItem number="28." label="Nama Wali" value={santri.namaWali} /><BiodataItem number="29." label="Hubungan dengan Santri" value={santri.statusWali} /><BiodataItem number="30." label="Pekerjaan Wali" value={santri.pekerjaanWali} /><BiodataItem number="32." label="No. Telepon Wali" value={santri.teleponWali || (santri as any).nomorHpWali || '-'} /><BiodataItem number="33." label="Alamat Wali" value={formatAlamat(santri.alamatWali) || formatAlamat(santri.alamat)} />
                 </BiodataSection>
                 )}
             </table>
@@ -212,7 +212,7 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                             {showRombel && <div className="flex justify-end gap-1"><span className="font-semibold">Rombel:</span> {rombelNama}</div>}
                             {showTtl && <div className="flex justify-end gap-1"><span className="font-semibold">Lahir:</span> {ttl}</div>}
                             {showAyahWali && <div className="flex justify-end gap-1"><span className="font-semibold">Wali:</span> {ayahWali}</div>}
-                            {showAlamat && <div className="flex justify-end gap-1 text-right"><span className="font-semibold">Alamat:</span> <span className="truncate max-w-[120px]">{alamat}</span></div>}
+                            {showAlamat && <div className="flex justify-end gap-1 text-right items-start"><span className="font-semibold shrink-0">Alamat:</span> <span className="line-clamp-2 text-[6pt] leading-tight break-all">{alamat}</span></div>}
                         </div>
                     </div>
                 </div>
@@ -255,7 +255,7 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                         {showJenjang && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Kelas</span><span>: {jenjangKelas}</span></div>}
                         {showRombel && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Rombel</span><span>: {rombelNama}</span></div>}
                         {showAyahWali && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Wali</span><span>: {ayahWali}</span></div>}
-                        {showAlamat && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Alamat</span><span className="truncate">: {alamat}</span></div>}
+                        {showAlamat && <div className="grid grid-cols-[40px_1fr] text-left border-t border-gray-100 pt-0.5 mt-0.5"><span className="text-gray-400">Alamat</span><span className="line-clamp-2 leading-tight">: {alamat}</span></div>}
                     </div>
                 </div>
                 

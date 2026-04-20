@@ -3,6 +3,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { ReportType } from '../../types';
 import { generatePdf, printToPdfNative } from '../../utils/pdfGenerator';
 import { exportReportToSvg } from '../../utils/svgExporter';
+import { exportToHtml, exportToAutoTable } from '../../utils/exportUtils';
 import { generateContactCsv } from '../../services/csvService';
 import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel, exportEmisTemplate } from '../../services/excelService';
 
@@ -121,6 +122,32 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         finally { setIsGeneratingFile(false); setIsDownloadMenuOpen(false); }
     };
 
+    const handleDownloadAutoTable = () => {
+        setIsGeneratingFile(true);
+        try {
+            exportToAutoTable('preview-area', `Laporan_${activeReport}`);
+            onToast('PDF AutoTable berhasil diunduh.', 'success');
+        } catch (e) {
+            onToast('Gagal ekspor AutoTable.', 'error');
+        } finally {
+            setIsGeneratingFile(false);
+            setIsDownloadMenuOpen(false);
+        }
+    };
+
+    const handleDownloadHtml = () => {
+        setIsGeneratingFile(true);
+        try {
+            exportToHtml('preview-area', `Laporan_${activeReport}`);
+            onToast('HTML Offline berhasil diunduh.', 'success');
+        } catch (e) {
+            onToast('Gagal ekspor HTML.', 'error');
+        } finally {
+            setIsGeneratingFile(false);
+            setIsDownloadMenuOpen(false);
+        }
+    };
+
     // List of reports eligible for Excel Export
     const canExportToExcel = [
         ReportType.LaporanKontak, 
@@ -128,7 +155,28 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         ReportType.Biodata,
         ReportType.LaporanArusKas,
         ReportType.FinanceSummary,
-        ReportType.LaporanEMIS // Add EMIS here
+        ReportType.LaporanEMIS,
+        ReportType.KartuSantri
+    ].includes(activeReport);
+
+    // List of reports eligible for AutoTable Export (Clean Data PDF)
+    const canExportToAutoTable = [
+        ReportType.DashboardSummary,
+        ReportType.FinanceSummary,
+        ReportType.LaporanMutasi,
+        ReportType.DaftarRombel,
+        ReportType.LembarAbsensi,
+        ReportType.LembarNilai,
+        ReportType.LembarRapor,
+        ReportType.LembarPembinaan,
+        ReportType.RaporLengkap,
+        ReportType.RekeningKoranSantri,
+        ReportType.LaporanArusKas,
+        ReportType.LaporanAsrama,
+        ReportType.DaftarWaliKelas,
+        ReportType.LaporanMapel,
+        ReportType.LaporanKontakStaf,
+        ReportType.LembarKedatangan
     ].includes(activeReport);
 
     if (!previewContent && !isLoading) {
@@ -176,6 +224,17 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                                     <button onClick={handleDownloadCsv} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 border-b flex items-center gap-2"><i className="bi bi-file-earmark-spreadsheet text-gray-500"></i> CSV (Legacy)</button>
                                 )}
                                 <button onClick={handlePrintNative} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 border-b flex items-center gap-2"><i className="bi bi-printer text-blue-600"></i> Cetak / PDF (Asli)</button>
+                                
+                                {canExportToAutoTable && (
+                                    <button onClick={handleDownloadAutoTable} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 border-b flex items-center gap-2">
+                                        <i className="bi bi-file-earmark-ruled text-teal-600"></i> PDF Data (AutoTable)
+                                    </button>
+                                )}
+
+                                <button onClick={handleDownloadHtml} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 border-b flex items-center gap-2">
+                                    <i className="bi bi-code-slash text-indigo-600"></i> HTML (Offline)
+                                </button>
+
                                 <button onClick={handleDownloadPdfImage} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"><i className="bi bi-file-earmark-pdf text-red-600"></i> PDF (Gambar)</button>
                                 {activeReport === ReportType.KartuSantri && (
                                     <button onClick={handleDownloadSvg} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-t"><i className="bi bi-vector-pen text-purple-600"></i> SVG (Vektor)</button>

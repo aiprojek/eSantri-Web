@@ -344,15 +344,35 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
         (meta as any).agenda = options.agendaKedatangan || '...';
         tableHeader = (
             <thead className="text-xs uppercase bg-gray-200 text-center">
-                <tr><th rowSpan={2} className="px-2 py-2 border border-black align-middle">No</th><th rowSpan={2} className="px-2 py-2 border border-black align-middle">NIS</th><th rowSpan={2} className="px-2 py-2 border border-black align-middle" style={{minWidth: '200px'}}>Nama Lengkap</th><th colSpan={2} className="px-2 py-2 border border-black">Waktu Kedatangan</th><th rowSpan={2} className="px-2 py-2 border border-black align-middle">Paraf</th></tr>
-                <tr><th className="px-2 py-2 border border-black font-medium">Hari, Tanggal</th><th className="px-2 py-2 border border-black font-medium">Pukul</th></tr>
+                <tr>
+                    <th rowSpan={2} className="px-2 py-2 border border-black align-middle">No</th>
+                    <th rowSpan={2} className="px-2 py-2 border border-black align-middle">NIS</th>
+                    <th rowSpan={2} className="px-2 py-2 border border-black align-middle" style={{minWidth: '180px'}}>Nama Lengkap</th>
+                    <th rowSpan={2} className="px-2 py-2 border border-black align-middle">Rombel / Kamar</th>
+                    <th colSpan={2} className="px-2 py-2 border border-black">Waktu Kedatangan</th>
+                    <th rowSpan={2} className="px-2 py-2 border border-black align-middle">Paraf</th>
+                </tr>
+                <tr>
+                    <th className="px-2 py-2 border border-black font-medium">Hari, Tanggal</th>
+                    <th className="px-2 py-2 border border-black font-medium">Pukul</th>
+                </tr>
             </thead>
         );
-        tableRow = (s, i) => (
-            <tr key={s.id}>
-                <td className="px-2 py-2 border border-black text-center">{i + 1}</td><td className="px-2 py-2 border border-black">{s.nis}</td><td className="px-2 py-2 border border-black">{s.namaLengkap}</td><td className="px-2 py-2 border border-black h-8"></td><td className="px-2 py-2 border border-black h-8"></td><td className="px-2 py-2 border border-black h-8"></td>
-            </tr>
-        );
+        tableRow = (s, i) => {
+            const rombel = settings.rombel.find(r => r.id === s.rombelId)?.nama || '-';
+            const kamar = s.kamarId ? settings.kamar.find(k => k.id === s.kamarId)?.nama : '-';
+            return (
+                <tr key={s.id}>
+                    <td className="px-2 py-2 border border-black text-center">{i + 1}</td>
+                    <td className="px-2 py-2 border border-black text-center">{s.nis}</td>
+                    <td className="px-2 py-2 border border-black">{s.namaLengkap}</td>
+                    <td className="px-2 py-2 border border-black text-center text-[10px]">{rombel} / {kamar}</td>
+                    <td className="px-2 py-2 border border-black h-9"></td>
+                    <td className="px-2 py-2 border border-black h-9"></td>
+                    <td className="px-2 py-2 border border-black h-9"></td>
+                </tr>
+            );
+        };
     }
 
     return [{

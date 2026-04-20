@@ -37,14 +37,21 @@ export const exportSantriToExcel = (data: Santri[], settings: PondokSettings, fi
             'Rombel': rombel?.nama || '-',
             'Status': s.status,
             'Nama Ayah': s.namaAyah,
+            'Tempat Lahir Ayah': s.tempatLahirAyah || '-',
+            'Tgl Lahir Ayah': formatExcelDate(s.tanggalLahirAyah),
             'No HP Ayah': s.teleponAyah || '-',
             'Nama Ibu': s.namaIbu,
+            'Tempat Lahir Ibu': s.tempatLahirIbu || '-',
+            'Tgl Lahir Ibu': formatExcelDate(s.tanggalLahirIbu),
             'No HP Ibu': s.teleponIbu || '-',
             'Nama Wali': s.namaWali || '-',
             'No HP Wali': s.teleponWali || '-',
             'Alamat Detail': s.alamat?.detail || '-',
+            'Desa/Kel': s.alamat?.desaKelurahan || '-',
             'Kecamatan': s.alamat?.kecamatan || '-',
-            'Kab/Kota': s.alamat?.kabupatenKota || '-'
+            'Kab/Kota': s.alamat?.kabupatenKota || '-',
+            'Provinsi': s.alamat?.provinsi || '-',
+            'Kode Pos': s.alamat?.kodePos || '-'
         };
     });
 
@@ -129,9 +136,18 @@ export const exportEmisTemplate = (data: Santri[], settings: PondokSettings, fil
         'TEMPAT LAHIR': s.tempatLahir,
         'TANGGAL LAHIR (YYYY-MM-DD)': s.tanggalLahir,
         'JENIS KELAMIN (L/P)': s.jenisKelamin === 'Laki-laki' ? 'L' : 'P',
+        'ALAMAT JALAN': s.alamat?.detail || '',
+        'DESA/KELURAHAN': s.alamat?.desaKelurahan || '',
+        'KECAMATAN': s.alamat?.kecamatan || '',
+        'KABUPATEN/KOTA': s.alamat?.kabupatenKota || '',
+        'PROVINSI': s.alamat?.provinsi || '',
+        'KODE POS': s.alamat?.kodePos || '',
         'NAMA AYAH': s.namaAyah,
+        'TEMPAT LAHIR AYAH': s.tempatLahirAyah || '',
+        'TANGGAL LAHIR AYAH': s.tanggalLahirAyah || '',
         'NAMA IBU': s.namaIbu,
-        'ALAMAT': s.alamat?.detail || ''
+        'TEMPAT LAHIR IBU': s.tempatLahirIbu || '',
+        'TANGGAL LAHIR IBU': s.tanggalLahirIbu || ''
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);

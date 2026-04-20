@@ -23,7 +23,7 @@ export const FinanceSummaryTemplate: React.FC<{ santriList: Santri[], tagihanLis
          <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="Laporan Ringkas Keuangan" />
-                <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
+                <p className="print-meta text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
                 <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Keuangan Utama</h4>
                 <table className="w-full text-sm my-4">
                     <tbody>
@@ -65,7 +65,7 @@ export const LaporanArusKasTemplate: React.FC<{ settings: PondokSettings; option
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="Laporan Arus Kas Umum" />
-                <p className="text-center text-sm mb-4">Periode: {formatDate(kasStartDate)} s.d. {formatDate(kasEndDate)}</p>
+                <p className="print-meta text-center text-sm mb-4">Periode: {formatDate(kasStartDate)} s.d. {formatDate(kasEndDate)}</p>
                 <table className="w-full text-sm my-4">
                     <tbody>
                         <tr className="border-b"><td className="py-1 font-medium">Saldo Awal</td><td className="py-1 text-right font-semibold">{formatRupiah(saldoAwal)}</td></tr>
@@ -116,7 +116,7 @@ export const RekeningKoranSantriTemplate: React.FC<{ santri: Santri; settings: P
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="Rekening Koran Santri" />
-                <table className="w-full text-sm my-4">
+                <table className="print-meta w-full text-sm my-4">
                     <tbody>
                         <tr><td className="pr-4 font-medium w-32">Nama Santri</td><td>: {santri.namaLengkap}</td></tr>
                         <tr><td className="pr-4 font-medium">NIS</td><td>: {santri.nis}</td></tr>

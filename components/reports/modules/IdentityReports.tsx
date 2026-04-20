@@ -419,47 +419,69 @@ export const generateCardReports = (data: Santri[], settings: PondokSettings, op
         sheetOrientation = 'portrait';
     }
 
-    // Dynamic grid estimation
-    // A4 Portrait: 21cm x 29.7cm. A4 Landscape: 29.7cm x 21cm.
-    // We'll use a CSS grid instead of flex-wrap for better accuracy in PDF generation
+    const paperDimensions = { 'A4': { width: 21.0, height: 29.7 }, 'F4': { width: 21.5, height: 33.0 } };
+    const marginValues = { 'narrow': 1.27, 'normal': 2.0, 'wide': 3.0 };
     
-    const cardsPerPage = 8; // Safer than 9 for various sizes
+    // Default to A4/Normal if not found
+    let paperWidth = (paperDimensions[options.paperSize as keyof typeof paperDimensions] || paperDimensions['A4']).width;
+    let paperHeight = (paperDimensions[options.paperSize as keyof typeof paperDimensions] || paperDimensions['A4']).height;
+    
+    const currentMargin = marginValues[options.margin as keyof typeof marginValues] || 2.0;
+
+    // Swap dimensions if paper is landscape
+    if (sheetOrientation === 'landscape') {
+        const temp = paperWidth;
+        paperWidth = paperHeight;
+        paperHeight = temp;
+    }
+
+    const gapX = 0.5; // cm
+    const gapY = 0.8; // cm
+
+    const effectiveWidth = paperWidth - (currentMargin * 2);
+    const effectiveHeight = paperHeight - (currentMargin * 2);
+
+    const cols = Math.floor((effectiveWidth + gapX) / (options.cardWidth + gapX));
+    const rows = Math.floor((effectiveHeight + gapY) / (options.cardHeight + gapY));
+    
+    // Ensure we print at least 1 item per page even if dims are wonky
+    const itemsPerPage = Math.max(1, cols * rows);
+
     const previews = [];
 
-    for (let i = 0; i < data.length; i += cardsPerPage) {
-        const pageData = data.slice(i, i + cardsPerPage);
+    for (let i = 0; i < data.length; i += itemsPerPage) {
+        const pageData = data.slice(i, i + itemsPerPage);
         previews.push({
             content: (
                 <div 
-                    className="bg-white print:m-0 mx-auto overflow-hidden flex flex-col items-center justify-center" 
+                    className="bg-white print:m-0 mx-auto overflow-hidden flex flex-col items-center" 
                     style={{ 
-                        width: sheetOrientation === 'portrait' ? '21cm' : '29.7cm', 
-                        height: sheetOrientation === 'portrait' ? '29.7cm' : '21cm',
-                        padding: '1cm',
+                        width: `${paperWidth}cm`, 
+                        height: `${paperHeight}cm`,
+                        padding: `${currentMargin}cm`,
                         boxSizing: 'border-box'
                     }}
                 >
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-6 justify-items-center content-start">
+                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignContent: 'flex-start', gap: `${gapY}cm ${gapX}cm`, width: '100%', height: '100%' }}>
                         {pageData.map((santri) => (
-                            <div key={santri.id} className="relative group" style={{ breakInside: 'avoid', width: `${options.cardWidth}cm`, height: `${options.cardHeight}cm` }}>
+                            <div key={santri.id} className="relative" style={{ breakInside: 'avoid', width: `${options.cardWidth}cm`, height: `${options.cardHeight}cm` }}>
                                 <KartuSantriTemplate santri={santri} settings={settings} options={options} />
-                                {/* Cut marks (Semi-transparent in UI, visible enough for cutting) */}
-                                <div className="absolute -top-2 -left-2 w-4 h-4 border-t border-l border-gray-300 pointer-events-none no-print"></div>
-                                <div className="absolute -top-2 -right-2 w-4 h-4 border-t border-r border-gray-300 pointer-events-none no-print"></div>
-                                <div className="absolute -bottom-2 -left-2 w-4 h-4 border-b border-l border-gray-300 pointer-events-none no-print"></div>
-                                <div className="absolute -bottom-2 -right-2 w-4 h-4 border-b border-r border-gray-300 pointer-events-none no-print"></div>
                                 
-                                {/* Real print cut marks (Black, very thin) */}
-                                <div className="hidden print:block absolute -top-4 -left-4 w-4 h-4 border-t border-l border-black opacity-30"></div>
-                                <div className="hidden print:block absolute -top-4 -right-4 w-4 h-4 border-t border-r border-black opacity-30"></div>
-                                <div className="hidden print:block absolute -bottom-4 -left-4 w-4 h-4 border-b border-l border-black opacity-30"></div>
-                                <div className="hidden print:block absolute -bottom-4 -right-4 w-4 h-4 border-b border-r border-black opacity-30"></div>
+                                {/* Real print cut marks (Black, very thin, slightly further out to avoid being on the card) */}
+                                <div className="absolute -top-[0.2cm] -left-[0.2cm] w-[0.3cm] h-[0.3cm] border-t border-l border-gray-400"></div>
+                                <div className="absolute -top-[0.2cm] -right-[0.2cm] w-[0.3cm] h-[0.3cm] border-t border-r border-gray-400"></div>
+                                <div className="absolute -bottom-[0.2cm] -left-[0.2cm] w-[0.3cm] h-[0.3cm] border-b border-l border-gray-400"></div>
+                                <div className="absolute -bottom-[0.2cm] -right-[0.2cm] w-[0.3cm] h-[0.3cm] border-b border-r border-gray-400"></div>
+
+                                {/* Label for helper in preview */}
+                                <div className="absolute top-[0.1cm] right-[0.1cm] bg-white/70 backdrop-blur-sm text-[5pt] px-1 no-print rounded">S: {santri.nis}</div>
                             </div>
                         ))}
                     </div>
                 </div>
             ),
-            orientation: sheetOrientation
+            orientation: sheetOrientation,
+            isFullPage: true
         });
     }
     return previews;
@@ -521,7 +543,8 @@ export const generateLabelReports = (data: Santri[], settings: PondokSettings, o
                     </div>
                 </div>
             ), 
-            orientation: 'portrait' as const
+            orientation: 'portrait' as const,
+            isFullPage: true
         });
     }
     return previews;

@@ -9,7 +9,7 @@ import { db } from '../../../db';
 const AcademicHeader: React.FC<{ settings: PondokSettings, title: string, meta: any }> = ({ settings, title, meta }) => (
     <div>
         <PrintHeader settings={settings} title={title} />
-        <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-y-1 bg-gray-50 p-3 rounded-lg border border-gray-200">
+        <div className="print-meta text-sm font-semibold mb-4 grid grid-cols-2 gap-y-1 bg-gray-50 p-3 rounded-lg border border-gray-200">
             <span>Jenjang: <span className="font-normal">{meta.jenjang || '-'}</span></span>
             <span className="text-right">Tahun Ajaran: <span className="font-normal">{meta.tahunAjaran || '-'}</span></span>
             <span>Kelas / Rombel: <span className="font-normal">{meta.kelas || '-'} / {meta.rombel || '-'}</span></span>
@@ -65,7 +65,7 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
             <div>
                 <PrintHeader settings={settings} title="LAPORAN HASIL BELAJAR SANTRI (RAPOR)" />
                 
-                <table className="w-full text-sm mb-4 font-medium">
+                <table className="print-meta w-full text-sm mb-4 font-medium">
                     <tbody>
                         <tr><td className="w-24">Nama</td><td>: {santri.namaLengkap}</td><td className="w-24 text-right">Tahun Ajaran</td><td className="w-32 text-right">: {options.tahunAjaran}</td></tr>
                         <tr><td>NIS</td><td>: {santri.nis}</td><td className="text-right">Semester</td><td className="text-right">: {options.semester}</td></tr>
@@ -242,7 +242,7 @@ export const generateNilaiReports = (data: Santri[], settings: PondokSettings, o
                                 <tr key={s.id} className="h-6">
                                     <td className="border border-black">{i + 1}</td>
                                     <td className="border border-black">{s.nis}</td>
-                                    <td className="border border-black text-left pl-2">{s.namaLengkap}</td>
+                                    <td className="border border-black text-left pl-2">{s.namaLengkap} {s.status === 'Hiatus' && <span className="italic text-xs text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>}</td>
                                     {/* Empty cells for grades */}
                                     {[...Array(options.nilaiTpCount + 1 + options.nilaiSmCount + 1 + (options.showNilaiTengahSemester ? 1 : 0) + 2)].map((_, idx) => <td key={idx} className="border border-black"></td>)}
                                 </tr>
@@ -300,7 +300,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
         tableRow = (s, i) => (
             <tr key={s.id} className="h-6">
                 <td className="border border-black">{i+1}</td>
-                <td className="border border-black text-left px-2 truncate max-w-[150px]">{s.namaLengkap}</td>
+                <td className="border border-black text-left px-2 truncate max-w-[150px]">{s.namaLengkap} {s.status === 'Hiatus' && <span className="italic text-xs text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>}</td>
                 {[...Array(31)].map((_, idx) => <td key={idx} className="border border-black"></td>)}
                 <td className="border border-black bg-gray-50"></td><td className="border border-black bg-gray-50"></td><td className="border border-black bg-gray-50"></td>
             </tr>
@@ -320,7 +320,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             
             return (
                 <tr key={s.id}>
-                    <td className="border border-black p-2 text-center">{i+1}</td><td className="border border-black p-2 text-center">{s.nis}</td><td className="border border-black p-2 font-semibold">{s.namaLengkap}</td><td className="border border-black p-2 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td><td className="border border-black p-2">{s.tempatLahir}, {formatDate(s.tanggalLahir)}</td><td className="border border-black p-2">{wali}</td><td className="border border-black p-2 font-mono whitespace-nowrap">{telepon}</td><td className="border border-black p-2 text-[10px] leading-tight">{alamat}</td>
+                    <td className="border border-black p-2 text-center">{i+1}</td><td className="border border-black p-2 text-center">{s.nis}</td><td className="border border-black p-2 font-semibold">{s.namaLengkap} {s.status === 'Hiatus' && <span className="italic text-xs font-normal text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>}</td><td className="border border-black p-2 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td><td className="border border-black p-2">{s.tempatLahir}, {formatDate(s.tanggalLahir)}</td><td className="border border-black p-2">{wali}</td><td className="border border-black p-2 font-mono whitespace-nowrap">{telepon}</td><td className="border border-black p-2 text-[10px] leading-tight">{alamat}</td>
                 </tr>
             );
         };
@@ -335,7 +335,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
         );
         tableRow = (s, i) => (
             <tr key={s.id}>
-                <td className="p-2 border border-black text-center">{i + 1}</td><td className="p-2 border border-black">{s.nis}</td><td className="p-2 border border-black">{s.namaLengkap}</td><td className="p-2 border border-black h-12"></td><td className="p-2 border border-black"></td><td className="p-2 border border-black"></td><td className="p-2 border border-black"></td>
+                <td className="p-2 border border-black text-center">{i + 1}</td><td className="p-2 border border-black">{s.nis}</td><td className="p-2 border border-black">{s.namaLengkap} {s.status === 'Hiatus' && <span className="italic text-xs font-normal text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>}</td><td className="p-2 border border-black h-12"></td><td className="p-2 border border-black"></td><td className="p-2 border border-black"></td><td className="p-2 border border-black"></td>
             </tr>
         );
     } else if (type === 'Kedatangan') {
@@ -365,7 +365,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                 <tr key={s.id}>
                     <td className="px-2 py-2 border border-black text-center">{i + 1}</td>
                     <td className="px-2 py-2 border border-black text-center">{s.nis}</td>
-                    <td className="px-2 py-2 border border-black">{s.namaLengkap}</td>
+                    <td className="px-2 py-2 border border-black">{s.namaLengkap} {s.status === 'Hiatus' && <span className="italic text-xs font-normal text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>}</td>
                     <td className="px-2 py-2 border border-black text-center text-[10px]">{rombel} / {kamar}</td>
                     <td className="px-2 py-2 border border-black h-9"></td>
                     <td className="px-2 py-2 border border-black h-9"></td>

@@ -15,6 +15,47 @@ const formatExcelDate = (dateVal: string | Date | undefined) => {
     }
 };
 
+// Helper function to scrape metadata from DOM before Excel generation
+const buildWorksheetWithMeta = (excelData: any[]) => {
+    const worksheet = XLSX.utils.json_to_sheet([]);
+    
+    let metaLines: string[] = [];
+    try {
+        const metaContainers = document.querySelectorAll('.print-meta');
+        metaContainers.forEach(metaContainer => {
+            if (metaContainer.classList.contains('print-header-subtitle')) {
+                metaLines.push(`LAPORAN: ${metaContainer.textContent?.trim()}`);
+            } else if (metaContainer.classList.contains('grid')) {
+                Array.from(metaContainer.children).forEach((child) => {
+                    const text = child.textContent?.replace(/\s+/g, ' ').trim();
+                    if (text) metaLines.push(text);
+                });
+            } else if (metaContainer.nodeName.toLowerCase() === 'table') {
+                Array.from(metaContainer.querySelectorAll('tr')).forEach(tr => {
+                    let rowText = '';
+                    Array.from(tr.querySelectorAll('td, th')).forEach(td => rowText += (td.textContent?.trim() + " "));
+                    if (rowText.trim()) metaLines.push(rowText.replace(/\s+/g, ' ').trim());
+                });
+            } else {
+                const text = metaContainer.textContent?.replace(/\s+/g, ' ').trim();
+                if (text) metaLines.push(text);
+            }
+        });
+    } catch(e) {}
+
+    let startRow = 0;
+    if (metaLines.length > 0) {
+        XLSX.utils.sheet_add_aoa(worksheet, [['DETAIL LAPORAN:']], { origin: `A1` });
+        metaLines.forEach((text, i) => {
+            XLSX.utils.sheet_add_aoa(worksheet, [[text]], { origin: `A${i + 2}` });
+        });
+        startRow = metaLines.length + 2;
+    }
+
+    XLSX.utils.sheet_add_json(worksheet, excelData, { origin: `A${startRow + 1}` });
+    return worksheet;
+};
+
 /**
  * Ekspor Data Santri ke Excel (Default Export)
  */
@@ -55,7 +96,8 @@ export const exportSantriToExcel = (data: Santri[], settings: PondokSettings, fi
         };
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const worksheet = buildWorksheetWithMeta(excelData);
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data Santri");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
@@ -75,7 +117,7 @@ export const exportContactsToExcel = (data: Santri[], settings: PondokSettings, 
         };
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const worksheet = buildWorksheetWithMeta(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Kontak Wali");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
@@ -95,7 +137,8 @@ export const exportArusKasToExcel = (data: TransaksiKas[], fileName: string) => 
         'P. Jawab': t.penanggungJawab
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const worksheet = buildWorksheetWithMeta(excelData);
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Arus Kas");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
@@ -119,7 +162,8 @@ export const exportFinanceSummaryToExcel = (data: Santri[], tagihan: Tagihan[], 
         };
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const worksheet = buildWorksheetWithMeta(excelData);
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Tunggakan");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
@@ -150,7 +194,7 @@ export const exportEmisTemplate = (data: Santri[], settings: PondokSettings, fil
         'TANGGAL LAHIR IBU': s.tanggalLahirIbu || ''
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const worksheet = buildWorksheetWithMeta(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Template EMIS");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
@@ -181,7 +225,7 @@ export const exportKoperasiToExcel = (transaksiList: TransaksiKoperasi[], fileNa
         };
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
+    const worksheet = buildWorksheetWithMeta(data);
     
     // Auto-width hint
     const wscols = [

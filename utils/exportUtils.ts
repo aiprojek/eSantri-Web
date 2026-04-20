@@ -77,8 +77,9 @@ export const exportToAutoTable = (elementId: string, fileName: string) => {
     const doc = new jsPDF('p', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     
-    // Title & Header info extraction (Try to find titles)
+    // Extract contextual metadata if available (e.g., from PrintHeader or AcademicHeader)
     const titles = element.querySelectorAll('h1, h2, h3, h4');
+    const metaContainers = element.querySelectorAll('.print-meta');
     let yPos = 15;
     
     titles.forEach((title, idx) => {
@@ -90,8 +91,52 @@ export const exportToAutoTable = (elementId: string, fileName: string) => {
         }
     });
 
-    // Find all tables
-    const tables = element.querySelectorAll('table');
+    if (metaContainers.length > 0) {
+        doc.setFontSize(10);
+        let allMetaLines: string[] = [];
+        
+        metaContainers.forEach(metaContainer => {
+            if (metaContainer.classList.contains('print-header-subtitle')) return; // handled by titles usually
+            
+            let metaText = '';
+            if (metaContainer.classList.contains('grid')) {
+                Array.from(metaContainer.children).forEach((child) => {
+                    const text = child.textContent?.replace(/\s+/g, ' ').trim();
+                    if (text) {
+                         metaText += text + " | ";
+                    }
+                });
+                metaText = metaText.replace(/ \|\ $/, ''); // Remove trailing separator
+                if (metaText) allMetaLines.push(metaText);
+            } else if (metaContainer.nodeName.toLowerCase() === 'table') {
+                // If the meta is a table (like in Rekening Koran)
+                Array.from(metaContainer.querySelectorAll('tr')).forEach(tr => {
+                    let rowText = '';
+                    Array.from(tr.querySelectorAll('td, th')).forEach(td => rowText += (td.textContent?.trim() + " "));
+                    if (rowText.trim()) allMetaLines.push(rowText.replace(/\s+/g, ' ').trim());
+                });
+            } else {
+                metaText = metaContainer.textContent?.replace(/\s+/g, ' ').trim() || '';
+                if (metaText) allMetaLines.push(metaText);
+            }
+        });
+        
+        allMetaLines.forEach(line => {
+             const wrappedLines = doc.splitTextToSize(line, pageWidth - 30);
+             doc.text(wrappedLines, 15, yPos);
+             yPos += (wrappedLines.length * 5) + 2;
+        });
+        yPos += 5; // Extra spacing before tables
+    }
+
+    // Find all tables, but exclude tables that were already processed as print-meta
+    const allTables = element.querySelectorAll('table');
+    const tables: HTMLTableElement[] = [];
+    allTables.forEach(t => {
+        if (!t.classList.contains('print-meta')) {
+            tables.push(t);
+        }
+    });
     
     if (tables.length === 0) {
         // Fallback: If no real tables, maybe it's a grid? 

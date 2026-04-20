@@ -17,6 +17,6 @@ export const PrintHeader: React.FC<{ settings: PondokSettings; title: string }> 
             </div>
         </div>
         <hr className="my-4 border-t-2 border-black"/>
-        <h3 className="text-xl font-semibold uppercase text-center text-black">{title}</h3>
+        <h3 className="print-meta print-header-subtitle text-xl font-semibold uppercase text-center text-black">{title}</h3>
     </div>
 );

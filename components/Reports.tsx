@@ -47,9 +47,20 @@ const Reports: React.FC = () => {
   }, [filters.kelasId, settings.rombel, availableKelas]);
 
   const filteredSantri = useMemo(() => {
-    // If report is pure generic (like Dashboard Summary), we might pass all santri or handle inside generator
-    // but consistent filtering is good.
+    // Determine if the current report type naturally shows all statuses
+    // For DashboardSummary, we need all to calculate statistics (Lulus, Keluar, etc.)
+    // For LaporanMutasi, we specifically need to see mutated students.
+    const showAllStatusesReports = [ReportType.DashboardSummary, ReportType.LaporanMutasi];
+    const isShowingAllStatusReport = activeReportType && showAllStatusesReports.includes(activeReportType);
+
     const result = santriList.filter(s => {
+      // By default, for general academic/administrative reports (Absensi, Rombel, etc.), 
+      // do not include Lulus or Keluar/Pindah UNLESS the user explicitly sets the status filter.
+      const isLulusAtauKeluar = s.status === 'Lulus' || s.status === 'Keluar/Pindah';
+      const hideInactive = (!filters.status && isLulusAtauKeluar && !isShowingAllStatusReport);
+
+      if (hideInactive) return false;
+
       return (
         (!filters.jenjangId || s.jenjangId === parseInt(filters.jenjangId)) &&
         (!filters.kelasId || s.kelasId === parseInt(filters.kelasId)) &&
@@ -67,7 +78,7 @@ const Reports: React.FC = () => {
         if (valA > valB) return filters.sortOrder === 'asc' ? 1 : -1;
         return 0;
     });
-  }, [santriList, filters]);
+  }, [santriList, filters, activeReportType]);
 
   const filteredGedung = useMemo(() => {
     if (!filters.gedungId) return settings.gedungAsrama;
@@ -202,10 +213,10 @@ const Reports: React.FC = () => {
                   {generatedPages.map((p, i) => (
                       <div key={i} className={`bg-white shadow-lg mx-auto page-break-after flex flex-col ${p.orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} ${i < generatedPages.length - 1 ? 'mb-8' : 'mb-2'}`}
                           style={{ 
-                              width: `${p.orientation === 'landscape' ? currentPaper.height : currentPaper.width}cm`,
-                              minHeight: `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`
+                              width: p.isFullPage ? 'auto' : `${p.orientation === 'landscape' ? currentPaper.height : currentPaper.width}cm`,
+                              minHeight: p.isFullPage ? '0' : `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`
                           }}>
-                          <div style={{ padding: `${currentMarginCm}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+                          <div style={{ padding: p.isFullPage ? '0' : `${currentMarginCm}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
                               {p.content}
                           </div>
                       </div>

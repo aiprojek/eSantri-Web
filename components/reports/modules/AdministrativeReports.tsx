@@ -44,7 +44,7 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="Laporan Ringkas Dashboard Utama" />
-                <p className="text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
+                <p className="print-meta text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
                 
                 <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Utama</h4>
                 <div className="grid grid-cols-3 gap-4 text-center mb-6">
@@ -130,7 +130,7 @@ export const DaftarWaliKelasTemplate: React.FC<{ settings: PondokSettings }> = (
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="DAFTAR WALI KELAS PER ROMBEL" />
-                <p className="text-center text-sm mb-6">Tahun Ajaran: {new Date().getFullYear()}/{new Date().getFullYear()+1}</p>
+                <p className="print-meta text-center text-sm mb-6">Tahun Ajaran: {new Date().getFullYear()}/{new Date().getFullYear()+1}</p>
                 <div className="space-y-6">
                     {dataByJenjang.map((group, idx) => (
                         <div key={idx} style={{ breakInside: 'avoid' }}>
@@ -340,7 +340,7 @@ export const LaporanMutasiTemplate: React.FC<{ mutasiEvents: any[]; settings: Po
     <div className="text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
         <div>
             <PrintHeader settings={settings} title="LAPORAN MUTASI SANTRI" />
-            <div className="text-sm font-semibold mb-4"><span>Periode: {formatDate(startDate)} s.d. {formatDate(endDate)}</span></div>
+            <div className="print-meta text-sm font-semibold mb-4 text-center"><span>Periode: {formatDate(startDate)} s.d. {formatDate(endDate)}</span></div>
             <table className="w-full text-left border-collapse border border-black">
                 <thead className="text-xs uppercase bg-gray-200 text-center"><tr><th className="px-2 py-2 border border-black">No</th><th className="px-2 py-2 border border-black">Tanggal</th><th className="px-2 py-2 border border-black">NIS</th><th className="px-2 py-2 border border-black text-left">Nama Lengkap</th><th className="px-2 py-2 border border-black">Status Baru</th><th className="px-2 py-2 border border-black text-left">Keterangan</th></tr></thead>
                 <tbody style={{ fontSize: '9pt' }}>
@@ -365,7 +365,7 @@ export const LembarPembinaanTemplate: React.FC<{ santri: Santri; settings: Pondo
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="LEMBAR PEMBINAAN SANTRI" />
-                <div className="mb-6 p-4 border rounded bg-gray-50">
+                <div className="print-meta mb-6 p-4 border rounded bg-gray-50">
                     <table className="w-full"><tbody><tr><td className="font-semibold w-32">Nama</td><td>: {santri.namaLengkap}</td><td className="font-semibold w-32">NIS</td><td>: {santri.nis}</td></tr><tr><td className="font-semibold">Jenjang/Kelas</td><td>: {jenjang?.nama} / {kelas?.nama}</td><td className="font-semibold">Rombel</td><td>: {rombel?.nama}</td></tr><tr><td className="font-semibold">Wali</td><td>: {santri.namaWali || santri.namaAyah}</td><td className="font-semibold">Kamar</td><td>: {santri.kamarId ? settings.kamar.find(k=>k.id===santri.kamarId)?.nama : '-'}</td></tr></tbody></table>
                 </div>
                 <h4 className="font-bold text-lg border-b border-black mb-2 mt-4">A. Catatan Prestasi</h4>
@@ -395,7 +395,7 @@ export const FormulirIzinTemplate: React.FC<{ santri: Santri; settings: PondokSe
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '11pt' }}>
             <div>
                 <PrintHeader settings={settings} title="SURAT IZIN KELUAR PONDOK" />
-                <div className="my-6">
+                <div className="print-meta my-6">
                     <p>Yang bertanda tangan di bawah ini memberikan izin kepada:</p>
                     <table className="w-full my-4 ml-4">
                         <tbody>

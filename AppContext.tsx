@@ -58,7 +58,7 @@ interface AppContextType {
   onSaveArsipSurat: (surat: Omit<ArsipSurat, 'id'>) => Promise<void>;
   onDeleteArsipSurat: (id: number) => Promise<void>;
   onDeleteSampleData: () => Promise<void>;
-  triggerManualSync: (action: 'up' | 'down' | 'admin_publish') => Promise<void>;
+  triggerManualSync: (action: 'up' | 'down' | 'admin_publish', silent?: boolean) => Promise<void>;
   pendingChanges: number;
 }
 
@@ -111,7 +111,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (auth.currentUser && auth.currentUser.id !== 0 && sets.settings.cloudSyncConfig?.provider !== 'none') {
             // Trigger pull to ensure staff has latest data from admin
             console.log("Auto-pulling data on login...");
-            triggerManualSync('down');
+            triggerManualSync('down', true); // Use silent: true to avoid reload and logout
         }
     }, [auth.currentUser?.id]); 
 
@@ -119,7 +119,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (sets.settings.cloudSyncConfig?.autoSync && sets.settings.cloudSyncConfig.provider !== 'none') {
             if (pullSyncIntervalRef.current) clearInterval(pullSyncIntervalRef.current);
             pullSyncIntervalRef.current = setInterval(() => {
-                triggerManualSync('down');
+                triggerManualSync('down', true);
             }, 300000); 
         }
         return () => { if (pullSyncIntervalRef.current) clearInterval(pullSyncIntervalRef.current); }
@@ -151,7 +151,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }, 5000); 
     }, [sets.settings, auth.currentUser]);
 
-    const triggerManualSync = async (action: 'up' | 'down' | 'admin_publish') => {
+    const triggerManualSync = async (action: 'up' | 'down' | 'admin_publish', silent: boolean = false) => {
         const config = sets.settings.cloudSyncConfig;
         if (!config || config.provider === 'none' || config.provider === 'firebase') return;
 
@@ -168,7 +168,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     cloudSyncConfig: { ...config, lastSync: new Date().toISOString() } 
                 });
                 
-                ui.showToast('Data Master berhasil dipublikasikan.', 'success');
+                if (!silent) ui.showToast('Data Master berhasil dipublikasikan.', 'success');
             } else if (action === 'up') {
                 const username = auth.currentUser?.username || 'user';
                 const result = await uploadStaffChanges(config, username);
@@ -178,9 +178,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     await db.settings.update(sets.settings.id!, { 
                         cloudSyncConfig: { ...config, lastSync: new Date().toISOString() } 
                     });
-                    ui.showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
+                    if (!silent) ui.showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
                 } else {
-                    ui.showToast('Tidak ada perubahan baru untuk dikirim.', 'info');
+                    if (!silent) ui.showToast('Tidak ada perubahan baru untuk dikirim.', 'info');
                 }
             } else {
                 const result = await downloadAndMergeMaster(config);
@@ -189,17 +189,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     await db.settings.update(sets.settings.id!, { 
                         cloudSyncConfig: { ...config, lastSync: result.timestamp } 
                     });
-                    ui.showToast('Data terbaru dari Admin berhasil digabungkan.', 'success');
-                    setTimeout(() => window.location.reload(), 1500);
+                    
+                    if (!silent) {
+                        ui.showToast('Data terbaru dari Admin berhasil digabungkan.', 'success');
+                        setTimeout(() => window.location.reload(), 1500);
+                    }
                 } else if (result.status === 'no_master') {
-                    ui.showToast('Belum ada Master Data dari Admin di Cloud.', 'info');
+                    if (!silent) ui.showToast('Belum ada Master Data dari Admin di Cloud.', 'info');
                 }
             }
             setSyncStatus('success');
             setTimeout(() => setSyncStatus('idle'), 3000);
         } catch (e) {
             setSyncStatus('error');
-            ui.showToast(`Gagal Sync: ${(e as Error).message}`, 'error');
+            if (!silent) ui.showToast(`Gagal Sync: ${(e as Error).message}`, 'error');
         }
     };
 

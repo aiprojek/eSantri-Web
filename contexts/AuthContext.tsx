@@ -25,7 +25,14 @@ const VIRTUAL_ADMIN: User = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [currentUser, setCurrentUser] = useState<User | null>(() => {
+        const saved = localStorage.getItem('eSantriCurrentUser');
+        try {
+            return saved ? JSON.parse(saved) : null;
+        } catch (e) {
+            return null;
+        }
+    });
     const settingsList = useLiveQuery(() => db.settings.toArray(), []) || [];
     const settings = settingsList[0];
 
@@ -33,14 +40,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         if (!settings) return;
         if (!settings.multiUserMode) {
-            setCurrentUser(VIRTUAL_ADMIN);
+            if (currentUser?.id !== 0) {
+                setCurrentUser(VIRTUAL_ADMIN);
+            }
         } else if (currentUser && currentUser.id === 0) {
-            setCurrentUser(null); // Logout virtual admin if switched to multi-user
+            logout(); // Logout virtual admin if switched to multi-user
         }
-    }, [settings?.multiUserMode]);
+    }, [settings?.multiUserMode, currentUser?.id]);
 
-    const login = (user: User) => setCurrentUser(user);
-    const logout = () => setCurrentUser(null);
+    const login = (user: User) => {
+        setCurrentUser(user);
+        localStorage.setItem('eSantriCurrentUser', JSON.stringify(user));
+    };
+    
+    const logout = () => {
+        setCurrentUser(null);
+        localStorage.removeItem('eSantriCurrentUser');
+    };
 
     return (
         <AuthContext.Provider value={{ currentUser, login, logout }}>

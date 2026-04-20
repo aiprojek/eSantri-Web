@@ -65,6 +65,18 @@ export const chunkArray = <T,>(arr: T[], size: number) =>
         arr.slice(i * size, i * size + size)
     );
 
+export const formatAlamat = (alamat?: any) => {
+    if (!alamat) return '';
+    const parts = [];
+    if (alamat.detail) parts.push(alamat.detail);
+    if (alamat.desaKelurahan) parts.push(alamat.desaKelurahan);
+    if (alamat.kecamatan) parts.push(alamat.kecamatan);
+    if (alamat.kabupatenKota) parts.push(alamat.kabupatenKota);
+    if (alamat.provinsi) parts.push(alamat.provinsi);
+    if (alamat.kodePos) parts.push(alamat.kodePos);
+    return parts.length > 0 ? parts.join(', ') : '';
+};
+
 // --- Components ---
 
 export const ReportFooter: React.FC = () => (
@@ -122,7 +134,7 @@ export const SmartAvatar: React.FC<{ santri: Santri, variant: 'classic' | 'moder
     return (
         <div className={`overflow-hidden ${className}`}>
             {!forcePlaceholder && hasValidPhoto ? (
-                <img src={santri.fotoUrl} alt={santri.namaLengkap} className="w-full h-full object-cover" />
+                <img src={santri.fotoUrl} alt={santri.namaLengkap} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
                 <AvatarPlaceholder variant={variant} />
             )}

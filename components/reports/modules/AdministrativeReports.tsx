@@ -2,7 +2,7 @@
 import React from 'react';
 import { Santri, PondokSettings, RiwayatStatus, GedungAsrama } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
-import { ReportFooter, formatDate, formatRupiah } from './Common';
+import { ReportFooter, formatDate, formatRupiah, formatAlamat } from './Common';
 
 // --- DASHBOARD SUMMARY ---
 export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings: PondokSettings }> = ({ santriList, settings }) => {
@@ -174,10 +174,10 @@ export const LaporanKontakTemplate: React.FC<{ santriList: Santri[], settings: P
         <div>
             <PrintHeader settings={settings} title="LAPORAN KONTAK WALI SANTRI" />
             <table className="w-full text-left border-collapse border border-black text-sm">
-                <thead className="bg-gray-200 uppercase"><tr><th className="p-2 border border-black w-8 text-center">No</th><th className="p-2 border border-black w-24 text-center">NIS</th><th className="p-2 border border-black">Nama Santri</th><th className="p-2 border border-black">Rombel</th><th className="p-2 border border-black">Nama Wali</th><th className="p-2 border border-black text-center">No. HP Wali</th></tr></thead>
+                <thead className="bg-gray-200 uppercase"><tr><th className="p-2 border border-black w-8 text-center">No</th><th className="p-2 border border-black w-24 text-center">NIS</th><th className="p-2 border border-black">Nama Santri</th><th className="p-2 border border-black">Rombel</th><th className="p-2 border border-black">Nama Wali</th><th className="p-2 border border-black text-center">No. HP Wali</th><th className="p-2 border border-black">Alamat Rumah</th></tr></thead>
                 <tbody>
                     {santriList.map((s, i) => (
-                        <tr key={s.id}><td className="p-2 border border-black text-center">{i + 1}</td><td className="p-2 border border-black text-center">{s.nis}</td><td className="p-2 border border-black">{s.namaLengkap}</td><td className="p-2 border border-black">{settings.rombel.find(r => r.id === s.rombelId)?.nama || '-'}</td><td className="p-2 border border-black">{s.namaWali || s.namaAyah || s.namaIbu}</td><td className="p-2 border border-black text-center font-mono">{s.teleponWali || s.teleponAyah || s.teleponIbu || '-'}</td></tr>
+                        <tr key={s.id}><td className="p-2 border border-black text-center">{i + 1}</td><td className="p-2 border border-black text-center">{s.nis}</td><td className="p-2 border border-black">{s.namaLengkap}</td><td className="p-2 border border-black">{settings.rombel.find(r => r.id === s.rombelId)?.nama || '-'}</td><td className="p-2 border border-black">{s.namaWali || s.namaAyah || s.namaIbu}</td><td className="p-2 border border-black text-center font-mono">{s.teleponWali || (s as any).nomorHpWali || s.teleponAyah || s.teleponIbu || '-'}</td><td className="p-2 border border-black text-xs leading-tight">{formatAlamat(s.alamat) || '-'}</td></tr>
                     ))}
                 </tbody>
             </table>

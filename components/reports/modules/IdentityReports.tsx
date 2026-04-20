@@ -2,7 +2,7 @@
 import React from 'react';
 import { Santri, PondokSettings } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
-import { formatDate, toHijri, ReportFooter, SmartAvatar } from './Common';
+import { formatDate, toHijri, ReportFooter, SmartAvatar, formatAlamat } from './Common';
 
 // --- BIODATA ---
 
@@ -52,19 +52,19 @@ const BiodataTemplate: React.FC<{ santri: Santri; settings: PondokSettings; useH
                     <BiodataItem number="4." label="Jenis Kelamin" value={santri.jenisKelamin} /><BiodataItem number="5." label="Tempat, Tanggal Lahir" value={`${santri.tempatLahir}, ${formatDate(santri.tanggalLahir)}`} />
                     <BiodataItem number="6." label="Kewarganegaraan" value={santri.kewarganegaraan} /><BiodataItem number="7." label="Jenis Santri" value={santri.jenisSantri} /><BiodataItem number="8." label="Berkebutuhan Khusus" value={santri.berkebutuhanKhusus} />
                     <BiodataItem number="9." label="Anak Ke" value={santri.anakKe} /><BiodataItem number="10." label="Jumlah Saudara" value={santri.jumlahSaudara} /><BiodataItem number="11." label="Status Keluarga" value={santri.statusKeluarga} />
-                    <BiodataItem number="12." label="Alamat Santri" value={santri.alamat.detail} /><BiodataItem number="13." label="Diterima di Ponpes ini" /><BiodataItem label="a. Di Jenjang" value={jenjang?.nama} sub /><BiodataItem label="b. Di Rombel" value={rombel?.nama} sub /><BiodataItem label="c. Pada Tanggal" value={formatDate(santri.tanggalMasuk)} sub />
+                    <BiodataItem number="12." label="Alamat Santri" value={formatAlamat(santri.alamat)} /><BiodataItem number="13." label="Diterima di Ponpes ini" /><BiodataItem label="a. Di Jenjang" value={jenjang?.nama} sub /><BiodataItem label="b. Di Rombel" value={rombel?.nama} sub /><BiodataItem label="c. Pada Tanggal" value={formatDate(santri.tanggalMasuk)} sub />
                     <BiodataItem number="14." label="Sekolah Asal" /><BiodataItem label="a. Nama Sekolah" value={santri.sekolahAsal} sub /><BiodataItem label="b. Alamat Sekolah" value={santri.alamatSekolahAsal} sub />
                 </BiodataSection>
                 <BiodataSection title="B. KETERANGAN ORANG TUA KANDUNG">
                     <BiodataItem number="15." label="Nama Ayah" value={santri.namaAyah} /><BiodataItem number="16." label="Tempat, Tanggal Lahir Ayah" value={santri.tempatLahirAyah ? `${santri.tempatLahirAyah}, ${formatDate(santri.tanggalLahirAyah)}` : formatDate(santri.tanggalLahirAyah)} />
-                    <BiodataItem number="17." label="Pendidikan Terakhir Ayah" value={santri.pendidikanAyah} /><BiodataItem number="18." label="Pekerjaan Ayah" value={santri.pekerjaanAyah} /><BiodataItem number="19." label="Penghasilan Ayah" value={santri.penghasilanAyah} /><BiodataItem number="20." label="No. Telepon Ayah" value={santri.teleponAyah || '-'} />
+                    <BiodataItem number="17." label="Pendidikan Terakhir Ayah" value={santri.pendidikanAyah} /><BiodataItem number="18." label="Pekerjaan Ayah" value={santri.pekerjaanAyah} /><BiodataItem number="19." label="Penghasilan Ayah" value={santri.penghasilanAyah} /><BiodataItem number="20." label="No. Telepon Ayah" value={santri.teleponAyah || (santri as any).nomorHpAyah || '-'} />
                     <BiodataItem number="21." label="Nama Ibu" value={santri.namaIbu} /><BiodataItem number="22." label="Tempat, Tanggal Lahir Ibu" value={santri.tempatLahirIbu ? `${santri.tempatLahirIbu}, ${formatDate(santri.tanggalLahirIbu)}` : formatDate(santri.tanggalLahirIbu)} />
-                    <BiodataItem number="23." label="Pendidikan Terakhir Ibu" value={santri.pendidikanIbu} /><BiodataItem number="24." label="Pekerjaan Ibu" value={santri.pekerjaanIbu} /><BiodataItem number="25." label="Penghasilan Ibu" value={santri.penghasilanIbu} /><BiodataItem number="26." label="No. Telepon Ibu" value={santri.teleponIbu || '-'} />
-                    <BiodataItem number="27." label="Alamat Orang Tua" value={santri.alamatAyah?.detail || santri.alamatIbu?.detail || santri.alamat.detail} />
+                    <BiodataItem number="23." label="Pendidikan Terakhir Ibu" value={santri.pendidikanIbu} /><BiodataItem number="24." label="Pekerjaan Ibu" value={santri.pekerjaanIbu} /><BiodataItem number="25." label="Penghasilan Ibu" value={santri.penghasilanIbu} /><BiodataItem number="26." label="No. Telepon Ibu" value={santri.teleponIbu || (santri as any).nomorHpIbu || '-'} />
+                    <BiodataItem number="27." label="Alamat Orang Tua" value={formatAlamat(santri.alamatAyah) || formatAlamat(santri.alamatIbu) || formatAlamat(santri.alamat)} />
                 </BiodataSection>
                 {santri.namaWali && (
                 <BiodataSection title="C. KETERANGAN WALI">
-                    <BiodataItem number="28." label="Nama Wali" value={santri.namaWali} /><BiodataItem number="29." label="Hubungan dengan Santri" value={santri.statusWali} /><BiodataItem number="30." label="Pekerjaan Wali" value={santri.pekerjaanWali} /><BiodataItem number="31." label="Penghasilan Wali" value={santri.penghasilanWali} /><BiodataItem number="32." label="No. Telepon Wali" value={santri.teleponWali || '-'} /><BiodataItem number="33." label="Alamat Wali" value={santri.alamatWali?.detail || santri.alamat.detail} />
+                    <BiodataItem number="28." label="Nama Wali" value={santri.namaWali} /><BiodataItem number="29." label="Hubungan dengan Santri" value={santri.statusWali} /><BiodataItem number="30." label="Pekerjaan Wali" value={santri.pekerjaanWali} /><BiodataItem number="31." label="Penghasilan Wali" value={santri.penghasilanWali} /><BiodataItem number="32." label="No. Telepon Wali" value={santri.teleponWali || (santri as any).nomorHpWali || '-'} /><BiodataItem number="33." label="Alamat Wali" value={formatAlamat(santri.alamatWali) || formatAlamat(santri.alamat)} />
                 </BiodataSection>
                 )}
             </table>
@@ -111,7 +111,7 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     const rombelNama = rombel?.nama || 'N/A';
     const ttl = `${santri.tempatLahir}, ${formatDate(santri.tanggalLahir)}`;
     const ayahWali = santri.namaAyah || santri.namaWali || '-';
-    const alamat = santri.alamat.detail || '-';
+    const alamat = formatAlamat(santri.alamat) || '-';
     
     // Logic for Validity Text
     const validityText = cardValidityMode === 'forever' 
@@ -132,19 +132,19 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     if (cardDesign === 'classic') {
         return (
             <div className="rounded-xl overflow-hidden relative flex flex-col text-white border-4 border-double border-[#D4AF37]" 
-                 style={{ ...cardStyle, backgroundColor: '#1B4D3E', borderColor: '#D4AF37' }}>
+                 style={{ ...cardStyle, backgroundColor: '#1B4D3E', borderColor: '#D4AF37', printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' } as any}>
                 <div className="flex justify-between items-center px-2 py-1.5 border-b border-[#D4AF37]/30 bg-black/20 h-1/4">
                     {/* Left Logo (Yayasan) */}
                     <div className="w-10 h-full flex items-center justify-center">
-                        {settings.logoYayasanUrl && <img src={settings.logoYayasanUrl} alt="Logo Yayasan" className="max-h-full max-w-full object-contain" />}
+                        {settings.logoYayasanUrl && <img src={settings.logoYayasanUrl} alt="Logo Yayasan" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />}
                     </div>
-                    <div className="text-center flex-grow">
-                        <div className="text-[7pt] font-bold uppercase tracking-wider text-[#D4AF37]">{settings.namaYayasan}</div>
-                        <div className="text-[9pt] font-bold leading-tight">{settings.namaPonpes}</div>
+                    <div className="text-center flex-grow px-1">
+                        <div className="text-[7pt] font-bold uppercase tracking-wider text-[#D4AF37] line-clamp-1">{settings.namaYayasan}</div>
+                        <div className="text-[9pt] font-bold leading-tight line-clamp-1">{settings.namaPonpes}</div>
                     </div>
                     {/* Right Logo (Ponpes) */}
                     <div className="w-10 h-full flex items-center justify-center">
-                        {settings.logoPonpesUrl && <img src={settings.logoPonpesUrl} alt="Logo Ponpes" className="max-h-full max-w-full object-contain" />}
+                        {settings.logoPonpesUrl && <img src={settings.logoPonpesUrl} alt="Logo Ponpes" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />}
                     </div>
                 </div>
                 
@@ -181,10 +181,15 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     // --- Design 2: Modern Tech ---
     else if (cardDesign === 'modern') {
         return (
-            <div className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border border-gray-200 shadow-sm" style={cardStyle}>
-                {/* Background Shapes */}
-                <div className="absolute top-0 left-0 w-2/5 h-full bg-blue-600 skew-x-12 -ml-8 z-0"></div>
-                <div className="absolute top-0 left-0 w-2/5 h-full bg-blue-500 skew-x-12 -ml-4 z-0 opacity-50"></div>
+            <div className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border border-gray-200 shadow-sm" 
+                 style={{ ...cardStyle, printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' } as any}>
+                {/* Background Decor (Optimized for exports) */}
+                <div className="absolute inset-0 z-0" style={{ 
+                    background: 'linear-gradient(110deg, #2563eb 0%, #2563eb 38%, transparent 38.2%)' 
+                }}></div>
+                <div className="absolute inset-0 z-0" style={{ 
+                    background: 'linear-gradient(110deg, rgba(59, 130, 246, 0.5) 0%, rgba(59, 130, 246, 0.5) 42%, transparent 42.2%)' 
+                }}></div>
                 
                 {/* Header Section (Moved to Top) */}
                 <div className="bg-blue-600/10 p-2 border-b border-blue-100 text-center z-10 relative">
@@ -227,8 +232,9 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     // --- Design 3: Vertical ID ---
     else if (cardDesign === 'vertical') {
         return (
-            <div className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border shadow-sm items-center text-center" style={cardStyle}>
-                <div className="w-full h-24 bg-red-700 absolute top-0 rounded-b-[50%] scale-x-150 z-0"></div>
+            <div className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border shadow-sm items-center text-center" 
+                 style={{ ...cardStyle, printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' } as any}>
+                <div className="w-[150%] h-24 bg-red-700 absolute top-0 left-[-25%] rounded-b-[50%] z-0"></div>
                 
                 <div className="z-10 mt-3 text-white">
                     <div className="text-[6pt] opacity-80 uppercase tracking-widest">KARTU SANTRI</div>
@@ -265,7 +271,8 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     // --- Design 4: Dark Premium ---
     else if (cardDesign === 'dark') {
         return (
-            <div className="rounded-xl overflow-hidden relative flex flex-col bg-slate-900 text-white border border-slate-700" style={cardStyle}>
+            <div className="rounded-xl overflow-hidden relative flex flex-col bg-slate-900 text-white border border-slate-700" 
+                 style={{ ...cardStyle, printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' } as any}>
                 <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500 rounded-full blur-[40px] opacity-20 -mr-10 -mt-10"></div>
                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500 rounded-full blur-[30px] opacity-20 -ml-8 -mb-8"></div>
 
@@ -273,7 +280,7 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     <div className="flex items-center gap-2">
                         {settings.logoPonpesUrl && (
                             <div className="w-8 h-8 flex items-center justify-center">
-                                <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+                                <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
                             </div>
                         )}
                         <div>
@@ -405,16 +412,6 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
 };
 
 export const generateCardReports = (data: Santri[], settings: PondokSettings, options: any) => {
-    // Logic for sheet orientation based on card dimensions
-    // If cardWidth > cardHeight (Landscape Card), use Landscape Sheet to fit more columns?
-    // Actually, usually A4 Portrait fits 2 cols of Landscape cards (8.5cm * 2 = 17cm < 21cm)
-    // A4 Landscape fits 3 cols of Landscape cards (8.5cm * 3 = 25.5cm < 29.7cm)
-    // Vertical cards (5.4cm): A4 Portrait fits 3 cols (16.2cm).
-    
-    // For simplicity and best fit on standard paper:
-    // Landscape Cards -> Landscape Sheet
-    // Portrait Cards -> Portrait Sheet
-    
     let sheetOrientation: 'portrait' | 'landscape' = 'portrait';
     if (options.cardWidth > options.cardHeight) {
         sheetOrientation = 'landscape';
@@ -422,24 +419,44 @@ export const generateCardReports = (data: Santri[], settings: PondokSettings, op
         sheetOrientation = 'portrait';
     }
 
-    const cardsPerPage = 9; // Grid 3x3
+    // Dynamic grid estimation
+    // A4 Portrait: 21cm x 29.7cm. A4 Landscape: 29.7cm x 21cm.
+    // We'll use a CSS grid instead of flex-wrap for better accuracy in PDF generation
+    
+    const cardsPerPage = 8; // Safer than 9 for various sizes
     const previews = [];
 
     for (let i = 0; i < data.length; i += cardsPerPage) {
         const pageData = data.slice(i, i + cardsPerPage);
         previews.push({
             content: (
-                <div className="flex flex-wrap gap-4 justify-center items-start content-start h-full">
-                    {pageData.map((santri) => (
-                        <div key={santri.id} className="relative" style={{ breakInside: 'avoid' }}>
-                            <KartuSantriTemplate santri={santri} settings={settings} options={options} />
-                            {/* Cut marks */}
-                            <div className="absolute -top-1 -left-1 w-2 h-2 border-t border-l border-gray-300"></div>
-                            <div className="absolute -top-1 -right-1 w-2 h-2 border-t border-r border-gray-300"></div>
-                            <div className="absolute -bottom-1 -left-1 w-2 h-2 border-b border-l border-gray-300"></div>
-                            <div className="absolute -bottom-1 -right-1 w-2 h-2 border-b border-r border-gray-300"></div>
-                        </div>
-                    ))}
+                <div 
+                    className="bg-white print:m-0 mx-auto overflow-hidden flex flex-col items-center justify-center" 
+                    style={{ 
+                        width: sheetOrientation === 'portrait' ? '21cm' : '29.7cm', 
+                        height: sheetOrientation === 'portrait' ? '29.7cm' : '21cm',
+                        padding: '1cm',
+                        boxSizing: 'border-box'
+                    }}
+                >
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-6 justify-items-center content-start">
+                        {pageData.map((santri) => (
+                            <div key={santri.id} className="relative group" style={{ breakInside: 'avoid', width: `${options.cardWidth}cm`, height: `${options.cardHeight}cm` }}>
+                                <KartuSantriTemplate santri={santri} settings={settings} options={options} />
+                                {/* Cut marks (Semi-transparent in UI, visible enough for cutting) */}
+                                <div className="absolute -top-2 -left-2 w-4 h-4 border-t border-l border-gray-300 pointer-events-none no-print"></div>
+                                <div className="absolute -top-2 -right-2 w-4 h-4 border-t border-r border-gray-300 pointer-events-none no-print"></div>
+                                <div className="absolute -bottom-2 -left-2 w-4 h-4 border-b border-l border-gray-300 pointer-events-none no-print"></div>
+                                <div className="absolute -bottom-2 -right-2 w-4 h-4 border-b border-r border-gray-300 pointer-events-none no-print"></div>
+                                
+                                {/* Real print cut marks (Black, very thin) */}
+                                <div className="hidden print:block absolute -top-4 -left-4 w-4 h-4 border-t border-l border-black opacity-30"></div>
+                                <div className="hidden print:block absolute -top-4 -right-4 w-4 h-4 border-t border-r border-black opacity-30"></div>
+                                <div className="hidden print:block absolute -bottom-4 -left-4 w-4 h-4 border-b border-l border-black opacity-30"></div>
+                                <div className="hidden print:block absolute -bottom-4 -right-4 w-4 h-4 border-b border-r border-black opacity-30"></div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             ),
             orientation: sheetOrientation
@@ -470,27 +487,38 @@ export const generateLabelReports = (data: Santri[], settings: PondokSettings, o
         const pageData = data.slice(i, i + itemsPerPage);
         previews.push({ 
             content: (
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: `${gap}cm`, width: '100%', height: '100%' }}>
-                    {pageData.map(s => {
-                        const rombel = settings.rombel.find(r => r.id === s.rombelId)?.nama;
-                        const jenjang = settings.jenjang.find(j => j.id === s.jenjangId)?.nama;
-                        const fontSizePt = options.labelFontSize || 10;
-                        
-                        return (
-                            <div key={s.id} className="border border-gray-400 border-dashed flex flex-col justify-center items-center text-center overflow-hidden bg-white"
-                                    style={{ width: `${options.labelWidth}cm`, height: `${options.labelHeight}cm`, padding: '0.1cm', boxSizing: 'border-box' }}>
-                                {options.labelFields.includes('namaLengkap') && <div className="font-bold leading-tight" style={{ fontSize: `${fontSizePt}pt` }}>{s.namaLengkap}</div>}
-                                {options.labelFields.includes('namaHijrah') && s.namaHijrah && <div className="italic text-gray-600" style={{ fontSize: `${fontSizePt}pt` }}>({s.namaHijrah})</div>}
-                                {options.labelFields.includes('nis') && <div className="font-mono bg-gray-100 px-1 rounded mt-0.5" style={{ fontSize: `${fontSizePt}pt` }}>{s.nis}</div>}
-                                <div className="text-gray-600 mt-0.5 leading-tight" style={{ fontSize: `${Math.max(6, fontSizePt - 2)}pt` }}>
-                                    {options.labelFields.includes('jenjang') && <span>{jenjang}</span>}
-                                    {options.labelFields.includes('jenjang') && options.labelFields.includes('rombel') && <br/>}
-                                    {options.labelFields.includes('rombel') && <span>{rombel}</span>}
+                <div 
+                    className="bg-white print:m-0 mx-auto overflow-hidden flex flex-col items-start justify-start" 
+                    style={{ 
+                        width: `${currentPaper.width}cm`, 
+                        height: `${currentPaper.height}cm`,
+                        padding: `${currentMargin}cm`,
+                        boxSizing: 'border-box'
+                    }}
+                >
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: `${gap}cm`, width: '100%', height: '100%' }}>
+                        {pageData.map(s => {
+                            const rombel = settings.rombel.find(r => r.id === s.rombelId)?.nama;
+                            const jenjang = settings.jenjang.find(j => j.id === s.jenjangId)?.nama;
+                            const fontSizePt = options.labelFontSize || 10;
+                            
+                            return (
+                                <div key={s.id} className="border border-gray-400 border-dashed flex flex-col justify-center items-center text-center overflow-hidden bg-white"
+                                        style={{ width: `${options.labelWidth}cm`, height: `${options.labelHeight}cm`, padding: '0.1cm', boxSizing: 'border-box' }}>
+                                    {options.labelFields.includes('namaLengkap') && <div className="font-bold leading-tight" style={{ fontSize: `${fontSizePt}pt` }}>{s.namaLengkap}</div>}
+                                    {options.labelFields.includes('namaHijrah') && s.namaHijrah && <div className="italic text-gray-600" style={{ fontSize: `${fontSizePt}pt` }}>({s.namaHijrah})</div>}
+                                    {options.labelFields.includes('nis') && <div className="font-mono bg-gray-100 px-1 rounded mt-0.5" style={{ fontSize: `${fontSizePt}pt` }}>{s.nis}</div>}
+                                    <div className="text-gray-600 mt-0.5 leading-tight" style={{ fontSize: `${Math.max(6, fontSizePt - 2)}pt` }}>
+                                        {options.labelFields.includes('jenjang') && <span>{jenjang}</span>}
+                                        {options.labelFields.includes('jenjang') && options.labelFields.includes('rombel') && <br/>}
+                                        {options.labelFields.includes('rombel') && <span>{rombel}</span>}
+                                    </div>
+                                    {options.labelFields.includes('ttl') && <div className="text-gray-500 mt-0.5" style={{ fontSize: `${Math.max(6, fontSizePt - 2)}pt` }}>{s.tempatLahir}, {formatDate(s.tanggalLahir)}</div>}
+                                    {options.labelFields.includes('alamat') && <div className="text-gray-500 mt-0.5 leading-tight italic" style={{ fontSize: `${Math.max(6, fontSizePt - 2)}pt` }}>{formatAlamat(s.alamat)}</div>}
                                 </div>
-                                {options.labelFields.includes('ttl') && <div className="text-gray-500 mt-0.5" style={{ fontSize: `${Math.max(6, fontSizePt - 2)}pt` }}>{s.tempatLahir}, {formatDate(s.tanggalLahir)}</div>}
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
+                    </div>
                 </div>
             ), 
             orientation: 'portrait' as const

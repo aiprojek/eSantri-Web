@@ -417,8 +417,8 @@ const AppContent: React.FC = () => {
                 ></div>
             )}
 
-            <main className="p-4 md:ml-64">
-                <div className="p-4 rounded-lg mt-14">
+            <main className="p-4 md:ml-64 min-h-screen overflow-y-auto">
+                <div className="p-4 rounded-lg mt-14 max-w-full">
                     <ErrorBoundary>
                         {renderContent()}
                     </ErrorBoundary>

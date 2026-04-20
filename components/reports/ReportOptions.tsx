@@ -100,6 +100,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
     const availableLabelFields = useMemo(() => [
         { id: 'namaLengkap', label: 'Nama Lengkap' }, { id: 'nis', label: 'NIS' }, { id: 'rombel', label: 'Nama Rombel' },
         { id: 'jenjang', label: 'Nama Jenjang' }, { id: 'namaHijrah', label: 'Nama Hijrah' }, { id: 'ttl', label: 'Tempat & Tgl. Lahir' },
+        { id: 'alamat', label: 'Alamat Lengkap' },
     ], []);
 
     const availableCardFields = useMemo(() => [

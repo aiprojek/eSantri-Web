@@ -2,19 +2,20 @@
 import React, { useEffect, useState } from 'react';
 import { Santri, PondokSettings, RaporRecord } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
-import { ReportFooter, chunkArray, formatDate } from './Common';
+import { ReportFooter, chunkArray, formatDate, formatAlamat } from './Common';
 import { db } from '../../../db';
 
 // --- COMMON HEADER FOR ACADEMIC ---
 const AcademicHeader: React.FC<{ settings: PondokSettings, title: string, meta: any }> = ({ settings, title, meta }) => (
     <div>
         <PrintHeader settings={settings} title={title} />
-        <div className="text-sm font-semibold mb-4 grid grid-cols-2">
-            <span>Jenjang: {meta.jenjang || '...'}</span>
-            <span className="text-right">Tahun Ajaran: {meta.tahunAjaran || '...'}</span>
-            <span>Kelas / Rombel: {meta.kelas || '...'} / {meta.rombel || '...'}</span>
-            <span className="text-right">Semester: {meta.semester || '...'}</span>
-            {meta.waliKelas && <span>Wali Kelas: {meta.waliKelas}</span>}
+        <div className="text-sm font-semibold mb-4 grid grid-cols-2 gap-y-1 bg-gray-50 p-3 rounded-lg border border-gray-200">
+            <span>Jenjang: <span className="font-normal">{meta.jenjang || '-'}</span></span>
+            <span className="text-right">Tahun Ajaran: <span className="font-normal">{meta.tahunAjaran || '-'}</span></span>
+            <span>Kelas / Rombel: <span className="font-normal">{meta.kelas || '-'} / {meta.rombel || '-'}</span></span>
+            <span className="text-right">Semester: <span className="font-normal">{meta.semester || '-'}</span></span>
+            {meta.waliKelas && <span>Wali Kelas: <span className="font-normal">{meta.waliKelas}</span></span>}
+            {meta.agenda && <span className={meta.waliKelas ? "text-right" : "col-span-2"}>Agenda: <span className="font-normal text-blue-700">{meta.agenda}</span></span>}
         </div>
     </div>
 );
@@ -314,12 +315,12 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
         );
         tableRow = (s, i) => {
             const wali = s.namaWali || s.namaAyah || s.namaIbu || '-';
-            const telepon = s.teleponWali || s.teleponAyah || s.teleponIbu || '-';
-            const alamat = s.alamat.detail || s.alamat.kecamatan || s.alamat.desaKelurahan || '-';
+            const telepon = s.teleponWali || (s as any).nomorHpWali || s.teleponAyah || s.teleponIbu || '-';
+            const alamat = formatAlamat(s.alamat) || '-';
             
             return (
                 <tr key={s.id}>
-                    <td className="border border-black p-2 text-center">{i+1}</td><td className="border border-black p-2 text-center">{s.nis}</td><td className="border border-black p-2 font-semibold">{s.namaLengkap}</td><td className="border border-black p-2 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td><td className="border border-black p-2">{s.tempatLahir}, {formatDate(s.tanggalLahir)}</td><td className="border border-black p-2">{wali}</td><td className="border border-black p-2 font-mono whitespace-nowrap">{telepon}</td><td className="border border-black p-2 text-xs">{alamat}</td>
+                    <td className="border border-black p-2 text-center">{i+1}</td><td className="border border-black p-2 text-center">{s.nis}</td><td className="border border-black p-2 font-semibold">{s.namaLengkap}</td><td className="border border-black p-2 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td><td className="border border-black p-2">{s.tempatLahir}, {formatDate(s.tanggalLahir)}</td><td className="border border-black p-2">{wali}</td><td className="border border-black p-2 font-mono whitespace-nowrap">{telepon}</td><td className="border border-black p-2 text-[10px] leading-tight">{alamat}</td>
                 </tr>
             );
         };
@@ -340,7 +341,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
     } else if (type === 'Kedatangan') {
         title = "LEMBAR KEDATANGAN SANTRI";
         orientation = 'portrait';
-        meta.semester += ` | Agenda: ${options.agendaKedatangan || '...'}`; // Hack to fit agenda
+        (meta as any).agenda = options.agendaKedatangan || '...';
         tableHeader = (
             <thead className="text-xs uppercase bg-gray-200 text-center">
                 <tr><th rowSpan={2} className="px-2 py-2 border border-black align-middle">No</th><th rowSpan={2} className="px-2 py-2 border border-black align-middle">NIS</th><th rowSpan={2} className="px-2 py-2 border border-black align-middle" style={{minWidth: '200px'}}>Nama Lengkap</th><th colSpan={2} className="px-2 py-2 border border-black">Waktu Kedatangan</th><th rowSpan={2} className="px-2 py-2 border border-black align-middle">Paraf</th></tr>

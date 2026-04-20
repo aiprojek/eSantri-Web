@@ -2,7 +2,7 @@
 import React from 'react';
 import { Santri, PondokSettings, Tagihan, Pembayaran, TransaksiKas, TransaksiSaldo } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
-import { ReportFooter, formatRupiah, formatDate, formatDateTime } from './Common';
+import { ReportFooter, formatRupiah, formatDate, formatDateTime, formatAlamat } from './Common';
 
 // --- FINANCE SUMMARY ---
 export const FinanceSummaryTemplate: React.FC<{ santriList: Santri[], tagihanList: Tagihan[], pembayaranList: Pembayaran[], settings: PondokSettings }> = ({ santriList, tagihanList, pembayaranList, settings }) => {
@@ -116,7 +116,14 @@ export const RekeningKoranSantriTemplate: React.FC<{ santri: Santri; settings: P
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="Rekening Koran Santri" />
-                <table className="w-full text-sm my-4"><tbody><tr><td className="pr-4 font-medium">Nama Santri</td><td>: {santri.namaLengkap}</td></tr><tr><td className="pr-4 font-medium">NIS</td><td>: {santri.nis}</td></tr><tr><td className="pr-4 font-medium">Periode</td><td>: {formatDate(rekeningKoranStartDate)} s.d. {formatDate(rekeningKoranEndDate)}</td></tr></tbody></table>
+                <table className="w-full text-sm my-4">
+                    <tbody>
+                        <tr><td className="pr-4 font-medium w-32">Nama Santri</td><td>: {santri.namaLengkap}</td></tr>
+                        <tr><td className="pr-4 font-medium">NIS</td><td>: {santri.nis}</td></tr>
+                        <tr><td className="pr-4 font-medium">Alamat</td><td>: {formatAlamat(santri.alamat) || '-'}</td></tr>
+                        <tr><td className="pr-4 font-medium">Periode</td><td>: {formatDate(rekeningKoranStartDate)} s.d. {formatDate(rekeningKoranEndDate)}</td></tr>
+                    </tbody>
+                </table>
                 <table className="w-full text-left border-collapse border border-black text-xs mt-6">
                     <thead className="bg-gray-200 uppercase"><tr><th className="p-1 border border-black">Tanggal</th><th className="p-1 border border-black">Deskripsi</th><th className="p-1 border border-black text-right">Debit</th><th className="p-1 border border-black text-right">Kredit</th><th className="p-1 border border-black text-right">Saldo</th></tr></thead>
                     <tbody>

@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { User, PondokSettings } from '../types';
 import { db } from '../db';
 import { useLiveQuery } from "dexie-react-hooks";
@@ -36,16 +36,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const settingsList = useLiveQuery(() => db.settings.toArray(), []) || [];
     const settings = settingsList[0];
 
+    const prevMultiUserModeRef = useRef<boolean | undefined>(undefined);
+    const prevUserIdRef = useRef<number | undefined>(undefined);
+
     // Sync Current User with Multi-User Mode
     useEffect(() => {
         if (!settings) return;
+
+        // Prevent redundant checks if values haven't actually changed
+        if (prevMultiUserModeRef.current === settings.multiUserMode && prevUserIdRef.current === currentUser?.id) {
+            return;
+        }
+
         if (!settings.multiUserMode) {
+            // In single user mode, always use virtual admin
             if (currentUser?.id !== 0) {
+                console.log("Switching to virtual admin mode");
                 setCurrentUser(VIRTUAL_ADMIN);
             }
         } else if (currentUser && currentUser.id === 0) {
-            logout(); // Logout virtual admin if switched to multi-user
+            // In multi-user mode, if current user is virtual admin (ID 0), they MUST log out to login screen
+            // But ONLY if we are sure multiUserMode is correctly set
+            console.log("Multi-user mode detected, logging out virtual admin");
+            logout(); 
         }
+
+        prevMultiUserModeRef.current = settings.multiUserMode;
+        prevUserIdRef.current = currentUser?.id;
     }, [settings?.multiUserMode, currentUser?.id]);
 
     const login = (user: User) => {

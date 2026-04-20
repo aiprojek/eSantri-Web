@@ -143,6 +143,10 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
     
+    // Detect orientation from the preview content
+    const isLandscape = element.querySelector('.print-landscape') !== null;
+    const orientation = isLandscape ? 'landscape' : 'portrait';
+    
     // Use the element's innerHTML directly to preserve multiple pages and their specific wrapper classes
     const content = element.innerHTML;
 
@@ -169,25 +173,39 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
     styles += `
     <style>
         @media print {
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; }
-            @page { margin: 0; size: A4 portrait; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; -webkit-filter: opacity(1) !important; }
+            @page { margin: 0; size: auto ${orientation}; }
             .printable-content-wrapper { 
-                width: 21cm !important; 
-                height: 29.7cm !important;
-                min-height: 29.7cm !important;
+                width: auto !important; 
+                height: auto !important;
+                min-height: initial !important;
                 transform: none !important; 
-                margin: 0 auto !important; 
+                margin: 0 !important; 
+                padding: 0 !important;
                 box-shadow: none !important; 
-                page-break-after: always !important;
-                page-break-inside: avoid !important;
-                overflow: hidden !important;
-                display: flex !important;
-                flex-direction: column !important;
-                background-color: white !important;
+                overflow: visible !important;
+                display: block !important;
+                background-color: transparent !important;
             }
-            /* Reset shadows for print */
-            .shadow-lg, .shadow-md, .shadow-xl { box-shadow: none !important; }
-            * { transition: none !important; }
+            /* Hide items tagged with no-print */
+            .no-print { display: none !important; }
+            
+            /* Ensure pages take full sheet and handle breaks */
+            .page-break-after { 
+                page-break-after: always !important; 
+                break-after: page !important;
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+            
+            /* Reset card shadows for cleaner printing */
+            .rounded-lg, .rounded-xl, .shadow-lg, .shadow-md, .shadow-xl { 
+                box-shadow: none !important; 
+                filter: none !important;
+            }
+            * { transition: none !important; animation: none !important; }
         }
         body { background-color: white; margin: 0; padding: 0; }
         .printable-content-wrapper { transform: none !important; margin: 0 auto; }

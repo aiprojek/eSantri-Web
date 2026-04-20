@@ -309,14 +309,17 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
         orientation = 'landscape';
         tableHeader = (
             <thead className="bg-gray-200">
-                <tr><th className="border border-black p-2 w-8">No</th><th className="border border-black p-2 w-24">NIS</th><th className="border border-black p-2">Nama Lengkap</th><th className="border border-black p-2 w-10">L/P</th><th className="border border-black p-2 w-32">TTL</th><th className="border border-black p-2 w-32">Ayah / Wali</th><th className="border border-black p-2 w-28">No. Telepon</th><th className="border border-black p-2">Alamat</th></tr>
+                <tr><th className="border border-black p-2 w-8">No</th><th className="border border-black p-2 w-24">NIS</th><th className="border border-black p-2">Nama Lengkap</th><th className="border border-black p-2 w-10">L/P</th><th className="border border-black p-2 w-32">TTL</th><th className="border border-black p-2 w-32">Ayah / Wali / Ibu</th><th className="border border-black p-2 w-32">No. Telepon</th><th className="border border-black p-2 w-48">Alamat</th></tr>
             </thead>
         );
         tableRow = (s, i) => {
-            const wali = s.namaAyah || s.namaWali || '-';
+            const wali = s.namaWali || s.namaAyah || s.namaIbu || '-';
+            const telepon = s.teleponWali || s.teleponAyah || s.teleponIbu || '-';
+            const alamat = s.alamat.detail || s.alamat.kecamatan || s.alamat.desaKelurahan || '-';
+            
             return (
                 <tr key={s.id}>
-                    <td className="border border-black p-2 text-center">{i+1}</td><td className="border border-black p-2">{s.nis}</td><td className="border border-black p-2">{s.namaLengkap}</td><td className="border border-black p-2 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td><td className="border border-black p-2">{s.tempatLahir}, {formatDate(s.tanggalLahir)}</td><td className="border border-black p-2">{wali}</td><td className="border border-black p-2">{s.teleponWali || '-'}</td><td className="border border-black p-2">{s.alamat.kecamatan}</td>
+                    <td className="border border-black p-2 text-center">{i+1}</td><td className="border border-black p-2 text-center">{s.nis}</td><td className="border border-black p-2 font-semibold">{s.namaLengkap}</td><td className="border border-black p-2 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td><td className="border border-black p-2">{s.tempatLahir}, {formatDate(s.tanggalLahir)}</td><td className="border border-black p-2">{wali}</td><td className="border border-black p-2 font-mono whitespace-nowrap">{telepon}</td><td className="border border-black p-2 text-xs">{alamat}</td>
                 </tr>
             );
         };

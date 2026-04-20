@@ -177,7 +177,7 @@ export const LaporanKontakTemplate: React.FC<{ santriList: Santri[], settings: P
                 <thead className="bg-gray-200 uppercase"><tr><th className="p-2 border border-black w-8 text-center">No</th><th className="p-2 border border-black w-24 text-center">NIS</th><th className="p-2 border border-black">Nama Santri</th><th className="p-2 border border-black">Rombel</th><th className="p-2 border border-black">Nama Wali</th><th className="p-2 border border-black text-center">No. HP Wali</th></tr></thead>
                 <tbody>
                     {santriList.map((s, i) => (
-                        <tr key={s.id}><td className="p-2 border border-black text-center">{i + 1}</td><td className="p-2 border border-black text-center">{s.nis}</td><td className="p-2 border border-black">{s.namaLengkap}</td><td className="p-2 border border-black">{settings.rombel.find(r => r.id === s.rombelId)?.nama || '-'}</td><td className="p-2 border border-black">{s.namaWali || s.namaAyah}</td><td className="p-2 border border-black text-center font-mono">{s.teleponWali || s.teleponAyah || '-'}</td></tr>
+                        <tr key={s.id}><td className="p-2 border border-black text-center">{i + 1}</td><td className="p-2 border border-black text-center">{s.nis}</td><td className="p-2 border border-black">{s.namaLengkap}</td><td className="p-2 border border-black">{settings.rombel.find(r => r.id === s.rombelId)?.nama || '-'}</td><td className="p-2 border border-black">{s.namaWali || s.namaAyah || s.namaIbu}</td><td className="p-2 border border-black text-center font-mono">{s.teleponWali || s.teleponAyah || s.teleponIbu || '-'}</td></tr>
                     ))}
                 </tbody>
             </table>

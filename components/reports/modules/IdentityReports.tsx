@@ -6,8 +6,9 @@ import { formatDate, toHijri, ReportFooter, SmartAvatar } from './Common';
 
 // --- BIODATA ---
 
-const BiodataItem: React.FC<{ number?: string; label: string; value?: string | number | null; sub?: boolean; }> = ({ number, label, value, sub }) => {
-    const isHeaderField = !Object.prototype.hasOwnProperty.call({number, label, value, sub}, 'value');
+const BiodataItem: React.FC<{ number?: string; label: string; value?: string | number | null; sub?: boolean; }> = (props) => {
+    const { number, label, value, sub } = props;
+    const isHeaderField = !('value' in props);
     const hasValue = value !== null && value !== undefined && value !== '';
     return (
       <tr>
@@ -56,14 +57,14 @@ const BiodataTemplate: React.FC<{ santri: Santri; settings: PondokSettings; useH
                 </BiodataSection>
                 <BiodataSection title="B. KETERANGAN ORANG TUA KANDUNG">
                     <BiodataItem number="15." label="Nama Ayah" value={santri.namaAyah} /><BiodataItem number="16." label="Tempat, Tanggal Lahir Ayah" value={santri.tempatLahirAyah ? `${santri.tempatLahirAyah}, ${formatDate(santri.tanggalLahirAyah)}` : formatDate(santri.tanggalLahirAyah)} />
-                    <BiodataItem number="17." label="Pendidikan Terakhir Ayah" value={santri.pendidikanAyah} /><BiodataItem number="18." label="Pekerjaan Ayah" value={santri.pekerjaanAyah} /><BiodataItem number="19." label="Penghasilan Ayah" value={santri.penghasilanAyah} /><BiodataItem number="20." label="No. Telepon Ayah" value={santri.teleponAyah} />
+                    <BiodataItem number="17." label="Pendidikan Terakhir Ayah" value={santri.pendidikanAyah} /><BiodataItem number="18." label="Pekerjaan Ayah" value={santri.pekerjaanAyah} /><BiodataItem number="19." label="Penghasilan Ayah" value={santri.penghasilanAyah} /><BiodataItem number="20." label="No. Telepon Ayah" value={santri.teleponAyah || '-'} />
                     <BiodataItem number="21." label="Nama Ibu" value={santri.namaIbu} /><BiodataItem number="22." label="Tempat, Tanggal Lahir Ibu" value={santri.tempatLahirIbu ? `${santri.tempatLahirIbu}, ${formatDate(santri.tanggalLahirIbu)}` : formatDate(santri.tanggalLahirIbu)} />
-                    <BiodataItem number="23." label="Pendidikan Terakhir Ibu" value={santri.pendidikanIbu} /><BiodataItem number="24." label="Pekerjaan Ibu" value={santri.pekerjaanIbu} /><BiodataItem number="25." label="Penghasilan Ibu" value={santri.penghasilanIbu} /><BiodataItem number="26." label="No. Telepon Ibu" value={santri.teleponIbu} />
-                    <BiodataItem number="27." label="Alamat Orang Tua" value={santri.alamatAyah?.detail || santri.alamatIbu?.detail} />
+                    <BiodataItem number="23." label="Pendidikan Terakhir Ibu" value={santri.pendidikanIbu} /><BiodataItem number="24." label="Pekerjaan Ibu" value={santri.pekerjaanIbu} /><BiodataItem number="25." label="Penghasilan Ibu" value={santri.penghasilanIbu} /><BiodataItem number="26." label="No. Telepon Ibu" value={santri.teleponIbu || '-'} />
+                    <BiodataItem number="27." label="Alamat Orang Tua" value={santri.alamatAyah?.detail || santri.alamatIbu?.detail || santri.alamat.detail} />
                 </BiodataSection>
                 {santri.namaWali && (
                 <BiodataSection title="C. KETERANGAN WALI">
-                    <BiodataItem number="28." label="Nama Wali" value={santri.namaWali} /><BiodataItem number="29." label="Hubungan dengan Santri" value={santri.statusWali} /><BiodataItem number="30." label="Pekerjaan Wali" value={santri.pekerjaanWali} /><BiodataItem number="31." label="Penghasilan Wali" value={santri.penghasilanWali} /><BiodataItem number="32." label="No. Telepon Wali" value={santri.teleponWali} /><BiodataItem number="33." label="Alamat Wali" value={santri.alamatWali?.detail} />
+                    <BiodataItem number="28." label="Nama Wali" value={santri.namaWali} /><BiodataItem number="29." label="Hubungan dengan Santri" value={santri.statusWali} /><BiodataItem number="30." label="Pekerjaan Wali" value={santri.pekerjaanWali} /><BiodataItem number="31." label="Penghasilan Wali" value={santri.penghasilanWali} /><BiodataItem number="32." label="No. Telepon Wali" value={santri.teleponWali || '-'} /><BiodataItem number="33." label="Alamat Wali" value={santri.alamatWali?.detail || santri.alamat.detail} />
                 </BiodataSection>
                 )}
             </table>

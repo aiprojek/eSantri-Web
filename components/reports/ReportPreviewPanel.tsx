@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { ReportType } from '../../types';
 import { generatePdf, printToPdfNative } from '../../utils/pdfGenerator';
 import { exportReportToSvg } from '../../utils/svgExporter';
-import { exportToHtml, exportToAutoTable } from '../../utils/exportUtils';
+import { exportToHtml, exportToAutoTable, exportPreviewToExcelWorksheets } from '../../utils/exportUtils';
 import { generateContactCsv } from '../../services/csvService';
 import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel, exportEmisTemplate } from '../../services/excelService';
 
@@ -135,6 +135,19 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         }
     };
 
+    const handleDownloadVisualExcel = () => {
+        setIsGeneratingFile(true);
+        try {
+            exportPreviewToExcelWorksheets('preview-area', `Laporan_${activeReport}`);
+            onToast('Excel Visual berhasil diunduh.', 'success');
+        } catch (e) {
+            onToast('Gagal ekspor Excel Visual.', 'error');
+        } finally {
+            setIsGeneratingFile(false);
+            setIsDownloadMenuOpen(false);
+        }
+    };
+
     const handleDownloadHtml = () => {
         setIsGeneratingFile(true);
         try {
@@ -226,9 +239,14 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                                 <button onClick={handlePrintNative} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 border-b flex items-center gap-2"><i className="bi bi-printer text-blue-600"></i> Cetak / PDF (Asli)</button>
                                 
                                 {canExportToAutoTable && (
-                                    <button onClick={handleDownloadAutoTable} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 border-b flex items-center gap-2">
-                                        <i className="bi bi-file-earmark-ruled text-teal-600"></i> PDF Data (AutoTable)
-                                    </button>
+                                    <>
+                                        <button onClick={handleDownloadAutoTable} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 border-b flex items-center gap-2">
+                                            <i className="bi bi-file-earmark-ruled text-teal-600"></i> PDF Data (AutoTable)
+                                        </button>
+                                        <button onClick={handleDownloadVisualExcel} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 border-b flex items-center gap-2">
+                                            <i className="bi bi-file-earmark-spreadsheet text-green-600"></i> Excel (Tabel Visual)
+                                        </button>
+                                    </>
                                 )}
 
                                 <button onClick={handleDownloadHtml} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 border-b flex items-center gap-2">

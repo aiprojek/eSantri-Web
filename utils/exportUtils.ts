@@ -66,6 +66,8 @@ export const exportToHtml = (elementId: string, fileName: string) => {
     URL.revokeObjectURL(url);
 };
 
+import * as XLSX from 'xlsx';
+
 /**
  * AutoTable Export
  * Scrapes tables from the preview area and creates a clean PDF.
@@ -77,94 +79,230 @@ export const exportToAutoTable = (elementId: string, fileName: string) => {
     const doc = new jsPDF('p', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     
-    // Extract contextual metadata if available (e.g., from PrintHeader or AcademicHeader)
-    const titles = element.querySelectorAll('h1, h2, h3, h4');
-    const metaContainers = element.querySelectorAll('.print-meta');
-    let yPos = 15;
+    // Find all visual pages
+    const pages = element.querySelectorAll('.page-break-after');
     
-    titles.forEach((title, idx) => {
-        const text = title.textContent?.trim();
-        if (text && idx < 3) {
-            doc.setFontSize(idx === 0 ? 16 : 12);
-            doc.text(text, pageWidth / 2, yPos, { align: 'center' });
-            yPos += (idx === 0 ? 10 : 7);
-        }
-    });
-
-    if (metaContainers.length > 0) {
-        doc.setFontSize(10);
-        let allMetaLines: string[] = [];
-        
-        metaContainers.forEach(metaContainer => {
-            if (metaContainer.classList.contains('print-header-subtitle')) return; // handled by titles usually
-            
-            let metaText = '';
-            if (metaContainer.classList.contains('grid')) {
-                Array.from(metaContainer.children).forEach((child) => {
-                    const text = child.textContent?.replace(/\s+/g, ' ').trim();
-                    if (text) {
-                         metaText += text + " | ";
-                    }
-                });
-                metaText = metaText.replace(/ \|\ $/, ''); // Remove trailing separator
-                if (metaText) allMetaLines.push(metaText);
-            } else if (metaContainer.nodeName.toLowerCase() === 'table') {
-                // If the meta is a table (like in Rekening Koran)
-                Array.from(metaContainer.querySelectorAll('tr')).forEach(tr => {
-                    let rowText = '';
-                    Array.from(tr.querySelectorAll('td, th')).forEach(td => rowText += (td.textContent?.trim() + " "));
-                    if (rowText.trim()) allMetaLines.push(rowText.replace(/\s+/g, ' ').trim());
-                });
-            } else {
-                metaText = metaContainer.textContent?.replace(/\s+/g, ' ').trim() || '';
-                if (metaText) allMetaLines.push(metaText);
-            }
-        });
-        
-        allMetaLines.forEach(line => {
-             const wrappedLines = doc.splitTextToSize(line, pageWidth - 30);
-             doc.text(wrappedLines, 15, yPos);
-             yPos += (wrappedLines.length * 5) + 2;
-        });
-        yPos += 5; // Extra spacing before tables
+    if (pages.length === 0) {
+        alert("Tidak ditemukan halaman laporan yang bisa diproses.");
+        return;
     }
 
-    // Find all tables, but exclude tables that were already processed as print-meta
-    const allTables = element.querySelectorAll('table');
-    const tables: HTMLTableElement[] = [];
-    allTables.forEach(t => {
-        if (!t.classList.contains('print-meta')) {
-            tables.push(t);
+    let isFirstPage = true;
+
+    pages.forEach((pageContainer, pageIndex) => {
+        const titles = pageContainer.querySelectorAll('h1, h2, h3, h4');
+        const metaContainers = pageContainer.querySelectorAll('.print-meta');
+        
+        // Find tables in this specific page, excluding meta tables
+        const allPageTables = pageContainer.querySelectorAll('table');
+        const tables: HTMLTableElement[] = [];
+        allPageTables.forEach(t => {
+            if (!t.classList.contains('print-meta')) {
+                tables.push(t);
+            }
+        });
+
+        if (tables.length === 0 && metaContainers.length === 0 && titles.length === 0) {
+            return; // Skip completely empty containers
         }
+
+        if (!isFirstPage) {
+            doc.addPage();
+        }
+        isFirstPage = false;
+        
+        let yPos = 15;
+
+        // Print Titles
+        titles.forEach((title, idx) => {
+            const text = title.textContent?.trim();
+            if (text && idx < 3) {
+                doc.setFontSize(idx === 0 ? 16 : 12);
+                doc.text(text, pageWidth / 2, yPos, { align: 'center' });
+                yPos += (idx === 0 ? 10 : 7);
+            }
+        });
+
+        // Print Meta
+        if (metaContainers.length > 0) {
+            doc.setFontSize(10);
+            let allMetaLines: string[] = [];
+            
+            metaContainers.forEach(metaContainer => {
+                if (metaContainer.classList.contains('print-header-subtitle')) return;
+                
+                let metaText = '';
+                if (metaContainer.classList.contains('grid')) {
+                    Array.from(metaContainer.children).forEach((child) => {
+                        const text = child.textContent?.replace(/\s+/g, ' ').trim();
+                        if (text) {
+                            metaText += text + " | ";
+                        }
+                    });
+                    metaText = metaText.replace(/ \|\ $/, '');
+                    if (metaText) allMetaLines.push(metaText);
+                } else if (metaContainer.nodeName.toLowerCase() === 'table') {
+                    Array.from(metaContainer.querySelectorAll('tr')).forEach(tr => {
+                        let rowText = '';
+                        Array.from(tr.querySelectorAll('td, th')).forEach(td => rowText += (td.textContent?.trim() + " "));
+                        if (rowText.trim()) allMetaLines.push(rowText.replace(/\s+/g, ' ').trim());
+                    });
+                } else {
+                    metaText = metaContainer.textContent?.replace(/\s+/g, ' ').trim() || '';
+                    if (metaText) allMetaLines.push(metaText);
+                }
+            });
+            
+            allMetaLines.forEach(line => {
+                const wrappedLines = doc.splitTextToSize(line, pageWidth - 30);
+                doc.text(wrappedLines, 15, yPos);
+                yPos += (wrappedLines.length * 5) + 2;
+            });
+            yPos += 5; // Extra spacing before tables
+        }
+
+        // Print Tables for this page
+        tables.forEach((table, index) => {
+            if (index > 0) yPos += 10;
+            
+            // @ts-ignore
+            doc.autoTable({
+                html: table,
+                startY: yPos,
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 2 },
+                headStyles: { fillColor: [45, 120, 110], textColor: 255 },
+                margin: { left: 10, right: 10 },
+                didDrawPage: (data: any) => {
+                    yPos = data.cursor?.y || yPos;
+                }
+            });
+            
+            // @ts-ignore
+            yPos = (doc as any).lastAutoTable.finalY + 5;
+        });
     });
-    
-    if (tables.length === 0) {
-        // Fallback: If no real tables, maybe it's a grid? 
-        // For Dashboard etc, we might just use the native printer or inform user.
+
+    if (isFirstPage) {
         alert("Tidak ditemukan tabel data yang bisa diproses untuk AutoTable. Gunakan PDF (Asli) untuk hasil visual.");
         return;
     }
 
-    tables.forEach((table, index) => {
-        if (index > 0) yPos += 10;
+    doc.save(`${fileName}.pdf`);
+};
+
+/**
+ * Excel Export by HTML Tables
+ * Scrapes visual pages and tables, putting each page's table into a separate sheet.
+ */
+export const exportPreviewToExcelWorksheets = (elementId: string, fileName: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const pages = element.querySelectorAll('.page-break-after');
+    
+    if (pages.length === 0) {
+        alert("Tidak ditemukan halaman laporan yang bisa diproses.");
+        return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    let sheetCount = 1;
+
+    pages.forEach((pageContainer) => {
+        const titles = pageContainer.querySelectorAll('h1, h2, h3, h4');
+        const metaContainers = pageContainer.querySelectorAll('.print-meta');
         
-        // @ts-ignore
-        doc.autoTable({
-            html: table,
-            startY: yPos,
-            theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 2 },
-            headStyles: { fillColor: [45, 120, 110], textColor: 255 },
-            margin: { left: 10, right: 10 },
-            didDrawPage: (data: any) => {
-                yPos = data.cursor?.y || yPos;
+        // Find main tables
+        const allPageTables = pageContainer.querySelectorAll('table');
+        const tables: HTMLTableElement[] = [];
+        allPageTables.forEach(t => {
+            if (!t.classList.contains('print-meta')) {
+                tables.push(t);
             }
         });
-        
-        // Update yPos for next table
-        // @ts-ignore
-        yPos = (doc as any).lastAutoTable.finalY + 10;
+
+        if (tables.length === 0) return; // Skip pages without tables
+
+        tables.forEach((table, tableIndex) => {
+            // Determine sheet name
+            let sheetName = `Halaman ${sheetCount}`;
+            // Try to use title if available
+            if (titles.length > 0 && titles[0].textContent) {
+                const safeTitle = titles[0].textContent.substring(0, 20).replace(/[\\/?*[\]]/g, '');
+                if (safeTitle) sheetName = `${safeTitle} ${sheetCount}`;
+            }
+            // Ensure sheet name exists and is unique (max 31 chars)
+            if (sheetName.length > 31) sheetName = sheetName.substring(0, 31);
+            if (workbook.SheetNames.includes(sheetName)) sheetName = `${sheetName.substring(0, 27)}_${sheetCount}`;
+            
+            // Extract meta text
+            let metaLines: string[] = [];
+            titles.forEach(t => metaLines.push(t.textContent?.trim() || ''));
+            
+            metaContainers.forEach(metaContainer => {
+                if (metaContainer.classList.contains('print-header-subtitle')) return;
+                
+                let metaText = '';
+                if (metaContainer.classList.contains('grid')) {
+                    Array.from(metaContainer.children).forEach((child) => {
+                        const text = child.textContent?.replace(/\s+/g, ' ').trim();
+                        if (text) metaText += text + " | ";
+                    });
+                    metaText = metaText.replace(/ \|\ $/, '');
+                    if (metaText) metaLines.push(metaText);
+                } else if (metaContainer.nodeName.toLowerCase() === 'table') {
+                    Array.from(metaContainer.querySelectorAll('tr')).forEach(tr => {
+                        let rowText = '';
+                        Array.from(tr.querySelectorAll('td, th')).forEach(td => rowText += (td.textContent?.trim() + " "));
+                        if (rowText.trim()) metaLines.push(rowText.replace(/\s+/g, ' ').trim());
+                    });
+                } else {
+                    metaText = metaContainer.textContent?.replace(/\s+/g, ' ').trim() || '';
+                    if (metaText) metaLines.push(metaText);
+                }
+            });
+            metaLines = metaLines.filter(m => m !== '');
+
+            // Convert HTML table to sheet
+            const worksheet = XLSX.utils.table_to_sheet(table);
+
+            // If there's header meta, shift rows down and add them at the top
+            if (metaLines.length > 0) {
+                const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+                const shiftRows = metaLines.length + 2; // Shift by meta lines + empty row
+                
+                // Shift all existing cells down
+                for (let r = range.e.r; r >= range.s.r; r--) {
+                    for (let c = range.s.c; c <= range.e.c; c++) {
+                        const oldCell = XLSX.utils.encode_cell({ r: r, c: c });
+                        const newCell = XLSX.utils.encode_cell({ r: r + shiftRows, c: c });
+                        if (worksheet[oldCell]) {
+                            worksheet[newCell] = worksheet[oldCell];
+                            delete worksheet[oldCell];
+                        }
+                    }
+                }
+                
+                // Adjust ref
+                range.e.r += shiftRows;
+                worksheet['!ref'] = XLSX.utils.encode_range(range);
+
+                // Insert Meta lines at top
+                metaLines.forEach((text, i) => {
+                    XLSX.utils.sheet_add_aoa(worksheet, [[text]], { origin: `A${i + 1}` });
+                });
+            }
+
+            XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.substring(0,31));
+            sheetCount++;
+        });
     });
 
-    doc.save(`${fileName}.pdf`);
+    if (workbook.SheetNames.length === 0) {
+        alert("Tidak ada tabel data untuk diekspor ke Excel.");
+        return;
+    }
+
+    XLSX.writeFile(workbook, `${fileName}.xlsx`);
 };

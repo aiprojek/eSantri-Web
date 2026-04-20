@@ -28,7 +28,7 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500 text-sm text-gray-700 space-y-3">
                         <p>
-                            <strong>Asal Usul & Evolusi:</strong> Aplikasi ini awalnya didesain untuk penggunaan <em>Admin Sentris</em> (terpusat pada satu komputer). 
+                            <strong>Asal Usul & Evolusi:</strong> Aplikasi ini awalnya didesain untuk penggunaan <em>Admin Sentris</em> (terpusat pada satu komputer).
                             Namun, kami telah menghadirkan dua opsi sinkronisasi modern:
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -78,7 +78,7 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Keamanan: Aktivasi Mode Multi-User',
                 content: (
                     <>
-                         <p>Secara default, aplikasi ini berjalan tanpa login. <strong>Sangat disarankan</strong> mengaktifkan Mode Multi-User di menu <em>Pengaturan &gt; User & Keamanan</em>.</p>
+                        <p>Secara default, aplikasi ini berjalan tanpa login. <strong>Sangat disarankan</strong> mengaktifkan Mode Multi-User di menu <em>Pengaturan &gt; User & Keamanan</em>.</p>
                         <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             <div className="bg-blue-50 p-3 rounded border border-blue-100">
                                 <h4 className="font-bold text-blue-800 mb-1"><i className="bi bi-shield-check"></i> Keamanan Data</h4>
@@ -106,7 +106,7 @@ export const panduanData: PanduanSectionData[] = [
                     <div className="space-y-3">
                         <div className="border-l-4 border-indigo-500 pl-3 py-1 bg-indigo-50">
                             <h4 className="font-bold text-indigo-800 text-sm">Menambah User Staff</h4>
-                            <p className="text-xs">Gunakan tombol <strong>"Ambil dari Data Guru"</strong> di menu Pengaturan Akun. Username akan dibuat otomatis. <br/><strong>Password Default:</strong> <code>123456</code> (Bisa diubah di tabel).</p>
+                            <p className="text-xs">Gunakan tombol <strong>"Ambil dari Data Guru"</strong> di menu Pengaturan Akun. Username akan dibuat otomatis. <br /><strong>Password Default:</strong> <code>123456</code> (Bisa diubah di tabel).</p>
                         </div>
                         <div className="border-l-4 border-red-500 pl-3 py-1 bg-red-50">
                             <h4 className="font-bold text-red-800 text-sm">Fitur Lupa Password Staff (Mandiri)</h4>
@@ -150,7 +150,7 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="bg-teal-50 p-4 rounded-lg border-l-4 border-teal-500 text-sm text-gray-700 space-y-3">
                         <p>
-                            <strong>Sinkronisasi Instan:</strong> Berbeda dengan Dropbox/WebDAV yang memerlukan proses "Kirim" dan "Terima" manual, 
+                            <strong>Sinkronisasi Instan:</strong> Berbeda dengan Dropbox/WebDAV yang memerlukan proses "Kirim" dan "Terima" manual,
                             <strong>Firebase</strong> bekerja secara real-time. Setiap perubahan data di satu laptop akan langsung muncul di laptop lain dalam hitungan detik.
                         </p>
                         <p>
@@ -177,7 +177,7 @@ export const panduanData: PanduanSectionData[] = [
                     <div className="bg-red-50 p-3 rounded border border-red-200 text-sm text-red-900 space-y-2">
                         <p className="font-bold mb-1"><i className="bi bi-globe"></i> Otorisasi Domain di Firebase</p>
                         <p>Agar fitur <strong>Login Google</strong> berfungsi, Firebase harus mengenali alamat website tempat aplikasi ini berjalan.</p>
-                        
+
                         <div className="bg-white p-2 rounded border border-red-100 text-xs">
                             <p className="font-bold text-gray-700 mb-1">Domain yang biasanya sudah terdaftar otomatis:</p>
                             <ul className="list-disc pl-4 space-y-0.5">
@@ -188,7 +188,7 @@ export const panduanData: PanduanSectionData[] = [
                         </div>
 
                         <p>Jika Anda menggunakan domain lain (misal: <code>esantriweb.pages.dev</code>, <code>esantri.pondokanda.com</code>, atau IP Server), Anda <strong>WAJIB</strong> menambahkannya secara manual di Firebase Console:</p>
-                        
+
                         <ol className="list-decimal pl-5 mt-2 space-y-1">
                             <li>Buka <strong>Firebase Console</strong> &gt; Project Anda.</li>
                             <li>Pilih menu <strong>Authentication</strong> &gt; Tab <strong>Settings</strong>.</li>
@@ -253,7 +253,7 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Keamanan & Isolasi Data',
                 content: (
                     <p className="text-sm">
-                        Setiap pondok memiliki <strong>Tenant ID</strong> unik. Data Pondok A tidak akan bisa dilihat oleh Pondok B meskipun menggunakan aplikasi yang sama. 
+                        Setiap pondok memiliki <strong>Tenant ID</strong> unik. Data Pondok A tidak akan bisa dilihat oleh Pondok B meskipun menggunakan aplikasi yang sama.
                         Akses staff dikontrol melalui daftar anggota yang hanya bisa dikelola oleh Admin Pondok tersebut.
                     </p>
                 )
@@ -291,7 +291,7 @@ export const panduanData: PanduanSectionData[] = [
                             <li><strong>Jembatan Portal:</strong> Menghubungkan data internal ke Portal Wali Santri secara aman.</li>
                         </ul>
                         <div className="mt-3 p-2 bg-yellow-50 border border-yellow-100 rounded text-xs text-yellow-800">
-                            <i className="bi bi-info-circle mr-1"></i> 
+                            <i className="bi bi-info-circle mr-1"></i>
                             <strong>Catatan:</strong> Panduan di bawah ini (Hub & Spoke) berlaku khusus untuk pengguna <strong>Dropbox</strong> dan <strong>WebDAV</strong>. Untuk pengguna <strong>Firebase</strong>, sinkronisasi berjalan otomatis secara real-time.
                         </div>
                     </>
@@ -330,14 +330,14 @@ export const panduanData: PanduanSectionData[] = [
                     </ol>
                 )
             },
-             {
+            {
                 title: 'Koneksi Staff (Pairing)',
                 color: 'black',
                 content: (
                     <ol className="list-decimal pl-5 space-y-2 text-sm mt-1">
-                         <li><strong>Di Laptop Staff:</strong> Buka menu <em>Pengaturan &gt; Sync Cloud</em>.</li>
-                         <li>Paste kode dari Admin ke kolom <strong>"Setup Cepat"</strong> di bagian bawah.</li>
-                         <li>Klik <strong>Hubungkan</strong>. Sistem akan otomatis mengonfigurasi akses cloud dan mendownload data terbaru.</li>
+                        <li><strong>Di Laptop Staff:</strong> Buka menu <em>Pengaturan &gt; Sync Cloud</em>.</li>
+                        <li>Paste kode dari Admin ke kolom <strong>"Setup Cepat"</strong> di bagian bawah.</li>
+                        <li>Klik <strong>Hubungkan</strong>. Sistem akan otomatis mengonfigurasi akses cloud dan mendownload data terbaru.</li>
                     </ol>
                 )
             },
@@ -524,7 +524,7 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="space-y-3">
                         <p className="text-sm">Agar portal wali bisa diakses dari mana saja, diperlukan sebuah alamat web (URL) yang aktif di internet.</p>
-                        
+
                         <div className="bg-green-50 p-3 rounded border border-green-200 text-sm">
                             <p className="font-bold text-green-900 mb-1"><i className="bi bi-check-circle-fill"></i> Untuk Pengguna Awam (Installer):</p>
                             <p className="text-xs">Anda cukup menggunakan link portal yang muncul di menu <strong>Pengaturan &gt; Portal Wali</strong>. Agar link tersebut valid, pastikan Admin telah memasukkan <strong>URL Web Portal</strong> yang sudah dionlinekan di kolom yang tersedia.</p>
@@ -543,8 +543,8 @@ export const panduanData: PanduanSectionData[] = [
                                 <li><strong>GitHub Pages / Vercel:</strong> Gratis untuk hosting file statis (folder <code>dist</code>).</li>
                             </ul>
                             <div className="mt-2 p-2 bg-white border rounded text-[9px] font-mono">
-                                # Langkah Deploy:<br/>
-                                npm run build<br/>
+                                # Langkah Deploy:<br />
+                                npm run build<br />
                                 firebase deploy
                             </div>
                         </div>
@@ -563,7 +563,7 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Input Data Santri',
                 content: (
                     <>
-                         <p>Tiga cara memasukkan data:</p>
+                        <p>Tiga cara memasukkan data:</p>
                         <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                             <li><strong>Manual:</strong> Klik "Tambah Santri" untuk input detail satu per satu lengkap dengan foto.</li>
                             <li><strong>Tambah Massal:</strong> Klik "Tambah Massal" untuk input cepat dalam bentuk tabel (seperti Excel) langsung di aplikasi.</li>
@@ -637,7 +637,7 @@ export const panduanData: PanduanSectionData[] = [
                     <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
                         <li><strong>Hubungkan Printer:</strong> Di tab <em>Pengaturan</em>, klik "Cari & Hubungkan Printer" untuk pairing dengan thermal printer Bluetooth.</li>
                         <li><strong>Scan Barcode:</strong> Arahkan kursor ke kolom pencarian, scan barang.</li>
-                        <li><strong>Pilih Pelanggan:</strong> 
+                        <li><strong>Pilih Pelanggan:</strong>
                             <ul className="list-disc pl-4 text-xs">
                                 <li><strong>Santri:</strong> Gunakan Saldo Tabungan (Cashless). Jika saldo kurang, transaksi ditolak.</li>
                                 <li><strong>Umum:</strong> Pembayaran Tunai.</li>
@@ -651,27 +651,27 @@ export const panduanData: PanduanSectionData[] = [
             {
                 title: 'Manajemen Hutang (Kasbon) & Pelunasan',
                 content: (
-                     <div className="text-sm">
-                         <p className="mb-2">Jika santri/pembeli tidak membawa uang:</p>
-                         <ol className="list-decimal pl-5 space-y-1">
-                             <li>Saat checkout, pilih metode <strong>Hutang</strong>. Transaksi akan tercatat tapi uang belum masuk kas.</li>
-                             <li>Untuk melihat daftar hutang, buka tab <strong>Kasbon (Hutang)</strong>.</li>
-                             <li>Jika pembeli datang membayar, klik tombol <strong>Lunasi</strong> pada transaksi tersebut.</li>
-                             <li>Pilih metode pelunasan (Tunai/Potong Tabungan). Setelah lunas, uang baru akan tercatat sebagai Pemasukan di laporan keuangan.</li>
-                         </ol>
-                     </div>
+                    <div className="text-sm">
+                        <p className="mb-2">Jika santri/pembeli tidak membawa uang:</p>
+                        <ol className="list-decimal pl-5 space-y-1">
+                            <li>Saat checkout, pilih metode <strong>Hutang</strong>. Transaksi akan tercatat tapi uang belum masuk kas.</li>
+                            <li>Untuk melihat daftar hutang, buka tab <strong>Kasbon (Hutang)</strong>.</li>
+                            <li>Jika pembeli datang membayar, klik tombol <strong>Lunasi</strong> pada transaksi tersebut.</li>
+                            <li>Pilih metode pelunasan (Tunai/Potong Tabungan). Setelah lunas, uang baru akan tercatat sebagai Pemasukan di laporan keuangan.</li>
+                        </ol>
+                    </div>
                 )
             },
             {
                 title: 'Laporan Keuangan Toko',
                 content: (
-                     <div className="text-sm">
-                         <p className="mb-2">Sistem memisahkan laporan operasional toko dengan keuangan pondok pusat.</p>
-                         <ul className="list-disc pl-5 space-y-1">
-                             <li><strong>Tab Riwayat:</strong> Fokus pada omset penjualan dan barang keluar.</li>
-                             <li><strong>Tab Laba Rugi:</strong> Fokus pada profit bersih. Anda bisa mencatat pengeluaran operasional toko (Gaji penjaga, Listrik Toko, Plastik) di sini agar Laba Bersih terlihat akurat.</li>
-                         </ul>
-                     </div>
+                    <div className="text-sm">
+                        <p className="mb-2">Sistem memisahkan laporan operasional toko dengan keuangan pondok pusat.</p>
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Tab Riwayat:</strong> Fokus pada omset penjualan dan barang keluar.</li>
+                            <li><strong>Tab Laba Rugi:</strong> Fokus pada profit bersih. Anda bisa mencatat pengeluaran operasional toko (Gaji penjaga, Listrik Toko, Plastik) di sini agar Laba Bersih terlihat akurat.</li>
+                        </ul>
+                    </div>
                 )
             }
         ]
@@ -695,7 +695,7 @@ export const panduanData: PanduanSectionData[] = [
             {
                 title: 'Alur Pemeriksaan Ideal (Beban Kerja Terbagi)',
                 content: (
-                     <>
+                    <>
                         <div className="bg-red-50 p-3 rounded border border-red-200 text-sm mb-2 text-red-900">
                             <strong>REKOMENDASI:</strong> Jangan biarkan Admin Kantor mengerjakan semuanya. Delegasikan input kesehatan ke Petugas Poskestren.
                         </div>
@@ -710,7 +710,7 @@ export const panduanData: PanduanSectionData[] = [
             {
                 title: 'Integrasi Absensi & Cetak Surat',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li><strong>Absensi Otomatis:</strong> Jika status pemeriksaan adalah 'Rawat Inap' atau 'Rujuk', sistem otomatis menandai santri tersebut 'Sakit' (S) di menu Absensi pada tanggal tersebut.</li>
                         <li><strong>Cetak Surat:</strong> Klik ikon printer pada tabel rekam medis untuk mencetak Surat Keterangan Sakit resmi untuk izin sekolah/kamar.</li>
                     </ul>
@@ -724,7 +724,7 @@ export const panduanData: PanduanSectionData[] = [
         badgeColor: 'gray',
         title: 'Buku Tamu (Satpam)',
         steps: [
-             {
+            {
                 title: 'Check-In & Check-Out',
                 content: (
                     <>
@@ -742,7 +742,7 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="bg-gray-100 p-3 rounded border border-gray-300 text-sm">
                         Agar tidak membebani Admin Kantor, <strong>buatkan akun khusus untuk Satpam</strong> dengan akses hanya ke modul 'Buku Tamu'.
-                        <br/>Satpam bisa menggunakan HP/Laptop di pos jaga. Jika menggunakan Cloud Sync, lakukan <strong>Kirim Perubahan</strong> saat pergantian shift. Jika menggunakan <strong>Firebase</strong>, data tersinkron otomatis.
+                        <br />Satpam bisa menggunakan HP/Laptop di pos jaga. Jika menggunakan Cloud Sync, lakukan <strong>Kirim Perubahan</strong> saat pergantian shift. Jika menggunakan <strong>Firebase</strong>, data tersinkron otomatis.
                     </div>
                 )
             }
@@ -754,18 +754,18 @@ export const panduanData: PanduanSectionData[] = [
         badgeColor: 'indigo',
         title: 'Bimbingan Konseling (BK)',
         steps: [
-             {
+            {
                 title: 'Penting: Privasi Data (Confidential)',
                 color: 'red',
                 content: (
                     <div className="bg-indigo-50 p-3 border border-indigo-200 rounded text-sm text-indigo-900">
                         <i className="bi bi-shield-lock-fill mr-1"></i> Data BK bersifat <strong>Sangat Rahasia</strong>.
-                        Pastikan Anda mengaktifkan <strong>Multi-User Mode</strong> di Pengaturan. 
+                        Pastikan Anda mengaktifkan <strong>Multi-User Mode</strong> di Pengaturan.
                         Buat akun khusus untuk Konselor/Guru BK. Staff biasa yang tidak memiliki izin akses 'BK' <strong>TIDAK AKAN BISA</strong> melihat menu ini.
                     </div>
                 )
             },
-             {
+            {
                 title: 'Cara Aman Menggunakan (Desentralisasi)',
                 color: 'teal',
                 content: (
@@ -845,10 +845,10 @@ export const panduanData: PanduanSectionData[] = [
                         <li>Masuk ke tab <strong>Rekap & Laporan</strong> di menu Absensi. Pilih Rombel, Bulan, dan Tahun.</li>
                         <li>Sistem akan menampilkan tabel matriks kehadiran tanggal 1-31 beserta persentase.</li>
                         <li>Klik tombol <strong>Export</strong> (Pojok Kanan Atas) untuk opsi lanjutan:
-                             <ul className="list-disc pl-4 mt-1 border-l-2 border-teal-200">
+                            <ul className="list-disc pl-4 mt-1 border-l-2 border-teal-200">
                                 <li><strong>Download PDF:</strong> Menghasilkan file PDF digital yang sangat rapi (High Quality/Vector), lengkap dengan Kop Surat resmi.</li>
                                 <li><strong>Excel (.xlsx):</strong> Mengunduh data mentah untuk diolah lebih lanjut di Microsoft Excel.</li>
-                             </ul>
+                            </ul>
                         </li>
                     </ul>
                 )
@@ -861,7 +861,7 @@ export const panduanData: PanduanSectionData[] = [
         badgeColor: 'green',
         title: "Tahfizh & Mutaba'ah Qur'an",
         steps: [
-             {
+            {
                 title: 'Rekomendasi Workflow (Halaqah Real-time)',
                 content: (
                     <>
@@ -908,8 +908,8 @@ export const panduanData: PanduanSectionData[] = [
         badgeColor: 'indigo',
         title: 'Akademik: Jadwal & Rapor',
         steps: [
-            { 
-                title: 'Persiapan Jadwal (Data Master) - WAJIB', 
+            {
+                title: 'Persiapan Jadwal (Data Master) - WAJIB',
                 content: (
                     <div>
                         <p className="mb-2">Sebelum menyusun jadwal, Anda <strong>wajib</strong> melengkapi Data Master terlebih dahulu agar fitur deteksi bentrok berfungsi:</p>
@@ -921,14 +921,14 @@ export const panduanData: PanduanSectionData[] = [
                     </div>
                 )
             },
-            { 
-                title: 'Menyusun Jadwal Pelajaran', 
+            {
+                title: 'Menyusun Jadwal Pelajaran',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                         <li>Buka menu <strong>Akademik &gt; Jadwal Pelajaran</strong>.</li>
-                         <li>Atur durasi jam pelajaran di panel kiri (Klik Simpan).</li>
-                         <li>Pilih Jenjang & Rombel. Klik kotak grid kosong untuk mengisi Mapel & Guru.</li>
-                         <li>Gunakan fitur <strong>"Salin Jadwal Dari..."</strong> untuk menduplikasi jadwal dari kelas lain (misal dari 7A ke 7B).</li>
+                        <li>Buka menu <strong>Akademik &gt; Jadwal Pelajaran</strong>.</li>
+                        <li>Atur durasi jam pelajaran di panel kiri (Klik Simpan).</li>
+                        <li>Pilih Jenjang & Rombel. Klik kotak grid kosong untuk mengisi Mapel & Guru.</li>
+                        <li>Gunakan fitur <strong>"Salin Jadwal Dari..."</strong> untuk menduplikasi jadwal dari kelas lain (misal dari 7A ke 7B).</li>
                     </ul>
                 )
             },
@@ -938,7 +938,7 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="bg-blue-50 p-3 rounded text-blue-900 border border-blue-200">
                         <strong>Metode Unik:</strong> Aplikasi ini dirancang agar Guru <strong>TIDAK PERLU LOGIN</strong> untuk mengisi nilai.
-                        <br/>
+                        <br />
                         Alurnya: Admin Desain Rapor &rarr; Generate File HTML &rarr; Kirim ke Guru (WA) &rarr; Guru Isi Nilai di HP (Offline) &rarr; Kirim Balik ke Admin &rarr; Admin Import.
                     </div>
                 )
@@ -956,7 +956,7 @@ export const panduanData: PanduanSectionData[] = [
             {
                 title: '4. Generate Formulir Guru',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Masuk ke tab <strong>Generate Form</strong>.</li>
                         <li>Pilih Rombel dan Template.</li>
                         <li>Pilih metode pengiriman (WhatsApp / Hybrid).</li>
@@ -974,10 +974,10 @@ export const panduanData: PanduanSectionData[] = [
                     </ul>
                 )
             },
-             {
+            {
                 title: '6. Monitoring Progress',
                 content: (
-                     <>
+                    <>
                         <p className="text-sm mb-1">Fitur ini membantu Admin memantau kelengkapan nilai:</p>
                         <ul className="list-disc pl-5 space-y-1 text-sm">
                             <li>Buka menu <strong>Akademik &gt; Monitoring</strong>.</li>
@@ -995,7 +995,7 @@ export const panduanData: PanduanSectionData[] = [
         badgeColor: 'blue',
         title: 'Keuangan & Pembayaran',
         steps: [
-             {
+            {
                 title: 'Rekomendasi: Multi-User & Cloud (Wajib untuk Bendahara)',
                 color: 'red',
                 content: (
@@ -1013,7 +1013,7 @@ export const panduanData: PanduanSectionData[] = [
             {
                 title: 'Siklus Tagihan & Pembayaran',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li><strong>Pengaturan Biaya:</strong> Buat komponen biaya (SPP, Uang Gedung) di menu <em>Keuangan &gt; Pengaturan Biaya</em>.</li>
                         <li><strong>Generate Tagihan:</strong> Buka <em>Status Pembayaran &gt; Generate Tagihan</em>. Lakukan setiap awal bulan untuk SPP.</li>
                         <li><strong>Pembayaran:</strong> Cari santri di Status Pembayaran, klik tombol <strong>"Bayar"</strong>, centang bulan yang dibayar. Kuitansi tercetak otomatis.</li>
@@ -1037,14 +1037,14 @@ export const panduanData: PanduanSectionData[] = [
             {
                 title: 'Penggajian Guru (Payroll)',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li><strong>Konfigurasi:</strong> Buka tab <em>Penggajian &gt; Konfigurasi</em>. Isi Gaji Pokok, Tunjangan, dan Tarif JTM (Jam Tatap Muka) per guru.</li>
                         <li><strong>Generate Bulanan:</strong> Buka tab <em>Generate Gaji</em>. Pilih Bulan/Tahun. Klik "Hitung Estimasi". Sistem otomatis menghitung total jam dari Jadwal Pelajaran.</li>
                         <li><strong>Cetak & Posting:</strong> Periksa draft gaji. Jika sudah benar, klik "Posting Keuangan" untuk mencatat pengeluaran kas otomatis, lalu cetak Slip Gaji PDF.</li>
                     </ul>
                 )
             },
-             {
+            {
                 title: 'Setoran Kas (Closing Harian)',
                 content: (
                     <>
@@ -1078,7 +1078,7 @@ export const panduanData: PanduanSectionData[] = [
             {
                 title: 'Penempatan Santri',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Buka tab <strong>Penempatan Santri</strong>.</li>
                         <li>Pilih santri dari daftar "Tanpa Kamar" (bisa filter per kelas).</li>
                         <li>Klik tombol "Tempatkan" pada kartu kamar yang tersedia.</li>
@@ -1090,7 +1090,7 @@ export const panduanData: PanduanSectionData[] = [
                 color: 'orange',
                 content: (
                     <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm">
-                        <strong>Tips Kolaborasi:</strong> Jika kantor asrama putra dan putri terpisah, gunakan fitur <strong>Cloud Sync</strong>. 
+                        <strong>Tips Kolaborasi:</strong> Jika kantor asrama putra dan putri terpisah, gunakan fitur <strong>Cloud Sync</strong>.
                         <ul className="list-disc pl-5 mt-1">
                             <li>Buat akun khusus untuk Musyrif/Musyrifah.</li>
                             <li>Mereka dapat mengecek data santri atau kapasitas kamar langsung dari asrama tanpa perlu ke kantor pusat.</li>
@@ -1112,11 +1112,11 @@ export const panduanData: PanduanSectionData[] = [
                     <>
                         <div className="mb-2">Gunakan menu <strong>PSB</strong> untuk mengelola pendaftaran santri baru secara online/offline.</div>
                         <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                             <li><strong>Portal PSB (Firebase):</strong> Pendaftaran kini bisa melalui Portal khusus yang terintegrasi dengan Firebase Firestore. Data pendaftar masuk secara real-time.</li>
-                             <li><strong>Upload Berkas:</strong> Berkas yang diunggah pendaftar akan otomatis diubah namanya menjadi <code>Nama_Dokumen-Nama_Santri-Waktu.[ext]</code> agar rapi untuk diarsip secara offline.</li>
-                             <li><strong>Desain Formulir:</strong> Buat formulir pendaftaran custom di menu <em>Desain Formulir Online</em>.</li>
-                             <li><strong>Smart Script:</strong> Jika menggunakan Google Spreadsheet, Anda cukup menggunakan satu script untuk banyak jenis formulir.</li>
-                             <li><strong>Rekap & Seleksi:</strong> Kelola data masuk di menu <em>Rekap Pendaftar</em>. Klik tombol "Terima" untuk memindahkan pendaftar resmi menjadi Santri Aktif secara otomatis.</li>
+                            <li><strong>Portal PSB (Firebase):</strong> Pendaftaran kini bisa melalui Portal khusus yang terintegrasi dengan Firebase Firestore. Data pendaftar masuk secara real-time.</li>
+                            <li><strong>Upload Berkas:</strong> Berkas yang diunggah pendaftar akan otomatis diubah namanya menjadi <code>Nama_Dokumen-Nama_Santri-Waktu.[ext]</code> agar rapi untuk diarsip secara offline.</li>
+                            <li><strong>Desain Formulir:</strong> Buat formulir pendaftaran custom di menu <em>Desain Formulir Online</em>.</li>
+                            <li><strong>Smart Script:</strong> Jika menggunakan Google Spreadsheet, Anda cukup menggunakan satu script untuk banyak jenis formulir.</li>
+                            <li><strong>Rekap & Seleksi:</strong> Kelola data masuk di menu <em>Rekap Pendaftar</em>. Klik tombol "Terima" untuk memindahkan pendaftar resmi menjadi Santri Aktif secara otomatis.</li>
                         </ul>
                     </>
                 )
@@ -1125,7 +1125,7 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Kerja Tim Panitia PSB (Multi-User)',
                 color: 'green',
                 content: (
-                     <div className="bg-green-50 p-3 rounded border border-green-200 text-sm">
+                    <div className="bg-green-50 p-3 rounded border border-green-200 text-sm">
                         <strong>Rekomendasi Panitia:</strong> Jangan kerjakan sendiri. Aktifkan <strong>Multi-User</strong> dan bagikan tugas:
                         <ul className="list-disc pl-5 mt-1">
                             <li><strong>Meja 1:</strong> Input Data & Wawancara.</li>
@@ -1163,7 +1163,7 @@ export const panduanData: PanduanSectionData[] = [
                     </ul>
                 )
             },
-             {
+            {
                 title: 'Manajemen Jadwal Piket Ibadah',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
@@ -1214,7 +1214,7 @@ export const panduanData: PanduanSectionData[] = [
                     </ul>
                 )
             },
-             {
+            {
                 title: 'Cetak Kartu & Label',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
@@ -1231,7 +1231,7 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="bg-teal-50 p-3 rounded border border-teal-200 text-sm">
                         <strong>Saran Implementasi:</strong> Biasanya perpustakaan memiliki komputer khusus yang terpisah dari kantor admin.
-                        <br/>
+                        <br />
                         Gunakan <strong>Cloud Sync</strong> untuk menghubungkan komputer perpustakaan dengan database santri pusat. Pustakawan cukup login dengan akun staff terbatas untuk mengelola peminjaman.
                     </div>
                 )
@@ -1297,7 +1297,7 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500 text-sm text-gray-700 space-y-3">
                         <p>
-                            Database lokal (IndexedDB) di browser bersifat sangat cepat namun rentan terhadap interupsi. 
+                            Database lokal (IndexedDB) di browser bersifat sangat cepat namun rentan terhadap interupsi.
                             <strong>Diagnosa Sistem</strong> membantu Anda mendeteksi ketidakkonsistenan data yang disebabkan oleh:
                         </p>
                         <ul className="list-disc pl-5 space-y-1 text-xs">
@@ -1323,15 +1323,15 @@ export const panduanData: PanduanSectionData[] = [
                     <div className="space-y-4">
                         <div className="bg-white p-3 rounded border shadow-sm">
                             <h4 className="font-bold text-teal-700 text-xs uppercase mb-1">1. Perbaiki Saldo (Integritas Data)</h4>
-                            <p className="text-[11px]">Sistem mendeteksi santri yang tidak punya catatan saldo (biasanya karena gagal sinkronisasi). <br/><strong>Efek:</strong> Akan dibuatkan saldo Rp 0 agar fitur keuangan santri tersebut bisa digunakan kembali.</p>
+                            <p className="text-[11px]">Sistem mendeteksi santri yang tidak punya catatan saldo (biasanya karena gagal sinkronisasi). <br /><strong>Efek:</strong> Akan dibuatkan saldo Rp 0 agar fitur keuangan santri tersebut bisa digunakan kembali.</p>
                         </div>
                         <div className="bg-white p-3 rounded border shadow-sm">
                             <h4 className="font-bold text-orange-700 text-xs uppercase mb-1">2. Re-Index Data (Kinerja Cloud)</h4>
-                            <p className="text-[11px]">Menambahkan timestamp sinkronisasi pada data-data versi lama. <br/><strong>Efek:</strong> Data lama akan diunggah ulang ke Cloud pada sinkronisasi berikutnya untuk memastikan data Cloud & Lokal seragam.</p>
+                            <p className="text-[11px]">Menambahkan timestamp sinkronisasi pada data-data versi lama. <br /><strong>Efek:</strong> Data lama akan diunggah ulang ke Cloud pada sinkronisasi berikutnya untuk memastikan data Cloud & Lokal seragam.</p>
                         </div>
                         <div className="bg-white p-3 rounded border shadow-sm">
                             <h4 className="font-bold text-red-700 text-xs uppercase mb-1">3. Bersihkan Orphan (Kerapihan Database)</h4>
-                            <p className="text-[11px]">Menghapus transaksi yang kodenya merujuk ke santri yang sudah dihapus selamanya. <br/><strong>Efek:</strong> Database menjadi lebih ringan dan bersih dari data "hantu".</p>
+                            <p className="text-[11px]">Menghapus transaksi yang kodenya merujuk ke santri yang sudah dihapus selamanya. <br /><strong>Efek:</strong> Database menjadi lebih ringan dan bersih dari data "hantu".</p>
                         </div>
                     </div>
                 )

@@ -175,21 +175,12 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
   
   const recentSantri = [...santriList].sort((a, b) => new Date(b.tanggalMasuk).getTime() - new Date(a.tanggalMasuk).getTime()).slice(0, 5);
 
-  const handlePrint = () => {
-      window.print();
-  };
-
   return (
     <div id="dashboard-container" className="printable-content-wrapper">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 no-print border-b border-gray-200 pb-0 shadow-sm bg-white -mx-6 px-6 -mt-6 pt-6 sticky top-0 z-20">
             <div className="w-full">
                 <div className="flex justify-between items-center sm:block">
                     <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Dashboard</h1>
-                    <div className="sm:hidden">
-                        <button onClick={handlePrint} className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm" title="Cetak Dashboard">
-                            <i className="bi bi-printer text-sm"></i>
-                        </button>
-                    </div>
                 </div>
                 <nav className="flex gap-6 mt-4 overflow-x-auto whitespace-nowrap no-scrollbar">
                     <button 
@@ -206,11 +197,6 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                         <span className="ml-2 text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">Pro</span>
                     </button>
                 </nav>
-            </div>
-            <div className="hidden sm:flex items-center gap-2 mb-8">
-                <button onClick={handlePrint} className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 shadow-sm" title="Cetak Dashboard">
-                    <i className="bi bi-printer"></i>
-                </button>
             </div>
         </div>
 

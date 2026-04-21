@@ -1,9 +1,8 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { ReportType } from '../../types';
-import { generatePdf, printToPdfNative } from '../../utils/pdfGenerator';
-import { exportReportToSvg } from '../../utils/svgExporter';
-import { exportToHtml, exportToAutoTable, exportPreviewToExcelWorksheets } from '../../utils/exportUtils';
+import { printToPdfNative } from '../../utils/pdfGenerator';
+import { exportToHtml, exportToAutoTable, exportPreviewToExcelWorksheets, exportToWord } from '../../utils/exportUtils';
 import { generateContactCsv } from '../../services/csvService';
 import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel, exportEmisTemplate } from '../../services/excelService';
 
@@ -26,6 +25,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const [smartZoomScale, setSmartZoomScale] = useState(1);
     const [isGeneratingFile, setIsGeneratingFile] = useState(false);
     const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+    const [showDonationModal, setShowDonationModal] = useState(false);
 
     // Auto-fit zoom logic
     useEffect(() => {
@@ -52,23 +52,8 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handlePrintNative = () => {
         printToPdfNative('preview-area', `Laporan_${activeReport}`);
         onToast('Membuka dialog cetak...', 'info');
-    };
-
-    const handleDownloadPdfImage = async () => {
-        if (!previewContent || !contentWrapperRef.current) return;
-        setIsGeneratingFile(true);
-        const originalTransform = contentWrapperRef.current.style.transform;
-        contentWrapperRef.current.style.transform = 'none'; // Reset zoom for capture
-        try {
-            await generatePdf('preview-area', { paperSize, fileName: `Laporan_${activeReport}.pdf` });
-            onToast('PDF berhasil diunduh.', 'success');
-        } catch (e) {
-            onToast('Gagal membuat PDF.', 'error');
-        } finally {
-            contentWrapperRef.current.style.transform = originalTransform;
-            setIsGeneratingFile(false);
-            setIsDownloadMenuOpen(false);
-        }
+        // Setting timeout to show modal after print dialog opens
+        setTimeout(() => setShowDonationModal(true), 2000);
     };
 
     const handleDownloadCsv = () => {
@@ -79,7 +64,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         link.setAttribute("download", `Kontak_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
         setIsDownloadMenuOpen(false);
-        onToast('CSV berhasil diunduh.', 'success');
+        triggerSuccessDownload('CSV berhasil diunduh.');
     };
 
     const handleDownloadExcel = () => {
@@ -103,7 +88,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                 // Default: Export Santri Data (for Biodata, Rombel, etc)
                 exportSantriToExcel(filteredSantri, settings, fileName);
             }
-            onToast('Excel berhasil diunduh.', 'success');
+            triggerSuccessDownload('Excel berhasil diunduh.');
         } catch (error) {
             console.error(error);
             onToast('Gagal membuat Excel. Pastikan data tersedia.', 'error');
@@ -113,20 +98,16 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         }
     };
 
-    const handleDownloadSvg = async () => {
-        setIsGeneratingFile(true);
-        try {
-            await exportReportToSvg('preview-area', `Card_${new Date().getTime()}`);
-            onToast('SVG berhasil diunduh.', 'success');
-        } catch(e) { onToast('Gagal ekspor SVG.', 'error'); } 
-        finally { setIsGeneratingFile(false); setIsDownloadMenuOpen(false); }
+    const triggerSuccessDownload = (message: string) => {
+        onToast(message, 'success');
+        setShowDonationModal(true);
     };
 
     const handleDownloadAutoTable = () => {
         setIsGeneratingFile(true);
         try {
             exportToAutoTable('preview-area', `Laporan_${activeReport}`);
-            onToast('PDF AutoTable berhasil diunduh.', 'success');
+            triggerSuccessDownload('PDF AutoTable berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor AutoTable.', 'error');
         } finally {
@@ -139,7 +120,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         setIsGeneratingFile(true);
         try {
             exportPreviewToExcelWorksheets('preview-area', `Laporan_${activeReport}`);
-            onToast('Excel Visual berhasil diunduh.', 'success');
+            triggerSuccessDownload('Excel Visual berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor Excel Visual.', 'error');
         } finally {
@@ -152,9 +133,22 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         setIsGeneratingFile(true);
         try {
             exportToHtml('preview-area', `Laporan_${activeReport}`);
-            onToast('HTML Offline berhasil diunduh.', 'success');
+            triggerSuccessDownload('HTML Offline berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor HTML.', 'error');
+        } finally {
+            setIsGeneratingFile(false);
+            setIsDownloadMenuOpen(false);
+        }
+    };
+
+    const handleDownloadWord = () => {
+        setIsGeneratingFile(true);
+        try {
+            exportToWord('preview-area', `Laporan_${activeReport}`);
+            triggerSuccessDownload('Word Document (.doc) berhasil diunduh.');
+        } catch (e) {
+            onToast('Gagal ekspor Word Document.', 'error');
         } finally {
             setIsGeneratingFile(false);
             setIsDownloadMenuOpen(false);
@@ -236,8 +230,15 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                                 {activeReport === ReportType.LaporanKontak && (
                                     <button onClick={handleDownloadCsv} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 border-b flex items-center gap-2"><i className="bi bi-file-earmark-spreadsheet text-gray-500"></i> CSV (Legacy)</button>
                                 )}
-                                <button onClick={handlePrintNative} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 border-b flex items-center gap-2"><i className="bi bi-printer text-blue-600"></i> Cetak / PDF (Asli)</button>
                                 
+                                <button onClick={handlePrintNative} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2">
+                                    <i className="bi bi-file-earmark-pdf text-red-600"></i> Cetak / PDF (Vektor Asli)
+                                </button>
+                                
+                                <button onClick={handleDownloadWord} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 border-b flex items-center gap-2">
+                                    <i className="bi bi-file-earmark-word text-blue-800"></i> Word Document (.doc)
+                                </button>
+
                                 {canExportToAutoTable && (
                                     <>
                                         <button onClick={handleDownloadAutoTable} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 border-b flex items-center gap-2">
@@ -252,10 +253,15 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                                 <button onClick={handleDownloadHtml} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 border-b flex items-center gap-2">
                                     <i className="bi bi-code-slash text-indigo-600"></i> HTML (Offline)
                                 </button>
-
-                                <button onClick={handleDownloadPdfImage} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"><i className="bi bi-file-earmark-pdf text-red-600"></i> PDF (Gambar)</button>
+                                
                                 {activeReport === ReportType.KartuSantri && (
-                                    <button onClick={handleDownloadSvg} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-t"><i className="bi bi-vector-pen text-purple-600"></i> SVG (Vektor)</button>
+                                    <button onClick={() => {
+                                        setIsDownloadMenuOpen(false);
+                                        onToast('Untuk hasil Kartu SVG/PDF terbaik (teks tidak pecah), silakan klik "Cetak / PDF", lalu pilih "Save as PDF" di dialog browser.', 'info');
+                                        setTimeout(handlePrintNative, 1000);
+                                    }} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 flex items-center gap-2 border-t">
+                                        <i className="bi bi-vector-pen text-purple-600"></i> SVG / PDF (Kartu HD)
+                                    </button>
                                 )}
                             </div>
                         )}
@@ -283,6 +289,44 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                 <div className="absolute inset-0 bg-white/80 z-30 flex flex-col items-center justify-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mb-3"></div>
                     <p className="text-gray-600 font-medium">Sedang menyusun laporan...</p>
+                </div>
+            )}
+            
+            {showDonationModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backldrop-blur-sm p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden text-center items-center flex flex-col">
+                        <div className="bg-teal-50 w-full pt-8 pb-6 border-b border-teal-100 flex flex-col items-center">
+                            <div className="bg-white p-3 rounded-full shadow-sm mb-4">
+                                <i className="bi bi-gift-fill text-4xl text-teal-500"></i>
+                            </div>
+                            <h3 className="text-xl font-bold text-teal-800 px-4">Selamat! Laporan Selesai</h3>
+                        </div>
+                        
+                        <div className="p-6">
+                            <p className="text-gray-600 text-sm mb-6 leading-relaxed">
+                                File laporan Anda berhasil diunduh dan siap digunakan. 
+                                Dukung terus pengembangan <strong>eSantri Web</strong> dengan memberikan donasi atau kontribusi terbaik Anda agar kami dapat terus menghadirkan fitur bermanfaat!
+                            </p>
+                            
+                            <div className="flex flex-col gap-3 w-full">
+                                <button 
+                                    onClick={() => {
+                                        window.open('https://lynk.id/aiprojek/s/bvBJvdA', '_blank');
+                                        setShowDonationModal(false);
+                                    }}
+                                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <i className="bi bi-heart-fill text-pink-300"></i> Donasi via Link.id
+                                </button>
+                                <button 
+                                    onClick={() => setShowDonationModal(false)}
+                                    className="w-full bg-white border-2 border-gray-200 text-gray-500 hover:text-gray-700 hover:bg-gray-50 hover:border-gray-300 font-medium py-2.5 px-4 rounded-xl transition-colors"
+                                >
+                                    Tidak, terima kasih
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

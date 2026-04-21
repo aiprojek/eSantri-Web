@@ -66,6 +66,77 @@ export const exportToHtml = (elementId: string, fileName: string) => {
     URL.revokeObjectURL(url);
 };
 
+export const exportToWord = (elementId: string, fileName: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const content = element.innerHTML;
+    
+    // Microsoft Word specific CSS overrides to make it look closer to preview
+    const finalHtml = `
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+    <meta charset="utf-8">
+    <title>${fileName}</title>
+    <style>
+        /* Word-specific styles */
+        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #333333; }
+        h1, h2, h3, h4, h5, h6 { color: #111111; margin-bottom: 8pt; }
+        p { margin-bottom: 8pt; }
+        
+        /* Table rendering for Word */
+        table { border-collapse: collapse; width: 100%; margin-bottom: 12pt; border: 1pt solid #dddddd; }
+        th, td { border: 1pt solid #dddddd; padding: 5pt; text-align: left; }
+        th { background-color: #f3f4f6; font-weight: bold; }
+        
+        /* Utility classes translation */
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .font-bold, .font-semibold { font-weight: bold; }
+        .text-sm { font-size: 10pt; }
+        .text-xs { font-size: 8pt; }
+        .mb-2 { margin-bottom: 5pt; }
+        .mb-4 { margin-bottom: 10pt; }
+        .mt-4 { margin-top: 10pt; }
+        .p-4 { padding: 10pt; }
+        .bg-gray-50 { background-color: #f9fafb; }
+        .bg-white { background-color: #ffffff; }
+        
+        /* Grid and Flex fallbacks (Word doesn't support them well, fallback to inline-block or block) */
+        .grid, .flex { display: block; width: 100%; }
+        .grid > *, .flex > * { display: inline-block; vertical-align: top; margin-right: 10pt; margin-bottom: 10pt; }
+        
+        /* Page break support for Word */
+        .page-break-after { page-break-after: always; clear: both; }
+        @page { margin: 2cm; }
+    </style>
+</head>
+<body>
+    <div style="width: 100%; max-width: 21cm; margin: 0 auto;">
+        ${content}
+    </div>
+</body>
+</html>`;
+
+    // Process the HTML to handle some specific Tailwind properties Word ignores
+    let processedHtml = finalHtml
+        .replace(/class="([^"]*?text-center[^"]*?)"/g, 'class="$1" align="center"')
+        .replace(/<div class="[^"]*?grid[^"]*?grid-cols-2[^"]*?">/g, '<table width="100%"><tr><td width="50%" valign="top">')
+        .replace(/<div class="[^"]*?grid[^"]*?grid-cols-3[^"]*?">/g, '<table width="100%"><tr><td width="33%" valign="top">');
+
+    const blob = new Blob(['\ufeff', processedHtml], {
+        type: 'application/msword'
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileName}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
 import * as XLSX from 'xlsx';
 
 /**

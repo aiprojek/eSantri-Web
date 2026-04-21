@@ -197,9 +197,16 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             showToast('Harap isi App Key terlebih dahulu.', 'error');
             return;
         }
-        // Standard code flow without specific redirect URI (manual copy paste)
-        const authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${appKey}&response_type=code&token_access_type=offline`;
-        window.open(authUrl, '_blank', 'width=600,height=700');
+        
+        const redirectUri = window.location.origin;
+        showConfirmation(
+            'Pembaruan Keamanan Dropbox',
+            `Dropbox telah menghapus fitur "Tampilkan Kode" (OOB). Sekarang Anda WAJIB mendaftarkan Redirect URI.\n\n1. Buka App Console Dropbox Anda.\n2. Tambahkan URL ini ke kolom Redirect URIs:\n   ${redirectUri}\n3. Klik Lanjutkan di bawah ini. Saat di-redirect kembali ke aplikasi web ini, silakan copy tulisan setelah "?code=" dari URL (Address Bar) browser Anda, lalu paste di langkah ke-2.`,
+            () => {
+                const authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${appKey}&response_type=code&token_access_type=offline&redirect_uri=${encodeURIComponent(redirectUri)}`;
+                window.open(authUrl, '_blank', 'width=800,height=700');
+            }
+        );
     };
 
     const handleVerifyDropboxCode = async () => {
@@ -211,7 +218,8 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
 
         setIsConnectingDropbox(true);
         try {
-            const result = await exchangeCodeForToken(dropboxAppKey, dropboxAppSecret, manualAuthCode);
+            const redirectUri = window.location.origin;
+            const result = await exchangeCodeForToken(dropboxAppKey, dropboxAppSecret, manualAuthCode, redirectUri);
             const updatedConfig = {
                 ...settings.cloudSyncConfig,
                 dropboxAppKey,

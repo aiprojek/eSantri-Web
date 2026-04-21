@@ -158,18 +158,21 @@ export const getValidDropboxToken = async (config: CloudSyncConfig): Promise<str
 };
 
 // Updated for Manual Code Flow with App Secret
-export const exchangeCodeForToken = async (appKey: string, appSecret: string, code: string) => {
-    const params = new URLSearchParams({
+export const exchangeCodeForToken = async (appKey: string, appSecret: string, code: string, redirectUri?: string) => {
+    const params: Record<string, string> = {
         code,
         grant_type: 'authorization_code',
         client_id: appKey,
         client_secret: appSecret
-    });
+    };
+    if (redirectUri) {
+        params.redirect_uri = redirectUri;
+    }
 
     const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params,
+        body: new URLSearchParams(params),
     });
     
     if (!response.ok) {

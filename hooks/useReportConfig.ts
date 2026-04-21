@@ -55,11 +55,19 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
     const [cardFields, setCardFields] = useState<string[]>(['foto', 'namaLengkap', 'nis', 'jenjang', 'rombel', 'ttl', 'alamat', 'ayahWali']);
     const [cardWidth, setCardWidth] = useState<number>(8.56);
     const [cardHeight, setCardHeight] = useState<number>(5.398);
+    const [cardBacksideLayout, setCardBacksideLayout] = useState<'none' | 'side-by-side' | 'separate'>('side-by-side');
     const [cardPrintMode, setCardPrintMode] = useState<'all' | 'selected'>('all');
     const [selectedCardSantriIds, setSelectedCardSantriIds] = useState<number[]>([]);
     const [cardSignatoryTitle, setCardSignatoryTitle] = useState<string>('Mudir Marhalah');
     const [cardSignatoryId, setCardSignatoryId] = useState<string>('');
     
+    const defaultCardRules = `Kartu ini adalah tanda pengenal resmi santri {NamaPonpes}.
+Santri wajib membawa kartu ini selama berada di lingkungan pesantren atau saat mengikuti kegiatan resmi.
+Kartu ini tidak boleh dipindahtangankan kepada orang lain.
+Apabila kartu ini hilang atau rusak, santri wajib segera melapor kepada pengurus kesantrian untuk proses penggantian.
+Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaan, layanan kesehatan, dan transaksi koperasi.`;
+
+    const [cardRules, setCardRules] = useState<string>(defaultCardRules);
     const [agendaKedatangan, setAgendaKedatangan] = useState<string>('');
     const [semester, setSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [tahunAjaran, setTahunAjaran] = useState<string>('2024/2025'); // UPDATED DEFAULT
@@ -203,6 +211,8 @@ export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) 
             cardFields, setCardFields,
             cardWidth, setCardWidth,
             cardHeight, setCardHeight,
+            cardBacksideLayout, setCardBacksideLayout,
+            cardRules, setCardRules,
             cardPrintMode, setCardPrintMode,
             selectedCardSantriIds, setSelectedCardSantriIds,
             cardSignatoryTitle, setCardSignatoryTitle,

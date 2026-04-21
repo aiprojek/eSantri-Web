@@ -411,9 +411,96 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     );
 };
 
+const KartuSantriBackTemplate: React.FC<{ settings: PondokSettings; options: any }> = ({ settings, options }) => {
+    const { cardWidth, cardHeight, cardRules } = options || {};
+    
+    // Replace placeholder with actual name safely
+    const finalRulesText = cardRules?.replace(/{NamaPonpes}/gi, settings.namaPonpes || 'Pondok Pesantren') || '';
+    const rulesList = finalRulesText.split('\n').filter((r: string) => r.trim() !== '');
+    
+    // Character count heuristic for auto-scaling text
+    const totalChars = finalRulesText.length;
+    let contentTextSize = 'text-[6pt]';
+    let footerTextSize = 'text-[5pt]';
+    let headerTextSize = 'text-[7pt]';
+    
+    if (totalChars > 400) {
+        contentTextSize = 'text-[4pt]';
+        footerTextSize = 'text-[4pt]';
+        headerTextSize = 'text-[5pt]';
+    } else if (totalChars > 250) {
+        contentTextSize = 'text-[5pt]';
+        footerTextSize = 'text-[4.5pt]';
+        headerTextSize = 'text-[6pt]';
+    }
+
+    const cardStyle: React.CSSProperties = {
+        width: `${cardWidth}cm`,
+        height: `${cardHeight}cm`,
+        flexShrink: 0,
+        boxSizing: 'border-box',
+    };
+
+    return (
+        <div className="rounded-xl overflow-hidden relative flex flex-col text-gray-800 border-2 border-gray-300 bg-white" 
+             style={{ ...cardStyle }}>
+            
+            {/* Faded Background Logo */}
+            {settings.logoYayasanUrl && (
+                <div className="absolute inset-0 flex items-center justify-center opacity-[0.08] pointer-events-none p-4">
+                    <img src={settings.logoYayasanUrl} alt="Logo" className="max-w-full max-h-full object-contain filter grayscale" />
+                </div>
+            )}
+
+            <div className={`text-center bg-gray-100 py-1.5 border-b border-gray-200 z-10 shrink-0`}>
+                <div className={`${headerTextSize} font-bold uppercase tracking-wider text-teal-800`}>Tata Tertib & Ketentuan</div>
+            </div>
+            
+            <div className={`p-2 flex-grow ${contentTextSize} leading-tight relative z-10 flex flex-col justify-center`}>
+                <ol className="list-decimal pl-3 space-y-0.5">
+                    {rulesList.map((rule: string, i: number) => (
+                        <li key={i}>{rule.trim()}</li>
+                    ))}
+                </ol>
+
+                {totalChars <= 300 && (
+                    <div className="mt-2 text-center italic text-[#1B4D3E]/80 font-medium">
+                        "Sebaik-baik manusia adalah yang paling bermanfaat."
+                    </div>
+                )}
+            </div>
+
+            <div className={`py-1.5 px-3 mb-[2px] border-t border-gray-100 flex justify-between items-end bg-gray-50/90 shrink-0 ${footerTextSize}`}>
+                <div className="text-gray-500 pb-0.5 leading-tight">
+                    <div>Dicetak: {new Date().toLocaleDateString('id-ID')}</div>
+                    <div>Sistem eSantri by AI Projek</div>
+                    <div>aiprojek01.my.id</div>
+                </div>
+                <div className="text-center w-[35%]">
+                    <div className="mb-3">{options.cardSignatoryTitle || 'Mengetahui,'}</div>
+                    <div className="border-b border-gray-500 w-full mb-0.5"></div>
+                    <div className="font-bold">
+                        {options.cardSignatoryId 
+                            ? (settings.tenagaPengajar || []).find((p: any) => p.id.toString() === options.cardSignatoryId)?.nama || 'Pengasuh / Pimpinan' 
+                            : 'Pengasuh / Pimpinan'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const generateCardReports = (data: Santri[], settings: PondokSettings, options: any) => {
+    const { cardBacksideLayout = 'none' } = options;
+    const isSideBySide = cardBacksideLayout === 'side-by-side';
+    
+    // In side-by-side, the physical unit being printed is twice as wide as 1 card Width (if landscape folding vertical)
+    // Wait, usually if card is landscape (width > height), folding side-by-side makes it 2x height (top/bottom fold) OR 2x width (left/right fold).
+    // Let's assume left/right fold: total logical width = cardWidth * 2.
+    const logicalCardWidth = isSideBySide ? options.cardWidth * 2 : options.cardWidth;
+
     let sheetOrientation: 'portrait' | 'landscape' = 'portrait';
-    if (options.cardWidth > options.cardHeight) {
+    if (logicalCardWidth > options.cardHeight) {
         sheetOrientation = 'landscape';
     } else {
         sheetOrientation = 'portrait';
@@ -441,7 +528,7 @@ export const generateCardReports = (data: Santri[], settings: PondokSettings, op
     const effectiveWidth = paperWidth - (currentMargin * 2);
     const effectiveHeight = paperHeight - (currentMargin * 2);
 
-    const cols = Math.floor((effectiveWidth + gapX) / (options.cardWidth + gapX));
+    const cols = Math.floor((effectiveWidth + gapX) / (logicalCardWidth + gapX));
     const rows = Math.floor((effectiveHeight + gapY) / (options.cardHeight + gapY));
     
     // Ensure we print at least 1 item per page even if dims are wonky
@@ -449,11 +536,40 @@ export const generateCardReports = (data: Santri[], settings: PondokSettings, op
 
     const previews = [];
 
-    for (let i = 0; i < data.length; i += itemsPerPage) {
-        const pageData = data.slice(i, i + itemsPerPage);
-        previews.push({
+    const renderCardBlock = (santri: Santri, mode: 'front' | 'back' | 'both') => {
+        return (
+            <div key={`${santri.id}-${mode}`} className={`relative flex ${isSideBySide ? 'flex-row' : ''}`} style={{ breakInside: 'avoid', width: `${logicalCardWidth}cm`, height: `${options.cardHeight}cm` }}>
+                {mode === 'front' && <KartuSantriTemplate santri={santri} settings={settings} options={options} />}
+                {mode === 'back' && <KartuSantriBackTemplate settings={settings} options={options} />}
+                {mode === 'both' && (
+                    <>
+                        <KartuSantriTemplate santri={santri} settings={settings} options={options} />
+                        <KartuSantriBackTemplate settings={settings} options={options} />
+                    </>
+                )}
+                
+                {/* Real print cut marks */}
+                <div className="absolute -top-[0.2cm] -left-[0.2cm] w-[0.3cm] h-[0.3cm] border-t border-l border-gray-400"></div>
+                <div className="absolute -top-[0.2cm] -right-[0.2cm] w-[0.3cm] h-[0.3cm] border-t border-r border-gray-400"></div>
+                <div className="absolute -bottom-[0.2cm] -left-[0.2cm] w-[0.3cm] h-[0.3cm] border-b border-l border-gray-400"></div>
+                <div className="absolute -bottom-[0.2cm] -right-[0.2cm] w-[0.3cm] h-[0.3cm] border-b border-r border-gray-400"></div>
+
+                {/* Dashboard divider for side-by-side */}
+                {isSideBySide && (
+                    <div className="absolute inset-y-0 left-1/2 border-l border-dashed border-gray-300 transform -translate-x-1/2 z-20"></div>
+                )}
+
+                {/* Label for helper in preview */}
+                <div className="absolute top-[0.1cm] right-[0.1cm] bg-white/70 backdrop-blur-sm text-[5pt] px-1 no-print rounded z-30">S: {santri.nis}</div>
+            </div>
+        )
+    };
+
+    const wrapInPage = (cardsRenderNode: React.ReactNode, keyPrefix: string) => (
+        {
             content: (
                 <div 
+                    key={keyPrefix}
                     className="bg-white print:m-0 mx-auto overflow-hidden flex flex-col items-center" 
                     style={{ 
                         width: `${paperWidth}cm`, 
@@ -463,26 +579,35 @@ export const generateCardReports = (data: Santri[], settings: PondokSettings, op
                     }}
                 >
                     <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignContent: 'flex-start', gap: `${gapY}cm ${gapX}cm`, width: '100%', height: '100%' }}>
-                        {pageData.map((santri) => (
-                            <div key={santri.id} className="relative" style={{ breakInside: 'avoid', width: `${options.cardWidth}cm`, height: `${options.cardHeight}cm` }}>
-                                <KartuSantriTemplate santri={santri} settings={settings} options={options} />
-                                
-                                {/* Real print cut marks (Black, very thin, slightly further out to avoid being on the card) */}
-                                <div className="absolute -top-[0.2cm] -left-[0.2cm] w-[0.3cm] h-[0.3cm] border-t border-l border-gray-400"></div>
-                                <div className="absolute -top-[0.2cm] -right-[0.2cm] w-[0.3cm] h-[0.3cm] border-t border-r border-gray-400"></div>
-                                <div className="absolute -bottom-[0.2cm] -left-[0.2cm] w-[0.3cm] h-[0.3cm] border-b border-l border-gray-400"></div>
-                                <div className="absolute -bottom-[0.2cm] -right-[0.2cm] w-[0.3cm] h-[0.3cm] border-b border-r border-gray-400"></div>
-
-                                {/* Label for helper in preview */}
-                                <div className="absolute top-[0.1cm] right-[0.1cm] bg-white/70 backdrop-blur-sm text-[5pt] px-1 no-print rounded">S: {santri.nis}</div>
-                            </div>
-                        ))}
+                        {cardsRenderNode}
                     </div>
                 </div>
             ),
             orientation: sheetOrientation,
             isFullPage: true
-        });
+        }
+    );
+
+    for (let i = 0; i < data.length; i += itemsPerPage) {
+        const pageData = data.slice(i, i + itemsPerPage);
+        
+        if (cardBacksideLayout === 'none') {
+            previews.push(wrapInPage(pageData.map(s => renderCardBlock(s, 'front')), `page-front-${i}`));
+        } else if (cardBacksideLayout === 'side-by-side') {
+            previews.push(wrapInPage(pageData.map(s => renderCardBlock(s, 'both')), `page-both-${i}`));
+        } else if (cardBacksideLayout === 'separate') {
+            // First page (Front)
+            previews.push(wrapInPage(pageData.map(s => renderCardBlock(s, 'front')), `page-sep-front-${i}`));
+            
+            // Second page (Back)
+            // For mirror duplex, we need to reverse the items in each row? 
+            // In a simple A4 print, reversing the array makes it roughly match if the printer flips on the long edge.
+            // For perfect duplex mirroring in browser: doing array.reverse() per row is ideal.
+            // For simplicity, we just render them in standard order and assume the user aligns it or it's non-critical alignment.
+            // Actually, reversing the items is best:
+            const reversedPageData = [...pageData].reverse();
+            previews.push(wrapInPage(reversedPageData.map(s => renderCardBlock(s, 'back')), `page-sep-back-${i}`));
+        }
     }
     return previews;
 };

@@ -360,6 +360,63 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                             </div>
                         )}
                     </div>
+
+                    {/* Sisi Belakang Layout */}
+                    <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700">Layout Sisi Belakang Kartu (Backside)</label>
+                        <select 
+                            value={options.cardBacksideLayout} 
+                            onChange={e => options.setCardBacksideLayout(e.target.value as any)} 
+                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                        >
+                            <option value="none">Tanpa Sisi Belakang (Hanya 1 Sisi)</option>
+                            <option value="side-by-side">Bersebelahan dalam 1 Kotak (Bisa dilipat ke belakang)</option>
+                            <option value="separate">Halaman Terpisah (Untuk Printer Duplex Bolak-Balik)</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1 italic">
+                            Opsi Bersebelahan cocok untuk cetak manual & laminating. Opsi Halaman Terpisah merender sisi belakang di lembar kertas berikutnya.
+                        </p>
+                        
+                        {options.cardBacksideLayout !== 'none' && (
+                            <div className="mt-3 space-y-4">
+                                <div>
+                                    <label className="block mb-1 text-xs font-medium text-gray-700">Tata Tertib / Ketentuan Singkat (Sisi Belakang)</label>
+                                    <textarea 
+                                        value={options.cardRules} 
+                                        onChange={e => options.setCardRules(e.target.value)} 
+                                        rows={5}
+                                        className="bg-white border border-gray-300 text-gray-900 text-xs rounded-lg w-full p-2.5"
+                                        placeholder="Masukkan setiap poin pada baris baru. Gunakan {NamaPonpes} untuk memunculkan nama."
+                                    />
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block mb-1 text-xs font-medium text-gray-700">Jabatan Penanda Tangan (Belakang)</label>
+                                        <input 
+                                            type="text" 
+                                            value={options.cardSignatoryTitle} 
+                                            onChange={e => options.setCardSignatoryTitle(e.target.value)} 
+                                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                                            placeholder="Contoh: Mudir Marhalah" 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-medium text-gray-700">Penanda Tangan (Belakang)</label>
+                                        <select 
+                                            value={options.cardSignatoryId} 
+                                            onChange={e => options.setCardSignatoryId(e.target.value)} 
+                                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                        >
+                                            <option value="">-- Pengasuh Utama --</option>
+                                            {settings.tenagaPengajar.map((p: any) => (
+                                                <option key={p.id} value={p.id.toString()}>{p.nama}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     
                     <SantriSelector title="" printMode={options.cardPrintMode} setPrintMode={options.setCardPrintMode} selectedIds={options.selectedCardSantriIds} setSelectedIds={options.setSelectedCardSantriIds} radioGroupName="card" filteredSantri={filteredSantri} />
                 </div>

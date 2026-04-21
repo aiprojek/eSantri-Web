@@ -119,10 +119,7 @@ export const exportToWord = (elementId: string, fileName: string) => {
 </html>`;
 
     // Process the HTML to handle some specific Tailwind properties Word ignores
-    let processedHtml = finalHtml
-        .replace(/class="([^"]*?text-center[^"]*?)"/g, 'class="$1" align="center"')
-        .replace(/<div class="[^"]*?grid[^"]*?grid-cols-2[^"]*?">/g, '<table width="100%"><tr><td width="50%" valign="top">')
-        .replace(/<div class="[^"]*?grid[^"]*?grid-cols-3[^"]*?">/g, '<table width="100%"><tr><td width="33%" valign="top">');
+    let processedHtml = finalHtml.replace(/class="([^"]*?text-center[^"]*?)"/g, 'class="$1" align="center"');
 
     const blob = new Blob(['\ufeff', processedHtml], {
         type: 'application/msword'

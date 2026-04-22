@@ -4,8 +4,25 @@ import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, qu
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import firebaseConfig from './firebase-applet-config.json';
 
-// Dynamic Config Support
+// Fallback to json if env vars are missing
 const getFirebaseConfig = () => {
+  // Try environment variables first (Client-side use VITE_ prefix)
+  const envConfig = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  };
+
+  // If apiKey is present in env, use env config
+  if (envConfig.apiKey) {
+    return envConfig;
+  }
+
+  // Then try localStorage (Custom config from UI)
   try {
     const customConfigStr = localStorage.getItem('esantri_custom_firebase_config');
     if (customConfigStr) {
@@ -17,6 +34,8 @@ const getFirebaseConfig = () => {
   } catch (e) {
     console.error("Failed to load custom firebase config:", e);
   }
+
+  // Finally fallback to the config file
   return firebaseConfig;
 };
 

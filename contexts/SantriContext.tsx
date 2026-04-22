@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
-import { Santri, Pendaftar, AbsensiRecord, TahfizhRecord, SantriFilters } from '../types';
+import { Santri, Pendaftar, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, KesehatanRecord, BkSession, SantriFilters } from '../types';
 import { db } from '../db';
 import { logActivity } from '../services/logService';
 
@@ -9,7 +9,10 @@ interface SantriContextType {
   santriList: Santri[];
   pendaftarList: Pendaftar[];
   absensiList: AbsensiRecord[];
+  jurnalMengajarList: JurnalMengajarRecord[];
   tahfizhList: TahfizhRecord[]; 
+  kesehatanRecords: KesehatanRecord[];
+  bkSessions: BkSession[];
   
   // Filters
   santriFilters: SantriFilters;
@@ -21,6 +24,8 @@ interface SantriContextType {
   onBulkUpdateSantri: (data: Santri[]) => Promise<void>;
   onBulkAddSantri: (data: Omit<Santri, 'id'>[]) => Promise<void>;
   onSaveAbsensi: (data: AbsensiRecord[]) => Promise<void>;
+  onSaveJurnalMengajar: (data: JurnalMengajarRecord) => Promise<void>;
+  onDeleteJurnalMengajar: (id: number) => Promise<void>;
   onSaveTahfizh: (data: TahfizhRecord | TahfizhRecord[]) => Promise<void>; 
   onDeleteTahfizh: (id: number) => Promise<void>;
 }
@@ -31,7 +36,10 @@ export const SantriProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const santriList = useLiveQuery(() => db.santri.filter((s: Santri) => !s.deleted).toArray(), []) || [];
   const pendaftarList = useLiveQuery(() => db.pendaftar.toArray(), []) || [];
   const absensiList = useLiveQuery(() => db.absensi.toArray(), []) || [];
+  const jurnalMengajarList = useLiveQuery(() => db.jurnalMengajar.toArray(), []) || [];
   const tahfizhList = useLiveQuery(() => db.tahfizh.toArray(), []) || [];
+  const kesehatanRecords = useLiveQuery(() => db.kesehatanRecords.toArray(), []) || [];
+  const bkSessions = useLiveQuery(() => db.bkSessions.toArray(), []) || [];
 
   const [santriFilters, setSantriFilters] = useState<SantriFilters>({
       search: '', jenjang: '', kelas: '', rombel: '', status: '', gender: '', provinsi: '', kabupatenKota: '', kecamatan: ''
@@ -78,6 +86,14 @@ export const SantriProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await db.absensi.bulkPut(withTs);
   };
 
+  const onSaveJurnalMengajar = async (data: JurnalMengajarRecord) => {
+    await db.jurnalMengajar.put(addTimestamp(data));
+  };
+  
+  const onDeleteJurnalMengajar = async (id: number) => {
+    await db.jurnalMengajar.delete(id);
+  };
+
   const onSaveTahfizh = async (data: TahfizhRecord | TahfizhRecord[]) => {
       if (Array.isArray(data)) {
            const withTs = data.map(r => ({ ...r, lastModified: Date.now() }));
@@ -96,7 +112,10 @@ export const SantriProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       santriList,
       pendaftarList,
       absensiList,
+      jurnalMengajarList,
       tahfizhList,
+      kesehatanRecords,
+      bkSessions,
       santriFilters,
       setSantriFilters,
       onAddSantri,
@@ -105,6 +124,8 @@ export const SantriProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       onBulkUpdateSantri,
       onBulkAddSantri,
       onSaveAbsensi,
+      onSaveJurnalMengajar,
+      onDeleteJurnalMengajar,
       onSaveTahfizh,
       onDeleteTahfizh
     }}>

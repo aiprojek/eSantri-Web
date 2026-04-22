@@ -601,6 +601,136 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
+        id: 'jurnal_mengajar',
+        badge: 'NEW',
+        badgeColor: 'teal',
+        title: 'Jurnal Mengajar & Agenda Kelas',
+        steps: [
+            {
+                title: 'Akses Menu Input Jurnal',
+                content: (
+                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Akademik</strong>.</li>
+                        <li>Pilih tab <strong>Kehadiran Kelas</strong>.</li>
+                        <li>Pilih Rombel / Kelas yang sedang diajar pada kolom di sebelah halaman.</li>
+                        <li>Di pojok kanan bawah, terdapat tombol Add berbentuk <strong>Pensil Terbang (Floating Action Button)</strong>.</li>
+                        <li>Klik <strong>Tambah Jurnal Mengajar</strong> dari menu yang muncul.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Mengisi Catatan Jurnal',
+                content: (
+                   <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Pilih <strong>Mata Pelajaran</strong> dan <strong>Guru Pengampu</strong>.</li>
+                        <li>Pilih jam pelajaran ke-berapa materi ini disampaikan (bisa memilih multiple, misal Jam 1 dan 2).</li>
+                        <li>Tuliskan <strong>Kompetensi Dasar / Materi</strong> yang diajarkan pada form yang tersedia.</li>
+                        <li>(Opsional) Isi <strong>Catatan Kejadian</strong> jika ada peristiwa khusus di kelas.</li>
+                    </ul>
+                )
+            },
+             {
+                title: 'Mencetak Laporan Jurnal',
+                content: (
+                     <div className="space-y-2 text-sm bg-gray-50 p-2 rounded">
+                        <ol className="list-decimal pl-5 space-y-1">
+                            <li>Buka menu <strong>Laporan</strong>.</li>
+                            <li>Pilih kategori <strong>Akademik & Kesiswaan</strong>.</li>
+                            <li>Pilih <strong>Rekap Jurnal Mengajar</strong>.</li>
+                            <li>Filter laporan berdasarkan tanggal dan rombel pada opsi sebelah kiri layar, kemudian Generate.</li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: 'Monitoring Jurnal (Admin/Staff)',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Akademik</strong>.</li>
+                        <li>Pilih tab <strong>Jurnal Mengajar</strong>.</li>
+                        <li>Gunakan filter Tanggal, Rombel, atau Guru untuk mencari catatan tertentu.</li>
+                        <li>Gunakan search bar untuk mencari berdasarkan materi pembelajaran.</li>
+                        <li>Admin dapat menghapus catatan yang salah input melalui tombol sampah di kolom aksi.</li>
+                    </ul>
+                )
+            }
+        ]
+    },
+    {
+        id: 'cetak_kartu',
+        badge: 'NEW',
+        badgeColor: 'indigo',
+        title: 'Desain & Cetak Kartu Santri',
+        steps: [
+            {
+                title: 'Akses Sub Menu Kelengkapan Identitas',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka menu <strong>Laporan</strong>.</li>
+                        <li>Pilih kategori <strong>Kelengkapan Identitas</strong>.</li>
+                        <li>Di sini Anda dapat memilih <strong>Kartu Santri</strong>, <strong>Buku Induk</strong>, atau <strong>Label Nama</strong>.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Opsi Kustomisasi Desain Sisi Depan',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <p>Menu Laporan Kartu Santri memberikan opsi layout yang sangat fleksibel:</p>
+                        <ol className="list-decimal pl-5 space-y-1 bg-gray-50 p-2 rounded">
+                            <li><strong>Variasi Data Latar:</strong> Anda bisa memilih untuk memunculkan (atau menyembunyikan) Foto Santri, Barcode NIS, Logo Tut Wuri / DEPAG, serta detail kelas dan alamat.</li>
+                            <li><strong>Masa Berlaku (Valid Until):</strong> Kartu dapat diset mencetak label "Berlaku Selama Menjadi Santri", atau hingga masa kelulusan (otomatis dihitung).</li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: 'Desain Sisi Belakang & Tata Tertib',
+                content: (
+                    <div className="space-y-3">
+                        <p className="text-sm">Kartu santri kini mendukung desain sisi belakang (Backside) otomatis. Di panel kiri, atur "Layout Sisi Belakang":</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-indigo-50 p-2 border border-indigo-200 rounded">
+                                <strong>Berdampingan (Depan & Belakang)</strong><br />
+                                Sisi depan dan belakang akan dicetak bersebelahan dalam 1 file. Sangat cocok jika Anda mencetaknya menggunakan pelastik ID Card lipat.
+                            </div>
+                            <div className="bg-blue-50 p-2 border border-blue-200 rounded">
+                                <strong>Terpisah / Balik Kertas</strong><br />
+                                Bagian belakang dirender di lembar (page) tersendiri. Cocok untuk mesin cetak PVC dua sisi (Duplex Printing).
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Auto-Scaling Teks & Jabatan Penanda Tangan',
+                color: 'teal',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li><strong>Tata Tertib Dinamis:</strong> Anda bisa mengetik aturan bebas di TextBox yang disediakan. Gunakan variabel <code>{'{NamaPonpes}'}</code> agar nama berubah otomatis. Jika teksnya panjang, sistem akan <strong>otomatis mengecilkan font</strong> agar muat dalam 1 kartu!</li>
+                        <li><strong>Ubah Jabatan Pengasuh:</strong> Anda bebas mengubah title tanda tangan bagian belakang. Misal dari "Mengetahui," menjadi "Mudir Aam", dan memilih nama ustadz spesifik dari daftar tenaga pengajar tanpa merubah Pengaturan Umum.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Cara Ekspor Vector / PDF tanpa Pecah',
+                color: 'green',
+                content: (
+                    <div className="bg-green-50 p-3 rounded border border-green-200 text-sm">
+                        <p className="mb-2">Daripada repot melakukan layout manual di CorelDRAW / Inkscape:</p>
+                        <ol className="list-decimal pl-5 space-y-1 text-green-900 font-medium">
+                            <li>Filter rombel yang akan dicetak di aplikasi. </li>
+                            <li>Klik tombol <strong>Cetak Document Laporan</strong>.</li>
+                            <li>Di jendela Preview Cetak Browser, pastikan Anda mengubah tujuan (Destination) menjadi <strong>Simpan sebagai PDF (Save as PDF)</strong>.</li>
+                            <li>Setelan Kertas: A4, Margin: None (Tidak Ada), Scale: Default.</li>
+                            <li>File PDF yang dihasilkan aslinya adalah basis <strong>Vector Component</strong>. Anda bisa langsung mencetaknya atau membukanya di Corel/Inkscape tanpa resolusi pecah!</li>
+                        </ol>
+                    </div>
+                )
+            }
+        ]
+    },
+    {
         id: 'koperasi',
         badge: 14,
         badgeColor: 'pink',

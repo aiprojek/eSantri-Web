@@ -351,20 +351,22 @@ export const TabDesainRapor: React.FC = () => {
     if (!isEditing) {
         return (
             <div className="space-y-4">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <h3 className="font-bold text-gray-700">Daftar Template Rapor</h3>
                     {canWrite && (
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 no-scrollbar">
                             <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls, .ods, .csv" className="hidden" />
-                            <button onClick={() => fileInputRef.current?.click()} className="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 text-sm flex items-center gap-2">
-                                <i className="bi bi-file-earmark-spreadsheet"></i> Import Excel/ODS/CSV
-                            </button>
-                            <button onClick={handleCreateSampleTemplate} className="bg-purple-600 text-white px-4 py-2 rounded shadow hover:bg-purple-700 text-sm flex items-center gap-2">
-                                <i className="bi bi-magic"></i> Buat Sample (Demo)
-                            </button>
-                            <button onClick={handleCreateTemplate} className="bg-teal-600 text-white px-4 py-2 rounded shadow hover:bg-teal-700 text-sm flex items-center gap-2">
-                                <i className="bi bi-plus-lg"></i> Buat Baru
-                            </button>
+                            <div className="flex gap-2 flex-grow sm:flex-none">
+                                <button onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none whitespace-nowrap bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95">
+                                    <i className="bi bi-file-earmark-spreadsheet text-base"></i> <span>Import</span>
+                                </button>
+                                <button onClick={handleCreateSampleTemplate} className="flex-1 sm:flex-none whitespace-nowrap bg-purple-50 text-purple-700 border border-purple-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95">
+                                    <i className="bi bi-magic text-base"></i> <span>Demo</span>
+                                </button>
+                                <button onClick={handleCreateTemplate} className="flex-1 sm:flex-none whitespace-nowrap bg-teal-600 text-white px-4 py-2.5 rounded-xl shadow-lg shadow-teal-100 hover:bg-teal-700 text-xs font-black flex items-center justify-center gap-2 transition-all active:scale-95">
+                                    <i className="bi bi-plus-lg text-sm"></i> <span>Baru</span>
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -403,72 +405,48 @@ export const TabDesainRapor: React.FC = () => {
     }
 
     return (
-        <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-250px)]">
-             <div className="flex-grow flex flex-col bg-gray-100 rounded-lg border overflow-hidden">
+        <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-180px)]">
+             <div className="flex-grow flex flex-col bg-gray-100 rounded-lg border overflow-hidden min-h-0">
                 <div className="bg-white border-b p-2 flex flex-wrap items-center gap-2">
-                    <div className="flex flex-col">
+                    <div className="flex flex-col flex-grow sm:flex-grow-0">
                         <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Nama Template</label>
-                        <input type="text" value={activeTemplate?.name} onChange={e => setActiveTemplate(t => t ? {...t, name: e.target.value} : null)} className="border rounded px-2 py-1 text-sm font-bold w-48 focus:ring-2 focus:ring-teal-500" placeholder="Nama Template" />
+                        <input type="text" value={activeTemplate?.name} onChange={e => setActiveTemplate(t => t ? {...t, name: e.target.value} : null)} className="border rounded px-2 py-1 text-sm font-bold w-full sm:w-48 focus:ring-2 focus:ring-teal-500" placeholder="Nama Template" />
                     </div>
-                    <div className="flex flex-col">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Kunci Marhalah (Opsional)</label>
-                        <select 
-                            value={activeTemplate?.jenjangId || ''} 
-                            onChange={e => setActiveTemplate(t => t ? {...t, jenjangId: e.target.value ? parseInt(e.target.value) : undefined, kelasId: undefined, rombelId: undefined} : null)}
-                            className="border rounded px-2 py-1 text-sm w-40 focus:ring-2 focus:ring-teal-500"
-                        >
-                            <option value="">-- Semua --</option>
-                            {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
-                        </select>
-                    </div>
-                    <div className="flex flex-col">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Kunci Kelas (Opsional)</label>
-                        <select 
-                            value={activeTemplate?.kelasId || ''} 
-                            onChange={e => setActiveTemplate(t => t ? {...t, kelasId: e.target.value ? parseInt(e.target.value) : undefined, rombelId: undefined} : null)}
-                            disabled={!activeTemplate?.jenjangId}
-                            className="border rounded px-2 py-1 text-sm w-40 focus:ring-2 focus:ring-teal-500 disabled:bg-gray-50"
-                        >
-                            <option value="">-- Semua --</option>
-                            {settings.kelas.filter(k => k.jenjangId === activeTemplate?.jenjangId).map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-                        </select>
-                    </div>
-                    <div className="flex flex-col">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Kunci Rombel (Opsional)</label>
-                        <select 
-                            value={activeTemplate?.rombelId || ''} 
-                            onChange={e => setActiveTemplate(t => t ? {...t, rombelId: e.target.value ? parseInt(e.target.value) : undefined} : null)}
-                            disabled={!activeTemplate?.kelasId}
-                            className="border rounded px-2 py-1 text-sm w-40 focus:ring-2 focus:ring-teal-500 disabled:bg-gray-50"
-                        >
-                            <option value="">-- Semua --</option>
-                            {settings.rombel.filter(r => r.kelasId === activeTemplate?.kelasId).map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-                        </select>
-                    </div>
-                    <div className="h-10 w-px bg-gray-300 mx-2 hidden md:block"></div>
-                    <button onClick={mergeCells} className="p-1.5 hover:bg-gray-100 rounded text-gray-700" title="Merge Cells"><i className="bi bi-intersect"></i></button>
-                    <button onClick={unmergeCells} className="p-1.5 hover:bg-gray-100 rounded text-gray-700" title="Unmerge Cells"><i className="bi bi-union"></i></button>
-                    <div className="h-6 w-px bg-gray-300 mx-2"></div>
-                    <button onClick={() => toggleBorder('all')} className="p-1.5 hover:bg-gray-100 rounded text-gray-700"><i className="bi bi-border-all"></i></button>
-                    <button onClick={() => toggleBorder('none')} className="p-1.5 hover:bg-gray-100 rounded text-gray-700"><i className="bi bi-border-none"></i></button>
-                    <div className="h-6 w-px bg-gray-300 mx-2"></div>
-                    <button onClick={addRow} className="p-1.5 hover:bg-gray-100 rounded text-gray-700"><i className="bi bi-arrow-down-square"></i></button>
-                    <button onClick={addCol} className="p-1.5 hover:bg-gray-100 rounded text-gray-700"><i className="bi bi-arrow-right-square"></i></button>
                     
-                    <div className="h-6 w-px bg-gray-300 mx-2"></div>
-                    <div className="flex items-center bg-gray-50 rounded border border-gray-200">
-                        <button onClick={() => setZoomScale(z => Math.max(0.5, z - 0.1))} className="px-2 py-1 hover:bg-gray-200 text-gray-600 rounded-l"><i className="bi bi-dash-lg"></i></button>
-                        <span className="text-xs font-mono w-12 text-center select-none bg-white py-1">{Math.round(zoomScale * 100)}%</span>
+                    <div className="flex overflow-x-auto items-center gap-1 sm:gap-2 flex-grow sm:flex-grow-0 no-scrollbar">
+                        <div className="flex flex-col shrink-0">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase ml-1">Marhalah</label>
+                            <select 
+                                value={activeTemplate?.jenjangId || ''} 
+                                onChange={e => setActiveTemplate(t => t ? {...t, jenjangId: e.target.value ? parseInt(e.target.value) : undefined, kelasId: undefined, rombelId: undefined} : null)}
+                                className="border rounded px-2 py-1 text-sm w-32 focus:ring-2 focus:ring-teal-500"
+                            >
+                                <option value="">Semua</option>
+                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                            </select>
+                        </div>
+                        <div className="h-8 w-px bg-gray-300 mx-1"></div>
+                        <button onClick={mergeCells} className="p-2 hover:bg-gray-100 rounded text-gray-700 shrink-0" title="Merge Cells"><i className="bi bi-intersect"></i></button>
+                        <button onClick={unmergeCells} className="p-2 hover:bg-gray-100 rounded text-gray-700 shrink-0" title="Unmerge Cells"><i className="bi bi-union"></i></button>
+                        <div className="h-8 w-px bg-gray-300 mx-1"></div>
+                        <button onClick={() => toggleBorder('all')} className="p-2 hover:bg-gray-100 rounded text-gray-700 shrink-0"><i className="bi bi-border-all"></i></button>
+                        <button onClick={() => toggleBorder('none')} className="p-2 hover:bg-gray-100 rounded text-gray-700 shrink-0"><i className="bi bi-border-none"></i></button>
+                    </div>
+
+                    <div className="flex items-center bg-gray-50 rounded border border-gray-200 ml-auto sm:ml-0">
+                        <button onClick={() => setZoomScale(z => Math.max(0.3, z - 0.1))} className="px-2 py-1 hover:bg-gray-200 text-gray-600 rounded-l"><i className="bi bi-dash-lg"></i></button>
+                        <span className="text-[10px] font-mono w-10 text-center select-none bg-white py-1">{Math.round(zoomScale * 100)}%</span>
                         <button onClick={() => setZoomScale(z => Math.min(2.0, z + 0.1))} className="px-2 py-1 hover:bg-gray-200 text-gray-600 rounded-r"><i className="bi bi-plus-lg"></i></button>
                     </div>
 
-                    <div className="flex-grow"></div>
-                    <button onClick={() => setIsDesignPreviewOpen(true)} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded text-sm font-semibold hover:bg-blue-200 flex items-center gap-2 mr-2"><i className="bi bi-eye"></i> Preview</button>
-                    <button onClick={handleSaveActiveTemplate} className="bg-teal-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-teal-700"><i className="bi bi-save"></i> Simpan</button>
-                    <button onClick={() => setIsEditing(false)} className="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300">Batal</button>
+                    <div className="flex gap-2 ml-auto">
+                        <button onClick={() => setIsDesignPreviewOpen(true)} className="bg-blue-100 text-blue-700 p-2 rounded text-sm font-bold hover:bg-blue-200" title="Preview"><i className="bi bi-eye"></i></button>
+                        <button onClick={handleSaveActiveTemplate} className="bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-teal-700 flex items-center gap-1"><i className="bi bi-save"></i> <span className="hidden sm:inline">Simpan</span></button>
+                        <button onClick={() => setIsEditing(false)} className="bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-300"><i className="bi bi-x-lg sm:hidden"></i><span className="hidden sm:inline">Batal</span></button>
+                    </div>
                 </div>
-                <div className="flex-grow overflow-auto p-4 relative bg-gray-200/50" onMouseUp={handleMouseUp} ref={scrollContainerRef}>
-                    <table className="border-collapse bg-white shadow-sm select-none origin-top-left transition-transform duration-200 ease-out" style={{ transform: `scale(${zoomScale})` }}>
+                <div className="flex-grow overflow-auto p-4 relative bg-gray-200/50 flex items-start justify-start sm:justify-center border-b" onMouseUp={handleMouseUp} ref={scrollContainerRef}>
+                    <table className="border-collapse bg-white shadow-lg select-none origin-top-left transition-transform duration-200 ease-out border border-gray-400" style={{ transform: `scale(${zoomScale})` }}>
                         <tbody>
                             {activeTemplate?.cells.map((row, rIdx) => (
                                 <tr key={rIdx}>
@@ -477,7 +455,7 @@ export const TabDesainRapor: React.FC = () => {
                                         const isSelected = selectedCells.some(s => s.r === rIdx && s.c === cIdx);
                                         const isActive = selectedCells.length === 1 && selectedCells[0].r === rIdx && selectedCells[0].c === cIdx;
                                         const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
-                                        let cellClass = "text-xs p-1 min-w-[80px] h-[30px] relative transition-colors border border-dashed border-gray-200 ";
+                                        let cellClass = "text-[10px] sm:text-xs p-1 min-w-[70px] sm:min-w-[80px] h-[30px] relative transition-colors border border-dashed border-gray-300 ";
                                         if (borders.top) cellClass += "!border-t !border-t-black !border-solid ";
                                         if (borders.right) cellClass += "!border-r !border-r-black !border-solid ";
                                         if (borders.bottom) cellClass += "!border-b !border-b-black !border-solid ";
@@ -487,9 +465,9 @@ export const TabDesainRapor: React.FC = () => {
                                         
                                         return (
                                             <td key={cell.id} colSpan={cell.colSpan || 1} rowSpan={cell.rowSpan || 1} className={cellClass} onMouseDown={() => handleMouseDown(rIdx, cIdx)} onMouseEnter={() => handleMouseEnter(rIdx, cIdx)} style={{ width: cell.width ? `${cell.width}px` : 'auto', textAlign: cell.align || 'center' }}>
-                                                <div className="w-full h-full flex flex-col items-center justify-center overflow-hidden">
-                                                    <span>{cell.value}</span>
-                                                    {cell.key && <span className="text-[9px] opacity-60 font-normal">${cell.key}</span>}
+                                                <div className="w-full h-full flex flex-col items-center justify-center overflow-hidden leading-tight">
+                                                    <span className="truncate w-full">{getSimulatedValue(cell)}</span>
+                                                    {cell.key && <span className="text-[8px] opacity-60 font-normal leading-none mt-0.5">${cell.key}</span>}
                                                 </div>
                                             </td>
                                         );

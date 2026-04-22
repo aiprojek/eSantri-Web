@@ -4,6 +4,7 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporTemplate, RaporRecord, NilaiMapel, Santri, Rombel } from '../../types';
 import { db } from '../../db';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const TabInputNilaiWali: React.FC = () => {
     const { settings, showToast, currentUser, showConfirmation } = useAppContext();
@@ -25,6 +26,7 @@ export const TabInputNilaiWali: React.FC = () => {
     }, [currentUser, settings.rombel]);
 
     const [activeRombelId, setActiveRombelId] = useState<number | null>(null);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
     // Derived lists for Admin
     const availableKelas = useMemo(() => adminJenjangId ? settings.kelas.filter(k => k.jenjangId === adminJenjangId) : [], [adminJenjangId, settings.kelas]);
@@ -239,60 +241,155 @@ export const TabInputNilaiWali: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl border shadow-sm">
-                <div className="flex flex-wrap gap-4 items-center">
-                    <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Tahun Ajaran</label>
-                        <input type="text" value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="border rounded p-2 text-sm w-32 font-semibold" />
+            <div className="bg-white p-4 rounded-xl border shadow-sm flex flex-col md:flex-row gap-4">
+                {/* Mobile Filter Trigger */}
+                <div className="md:hidden flex gap-2">
+                    <button 
+                        onClick={() => setIsFilterDrawerOpen(true)}
+                        className="flex-grow flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                    >
+                        <i className="bi bi-funnel-fill"></i>
+                        <span>Filter</span>
+                    </button>
+                    <button 
+                        onClick={handleSave} 
+                        disabled={isSaving || !selectedTemplateId || studentsInRombel.length === 0}
+                        className="shrink-0 w-[44px] h-[44px] flex items-center justify-center bg-teal-600 text-white rounded-xl shadow-lg shadow-teal-100 disabled:opacity-50"
+                    >
+                        {isSaving ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <i className="bi bi-save2-fill text-lg"></i>}
+                    </button>
+                </div>
+
+                {/* Desktop View Filter Bar */}
+                <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-6 gap-4 items-end flex-grow">
+                    <div className="md:col-span-1">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Tahun Ajaran</label>
+                        <input type="text" value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all placeholder:text-gray-300" />
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Semester</label>
-                        <select value={semester} onChange={e => setSemester(e.target.value as any)} className="border rounded p-2 text-sm w-32 font-semibold">
+                    <div className="md:col-span-1">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Semester</label>
+                        <select value={semester} onChange={e => setSemester(e.target.value as any)} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all">
                             <option value="Ganjil">Ganjil</option>
                             <option value="Genap">Genap</option>
                         </select>
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Rombel</label>
-                        {currentUser?.role === 'admin' ? (
-                            <div className="flex gap-2">
-                                <select value={adminJenjangId} onChange={e => {setAdminJenjangId(Number(e.target.value)); setAdminKelasId(0); setActiveRombelId(null)}} className="border rounded p-2 text-sm w-32 font-semibold">
-                                    <option value={0}>Jenjang...</option>
+
+                    {currentUser?.role === 'admin' ? (
+                        <>
+                            <div className="md:col-span-1">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Jenjang</label>
+                                <select value={adminJenjangId} onChange={e => {setAdminJenjangId(Number(e.target.value)); setAdminKelasId(0); setActiveRombelId(null)}} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all font-bold">
+                                    <option value={0}>Pilih Jenjang</option>
                                     {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                                 </select>
-                                <select value={adminKelasId} onChange={e => {setAdminKelasId(Number(e.target.value)); setActiveRombelId(0)}} disabled={!adminJenjangId} className="border rounded p-2 text-sm w-32 font-semibold disabled:bg-gray-50">
+                            </div>
+                            <div className="md:col-span-1">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Kelas</label>
+                                <select value={adminKelasId} onChange={e => {setAdminKelasId(Number(e.target.value)); setActiveRombelId(0)}} disabled={!adminJenjangId} className="w-full border rounded-lg p-2.5 text-sm font-bold disabled:bg-gray-100 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all font-bold">
                                     <option value={0}>Semua Kelas</option>
                                     {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
                                 </select>
-                                <select value={activeRombelId || 0} onChange={e => setActiveRombelId(parseInt(e.target.value))} disabled={!adminJenjangId} className="border rounded p-2 text-sm w-32 font-semibold disabled:bg-gray-50">
-                                    <option value={0}>Semua Rombel</option>
+                            </div>
+                            <div className="lg:col-span-1">
+                                <label className="block text-[10px] font-bold text-teal-600 uppercase mb-1.5 tracking-widest pl-1">Rombel Aktif</label>
+                                <select value={activeRombelId || 0} onChange={e => setActiveRombelId(parseInt(e.target.value))} disabled={!adminJenjangId} className="w-full border-2 border-teal-100 rounded-lg p-2.5 text-sm font-black bg-teal-50/10 disabled:bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all">
+                                    <option value={0}>Pilih Rombongan Belajar</option>
                                     {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
                                 </select>
                             </div>
-                        ) : (
-                            <div className="bg-teal-50 text-teal-700 px-3 py-2 rounded border border-teal-100 font-bold text-sm">
+                        </>
+                    ) : (
+                        <div className="md:col-span-1">
+                            <label className="block text-[10px] font-bold text-teal-600 uppercase mb-1.5 tracking-widest pl-1">Rombel Anda</label>
+                            <div className="bg-teal-50 text-teal-700 px-4 py-2.5 rounded-lg border border-teal-100 font-black text-sm text-center shadow-sm">
                                 {myRombel?.nama}
                             </div>
-                        )}
+                        </div>
+                    )}
+
+                    <div className="lg:col-span-1">
+                        <label className="block text-[10px] font-bold text-teal-600 uppercase mb-1.5 tracking-widest pl-1">Template Rapor</label>
+                        <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} className="w-full border-2 border-teal-100 rounded-lg p-2.5 text-sm font-black bg-teal-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all">
+                            <option value="">Pilih Template Rapor</option>
+                            {filteredTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Template Rapor</label>
-                        <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} className="border rounded p-2 text-sm w-56 font-semibold">
-                            <option value="">-- Pilih Template --</option>
+
+                    <button 
+                        onClick={handleSave} 
+                        disabled={isSaving || !selectedTemplateId || studentsInRombel.length === 0}
+                        className="bg-teal-600 text-white px-6 py-2.5 rounded-lg text-sm font-black flex items-center gap-2 hover:bg-teal-700 shadow-lg shadow-teal-100 disabled:opacity-50 transition-all h-[42px]"
+                    >
+                        {isSaving ? <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span> : <i className="bi bi-save2"></i>}
+                        Simpan Nilai
+                    </button>
+                </div>
+            </div>
+
+            {/* Mobile Filter Drawer */}
+            <MobileFilterDrawer 
+                isOpen={isFilterDrawerOpen} 
+                onClose={() => setIsFilterDrawerOpen(false)}
+                title="Pengaturan Input"
+            >
+                <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest pl-1">Tahun Ajaran</label>
+                            <input type="text" value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="w-full border-2 border-white rounded-xl p-3 text-sm font-bold shadow-sm focus:border-teal-500 outline-none" />
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest pl-1">Semester</label>
+                            <select value={semester} onChange={e => setSemester(e.target.value as any)} className="w-full border-2 border-white rounded-xl p-3 text-sm font-bold shadow-sm focus:border-teal-500 outline-none">
+                                <option value="Ganjil">Ganjil</option>
+                                <option value="Genap">Genap</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {currentUser?.role === 'admin' ? (
+                        <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
+                            <h4 className="text-xs font-black text-teal-700 uppercase tracking-widest flex items-center gap-2"><i className="bi bi-funnel"></i> Filter Rombel</h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Jenjang</label>
+                                    <select value={adminJenjangId} onChange={e => {setAdminJenjangId(Number(e.target.value)); setAdminKelasId(0); setActiveRombelId(null)}} className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none">
+                                        <option value={0}>Pilih Jenjang</option>
+                                        {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Kelas</label>
+                                    <select value={adminKelasId} onChange={e => {setAdminKelasId(Number(e.target.value)); setActiveRombelId(0)}} disabled={!adminJenjangId} className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none disabled:opacity-50">
+                                        <option value={0}>Semua Kelas</option>
+                                        {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div className="pt-2">
+                                    <label className="block text-[10px] font-black text-teal-600 uppercase mb-1.5 tracking-widest ml-1">Pilih Rombongan Belajar</label>
+                                    <select value={activeRombelId || 0} onChange={e => setActiveRombelId(parseInt(e.target.value))} disabled={!adminJenjangId} className="w-full border-2 border-teal-100 rounded-2xl p-4 text-base font-black bg-teal-50 shadow-sm focus:border-teal-500 outline-none disabled:opacity-50">
+                                        <option value={0}>Pilih Rombel</option>
+                                        {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-teal-50 p-6 rounded-3xl border border-teal-100 text-center">
+                            <span className="text-[10px] font-black text-teal-600 uppercase tracking-widest block mb-1">Rombel Pengampu</span>
+                            <span className="text-xl font-black text-teal-900">{myRombel?.nama}</span>
+                        </div>
+                    )}
+
+                    <div className="bg-teal-50/50 p-6 rounded-[2rem] border-2 border-teal-100">
+                        <label className="block text-xs font-black text-teal-700 uppercase mb-3 tracking-widest ml-1">Template Rapor</label>
+                        <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} className="w-full border-2 border-white rounded-2xl p-4 text-lg font-black text-teal-900 bg-white shadow-xl shadow-teal-900/5 focus:border-teal-500 outline-none">
+                            <option value="">Pilih Template Rapor</option>
                             {filteredTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </select>
                     </div>
                 </div>
-                
-                <button 
-                    onClick={handleSave} 
-                    disabled={isSaving || !selectedTemplateId || studentsInRombel.length === 0}
-                    className="bg-teal-600 text-white px-6 py-2.5 rounded-lg font-bold shadow-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
-                >
-                    {isSaving ? <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span> : <i className="bi bi-save"></i>}
-                    Simpan Nilai
-                </button>
-            </div>
+            </MobileFilterDrawer>
 
             {!selectedTemplateId ? (
                 <div className="p-20 text-center bg-gray-50 rounded-xl border-2 border-dashed">

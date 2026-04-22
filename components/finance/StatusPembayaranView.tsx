@@ -6,6 +6,7 @@ import { useFinanceContext } from '../../contexts/FinanceContext';
 import { Santri, Tagihan } from '../../types';
 import { Pagination } from '../common/Pagination';
 import { GenerateTagihanModal } from './modals/GenerateTagihanModal';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { formatRupiah } from '../../utils/formatters';
 import { sendManualWA, formatWAMessage, WA_TEMPLATES } from '../../services/waService';
 
@@ -21,6 +22,7 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
     const { santriList } = useSantriContext();
     const { tagihanList } = useFinanceContext();
     const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     
     const [filters, setFilters] = useState({ search: '', jenjang: '', kelas: '', rombel: '', statusTunggakan: '' });
     const [currentPage, setCurrentPage] = useState(1);
@@ -140,15 +142,90 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                 )}
             </div>
              {/* Filters UI */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border">
-                <div className="sm:col-span-2 lg:col-span-5">
-                    <input type="text" placeholder="Cari Nama atau NIS..." value={filters.search} onChange={e => setFilters({...filters, search: e.target.value})} className="w-full bg-white border border-gray-300 rounded-md p-2"/>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
+                {/* Mobile Filter Trigger */}
+                <div className="md:hidden flex gap-2">
+                    <button 
+                        onClick={() => setIsFilterDrawerOpen(true)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                    >
+                        <i className="bi bi-funnel-fill"></i>
+                        <span>Filter</span>
+                    </button>
+                    <div className="flex-1 relative">
+                        <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input 
+                            type="text" 
+                            placeholder="Cari..." 
+                            value={filters.search} 
+                            onChange={e => setFilters({...filters, search: e.target.value})}
+                            className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold focus:ring-teal-500 focus:border-teal-500"
+                        />
+                    </div>
                 </div>
-                <select value={filters.jenjang} onChange={e => setFilters({...filters, jenjang: e.target.value, kelas: '', rombel: ''})} className="bg-white border p-2 text-sm rounded-md"><option value="">Semua Jenjang</option>{settings.jenjang.map(j=><option key={j.id} value={j.id}>{j.nama}</option>)}</select>
-                <select value={filters.kelas} onChange={e => setFilters({...filters, kelas: e.target.value, rombel: ''})} className="bg-white border p-2 text-sm rounded-md"><option value="">Semua Kelas</option>{availableKelas.map(k=><option key={k.id} value={k.id}>{k.nama}</option>)}</select>
-                <select value={filters.rombel} onChange={e => setFilters({...filters, rombel: e.target.value})} className="bg-white border p-2 text-sm rounded-md"><option value="">Semua Rombel</option>{availableRombel.map(r=><option key={r.id} value={r.id}>{r.nama}</option>)}</select>
-                <select value={filters.statusTunggakan} onChange={e => setFilters({...filters, statusTunggakan: e.target.value})} className="bg-white border p-2 text-sm rounded-md"><option value="">Semua Status</option><option value="menunggak">Menunggak</option><option value="lunas">Lunas</option></select>
+
+                {/* Desktop Filters */}
+                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="lg:col-span-1">
+                        <input type="text" placeholder="Cari Nama atau NIS..." value={filters.search} onChange={e => setFilters({...filters, search: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:ring-teal-500"/>
+                    </div>
+                    <select value={filters.jenjang} onChange={e => setFilters({...filters, jenjang: e.target.value, kelas: '', rombel: ''})} className="bg-white border rounded-lg p-2 text-sm"><option value="">Semua Jenjang</option>{settings.jenjang.map(j=><option key={j.id} value={j.id}>{j.nama}</option>)}</select>
+                    <select value={filters.kelas} onChange={e => setFilters({...filters, kelas: e.target.value, rombel: ''})} className="bg-white border rounded-lg p-2 text-sm disabled:bg-gray-100" disabled={!filters.jenjang}><option value="">Semua Kelas</option>{availableKelas.map(k=><option key={k.id} value={k.id}>{k.nama}</option>)}</select>
+                    <select value={filters.rombel} onChange={e => setFilters({...filters, rombel: e.target.value})} className="bg-white border rounded-lg p-2 text-sm disabled:bg-gray-100" disabled={!filters.kelas}><option value="">Semua Rombel</option>{availableRombel.map(r=><option key={r.id} value={r.id}>{r.nama}</option>)}</select>
+                    <select value={filters.statusTunggakan} onChange={e => setFilters({...filters, statusTunggakan: e.target.value})} className="bg-white border rounded-lg p-2 text-sm"><option value="">Semua Status</option><option value="menunggak">Menunggak</option><option value="lunas">Lunas</option></select>
+                </div>
             </div>
+
+            <MobileFilterDrawer 
+                isOpen={isFilterDrawerOpen} 
+                onClose={() => setIsFilterDrawerOpen(false)}
+                title="Filter Pembayaran"
+            >
+                <div className="space-y-6">
+                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Jenjang</label>
+                            <select value={filters.jenjang} onChange={e => setFilters({...filters, jenjang: e.target.value, kelas: '', rombel: ''})} className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none">
+                                <option value="">Semua Jenjang</option>
+                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Kelas</label>
+                            <select value={filters.kelas} onChange={e => setFilters({...filters, kelas: e.target.value, rombel: ''})} disabled={!filters.jenjang} className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none disabled:opacity-50">
+                                <option value="">Semua Kelas</option>
+                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Status Pembayaran</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[
+                                    { id: '', label: 'Semua' },
+                                    { id: 'menunggak', label: 'Menunggak' },
+                                    { id: 'lunas', label: 'Lunas' }
+                                ].map(s => (
+                                    <button 
+                                        key={s.id}
+                                        onClick={() => setFilters({...filters, statusTunggakan: s.id})}
+                                        className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${filters.statusTunggakan === s.id ? 'bg-teal-600 text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-100'}`}
+                                    >
+                                        {s.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-gray-900 rounded-[2rem] text-center">
+                        <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">Hasil Filter</div>
+                        <div className="text-3xl font-black text-white">{dataTampilan.length} <span className="text-sm text-gray-400 font-bold uppercase tracking-widest ml-1">Santri</span></div>
+                    </div>
+                </div>
+            </MobileFilterDrawer>
 
             {selectedSantriIds.length > 0 && (
                  <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 p-2 my-4 rounded-lg bg-teal-50 border border-teal-200">

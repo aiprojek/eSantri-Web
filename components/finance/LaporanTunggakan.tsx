@@ -6,6 +6,7 @@ import { useAppContext } from '../../AppContext';
 import { formatRupiah } from '../../utils/formatters';
 import { Tagihan, Santri } from '../../types';
 import { sendManualWA, formatWAMessage, WA_TEMPLATES } from '../../services/waService';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const LaporanTunggakan: React.FC = () => {
     const { tagihanList } = useFinanceContext();
@@ -13,6 +14,7 @@ export const LaporanTunggakan: React.FC = () => {
     const { settings } = useAppContext();
     
     const [filterJenjang, setFilterJenjang] = useState('');
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
     const agingData = useMemo(() => {
         const today = new Date();
@@ -94,19 +96,55 @@ export const LaporanTunggakan: React.FC = () => {
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
-            <div className="flex justify-between items-center mb-6 no-print">
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 h-full flex flex-col">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 no-print gap-4">
                 <h2 className="text-xl font-bold text-gray-800">Laporan Umur Piutang (Aging Report)</h2>
-                <div className="flex gap-2">
-                    <select value={filterJenjang} onChange={e => setFilterJenjang(e.target.value)} className="border rounded p-2 text-sm">
+                
+                {/* Mobile Actions */}
+                <div className="md:hidden flex w-full gap-2">
+                    <button 
+                        onClick={() => setIsFilterDrawerOpen(true)}
+                        className="flex-grow flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                    >
+                        <i className="bi bi-funnel-fill"></i>
+                        <span>Filter</span>
+                    </button>
+                    <button onClick={handlePrint} className="shrink-0 w-[44px] h-[44px] flex items-center justify-center bg-gray-900 text-white rounded-xl shadow-lg">
+                        <i className="bi bi-printer text-xl"></i>
+                    </button>
+                </div>
+
+                {/* Desktop Actions */}
+                <div className="hidden md:flex gap-2">
+                    <select value={filterJenjang} onChange={e => setFilterJenjang(e.target.value)} className="bg-white border p-2 text-sm rounded-lg font-bold min-w-[150px]">
                         <option value="">Semua Jenjang</option>
                         {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                     </select>
-                    <button onClick={handlePrint} className="bg-gray-700 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2">
+                    <button onClick={handlePrint} className="bg-gray-800 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-black transition-all">
                         <i className="bi bi-printer"></i> Cetak
                     </button>
                 </div>
             </div>
+
+            <MobileFilterDrawer 
+                isOpen={isFilterDrawerOpen} 
+                onClose={() => setIsFilterDrawerOpen(false)}
+                title="Filter Laporan"
+            >
+                <div className="space-y-6">
+                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
+                        <label className="block text-xs font-black text-gray-400 uppercase mb-3 tracking-widest ml-1">Pilih Jenjang</label>
+                        <select 
+                            value={filterJenjang} 
+                            onChange={e => setFilterJenjang(e.target.value)}
+                            className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none"
+                        >
+                            <option value="">Semua Jenjang</option>
+                            {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                        </select>
+                    </div>
+                </div>
+            </MobileFilterDrawer>
 
             <div className="grid grid-cols-4 gap-4 mb-6 text-white no-print">
                 <div className="p-4 rounded-lg bg-blue-600 shadow">

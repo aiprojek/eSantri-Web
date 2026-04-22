@@ -8,6 +8,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { PrintHeader } from './common/PrintHeader';
 import { ReportFooter } from './reports/modules/Common';
+import { JurnalMengajarModal } from './akademik/modals/JurnalMengajarModal';
 
 // --- SUB-COMPONENT: INPUT ABSENSI ---
 const AbsensiInput: React.FC = () => {
@@ -25,6 +26,9 @@ const AbsensiInput: React.FC = () => {
     const [attendanceMap, setAttendanceMap] = useState<Record<number, AbsensiRecord['status']>>({});
     const [notesMap, setNotesMap] = useState<Record<number, string>>({});
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Jurnal Modal
+    const [isJurnalModalOpen, setIsJurnalModalOpen] = useState(false);
 
     useEffect(() => {
         if (currentUser && currentUser.role === 'staff' && settings.rombel.length === 1) {
@@ -280,12 +284,25 @@ const AbsensiInput: React.FC = () => {
                         <i className="bi bi-info-circle"></i>
                         <span>Pastikan keterangan diisi untuk status S, I, atau A.</span>
                     </div>
-                    <button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-teal-200 flex items-center justify-center gap-2 transition-transform hover:-translate-y-1 active:translate-y-0 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none">
-                        {isSaving ? <span className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-cloud-upload-fill"></i>} 
-                        Simpan Data Absensi
-                    </button>
+                    
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <button onClick={() => setIsJurnalModalOpen(true)} className="w-full sm:w-auto bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-transform hover:-translate-y-1 active:translate-y-0">
+                            <i className="bi bi-journal-text"></i> Isi Jurnal / Agenda
+                        </button>
+                        <button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-teal-200 flex items-center justify-center gap-2 transition-transform hover:-translate-y-1 active:translate-y-0 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none">
+                            {isSaving ? <span className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-cloud-upload-fill"></i>} 
+                            Simpan Data Absensi
+                        </button>
+                    </div>
                 </div>
             </div>
+            
+            <JurnalMengajarModal 
+                isOpen={isJurnalModalOpen}
+                onClose={() => setIsJurnalModalOpen(false)}
+                rombelId={selectedRombelId}
+                tanggal={selectedDate}
+            />
         </div>
     );
 };

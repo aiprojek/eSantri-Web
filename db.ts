@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang, Warehouse, StockTransfer } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang, Warehouse, StockTransfer } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -23,6 +23,7 @@ export class ESantriDatabase extends Dexie {
   syncHistory!: Table<SyncHistory, string>; 
   raporRecords!: Table<RaporRecord, number>;
   absensi!: Table<AbsensiRecord, number>;
+  jurnalMengajar!: Table<JurnalMengajarRecord, number>;
   tahfizh!: Table<TahfizhRecord, number>; 
   inventaris!: Table<Inventaris, number>; 
   calendarEvents!: Table<CalendarEvent, number>;
@@ -49,7 +50,7 @@ export class ESantriDatabase extends Dexie {
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(48).stores({ // Bump version
+    (this as any).version(49).stores({ // Bump version
       santri: '++id, nis, namaLengkap, kamarId, lastModified',
       settings: '++id, lastModified',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status, lastModified',
@@ -66,6 +67,7 @@ export class ESantriDatabase extends Dexie {
       syncHistory: 'id, fileId, mergedAt, lastModified',
       raporRecords: '++id, santriId, [santriId+tahunAjaran+semester], [tahunAjaran+semester], [tahunAjaran+semester+rombelId], rombelId, lastModified',
       absensi: '++id, santriId, [rombelId+tanggal], tanggal, lastModified',
+      jurnalMengajar: '++id, [rombelId+tanggal], tanggal, guruId, lastModified',
       tahfizh: '++id, santriId, tanggal, tipe, lastModified',
       inventaris: '++id, kode, nama, jenis, kategori, lokasi, lastModified',
       calendarEvents: '++id, startDate, endDate, category, lastModified',

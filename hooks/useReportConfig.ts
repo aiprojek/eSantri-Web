@@ -94,6 +94,11 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
     const [nilaiTpCount, setNilaiTpCount] = useState<number>(4);
     const [nilaiSmCount, setNilaiSmCount] = useState<number>(2);
     const [showNilaiTengahSemester, setShowNilaiTengahSemester] = useState<boolean>(true);
+    const [jurnalTanggalFilter, setJurnalTanggalFilter] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [kesehatanStartDate, setKesehatanStartDate] = useState<string>(mutasiStartDate);
+    const [kesehatanEndDate, setKesehatanEndDate] = useState<string>(mutasiEndDate);
+    const [bkStartDate, setBkStartDate] = useState<string>(mutasiStartDate);
+    const [bkEndDate, setBkEndDate] = useState<string>(mutasiEndDate);
 
 
     const isFinancialReport = activeReport === ReportType.LaporanArusKas || activeReport === ReportType.RekeningKoranSantri;
@@ -240,6 +245,11 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             nilaiTpCount, setNilaiTpCount,
             nilaiSmCount, setNilaiSmCount,
             showNilaiTengahSemester, setShowNilaiTengahSemester,
+            jurnalTanggalFilter, setJurnalTanggalFilter,
+            kesehatanStartDate, setKesehatanStartDate,
+            kesehatanEndDate, setKesehatanEndDate,
+            bkStartDate, setBkStartDate,
+            bkEndDate, setBkEndDate,
         }
     };
 };

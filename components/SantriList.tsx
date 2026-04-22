@@ -11,6 +11,7 @@ import { parseSantriCsv, generateSantriCsvForUpdate, generateSantriCsvTemplate }
 import { Pagination } from './common/Pagination';
 import { BulkStatusModal } from './santri/modals/BulkStatusModal';
 import { BulkMoveModal } from './santri/modals/BulkMoveModal';
+import { MobileFilterDrawer } from './common/MobileFilterDrawer';
 
 const SantriList: React.FC = () => {
     const { settings, showToast, showConfirmation, currentUser } = useAppContext();
@@ -30,6 +31,7 @@ const SantriList: React.FC = () => {
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [isBulkStatusOpen, setIsBulkStatusOpen] = useState(false);
     const [isBulkMoveOpen, setIsBulkMoveOpen] = useState(false);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     
     // Dropdown Menu State
     const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
@@ -241,17 +243,113 @@ const SantriList: React.FC = () => {
             </div>
 
             {/* Filters */}
-            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                 <div className="lg:col-span-5 relative">
-                     <input type="text" placeholder="Cari Nama, NIS, NIK..." value={santriFilters.search} onChange={e => handleFilterChange('search', e.target.value)} className="w-full pl-9 border rounded-lg p-2.5 text-sm focus:ring-teal-500 focus:border-teal-500"/>
-                     <i className="bi bi-search absolute left-3 top-3 text-gray-400"></i>
-                 </div>
-                 <select value={santriFilters.jenjang} onChange={e => handleFilterChange('jenjang', e.target.value)} className="border rounded-lg p-2 text-sm"><option value="">Semua Jenjang</option>{settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}</select>
-                 <select value={santriFilters.kelas} onChange={e => handleFilterChange('kelas', e.target.value)} className="border rounded-lg p-2 text-sm disabled:bg-gray-100" disabled={!santriFilters.jenjang}><option value="">Semua Kelas</option>{availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}</select>
-                 <select value={santriFilters.rombel} onChange={e => handleFilterChange('rombel', e.target.value)} className="border rounded-lg p-2 text-sm disabled:bg-gray-100" disabled={!santriFilters.kelas}><option value="">Semua Rombel</option>{availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}</select>
-                 <select value={santriFilters.status} onChange={e => handleFilterChange('status', e.target.value)} className="border rounded-lg p-2 text-sm"><option value="">Semua Status</option><option value="Aktif">Aktif</option><option value="Lulus">Lulus</option><option value="Keluar/Pindah">Keluar/Pindah</option></select>
-                 <select value={santriFilters.gender} onChange={e => handleFilterChange('gender', e.target.value)} className="border rounded-lg p-2 text-sm"><option value="">Semua Gender</option><option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option></select>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                {/* Mobile Filter Trigger */}
+                <div className="md:hidden flex gap-2">
+                    <button 
+                        onClick={() => setIsFilterDrawerOpen(true)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                    >
+                        <i className="bi bi-funnel-fill"></i>
+                        <span>Filter</span>
+                    </button>
+                    <div className="flex-1 relative">
+                        <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input 
+                            type="text" 
+                            placeholder="Cari..." 
+                            value={santriFilters.search} 
+                            onChange={e => handleFilterChange('search', e.target.value)}
+                            className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold focus:ring-teal-500 focus:border-teal-500"
+                        />
+                    </div>
+                </div>
+
+                {/* Desktop Filters */}
+                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-6 gap-3">
+                    <div className="lg:col-span-3 relative">
+                        <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" placeholder="Cari Nama, NIS, NIK..." value={santriFilters.search} onChange={e => handleFilterChange('search', e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all"/>
+                    </div>
+                    <select value={santriFilters.jenjang} onChange={e => handleFilterChange('jenjang', e.target.value)} className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all">
+                        <option value="">Jenjang</option>
+                        {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                    </select>
+                    <select value={santriFilters.kelas} onChange={e => handleFilterChange('kelas', e.target.value)} className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all disabled:bg-gray-100 disabled:text-gray-400" disabled={!santriFilters.jenjang}>
+                        <option value="">Kelas</option>
+                        {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                    </select>
+                    <select value={santriFilters.status} onChange={e => handleFilterChange('status', e.target.value)} className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all">
+                        <option value="">Status</option>
+                        <option value="Aktif">Aktif</option>
+                        <option value="Hiatus">Hiatus</option>
+                        <option value="Lulus">Lulus</option>
+                        <option value="Keluar/Pindah">Pindah</option>
+                    </select>
+                </div>
             </div>
+
+            <MobileFilterDrawer 
+                isOpen={isFilterDrawerOpen} 
+                onClose={() => setIsFilterDrawerOpen(false)}
+                title="Filter Santri"
+            >
+                <div className="space-y-6">
+                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Jenjang</label>
+                            <select value={santriFilters.jenjang} onChange={e => handleFilterChange('jenjang', e.target.value)} className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none">
+                                <option value="">Semua Jenjang</option>
+                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Kelas</label>
+                            <select value={santriFilters.kelas} onChange={e => handleFilterChange('kelas', e.target.value)} className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none disabled:opacity-50" disabled={!santriFilters.jenjang}>
+                                <option value="">Semua Kelas</option>
+                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Status Keaktifan</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah'].map(s => (
+                                    <button 
+                                        key={s}
+                                        onClick={() => handleFilterChange('status', s === santriFilters.status ? '' : s)}
+                                        className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${santriFilters.status === s ? 'bg-teal-600 text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-100'}`}
+                                    >
+                                        {s}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Gender</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {['Laki-laki', 'Perempuan'].map(g => (
+                                    <button 
+                                        key={g}
+                                        onClick={() => handleFilterChange('gender', g === santriFilters.gender ? '' : g)}
+                                        className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${santriFilters.gender === g ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-100'}`}
+                                    >
+                                        <i className={`bi bi-${g === 'Laki-laki' ? 'gender-male' : 'gender-female'} mr-1`}></i>
+                                        {g === 'Laki-laki' ? 'L' : 'P'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-gray-900 rounded-[2rem] text-center">
+                        <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">Hasil Filter</div>
+                        <div className="text-3xl font-black text-white">{filteredSantri.length} <span className="text-sm text-gray-400 font-bold uppercase tracking-widest ml-1">Santri</span></div>
+                    </div>
+                </div>
+            </MobileFilterDrawer>
 
             {/* Bulk Actions Toolbar */}
             {selectedIds.length > 0 && canWrite && (

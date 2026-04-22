@@ -2,7 +2,7 @@
 import React from 'react';
 import { Santri, PondokSettings, ReportType, RiwayatStatus } from '../types';
 import { generateBiodataReports, generateCardReports, generateLabelReports } from '../components/reports/modules/IdentityReports';
-import { generateNilaiReports, generateTableReport, generateRaporLengkapReports } from '../components/reports/modules/AcademicReports';
+import { generateNilaiReports, generateTableReport, generateRaporLengkapReports, JurnalMengajarTemplate, KesehatanRekapTemplate, KonselingRekapTemplate } from '../components/reports/modules/AcademicReports';
 import { FinanceSummaryTemplate, LaporanArusKasTemplate, RekeningKoranSantriTemplate } from '../components/reports/modules/FinancialReports';
 import { DaftarWaliKelasTemplate, LaporanKontakTemplate, LaporanKontakStafTemplate, LaporanMapelTemplate, LaporanAsramaTemplate, LaporanMutasiTemplate, LembarPembinaanTemplate, FormulirIzinTemplate, DashboardSummaryTemplate } from '../components/reports/modules/AdministrativeReports';
 import { chunkArray } from '../components/reports/modules/Common';
@@ -53,6 +53,17 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 break;
             case ReportType.LembarKedatangan:
                 previews = generateTableReport(data, settings, options, 'Kedatangan');
+                break;
+            case ReportType.JurnalMengajar:
+                // Special case where we can just render the component and push to array for previews
+                // We use one santri per rombel hack for data passing
+                previews.push({ content: <JurnalMengajarTemplate santriList={data} settings={settings} options={options} />, orientation: 'landscape' });
+                break;
+            case ReportType.RekapKesehatan:
+                previews.push({ content: <KesehatanRekapTemplate santriList={data} settings={settings} options={options} />, orientation: 'landscape' });
+                break;
+            case ReportType.RekapKonseling:
+                previews.push({ content: <KonselingRekapTemplate santriList={data} settings={settings} options={options} />, orientation: 'landscape' });
                 break;
             case ReportType.DashboardSummary:
                 previews.push({ content: <DashboardSummaryTemplate santriList={data} settings={settings} />, orientation: 'portrait' });

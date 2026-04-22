@@ -4,6 +4,7 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { Santri } from '../../types';
 import { TahfizhDetailModal } from './TahfizhDetailModal';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const TahfizhHistory: React.FC = () => {
     const { settings } = useAppContext();
@@ -14,6 +15,7 @@ export const TahfizhHistory: React.FC = () => {
     const [jenjangId, setJenjangId] = useState<number>(0);
     const [kelasId, setKelasId] = useState<number>(0);
     const [rombelId, setRombelId] = useState<number>(0);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
     // Modal State
     const [selectedSantri, setSelectedSantri] = useState<Santri | null>(null);
@@ -60,34 +62,110 @@ export const TahfizhHistory: React.FC = () => {
         <div className="w-full">
             {/* Filter Section */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 sticky top-16 z-30">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="lg:col-span-1">
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Cari Santri</label>
-                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Nama / NIS..." className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-teal-500 focus:border-teal-500" />
+                {/* Mobile Filter Trigger */}
+                <div className="md:hidden flex flex-col gap-2">
+                    <button 
+                        onClick={() => setIsFilterDrawerOpen(true)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                    >
+                        <i className="bi bi-funnel-fill"></i>
+                        <span>Filter</span>
+                    </button>
+                    <div className="relative">
+                        <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input 
+                            type="text" 
+                            placeholder="Cari santri..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-teal-500"
+                        />
+                    </div>
+                </div>
+
+                {/* Desktop Filter View */}
+                <div className="hidden md:grid md:grid-cols-4 gap-4">
+                    <div className="md:col-span-1">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Cari Santri</label>
+                        <div className="relative">
+                            <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Nama / NIS..." className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all" />
+                        </div>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Jenjang</label>
-                        <select value={jenjangId} onChange={e => { setJenjangId(Number(e.target.value)); setKelasId(0); setRombelId(0); }} className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-gray-50">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Jenjang</label>
+                        <select value={jenjangId} onChange={e => { setJenjangId(Number(e.target.value)); setKelasId(0); setRombelId(0); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all">
                             <option value={0}>Semua Jenjang</option>
                             {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kelas</label>
-                        <select value={kelasId} onChange={e => { setKelasId(Number(e.target.value)); setRombelId(0); }} disabled={!jenjangId} className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-gray-50 disabled:bg-gray-100">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Kelas</label>
+                        <select value={kelasId} onChange={e => { setKelasId(Number(e.target.value)); setRombelId(0); }} disabled={!jenjangId} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all disabled:bg-gray-100 disabled:text-gray-400">
                             <option value={0}>Semua Kelas</option>
                             {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Rombel</label>
-                        <select value={rombelId} onChange={e => setRombelId(Number(e.target.value))} disabled={!kelasId} className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-gray-50 disabled:bg-gray-100">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Rombel</label>
+                        <select value={rombelId} onChange={e => setRombelId(Number(e.target.value))} disabled={!kelasId} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all disabled:bg-gray-100 disabled:text-gray-400">
                             <option value={0}>Semua Rombel</option>
                             {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
                         </select>
                     </div>
                 </div>
             </div>
+
+            <MobileFilterDrawer 
+                isOpen={isFilterDrawerOpen} 
+                onClose={() => setIsFilterDrawerOpen(false)}
+                title="Filter Data Tahfizh"
+            >
+                <div className="space-y-6">
+                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
+                        <div>
+                            <label className="block text-xs font-black text-gray-400 uppercase mb-2 tracking-widest ml-1">Pilih Jenjang</label>
+                            <select 
+                                value={jenjangId} 
+                                onChange={e => { setJenjangId(Number(e.target.value)); setKelasId(0); setRombelId(0); }}
+                                className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none"
+                            >
+                                <option value={0}>Semua Jenjang</option>
+                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-black text-gray-400 uppercase mb-2 tracking-widest ml-1">Pilih Kelas</label>
+                            <select 
+                                value={kelasId} 
+                                onChange={e => { setKelasId(Number(e.target.value)); setRombelId(0); }}
+                                disabled={!jenjangId}
+                                className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none disabled:opacity-50"
+                            >
+                                <option value={0}>Semua Kelas</option>
+                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-black text-gray-400 uppercase mb-2 tracking-widest ml-1">Pilih Rombel</label>
+                            <select 
+                                value={rombelId} 
+                                onChange={e => setRombelId(Number(e.target.value))}
+                                disabled={!kelasId}
+                                className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none disabled:opacity-50"
+                            >
+                                <option value={0}>Semua Rombel</option>
+                                {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-gray-900 rounded-[2rem] text-center">
+                        <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">Ditemukan</div>
+                        <div className="text-3xl font-black text-white">{filteredSantri.length} <span className="text-sm text-gray-400 font-bold uppercase tracking-widest ml-1">Santri</span></div>
+                    </div>
+                </div>
+            </MobileFilterDrawer>
 
             {/* Grid List Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-20">

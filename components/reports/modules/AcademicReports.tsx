@@ -398,3 +398,183 @@ export const generateRaporLengkapReports = (data: Santri[], settings: PondokSett
         orientation: 'portrait' as const
     }));
 };
+
+export const JurnalMengajarTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: any }> = ({ santriList, settings, options }) => {
+    const rombel = settings.rombel.find(r => r.id === santriList[0]?.rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    
+    // Convert array to object mapping
+    const recordsMap: Record<number, any> = {};
+    if (options.jurnalMengajarList) {
+         options.jurnalMengajarList.forEach((jurnal: any) => {
+             recordsMap[jurnal.id] = jurnal;
+         });
+    }
+    
+    const recordsToday = options.jurnalMengajarList?.filter((j: any) => j.rombelId === rombel?.id && j.tanggal === options.jurnalTanggalFilter)?.sort((a: any, b: any) => (a.jamPelajaranIds?.[0] || 0) - (b.jamPelajaranIds?.[0] || 0)) || [];
+
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                 <AcademicHeader settings={settings} title={`JURNAL MENGAJAR (AGENDA KELAS)`} meta={{ jenjang: jenjang?.nama, kelas: kelas?.nama, rombel: rombel?.nama, tahunAjaran: options.tahunAjaran, semester: options.semester }} />
+                 
+                 <div className="mb-4">
+                     <p className="font-bold">Tanggal: {new Date(options.jurnalTanggalFilter || new Date().toISOString().split('T')[0]).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'})}</p>
+                 </div>
+
+                 <table className="w-full border-collapse border border-black text-xs text-left">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="border border-black p-2 w-10 text-center">Jam</th>
+                            <th className="border border-black p-2 w-32">Mata Pelajaran</th>
+                            <th className="border border-black p-2 w-32">Guru Pengajar</th>
+                            <th className="border border-black p-2">Materi / Kompetensi Dasar</th>
+                            <th className="border border-black p-2 w-48">Catatan Kejadian</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {recordsToday.length > 0 ? recordsToday.map((r: any) => {
+                             const guru = settings.tenagaPengajar.find(t => t.id === r.guruId);
+                             const mapel = settings.mataPelajaran.find(m => m.id === r.mataPelajaranId);
+                             return (
+                                 <tr key={r.id}>
+                                     <td className="border border-black p-2 text-center align-top">{r.jamPelajaranIds?.join(', ')}</td>
+                                     <td className="border border-black p-2 font-semibold align-top">{mapel?.nama}</td>
+                                     <td className="border border-black p-2 align-top">{guru?.nama}</td>
+                                     <td className="border border-black p-2 whitespace-pre-wrap align-top">{r.kompetensiMateri}</td>
+                                     <td className="border border-black p-2 whitespace-pre-wrap italic align-top">{r.catatanKejadian || '-'}</td>
+                                 </tr>
+                             )
+                        }) : (
+                            <tr><td colSpan={5} className="border border-black p-4 text-center italic text-gray-500">Tidak ada data jurnal mengajar di tanggal tersebut.</td></tr>
+                        )}
+                    </tbody>
+                 </table>
+            </div>
+            <ReportFooter />
+        </div>
+    )
+}
+
+export const KesehatanRekapTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: any }> = ({ santriList, settings, options }) => {
+    const start = new Date(options.kesehatanStartDate);
+    const end = new Date(options.kesehatanEndDate + 'T23:59:59');
+    
+    const recordsInRange = (options.kesehatanRecords || []).filter((r: any) => {
+        const d = new Date(r.tanggal);
+        return d >= start && d <= end;
+    }).sort((a: any, b: any) => b.tanggal.localeCompare(a.tanggal));
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                 <PrintHeader settings={settings} title={`REKAPITULASI LAYANAN KESEHATAN (UKP)`} />
+                 <div className="mb-4">
+                     <p className="font-bold text-center">Periode: {formatDate(options.kesehatanStartDate)} s/d {formatDate(options.kesehatanEndDate)}</p>
+                 </div>
+                 <table className="w-full border-collapse border border-black text-xs text-left">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="border border-black p-2 w-10 text-center">No</th>
+                            <th className="border border-black p-2 w-24">Tanggal</th>
+                            <th className="border border-black p-2 w-40">Nama Santri</th>
+                            <th className="border border-black p-2">Keluhan / Diagnosa</th>
+                            <th className="border border-black p-2">Tindakan / Resep</th>
+                            <th className="border border-black p-2 w-24">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {recordsInRange.length > 0 ? recordsInRange.map((r: any, idx: number) => {
+                             const santri = santriList?.find((s: any) => s.id === r.santriId);
+                             return (
+                                 <tr key={r.id}>
+                                     <td className="border border-black p-2 text-center">{idx + 1}</td>
+                                     <td className="border border-black p-2">{formatDate(r.tanggal)}</td>
+                                     <td className="border border-black p-2 font-bold">{santri?.namaLengkap || 'ID: ' + r.santriId}</td>
+                                     <td className="border border-black p-2">
+                                         <div className="font-bold">Keluhan: {r.keluhan}</div>
+                                         <div className="italic">Diagnosa: {r.diagnosa}</div>
+                                     </td>
+                                     <td className="border border-black p-2">
+                                         <div>{r.tindakan}</div>
+                                         {r.resep && r.resep.length > 0 && (
+                                             <div className="mt-1 pt-1 border-t border-gray-200">
+                                                 <span className="font-bold">Resep:</span> {r.resep.map((it: any) => `${it.namaObat} (${it.jumlah})`).join(', ')}
+                                             </div>
+                                         )}
+                                     </td>
+                                     <td className="border border-black p-2 text-center">{r.status}</td>
+                                 </tr>
+                             )
+                        }) : (
+                            <tr><td colSpan={6} className="border border-black p-4 text-center italic text-gray-500">Tidak ada data rekam kesehatan ditemukan pada periode tersebut.</td></tr>
+                        )}
+                    </tbody>
+                 </table>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+export const KonselingRekapTemplate: React.FC<{ santriList: Santri[]; settings: PondokSettings; options: any }> = ({ santriList, settings, options }) => {
+    const start = new Date(options.bkStartDate);
+    const end = new Date(options.bkEndDate + 'T23:59:59');
+    
+    const recordsInRange = (options.bkSessions || []).filter((r: any) => {
+        const d = new Date(r.tanggal);
+        return d >= start && d <= end;
+    }).sort((a: any, b: any) => b.tanggal.localeCompare(a.tanggal));
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                 <PrintHeader settings={settings} title={`REKAPITULASI BIMBINGAN & KONSELING (BK)`} />
+                 <div className="mb-4">
+                     <p className="font-bold text-center">Periode: {formatDate(options.bkStartDate)} s/d {formatDate(options.bkEndDate)}</p>
+                 </div>
+                 <table className="w-full border-collapse border border-black text-xs text-left">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="border border-black p-2 w-10 text-center">No</th>
+                            <th className="border border-black p-2 w-24">Tanggal</th>
+                            <th className="border border-black p-2 w-40">Nama Santri</th>
+                            <th className="border border-black p-2 w-24">Kategori</th>
+                            <th className="border border-black p-2">Masalah / Keluhan</th>
+                            <th className="border border-black p-2">Penanganan / Hasil</th>
+                            <th className="border border-black p-2 w-20">Privasi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {recordsInRange.length > 0 ? recordsInRange.map((r: any, idx: number) => {
+                             const santri = santriList?.find((s: any) => s.id === r.santriId);
+                             return (
+                                 <tr key={r.id}>
+                                     <td className="border border-black p-2 text-center">{idx + 1}</td>
+                                     <td className="border border-black p-2">{formatDate(r.tanggal)}</td>
+                                     <td className="border border-black p-2 font-bold">{santri?.namaLengkap || 'ID: ' + r.santriId}</td>
+                                     <td className="border border-black p-2 text-center">{r.kategori}</td>
+                                     <td className="border border-black p-2">{r.keluhan}</td>
+                                     <td className="border border-black p-2">
+                                         <div>{r.penanganan}</div>
+                                         {r.hasil && <div className="mt-1 pt-1 border-t border-gray-200 italic font-bold">Hasil: {r.hasil}</div>}
+                                     </td>
+                                     <td className="border border-black p-2 text-center">
+                                         <span className={`px-1 rounded ${r.privasi === 'Rahasia' ? 'bg-yellow-100' : r.privasi === 'Sangat Rahasia' ? 'bg-red-100 text-red-700' : ''}`}>
+                                            {r.privasi}
+                                         </span>
+                                     </td>
+                                 </tr>
+                             )
+                        }) : (
+                            <tr><td colSpan={7} className="border border-black p-4 text-center italic text-gray-500">Tidak ada data bimbingan konseling ditemukan pada periode tersebut.</td></tr>
+                        )}
+                    </tbody>
+                 </table>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};

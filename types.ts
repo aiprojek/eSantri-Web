@@ -767,6 +767,19 @@ export interface AbsensiRecord {
     lastModified?: number;
 }
 
+export interface JurnalMengajarRecord {
+    id: number;
+    tanggal: string; // YYYY-MM-DD
+    rombelId: number;
+    guruId: number;
+    mataPelajaranId: number;
+    jamPelajaranIds?: number[];
+    kompetensiMateri: string;
+    catatanKejadian?: string;
+    recordedBy?: string;
+    lastModified?: number;
+}
+
 export interface TahfizhRecord {
     id: number;
     santriId: number;
@@ -1152,6 +1165,9 @@ export enum ReportType {
   LembarKedatangan = 'LembarKedatangan',
   LembarRapor = 'LembarRapor',
   RaporLengkap = 'RaporLengkap',
+  JurnalMengajar = 'JurnalMengajar',
+  RekapKesehatan = 'RekapKesehatan',
+  RekapKonseling = 'RekapKonseling',
 }
 
 // --- NEW GLOBAL STATE TYPES ---

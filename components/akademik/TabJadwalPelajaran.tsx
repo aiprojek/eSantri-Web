@@ -9,6 +9,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PrintHeader } from '../common/PrintHeader';
 import { ReportFooter, formatDate } from '../reports/modules/Common';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 // --- MODAL ARSIP ---
 interface ArchiveModalProps {
@@ -218,6 +219,7 @@ export const TabJadwalPelajaran: React.FC = () => {
     const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
     const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
     const [isTeacherLoadModalOpen, setIsTeacherLoadModalOpen] = useState(false);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     
     const [selectedSlot, setSelectedSlot] = useState<{ hari: number, jamKe: number } | null>(null);
     const [editingJadwal, setEditingJadwal] = useState<JadwalPelajaran | null>(null);
@@ -675,58 +677,164 @@ export const TabJadwalPelajaran: React.FC = () => {
         <div className="space-y-6 animate-fade-in">
              <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 sticky top-0 z-40 shrink-0">
                 <nav className="flex -mb-px">
-                    <button onClick={() => setActiveTab('active')} className={`flex-1 py-3 px-1 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeTab === 'active' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        <i className="bi bi-pencil-square text-lg"></i> Editor Jadwal Aktif
+                    <button onClick={() => setActiveTab('active')} className={`flex-1 py-3 px-1 text-center border-b-2 font-medium text-xs md:text-sm flex items-center justify-center gap-1 md:gap-2 ${activeTab === 'active' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        <i className="bi bi-pencil-square text-base md:text-lg"></i> 
+                        <span className="hidden xs:inline">Editor Jadwal Aktif</span>
+                        <span className="xs:hidden">Editor</span>
                     </button>
-                    <button onClick={() => setActiveTab('archive')} className={`flex-1 py-3 px-1 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeTab === 'archive' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                        <i className="bi bi-clock-history text-lg"></i> Arsip & Riwayat
+                    <button onClick={() => setActiveTab('archive')} className={`flex-1 py-3 px-1 text-center border-b-2 font-medium text-xs md:text-sm flex items-center justify-center gap-1 md:gap-2 ${activeTab === 'archive' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        <i className="bi bi-clock-history text-base md:text-lg"></i> 
+                        <span className="hidden xs:inline">Arsip & Riwayat</span>
+                        <span className="xs:hidden">Arsip</span>
                     </button>
                 </nav>
             </div>
 
             {activeTab === 'active' && (
                 <>
-                    {/* Filter Bar */}
-                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex flex-wrap gap-4 items-end">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Jenjang</label>
-                            <select value={filterJenjangId} onChange={e => { setFilterJenjangId(Number(e.target.value)); setFilterKelasId(0); setFilterRombelId(0); }} className="border rounded p-2 text-sm bg-gray-50">
-                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
-                            </select>
+                    {/* Filter & Actions Bar */}
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-end">
+                        {/* Mobile Actions Overlay */}
+                        <div className="flex md:hidden items-center gap-2 mb-2">
+                            <button 
+                                onClick={() => setIsFilterDrawerOpen(true)}
+                                className="flex-grow flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                            >
+                                <i className="bi bi-funnel-fill"></i>
+                                <span>Filter</span>
+                            </button>
+                            <button onClick={handlePrint} disabled={targetRombels.length === 0} className="shrink-0 w-[44px] h-[44px] flex items-center justify-center bg-gray-900 text-white rounded-xl disabled:opacity-50 shadow-lg">
+                                <i className="bi bi-printer text-xl"></i>
+                            </button>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Kelas</label>
-                            <select value={filterKelasId} onChange={e => { setFilterKelasId(Number(e.target.value)); setFilterRombelId(0); }} className="border rounded p-2 text-sm bg-gray-50 disabled:bg-gray-100" disabled={!filterJenjangId}>
-                                <option value={0}>-- Semua Kelas --</option>
-                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-                            </select>
+
+                        {/* Desktop Filter View */}
+                        <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 flex-grow">
+                            <div className="md:col-span-1">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest">Jenjang Pendidikan</label>
+                                <select value={filterJenjangId} onChange={e => { setFilterJenjangId(Number(e.target.value)); setFilterKelasId(0); setFilterRombelId(0); }} className="w-full border rounded-lg p-2.5 text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-bold transition-all">
+                                    {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                </select>
+                            </div>
+                            <div className="md:col-span-1">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest">Angkatan / Kelas</label>
+                                <select value={filterKelasId} onChange={e => { setFilterKelasId(Number(e.target.value)); setFilterRombelId(0); }} className="w-full border rounded-lg p-2.5 text-sm bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 focus:bg-white focus:ring-2 focus:ring-teal-500 font-bold transition-all" disabled={!filterJenjangId}>
+                                    <option value={0}>Semua Kelas</option>
+                                    {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                </select>
+                            </div>
+                            <div className="lg:col-span-1">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest">Rombongan Belajar</label>
+                                <select value={filterRombelId} onChange={e => setFilterRombelId(Number(e.target.value))} className="w-full border rounded-lg p-2.5 text-sm bg-teal-50/50 border-teal-100 disabled:bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-bold transition-all" disabled={!filterJenjangId}>
+                                    <option value={0}>Semua Rombel</option>
+                                    {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Rombel</label>
-                            <select value={filterRombelId} onChange={e => setFilterRombelId(Number(e.target.value))} className="border rounded p-2 text-sm bg-gray-50 disabled:bg-gray-100" disabled={!filterJenjangId}>
-                                <option value={0}>-- Semua Rombel --</option>
-                                {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-                            </select>
-                        </div>
-                        <div className="ml-auto flex gap-2">
-                             <button onClick={() => setIsTeacherLoadModalOpen(true)} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-indigo-100">
-                                <i className="bi bi-bar-chart-fill"></i> Rekap Jam
+                        
+                        <div className="flex flex-wrap items-center gap-2.5 border-t md:border-none pt-4 md:pt-0">
+                             <button onClick={() => setIsTeacherLoadModalOpen(true)} className="flex-1 md:flex-none justify-center bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-100 transition-colors">
+                                <i className="bi bi-bar-chart-fill"></i> 
+                                <span className="md:inline">Rekap Jam</span>
                             </button>
                             {canWrite && (
-                                <>
-                                    <button onClick={handleAutoGenerate} className="bg-teal-600 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-teal-700 shadow-sm">
-                                        <i className="bi bi-magic"></i> Auto-Generate
+                                <div className="hidden md:flex gap-2.5">
+                                    <button onClick={handleAutoGenerate} className="flex-1 md:flex-none justify-center bg-teal-600 text-white px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-teal-700 shadow-md transition-all active:scale-95">
+                                        <i className="bi bi-magic"></i> 
+                                        <span>Auto</span>
                                     </button>
-                                    <button onClick={() => setIsArchiveModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-blue-700 shadow-sm">
-                                        <i className="bi bi-archive-fill"></i> Arsipkan Jadwal
+                                    <button onClick={() => setIsArchiveModalOpen(true)} className="flex-1 md:flex-none justify-center bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-blue-700 shadow-md transition-all active:scale-95">
+                                        <i className="bi bi-archive-fill"></i> 
+                                        <span>Arsip</span>
                                     </button>
-                                </>
+                                </div>
                             )}
-                            <button onClick={handlePrint} disabled={targetRombels.length === 0} className="bg-gray-700 text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2 hover:bg-gray-800 disabled:opacity-50">
-                                <i className="bi bi-printer"></i> Cetak {filterRombelId === 0 ? '(Semua)' : ''}
+                            <button onClick={handlePrint} disabled={targetRombels.length === 0} className="hidden md:flex flex-1 md:flex-none justify-center bg-gray-900 text-white px-4 py-2.5 rounded-xl text-sm font-black items-center gap-2 hover:bg-black disabled:opacity-50 transition-all">
+                                <i className="bi bi-printer"></i> 
+                                <span>Cetak PDF</span>
                             </button>
                         </div>
                     </div>
+
+                    {/* Mobile Filter Drawer */}
+                    <MobileFilterDrawer 
+                        isOpen={isFilterDrawerOpen} 
+                        onClose={() => setIsFilterDrawerOpen(false)}
+                        title="Filter Jadwal"
+                    >
+                        <div className="space-y-6">
+                            <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
+                                <label className="block text-xs font-black text-gray-400 uppercase mb-3 tracking-widest">Pilih Jenjang</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {settings.jenjang.map(j => (
+                                        <button 
+                                            key={j.id} 
+                                            onClick={() => { setFilterJenjangId(j.id); setFilterKelasId(0); setFilterRombelId(0); }}
+                                            className={`py-3 px-4 rounded-2xl text-sm font-bold transition-all border ${filterJenjangId === j.id ? 'bg-teal-600 text-white border-teal-600 shadow-lg' : 'bg-white text-gray-600 border-gray-200'}`}
+                                        >
+                                            {j.nama}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-2 tracking-widest ml-1">Pilih Kelas</label>
+                                    <select 
+                                        value={filterKelasId} 
+                                        onChange={e => { setFilterKelasId(Number(e.target.value)); setFilterRombelId(0); }} 
+                                        className="w-full border-2 border-gray-100 rounded-2xl p-4 text-base font-bold bg-white focus:border-teal-500 outline-none transition-all disabled:opacity-50"
+                                        disabled={!filterJenjangId}
+                                    >
+                                        <option value={0}>Semua Kelas</option>
+                                        {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-2 tracking-widest ml-1">Pilih Rombongan Belajar</label>
+                                    <select 
+                                        value={filterRombelId} 
+                                        onChange={e => setFilterRombelId(Number(e.target.value))} 
+                                        className="w-full border-2 border-gray-100 rounded-2xl p-4 text-base font-bold bg-white focus:border-teal-500 outline-none transition-all disabled:opacity-50"
+                                        disabled={!filterJenjangId}
+                                    >
+                                        <option value={0}>Semua Rombongan Belajar</option>
+                                        {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Mobile specific Actions */}
+                            {canWrite && (
+                                <div className="space-y-3">
+                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tindakan Editor</h4>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button 
+                                            onClick={() => { handleAutoGenerate(); setIsFilterDrawerOpen(false); }} 
+                                            className="bg-teal-50 text-teal-700 border border-teal-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 shadow-sm"
+                                        >
+                                            <i className="bi bi-magic text-2xl"></i>
+                                            <span className="text-xs font-black">Auto Build</span>
+                                        </button>
+                                        <button 
+                                            onClick={() => { setIsArchiveModalOpen(true); setIsFilterDrawerOpen(false); }} 
+                                            className="bg-blue-50 text-blue-700 border border-blue-100 p-4 rounded-2xl flex flex-col items-center justify-center gap-2 shadow-sm"
+                                        >
+                                            <i className="bi bi-archive text-2xl"></i>
+                                            <span className="text-xs font-black">Arsipkan</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="p-6 bg-gray-900 rounded-[2rem] text-center">
+                                <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">Status Editor</div>
+                                <div className="text-xl font-black text-white">{activeJenjang?.nama || 'Pilih Jenjang'}</div>
+                            </div>
+                        </div>
+                    </MobileFilterDrawer>
 
                     {/* Main Content */}
                     {filterRombelId ? (

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { db } from '../../db';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const TabMonitoringNilai: React.FC = () => {
     const { settings } = useAppContext();
@@ -12,6 +13,7 @@ export const TabMonitoringNilai: React.FC = () => {
     const [filterTahun, setFilterTahun] = useState('2024/2025');
     const [filterSemester, setFilterSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [availableYears, setAvailableYears] = useState<string[]>([]);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     
     // Stats State
     const [stats, setStats] = useState<any[]>([]);
@@ -105,28 +107,79 @@ export const TabMonitoringNilai: React.FC = () => {
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Header & Filter */}
-            <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-lg border shadow-sm gap-4">
-                <div>
-                    <h2 className="text-lg font-bold text-gray-800">Monitoring Pengumpulan Nilai</h2>
-                    <p className="text-xs text-gray-500">Pantau progres pengisian rapor oleh wali kelas/guru.</p>
-                </div>
-                <div className="flex gap-3">
+            <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase">Tahun Ajaran</label>
-                        {availableYears.length > 0 ? (
-                            <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="border rounded p-2 text-sm bg-gray-50 font-medium">
-                                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
-                        ) : <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="border rounded p-2 text-sm w-32" />}
+                        <h2 className="text-xl font-black text-gray-800">Monitoring Pengumpulan</h2>
+                        <p className="text-sm text-gray-500 font-medium">Pantau progres pengisian rapor oleh wali kelas.</p>
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase">Semester</label>
-                        <select value={filterSemester} onChange={e => setFilterSemester(e.target.value as any)} className="border rounded p-2 text-sm bg-gray-50 font-medium">
-                            <option value="Ganjil">Ganjil</option><option value="Genap">Genap</option>
-                        </select>
+
+                    {/* Mobile Filter */}
+                    <div className="md:hidden w-full">
+                        <button 
+                            onClick={() => setIsFilterDrawerOpen(true)}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                        >
+                            <i className="bi bi-funnel-fill"></i>
+                            <span>Filter</span>
+                        </button>
+                    </div>
+
+                    {/* Desktop Filter */}
+                    <div className="hidden md:flex gap-4">
+                        <div className="min-w-[140px]">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Tahun Ajaran</label>
+                            {availableYears.length > 0 ? (
+                                <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold bg-gray-50/50 focus:bg-white focus:border-teal-500 transition-all outline-none">
+                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            ) : (
+                                <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold bg-gray-50/50 focus:bg-white focus:border-teal-500 transition-all outline-none" />
+                            )}
+                        </div>
+                        <div className="min-w-[120px]">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Semester</label>
+                            <select value={filterSemester} onChange={e => setFilterSemester(e.target.value as any)} className="w-full border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold bg-gray-50/50 focus:bg-white focus:border-teal-500 transition-all outline-none">
+                                <option value="Ganjil">Ganjil</option>
+                                <option value="Genap">Genap</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <MobileFilterDrawer 
+                isOpen={isFilterDrawerOpen} 
+                onClose={() => setIsFilterDrawerOpen(false)}
+                title="Filter Monitoring"
+            >
+                <div className="space-y-6">
+                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Tahun Ajaran</label>
+                            {availableYears.length > 0 ? (
+                                <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-white rounded-2xl p-4 text-base font-black shadow-sm focus:border-teal-500 outline-none">
+                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            ) : (
+                                <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-white rounded-2xl p-4 text-base font-black shadow-sm focus:border-teal-500 outline-none" />
+                            )}
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Semester</label>
+                            <select value={filterSemester} onChange={e => setFilterSemester(e.target.value as any)} className="w-full border-2 border-white rounded-2xl p-4 text-base font-black shadow-sm focus:border-teal-500 outline-none">
+                                <option value="Ganjil">Ganjil</option>
+                                <option value="Genap">Genap</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-teal-600 rounded-[2rem] text-center shadow-xl shadow-teal-200">
+                        <div className="text-[10px] font-black text-teal-100 uppercase tracking-[0.2em] mb-1">Status Pantauan</div>
+                        <div className="text-3xl font-black text-white">{filterTahun} - {filterSemester}</div>
+                    </div>
+                </div>
+            </MobileFilterDrawer>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

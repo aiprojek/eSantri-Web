@@ -535,6 +535,62 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                     </div>
                 </div>
             );
+        case ReportType.JurnalMengajar:
+            return (
+                <div className="pt-4 border-t space-y-4">
+                    <h3 className="text-md font-semibold text-gray-700">Filter Jurnal Mengajar</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Jurnal</label>
+                            <input 
+                                type="date" 
+                                value={options.jurnalTanggalFilter} 
+                                onChange={e => options.setJurnalTanggalFilter(e.target.value)} 
+                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Semester</label>
+                            <select value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                <option value="Ganjil">Ganjil</option>
+                                <option value="Genap">Genap</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
+                            <input type="text" value={options.tahunAjaran} onChange={e => options.setTahunAjaran(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: 1446/1447 H"/>
+                        </div>
+                    </div>
+                </div>
+            );
+        case ReportType.RekapKesehatan:
+        case ReportType.RekapKonseling:
+            const isHealth = activeReport === ReportType.RekapKesehatan;
+            return (
+                <div className="pt-4 border-t space-y-4">
+                    <h3 className="text-md font-semibold text-gray-700">Filter {isHealth ? 'Rekap Kesehatan' : 'Rekap Konseling'}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Dari Tanggal</label>
+                            <input 
+                                type="date" 
+                                value={isHealth ? options.kesehatanStartDate : options.bkStartDate} 
+                                onChange={e => isHealth ? options.setKesehatanStartDate(e.target.value) : options.setBkStartDate(e.target.value)} 
+                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Sampai Tanggal</label>
+                            <input 
+                                type="date" 
+                                value={isHealth ? options.kesehatanEndDate : options.bkEndDate} 
+                                onChange={e => isHealth ? options.setKesehatanEndDate(e.target.value) : options.setBkEndDate(e.target.value)} 
+                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                            />
+                        </div>
+                    </div>
+                </div>
+            );
         case ReportType.LembarRapor:
         case ReportType.RaporLengkap:
              return (

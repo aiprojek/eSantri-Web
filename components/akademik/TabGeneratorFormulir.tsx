@@ -477,14 +477,21 @@ export const TabGeneratorFormulir: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                    <button onClick={handleGenerate} disabled={!genTemplateId || !genJenjangId} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3.5 rounded-xl font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mt-4">
+                    <button 
+                        onClick={handleGenerate} 
+                        disabled={!genTemplateId || !genJenjangId} 
+                        className="w-full bg-teal-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-teal-100 hover:bg-teal-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 px-6 active:scale-95"
+                    >
                         <i className="bi bi-cloud-download-fill text-xl"></i> 
-                        <span>Download Formulir HTML</span>
+                        <span className="text-sm">Download Formulir Digital</span>
                     </button>
-                    <p className="text-center text-xs text-gray-500 mt-3">
-                        File HTML ini ringan (Offline-First). Kirimkan ke Guru via WhatsApp agar mereka bisa mengisi nilai tanpa perlu login aplikasi.
-                    </p>
+                    <div className="mt-3 flex items-start gap-2 text-[10px] text-gray-500 bg-gray-50 p-3 rounded-lg border border-dashed border-gray-300">
+                        <i className="bi bi-info-circle-fill text-teal-500 mt-0.5"></i>
+                        <p className="leading-relaxed">
+                            Formulir ini **Offline-First**. Kirimkan ke Guru untuk pengisian nilai tanpa kuota internet.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

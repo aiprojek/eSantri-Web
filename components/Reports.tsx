@@ -12,7 +12,7 @@ import { ReportPreviewPanel } from './reports/ReportPreviewPanel';
 
 const Reports: React.FC = () => {
   const { settings, showToast } = useAppContext();
-  const { santriList } = useSantriContext();
+  const { santriList, jurnalMengajarList, kesehatanRecords, bkSessions } = useSantriContext();
   const { tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList } = useFinanceContext();
   
   // -- Nav & UI State --
@@ -160,7 +160,10 @@ const Reports: React.FC = () => {
               pembayaranList: activeReportType === ReportType.FinanceSummary || activeReportType === ReportType.RekeningKoranSantri ? pembayaranList : [],
               transaksiSaldoList: activeReportType === ReportType.RekeningKoranSantri ? transaksiSaldoList : [],
               filteredKas: filteredKasData,
-              allKas: activeReportType === ReportType.LaporanArusKas ? transaksiKasList : []
+              allKas: activeReportType === ReportType.LaporanArusKas ? transaksiKasList : [],
+              jurnalMengajarList: activeReportType === ReportType.JurnalMengajar ? jurnalMengajarList : [],
+              kesehatanRecords: activeReportType === ReportType.RekapKesehatan ? kesehatanRecords : [],
+              bkSessions: activeReportType === ReportType.RekapKonseling ? bkSessions : []
           };
 
           // Logic for generating preview content (same as before but cleaner call)
@@ -180,7 +183,7 @@ const Reports: React.FC = () => {
           }
 
           // Special logic for Rombel grouping (Flattened in hook, but handled here)
-          const perRombelReports = [ReportType.DaftarRombel, ReportType.LembarKedatangan, ReportType.LembarNilai, ReportType.LembarAbsensi, ReportType.LembarRapor, ReportType.RaporLengkap];
+          const perRombelReports = [ReportType.DaftarRombel, ReportType.LembarKedatangan, ReportType.LembarNilai, ReportType.LembarAbsensi, ReportType.LembarRapor, ReportType.RaporLengkap, ReportType.JurnalMengajar];
           let generatedPages: any[] = [];
 
           if (perRombelReports.includes(activeReportType)) {

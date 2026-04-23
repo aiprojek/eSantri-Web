@@ -3,6 +3,7 @@
 
 import { Santri, PondokSettings, RaporRecord, NilaiMapel, RaporTemplate, GridCell } from '../types';
 import { db } from '../db';
+import { getStandaloneDocumentStyles } from '../utils/standaloneStyles';
 
 // --- HELPER: CONVERT EXCEL SYNTAX TO JS ---
 const convertFormulaToJs = (expression: string): string => {
@@ -55,6 +56,7 @@ export const generateRaporFormHtml = (
     settings: PondokSettings,
     config: GeneratorConfig
 ): string => {
+    const standaloneStyles = getStandaloneDocumentStyles();
     let targetSantri: Santri[] = [];
     let contextName = "";
     
@@ -165,7 +167,7 @@ export const generateRaporFormHtml = (
             tbodyHtml += `
                 <tr class="bg-teal-600 text-white font-bold rombel-sep">
                     <td colspan="${interactiveCells.length + 3}" class="p-2 text-xs border border-black sticky left-0 z-20">
-                        <i class="fas fa-users mr-2"></i> ROMBEL: ${rombelName}
+                        <i class="bi bi-people-fill mr-2"></i> ROMBEL: ${rombelName}
                     </td>
                 </tr>
             `;
@@ -250,7 +252,7 @@ export const generateRaporFormHtml = (
         `;
     }
 
-    return `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Input Nilai - ${contextName}</title><script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"><style>input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.sticky-header th{position:sticky;top:0;z-index:40;height:36px}.rombel-sep td{position:sticky;top:36px;z-index:35}th,td{box-sizing:border-box}</style><script>
+    return `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Input Nilai - ${contextName}</title><style>${standaloneStyles}input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.sticky-header th{position:sticky;top:0;z-index:40;height:36px}.rombel-sep td{position:sticky;top:36px;z-index:35}th,td{box-sizing:border-box}</style><script>
         const santriIds = [${targetSantri.map(s=>s.id).join(',')}]; const santriNames = ${JSON.stringify(santriMap)}; const rankConfigs = ${rankConfigsJson};
         function getValue(key, rowId) { const el = document.getElementById('val_' + rowId + '_' + key); if (!el) return 0; const val = el.value; if (val === '') return 0; if (!isNaN(parseFloat(val)) && isFinite(val)) return parseFloat(val); return val; }
         function average(...args) { const validArgs = args.filter(a => typeof a === 'number' && !isNaN(a)); if (validArgs.length === 0) return 0; return validArgs.reduce((a,b)=>a+b,0)/validArgs.length; }
@@ -259,8 +261,8 @@ export const generateRaporFormHtml = (
         function excelIf(c, t, f) { return c ? t : f; } function excelAnd(...args) { return args.every(Boolean); } function excelOr(...args) { return args.some(Boolean); }
         function calculateRanks() { if (rankConfigs.length === 0) return; rankConfigs.forEach(cfg => { const values = santriIds.map(id => { const el = document.getElementById('val_' + id + '_' + cfg.sourceKey); return { id, val: el ? parseFloat(el.value) || 0 : 0 }; }); const sorted = [...values].sort((a,b) => b.val - a.val); const rankMap = {}; sorted.forEach((item, index) => { rankMap[item.id] = index + 1; }); santriIds.forEach(id => { const targetEl = document.getElementById('val_' + id + '_' + cfg.targetKey); if(targetEl) { const rank = rankMap[id]; targetEl.value = (cfg.limit > 0 && rank > cfg.limit) ? "" : rank; } }); }); }
         function calculateRow(rowId) { ${formulaScripts} calculateRanks(); }
-        function submitData() { santriIds.forEach(id => calculateRow(id)); const btn = document.getElementById('submit-btn'); const originalText = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...'; try { const inputKeys = ${JSON.stringify(inputKeysToSave)}; const records = []; santriIds.forEach(sid => { const santriRecord = { santriId: sid, santriName: santriNames[sid] || "", data: {} }; inputKeys.forEach(key => { const el = document.getElementById('val_' + sid + '_' + key); if(el) { const val = el.value; if (val !== "" && val !== null) santriRecord.data[key] = val; } }); records.push(santriRecord); }); const payload = { meta: { rombelId: ${config.rombelId}, rombelName: "${contextName}", templateName: "${config.template.name}", tahunAjaran: "${config.tahunAjaran}", semester: "${config.semester}", templateId: "${config.template.id}", timestamp: new Date().toISOString() }, records: records }; ${submissionScript} } catch (e) { alert("Error: " + e.message); btn.disabled = false; btn.innerHTML = originalText; } }
-    </script></head><body class="bg-gray-100 min-h-screen p-4"><div class="max-w-[98%] mx-auto bg-white shadow-xl rounded-xl border overflow-hidden flex flex-col h-[90vh]"><div class="bg-teal-700 p-4 text-white flex justify-between items-center shrink-0"><div><h1 class="text-xl font-bold">${config.template.name}</h1><p class="text-xs opacity-80">${settings.namaPonpes} | ${contextName}</p></div><button onclick="submitData()" id="submit-btn" class="bg-white text-teal-700 px-4 py-2 rounded font-bold text-sm hover:bg-teal-50"><i class="fab fa-paper-plane"></i> Kirim Nilai</button></div><div class="flex-grow overflow-auto"><table class="w-full text-sm border-collapse"><thead class="sticky-header">${theadHtml}</thead><tbody class="divide-y">${tbodyHtml}</tbody></table></div></div></body></html>`;
+        function submitData() { santriIds.forEach(id => calculateRow(id)); const btn = document.getElementById('submit-btn'); const originalText = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="inline-block animate-spin mr-2">↻</span>Memproses...'; try { const inputKeys = ${JSON.stringify(inputKeysToSave)}; const records = []; santriIds.forEach(sid => { const santriRecord = { santriId: sid, santriName: santriNames[sid] || "", data: {} }; inputKeys.forEach(key => { const el = document.getElementById('val_' + sid + '_' + key); if(el) { const val = el.value; if (val !== "" && val !== null) santriRecord.data[key] = val; } }); records.push(santriRecord); }); const payload = { meta: { rombelId: ${config.rombelId}, rombelName: "${contextName}", templateName: "${config.template.name}", tahunAjaran: "${config.tahunAjaran}", semester: "${config.semester}", templateId: "${config.template.id}", timestamp: new Date().toISOString() }, records: records }; ${submissionScript} } catch (e) { alert("Error: " + e.message); btn.disabled = false; btn.innerHTML = originalText; } }
+    </script></head><body class="bg-gray-100 min-h-screen p-4"><div class="max-w-[98%] mx-auto bg-white shadow-xl rounded-xl border overflow-hidden flex flex-col h-[90vh]"><div class="bg-teal-700 p-4 text-white flex justify-between items-center shrink-0"><div><h1 class="text-xl font-bold">${config.template.name}</h1><p class="text-xs opacity-80">${settings.namaPonpes} | ${contextName}</p></div><button onclick="submitData()" id="submit-btn" class="bg-white text-teal-700 px-4 py-2 rounded font-bold text-sm hover:bg-teal-50"><i class="bi bi-send-fill mr-1"></i> Kirim Nilai</button></div><div class="flex-grow overflow-auto"><table class="w-full text-sm border-collapse"><thead class="sticky-header">${theadHtml}</thead><tbody class="divide-y">${tbodyHtml}</tbody></table></div></div></body></html>`;
 };
 
 export const fetchRaporFromCloud = async (scriptUrl: string): Promise<any[]> => {

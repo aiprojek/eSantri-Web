@@ -67,26 +67,26 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         triggerSuccessDownload('CSV berhasil diunduh.');
     };
 
-    const handleDownloadExcel = () => {
+    const handleDownloadExcel = async () => {
         setIsGeneratingFile(true);
         try {
             const fileName = `Laporan_${activeReport}_${new Date().toISOString().slice(0,10)}`;
             
             if (activeReport === ReportType.LaporanKontak) {
-                exportContactsToExcel(filteredSantri, settings, fileName);
+                await exportContactsToExcel(filteredSantri, settings, fileName);
             } 
             else if (activeReport === ReportType.LaporanArusKas && excelData?.transaksiKas) {
-                exportArusKasToExcel(excelData.transaksiKas, fileName);
+                await exportArusKasToExcel(excelData.transaksiKas, fileName);
             }
             else if (activeReport === ReportType.FinanceSummary && excelData?.tagihanList) {
-                exportFinanceSummaryToExcel(filteredSantri, excelData.tagihanList, settings, fileName);
+                await exportFinanceSummaryToExcel(filteredSantri, excelData.tagihanList, settings, fileName);
             }
             else if (activeReport === ReportType.LaporanEMIS) {
-                exportEmisTemplate(filteredSantri, settings, `EMIS_Export_${new Date().toISOString().slice(0,10)}`);
+                await exportEmisTemplate(filteredSantri, settings, `EMIS_Export_${new Date().toISOString().slice(0,10)}`);
             }
             else {
                 // Default: Export Santri Data (for Biodata, Rombel, etc)
-                exportSantriToExcel(filteredSantri, settings, fileName);
+                await exportSantriToExcel(filteredSantri, settings, fileName);
             }
             triggerSuccessDownload('Excel berhasil diunduh.');
         } catch (error) {
@@ -103,10 +103,10 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         setShowDonationModal(true);
     };
 
-    const handleDownloadAutoTable = () => {
+    const handleDownloadAutoTable = async () => {
         setIsGeneratingFile(true);
         try {
-            exportToAutoTable('preview-area', `Laporan_${activeReport}`);
+            await exportToAutoTable('preview-area', `Laporan_${activeReport}`);
             triggerSuccessDownload('PDF AutoTable berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor AutoTable.', 'error');
@@ -116,10 +116,10 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         }
     };
 
-    const handleDownloadVisualExcel = () => {
+    const handleDownloadVisualExcel = async () => {
         setIsGeneratingFile(true);
         try {
-            exportPreviewToExcelWorksheets('preview-area', `Laporan_${activeReport}`);
+            await exportPreviewToExcelWorksheets('preview-area', `Laporan_${activeReport}`);
             triggerSuccessDownload('Excel Visual berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor Excel Visual.', 'error');

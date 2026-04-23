@@ -1,14 +1,26 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { Suspense, lazy, useState, useMemo, useRef } from 'react';
 import { ReportType, Santri } from '../types';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { useFinanceContext } from '../contexts/FinanceContext';
 import { useReportGenerator } from '../hooks/useReportGenerator';
 import { useReportConfig } from '../hooks/useReportConfig';
-import { ReportSelectionHome } from './reports/ReportSelectionHome';
-import { ReportFilterPanel } from './reports/ReportFilterPanel';
-import { ReportPreviewPanel } from './reports/ReportPreviewPanel';
+const ReportSelectionHome = lazy(() =>
+  import('./reports/ReportSelectionHome').then((module) => ({ default: module.ReportSelectionHome }))
+);
+const ReportFilterPanel = lazy(() =>
+  import('./reports/ReportFilterPanel').then((module) => ({ default: module.ReportFilterPanel }))
+);
+const ReportPreviewPanel = lazy(() =>
+  import('./reports/ReportPreviewPanel').then((module) => ({ default: module.ReportPreviewPanel }))
+);
+
+const ReportsPanelFallback = () => (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex items-center justify-center h-64">
+    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600"></div>
+  </div>
+);
 
 const Reports: React.FC = () => {
   const { settings, showToast } = useAppContext();
@@ -265,7 +277,9 @@ const Reports: React.FC = () => {
       <div className="flex-grow relative overflow-hidden">
           {currentView === 'home' ? (
               <div className="h-full overflow-y-auto pr-2 custom-scrollbar">
-                  <ReportSelectionHome onSelectReport={handleSelectReport} />
+                  <Suspense fallback={<ReportsPanelFallback />}>
+                      <ReportSelectionHome onSelectReport={handleSelectReport} />
+                  </Suspense>
               </div>
           ) : (
               <div className="flex h-full relative">
@@ -299,35 +313,39 @@ const Reports: React.FC = () => {
                               </div>
                           </div>
                    
-                          <ReportFilterPanel 
-                              activeReport={activeReportType!}
-                              settings={settings}
-                              filters={filters}
-                              onFilterChange={handleFilterChange}
-                              reportConfig={reportConfig}
-                              filteredSantri={filteredSantri}
-                              availableKelas={availableKelas}
-                              availableRombel={availableRombel}
-                              onGenerate={() => { handleGenerate(); setIsFilterDrawerOpen(false); }}
-                              isGenerating={isGenerating}
-                              canGenerate={reportConfig.canGenerate}
-                          />
+                          <Suspense fallback={<ReportsPanelFallback />}>
+                              <ReportFilterPanel 
+                                  activeReport={activeReportType!}
+                                  settings={settings}
+                                  filters={filters}
+                                  onFilterChange={handleFilterChange}
+                                  reportConfig={reportConfig}
+                                  filteredSantri={filteredSantri}
+                                  availableKelas={availableKelas}
+                                  availableRombel={availableRombel}
+                                  onGenerate={() => { handleGenerate(); setIsFilterDrawerOpen(false); }}
+                                  isGenerating={isGenerating}
+                                  canGenerate={reportConfig.canGenerate}
+                              />
+                          </Suspense>
                       </div>
                   </div>
 
                   {/* Main: Preview Panel (Full width now) */}
                   <div className="w-full h-full bg-gray-100 rounded-xl overflow-hidden border border-gray-300">
-                      <ReportPreviewPanel 
-                          previewContent={previewContent}
-                          activeReport={activeReportType!}
-                          pageCount={pageCount}
-                          isLoading={isGenerating}
-                          paperSize={reportConfig.paperSize}
-                          onToast={showToast}
-                          filteredSantri={filteredSantri}
-                          settings={settings}
-                          excelData={exportData} // Pass the specific data needed for export
-                      />
+                      <Suspense fallback={<ReportsPanelFallback />}>
+                          <ReportPreviewPanel 
+                              previewContent={previewContent}
+                              activeReport={activeReportType!}
+                              pageCount={pageCount}
+                              isLoading={isGenerating}
+                              paperSize={reportConfig.paperSize}
+                              onToast={showToast}
+                              filteredSantri={filteredSantri}
+                              settings={settings}
+                              excelData={exportData} // Pass the specific data needed for export
+                          />
+                      </Suspense>
                   </div>
               </div>
           )}

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PondokSettings, PortalConfig, PortalContact } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { useFirebase } from '../../../contexts/FirebaseContext';
@@ -162,7 +162,13 @@ const PortalPreview: React.FC<{ config: PortalConfig; settings: PondokSettings }
 
 export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSettings, onSaveSettings }) => {
     const { showToast } = useAppContext();
-    const { fbUser } = useFirebase();
+    const { fbUser, initializeAuthState } = useFirebase();
+
+    useEffect(() => {
+        if (localSettings.cloudSyncConfig?.provider === 'firebase' || localSettings.cloudSyncConfig?.portalEnabled) {
+            void initializeAuthState();
+        }
+    }, [initializeAuthState, localSettings.cloudSyncConfig?.portalEnabled, localSettings.cloudSyncConfig?.provider]);
     
     // Get Tenant ID for URL
     const tenantId = localSettings.cloudSyncConfig?.firebasePairedTenantId || fbUser?.uid;

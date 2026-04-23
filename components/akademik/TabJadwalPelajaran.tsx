@@ -5,11 +5,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from '../../db';
 import { JadwalPelajaran, JamPelajaran, ArsipJadwal, Rombel, TenagaPengajar } from '../../types';
 import { JadwalModal } from './modals/JadwalModal';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { PrintHeader } from '../common/PrintHeader';
 import { ReportFooter, formatDate } from '../reports/modules/Common';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { loadJsPdf, loadJsPdfAutoTable } from '../../utils/lazyClientLibs';
 
 // --- MODAL ARSIP ---
 interface ArchiveModalProps {
@@ -477,7 +476,12 @@ export const TabJadwalPelajaran: React.FC = () => {
         // Ensure kelas filter also updates for consistency if needed, but not strictly required
     };
 
-    const handlePrint = () => {
+    const handlePrint = async () => {
+        const [{ jsPDF }, autoTableModule] = await Promise.all([
+            loadJsPdf(),
+            loadJsPdfAutoTable()
+        ]);
+        const autoTable = autoTableModule.default;
         const doc = new jsPDF({
             orientation: 'landscape',
             unit: 'mm',

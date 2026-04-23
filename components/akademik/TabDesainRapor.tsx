@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useAppContext } from '../../AppContext';
 import { RaporTemplate, GridCell, RaporColumnType } from '../../types';
-import * as XLSX from 'xlsx';
+import { loadXLSX } from '../../utils/lazyClientLibs';
 
 export const TabDesainRapor: React.FC = () => {
     const { settings, onSaveSettings, showToast, showConfirmation, showAlert, currentUser } = useAppContext();
@@ -197,8 +197,9 @@ export const TabDesainRapor: React.FC = () => {
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
             try {
+                const XLSX = await loadXLSX();
                 const bstr = evt.target?.result;
                 const wb = XLSX.read(bstr, { type: 'binary' });
                 const wsname = wb.SheetNames[0];

@@ -1,15 +1,22 @@
 
-import React, { useState, useEffect } from 'react';
-import { TabDesainRapor } from './akademik/TabDesainRapor';
-import { TabGeneratorFormulir } from './akademik/TabGeneratorFormulir';
-import { TabImportNilai } from './akademik/TabImportNilai';
-import { TabDataNilai } from './akademik/TabDataNilai';
-import { TabCetakRapor } from './akademik/TabCetakRapor';
-import { TabMonitoringNilai } from './akademik/TabMonitoringNilai';
-import { TabJadwalPelajaran } from './akademik/TabJadwalPelajaran';
-import { TabInputNilaiWali } from './akademik/TabInputNilaiWali';
-import { TabJurnalMengajar } from './akademik/TabJurnalMengajar';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
+
+const TabDesainRapor = lazy(() => import('./akademik/TabDesainRapor').then((module) => ({ default: module.TabDesainRapor })));
+const TabGeneratorFormulir = lazy(() => import('./akademik/TabGeneratorFormulir').then((module) => ({ default: module.TabGeneratorFormulir })));
+const TabImportNilai = lazy(() => import('./akademik/TabImportNilai').then((module) => ({ default: module.TabImportNilai })));
+const TabDataNilai = lazy(() => import('./akademik/TabDataNilai').then((module) => ({ default: module.TabDataNilai })));
+const TabCetakRapor = lazy(() => import('./akademik/TabCetakRapor').then((module) => ({ default: module.TabCetakRapor })));
+const TabMonitoringNilai = lazy(() => import('./akademik/TabMonitoringNilai').then((module) => ({ default: module.TabMonitoringNilai })));
+const TabJadwalPelajaran = lazy(() => import('./akademik/TabJadwalPelajaran').then((module) => ({ default: module.TabJadwalPelajaran })));
+const TabInputNilaiWali = lazy(() => import('./akademik/TabInputNilaiWali').then((module) => ({ default: module.TabInputNilaiWali })));
+const TabJurnalMengajar = lazy(() => import('./akademik/TabJurnalMengajar').then((module) => ({ default: module.TabJurnalMengajar })));
+
+const TabLoadingFallback = () => (
+    <div className="flex justify-center items-center h-48">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600"></div>
+    </div>
+);
 
 const Akademik: React.FC = () => {
     const { currentUser } = useAppContext();
@@ -123,15 +130,17 @@ const Akademik: React.FC = () => {
                 </nav>
 
                 <div className="p-6">
-                    {activeTab === 'jadwal' && <TabJadwalPelajaran />}
-                    {activeTab === 'designer' && <TabDesainRapor />}
-                    {activeTab === 'generator' && <TabGeneratorFormulir />}
-                    {activeTab === 'import' && <TabImportNilai />}
-                    {activeTab === 'monitoring' && <TabMonitoringNilai />}
-                    {activeTab === 'data' && <TabDataNilai />}
-                    {activeTab === 'print' && <TabCetakRapor />}
-                    {activeTab === 'input_wali' && <TabInputNilaiWali />}
-                    {activeTab === 'jurnal' && <TabJurnalMengajar />}
+                    <Suspense fallback={<TabLoadingFallback />}>
+                        {activeTab === 'jadwal' && <TabJadwalPelajaran />}
+                        {activeTab === 'designer' && <TabDesainRapor />}
+                        {activeTab === 'generator' && <TabGeneratorFormulir />}
+                        {activeTab === 'import' && <TabImportNilai />}
+                        {activeTab === 'monitoring' && <TabMonitoringNilai />}
+                        {activeTab === 'data' && <TabDataNilai />}
+                        {activeTab === 'print' && <TabCetakRapor />}
+                        {activeTab === 'input_wali' && <TabInputNilaiWali />}
+                        {activeTab === 'jurnal' && <TabJurnalMengajar />}
+                    </Suspense>
                 </div>
             </div>
         </div>

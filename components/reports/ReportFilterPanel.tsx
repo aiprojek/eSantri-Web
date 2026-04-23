@@ -1,7 +1,16 @@
 
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { PondokSettings, ReportType, Santri, Jenjang, Kelas, Rombel } from '../../types';
-import { ReportOptions } from './ReportOptions';
+
+const ReportOptions = lazy(() =>
+    import('./ReportOptions').then((module) => ({ default: module.ReportOptions }))
+);
+
+const ReportOptionsFallback = () => (
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
+    </div>
+);
 
 interface ReportFilterPanelProps {
     activeReport: ReportType;
@@ -161,7 +170,9 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                         </div>
                     </div>
 
-                    <ReportOptions config={reportConfig} filteredSantri={filteredSantri} settings={settings} selectedJenjangId={filters.jenjangId} />
+                    <Suspense fallback={<ReportOptionsFallback />}>
+                        <ReportOptions config={reportConfig} filteredSantri={filteredSantri} settings={settings} selectedJenjangId={filters.jenjangId} />
+                    </Suspense>
                 </div>
                 )}
 

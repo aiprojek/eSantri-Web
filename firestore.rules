@@ -6,19 +6,52 @@ service cloud.firestore {
     function isAuthenticated() {
       return request.auth != null;
     }
+
+    function tenantOwner(tenantId) {
+      return isAuthenticated() && request.auth.uid == tenantId;
+    }
+
+    function hasLegacyMemberAccess(tenantId) {
+      return exists(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members) && 
+        request.auth.uid in get(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members).data.uids;
+    }
+
+    function hasMemberLink(tenantId) {
+      return exists(/databases/$(database)/documents/tenants/$(tenantId)/metadata/memberLinks/$(request.auth.uid));
+    }
     
     function isTenantMember(tenantId) {
       return isAuthenticated() && (
-        request.auth.uid == tenantId || 
-        exists(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members) && 
-        request.auth.uid in get(/databases/$(database)/documents/tenants/$(tenantId)/metadata/members).data.uids
+        tenantOwner(tenantId) || 
+        hasMemberLink(tenantId) ||
+        hasLegacyMemberAccess(tenantId)
       );
+    }
+
+    function validInviteForTenant(inviteId, tenantId) {
+      return inviteId is string &&
+        exists(/databases/$(database)/documents/tenantInvites/$(inviteId)) &&
+        get(/databases/$(database)/documents/tenantInvites/$(inviteId)).data.tenantId == tenantId &&
+        get(/databases/$(database)/documents/tenantInvites/$(inviteId)).data.expiresAt > request.time;
+    }
+
+    match /publicPortals/{tenantId} {
+      allow read: if true;
+      allow write: if isTenantMember(tenantId);
+    }
+
+    match /tenantInvites/{inviteId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.tenantId == request.auth.uid &&
+        request.resource.data.expiresAt > request.time;
+      allow update, delete: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
     }
 
     // Tenant Data
     match /tenants/{tenantId} {
-      // Allow public read of basic settings for the portal
-      allow read: if true; 
+      allow read: if isTenantMember(tenantId); 
       allow write: if isTenantMember(tenantId);
       
       // PSB Registrations - Allow public create
@@ -31,11 +64,18 @@ service cloud.firestore {
         allow read, write: if isTenantMember(tenantId);
       }
       
+      match /metadata/memberLinks/{userId} {
+        allow read: if isAuthenticated() && (request.auth.uid == userId || isTenantMember(tenantId));
+        allow create: if isAuthenticated() &&
+          request.auth.uid == userId &&
+          validInviteForTenant(request.resource.data.inviteId, tenantId) &&
+          request.resource.data.uid == request.auth.uid;
+        allow update, delete: if isAuthenticated() && (tenantOwner(tenantId) || request.auth.uid == userId);
+      }
+
       match /metadata/members {
-        // Allow anyone to join if they have the ID (pairing code)
-        // In a real app, you might want more checks
-        allow read: if isAuthenticated();
-        allow write: if isAuthenticated();
+        allow read: if isTenantMember(tenantId);
+        allow write: if tenantOwner(tenantId);
       }
     }
   }

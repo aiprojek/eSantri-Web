@@ -3,13 +3,13 @@ import React, { useState } from 'react';
 import { useAppContext } from '../AppContext';
 import { db } from '../db';
 import { hashString } from '../services/authService';
-import { updateAccountFromCloud } from '../services/syncService';
 import { User } from '../types';
 import { useFirebase } from '../contexts/FirebaseContext';
+import { loadSyncService } from '../utils/lazyCloudServices';
 
 export const LoginScreen: React.FC = () => {
     const { login, showToast, settings } = useAppContext();
-    const { fbUser, login: fbLogin, isFbLoading } = useFirebase();
+    const { login: fbLogin, isFbLoading } = useFirebase();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -81,6 +81,7 @@ export const LoginScreen: React.FC = () => {
         
         setIsLoading(true);
         try {
+            const { updateAccountFromCloud } = await loadSyncService();
             await updateAccountFromCloud(settings.cloudSyncConfig);
             showToast('Data akun berhasil diperbarui! Silakan login dengan password baru.', 'success');
         } catch (e) {
@@ -219,11 +220,11 @@ export const LoginScreen: React.FC = () => {
                                 </div>
                                 <button 
                                     onClick={handleGoogleLogin}
-                                    disabled={isLoading}
+                                    disabled={isLoading || isFbLoading}
                                     className="w-full bg-white border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
                                 >
                                     <i className="bi bi-google text-red-500"></i>
-                                    Masuk dengan Google
+                                    {isFbLoading ? 'Menyiapkan Google Login...' : 'Masuk dengan Google'}
                                 </button>
                             </div>
                         )}

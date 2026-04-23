@@ -1,13 +1,15 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import { Pendaftar, PsbConfig } from '../types';
 import { db } from '../db';
-import { PsbDashboard } from './psb/PsbDashboard';
-import { PsbRekap } from './psb/PsbRekap';
-import { PsbFormBuilder } from './psb/PsbFormBuilder';
-import { PsbPosterMaker } from './psb/PsbPosterMaker';
 import { initialSettings } from '../data/mock';
+import { LoadingFallback } from './common/LoadingFallback';
+
+const PsbDashboard = React.lazy(() => import('./psb/PsbDashboard').then((module) => ({ default: module.PsbDashboard })));
+const PsbRekap = React.lazy(() => import('./psb/PsbRekap').then((module) => ({ default: module.PsbRekap })));
+const PsbFormBuilder = React.lazy(() => import('./psb/PsbFormBuilder').then((module) => ({ default: module.PsbFormBuilder })));
+const PsbPosterMaker = React.lazy(() => import('./psb/PsbPosterMaker').then((module) => ({ default: module.PsbPosterMaker })));
 
 const PSB: React.FC = () => {
     const { settings, onSaveSettings, showToast, currentUser } = useAppContext();
@@ -79,10 +81,12 @@ const PSB: React.FC = () => {
                     <button onClick={() => setActiveTab('poster')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'poster' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-stars mr-2"></i>Poster AI</button>
                 </nav>
             </div>
-            {activeTab === 'dashboard' && <PsbDashboard pendaftarList={pendaftarList} config={psbConfig} settings={settings} />}
-            {activeTab === 'rekap' && <PsbRekap pendaftarList={pendaftarList} settings={settings} onImportFromWA={handleImportFromWA} onUpdateList={fetchPendaftar} canWrite={canWrite} />}
-            {activeTab === 'form' && canWrite && <PsbFormBuilder config={psbConfig} settings={settings} onSave={handleSaveConfig} />}
-            {activeTab === 'poster' && <PsbPosterMaker config={psbConfig} onSave={handleSaveConfig} settings={settings} />}
+            <Suspense fallback={<LoadingFallback />}>
+                {activeTab === 'dashboard' && <PsbDashboard pendaftarList={pendaftarList} config={psbConfig} settings={settings} />}
+                {activeTab === 'rekap' && <PsbRekap pendaftarList={pendaftarList} settings={settings} onImportFromWA={handleImportFromWA} onUpdateList={fetchPendaftar} canWrite={canWrite} />}
+                {activeTab === 'form' && canWrite && <PsbFormBuilder config={psbConfig} settings={settings} onSave={handleSaveConfig} />}
+                {activeTab === 'poster' && <PsbPosterMaker config={psbConfig} onSave={handleSaveConfig} settings={settings} />}
+            </Suspense>
         </div>
     );
 };

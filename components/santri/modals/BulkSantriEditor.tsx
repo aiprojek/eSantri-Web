@@ -4,7 +4,7 @@ import { Santri, Alamat } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { useSantriContext } from '../../../contexts/SantriContext';
 import { generateNis } from '../../../utils/nisGenerator';
-import * as XLSX from 'xlsx';
+import { loadXLSX } from '../../../utils/lazyClientLibs';
 
 interface BulkSantriEditorProps {
     isOpen: boolean;
@@ -264,8 +264,9 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
             try {
+                const XLSX = await loadXLSX();
                 const bstr = evt.target?.result;
                 const wb = XLSX.read(bstr, { type: 'binary' });
                 const wsname = wb.SheetNames[0];

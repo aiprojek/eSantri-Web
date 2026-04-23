@@ -545,7 +545,6 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
             <head>
               <meta charset="UTF-8">
               <title>Surat - ${template?.judul || 'eSantri'}</title>
-              <script src="https://cdn.tailwindcss.com"></script>
               <style>
                  ${allCss}
                  body { background-color: #e5e7eb; padding: 2rem; display: flex; justify-content: center; }

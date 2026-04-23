@@ -82,7 +82,7 @@ export const TransactionHistory: React.FC = () => {
          // Export ALL data in range, not just current page
          const endDateTime = endDate + 'T23:59:59.999';
          const allData = await db.transaksiKoperasi.where('tanggal').between(startDate, endDateTime, true, true).reverse().toArray();
-         exportKoperasiToExcel(allData);
+         await exportKoperasiToExcel(allData);
     };
 
     return (

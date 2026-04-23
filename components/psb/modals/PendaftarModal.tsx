@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Pendaftar, PondokSettings } from '../../../types';
 import { useAppContext } from '../../../AppContext';
-import { storage } from '../../../firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntimes';
 
 interface PendaftarModalProps {
     isOpen: boolean;
@@ -149,18 +148,12 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
 
         setIsUploading(fieldName);
         try {
-            // Requirement: Rename file to documentName-santriName
-            const cleanSantriName = formData.namaLengkap.replace(/[^a-zA-Z0-9]/g, '_');
-            const extension = file.name.split('.').pop();
-            const newFileName = `${fieldName}-${cleanSantriName}.${extension}`;
-            
-            const storagePath = `psb/${Date.now()}_${newFileName}`;
-            const fileRef = ref(storage);
-            
-            // Note: In typical Firebase environments, storage usually needs a path
-            const psbRef = ref(storage, storagePath);
-            const snapshot = await uploadBytes(psbRef, file);
-            const downloadUrl = await getDownloadURL(snapshot.ref);
+            const { uploadPsbDocument } = await loadFirebasePsbUploadRuntime();
+            const downloadUrl = await uploadPsbDocument({
+                fieldName,
+                santriName: formData.namaLengkap,
+                file,
+            });
             
             handleCustomDataChange(fieldName, downloadUrl);
             showAlert('Berhasil', `Dokumen ${fieldName} berhasil diunggah.`);

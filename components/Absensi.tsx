@@ -3,12 +3,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { AbsensiRecord } from '../types';
-import * as XLSX from 'xlsx';
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import { PrintHeader } from './common/PrintHeader';
 import { ReportFooter } from './reports/modules/Common';
 import { JurnalMengajarModal } from './akademik/modals/JurnalMengajarModal';
+import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from '../utils/lazyClientLibs';
 
 // --- SUB-COMPONENT: INPUT ABSENSI ---
 const AbsensiInput: React.FC = () => {
@@ -382,13 +380,18 @@ const AbsensiRekap: React.FC = () => {
         window.print();
     };
 
-    const handleExport = (format: 'xlsx' | 'pdf') => {
+    const handleExport = async (format: 'xlsx' | 'pdf') => {
         setIsExportMenuOpen(false);
         const fileName = `Rekap_Absensi_${selectedRombel?.nama.replace(/\s+/g, '_')}_${bulan}_${tahun}`;
         const periodeName = new Date(tahun, bulan - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
         if (format === 'pdf') {
             try {
+                const [{ jsPDF }, autoTableModule] = await Promise.all([
+                    loadJsPdf(),
+                    loadJsPdfAutoTable()
+                ]);
+                const autoTable = autoTableModule.default;
                 const doc = new jsPDF('l', 'mm', 'a4'); // Landscape, mm, A4
                 
                 // --- 1. Header (Kop) ---
@@ -483,6 +486,7 @@ const AbsensiRekap: React.FC = () => {
                 alert("Gagal membuat PDF. Cek konsol.");
             }
         } else if (format === 'xlsx') {
+            const XLSX = await loadXLSX();
             const wb = XLSX.utils.book_new();
             const wsData: any[][] = [];
             

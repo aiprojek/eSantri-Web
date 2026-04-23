@@ -1,14 +1,16 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { Suspense, useState, useEffect, useMemo } from 'react';
 import { PondokSettings, NisJenjangConfig } from '../types';
 import { useAppContext } from '../AppContext';
-import { TabUmum } from './settings/tabs/TabUmum';
-import { TabAkun } from './settings/tabs/TabAkun';
-import { TabNis } from './settings/tabs/TabNis';
-import { TabCloud } from './settings/tabs/TabCloud';
-import { TabBackup } from './settings/tabs/TabBackup';
-import { TabPortal } from './settings/tabs/TabPortal';
-import { TabDiagnostik } from './settings/tabs/TabDiagnostik';
+import { LoadingFallback } from './common/LoadingFallback';
+
+const TabUmum = React.lazy(() => import('./settings/tabs/TabUmum').then((module) => ({ default: module.TabUmum })));
+const TabAkun = React.lazy(() => import('./settings/tabs/TabAkun').then((module) => ({ default: module.TabAkun })));
+const TabNis = React.lazy(() => import('./settings/tabs/TabNis').then((module) => ({ default: module.TabNis })));
+const TabCloud = React.lazy(() => import('./settings/tabs/TabCloud').then((module) => ({ default: module.TabCloud })));
+const TabBackup = React.lazy(() => import('./settings/tabs/TabBackup').then((module) => ({ default: module.TabBackup })));
+const TabPortal = React.lazy(() => import('./settings/tabs/TabPortal').then((module) => ({ default: module.TabPortal })));
+const TabDiagnostik = React.lazy(() => import('./settings/tabs/TabDiagnostik').then((module) => ({ default: module.TabDiagnostik })));
 
 const Settings: React.FC = () => {
     const { settings, onSaveSettings, showConfirmation, showToast } = useAppContext();
@@ -161,13 +163,15 @@ const Settings: React.FC = () => {
             </div>
 
             <div className="space-y-6">
-                {activeTab === 'umum' && <TabUmum localSettings={localSettings} handleInputChange={handleInputChange} activeTeachers={activeTeachers} />}
-                {activeTab === 'akun' && <TabAkun localSettings={localSettings} handleInputChange={handleInputChange} />}
-                {activeTab === 'nis' && <TabNis localSettings={localSettings} setLocalSettings={setLocalSettings} />}
-                {activeTab === 'portal' && <TabPortal localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
-                {activeTab === 'cloud' && <TabCloud localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
-                {activeTab === 'backup' && <TabBackup localSettings={localSettings} setLocalSettings={setLocalSettings} />}
-                {activeTab === 'diagnostik' && <TabDiagnostik />}
+                <Suspense fallback={<LoadingFallback />}>
+                    {activeTab === 'umum' && <TabUmum localSettings={localSettings} handleInputChange={handleInputChange} activeTeachers={activeTeachers} />}
+                    {activeTab === 'akun' && <TabAkun localSettings={localSettings} handleInputChange={handleInputChange} />}
+                    {activeTab === 'nis' && <TabNis localSettings={localSettings} setLocalSettings={setLocalSettings} />}
+                    {activeTab === 'portal' && <TabPortal localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
+                    {activeTab === 'cloud' && <TabCloud localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
+                    {activeTab === 'backup' && <TabBackup localSettings={localSettings} setLocalSettings={setLocalSettings} />}
+                    {activeTab === 'diagnostik' && <TabDiagnostik />}
+                </Suspense>
             </div>
             
              <div className="mt-6 flex justify-end sticky bottom-4 z-10">

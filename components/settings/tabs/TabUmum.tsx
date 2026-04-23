@@ -110,18 +110,16 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
     const checkOfflineStatus = async () => {
         if ('caches' in window) {
             try {
-                // We check if the main cache exists
                 const cacheNames = await caches.keys();
-                const mainCacheName = cacheNames.find(name => name.includes('esantri-web-hybrid'));
+                const mainCacheName = cacheNames.find(name => name.includes('esantri-web-local'));
                 
                 if (mainCacheName) {
                     const cache = await caches.open(mainCacheName);
-                    // Check a few critical dependencies to assume readiness
-                    const react = await cache.match('https://esm.sh/react@18.3.1');
-                    const dexie = await cache.match('https://esm.sh/dexie@3.2.4');
-                    const tailwind = await cache.match('https://cdn.tailwindcss.com');
+                    const appShell = await cache.match('/');
+                    const manifest = await cache.match('/manifest.json');
+                    const icon = await cache.match('/icon.svg');
                     
-                    if (react && dexie && tailwind) {
+                    if (appShell && manifest && icon) {
                         setIsOfflineReady(true);
                     } else {
                         setIsOfflineReady(false);
@@ -146,31 +144,16 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
         setIsDownloadingAssets(true);
         setDownloadProgress(0);
         try {
-            const cacheName = 'esantri-web-hybrid-v2.3'; // Must match sw.js
+            const cacheName = 'esantri-web-local-v3';
             const cache = await caches.open(cacheName);
             
-            // Comprehensive list of dependencies to ensure offline functionality in Hybrid Mode
             const urls = [
                 '/',
                 '/index.html',
                 '/manifest.json',
-                'https://cdn.tailwindcss.com',
-                'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
-                'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?524846017b983fc8ded9325d94ed40f3',
-                // ESM Libraries
-                'https://esm.sh/react@18.3.1',
-                'https://esm.sh/react-dom@18.3.1',
-                'https://esm.sh/react-dom@18.3.1/client',
-                'https://esm.sh/dexie@3.2.4',
-                'https://esm.sh/dexie-react-hooks@1.1.7?external=react,dexie',
-                'https://esm.sh/react-hook-form@7.51.5?external=react',
-                'https://esm.sh/date-fns@^4.1.0',
-                'https://esm.sh/html2canvas@1.4.1',
-                'https://esm.sh/jspdf@2.5.1',
-                'https://esm.sh/jspdf-autotable@3.8.2',
-                'https://esm.sh/xlsx@0.18.5',
-                'https://esm.sh/webdav@5.7.1',
-                'https://esm.sh/react-virtuoso@^4.18.1?external=react,react-dom'
+                '/icon.svg',
+                '/logo.svg',
+                '/sw.js'
             ];
 
             const total = urls.length;
@@ -188,7 +171,7 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
             }
 
             setIsOfflineReady(true);
-            alert("Semua aset berhasil diunduh! Aplikasi siap berjalan offline sepenuhnya.");
+            alert("Aset inti aplikasi berhasil diunduh. Untuk offline penuh, buka aplikasi sekali dalam mode build/preview agar semua aset bundle lokal ikut tercache.");
         } catch (error) {
             console.error("Download assets failed", error);
             alert("Gagal mengunduh aset. Pastikan internet lancar.");

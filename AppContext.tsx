@@ -4,8 +4,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { SuratTemplate, ArsipSurat, AuditLog, PondokSettings } from './types';
 import { db } from './db';
 import { logActivity as logActivityHelper } from './services/logService';
-import { uploadStaffChanges, downloadAndMergeMaster, publishMasterData, getPendingChangesCount } from './services/syncService';
 import { initialSantri } from './data/mock';
+import { loadSyncService } from './utils/lazyCloudServices';
 
 // Import New Contexts
 import { useUIContext } from './contexts/UIContext';
@@ -30,6 +30,7 @@ interface AppContextType {
   
   // From AuthContext
   currentUser: any;
+  isAuthReady: boolean;
   login: (user: any) => void;
   logout: () => void;
 
@@ -82,6 +83,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     useEffect(() => {
         const checkPending = async () => {
             if (sets.settings.cloudSyncConfig?.provider !== 'none') {
+                const { getPendingChangesCount } = await loadSyncService();
                 const count = await getPendingChangesCount(sets.settings.cloudSyncConfig);
                 setPendingChanges(count);
             }
@@ -136,6 +138,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         autoSyncTimeoutRef.current = setTimeout(async () => {
             try {
                 const username = auth.currentUser?.username || 'user';
+                const { uploadStaffChanges } = await loadSyncService();
                 await uploadStaffChanges(sets.settings.cloudSyncConfig, username);
                 
                 const id = sets.settings.id;
@@ -157,6 +160,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setSyncStatus('syncing');
         try {
+            const { publishMasterData, uploadStaffChanges, downloadAndMergeMaster } = await loadSyncService();
             if (action === 'admin_publish') {
                 if (auth.currentUser?.role !== 'admin' && !auth.currentUser?.permissions?.syncAdmin) {
                     throw new Error("Anda tidak memiliki izin untuk mempublikasikan master data.");

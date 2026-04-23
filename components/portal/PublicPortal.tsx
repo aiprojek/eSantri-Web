@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { db, doc, getDoc, collection, setDoc, serverTimestamp, storage, ref, uploadBytes, getDownloadURL } from '../../firebase';
-import { PondokSettings, PsbConfig, Pendaftar } from '../../types';
+import { PondokSettings, PsbConfig } from '../../types';
 import { LoadingFallback } from '../common/LoadingFallback';
+import { loadFirebasePortalRuntime } from '../../utils/lazyFirebaseRuntimes';
 
 const fieldGroups = [
     {
@@ -86,9 +86,10 @@ export const PublicPortal: React.FC = () => {
                 return;
             }
             try {
-                const tenantDoc = await getDoc(doc(db, 'tenants', tenantId));
-                if (tenantDoc.exists()) {
-                    setTenantSettings(tenantDoc.data() as PondokSettings);
+                const { fetchPublicPortalSettings } = await loadFirebasePortalRuntime();
+                const portalSettings = await fetchPublicPortalSettings(tenantId);
+                if (portalSettings) {
+                    setTenantSettings(portalSettings);
                 } else {
                     setError('Data pesantren tidak ditemukan di sistem cloud.');
                 }
@@ -186,43 +187,8 @@ const PsbFormViewer: React.FC<{ settings: PondokSettings, config: PsbConfig, ten
         e.preventDefault();
         setSubmitting(true);
         try {
-            const pendaftarData: Partial<Pendaftar> = {
-                ...fields,
-                tanggalDaftar: new Date().toISOString(),
-                status: 'Baru',
-                gelombang: config.activeGelombang,
-            };
-            const customData: Record<string, any> = {};
-            const uploadPromises: Promise<any>[] = [];
-            for (const key of Object.keys(fields)) {
-                if (key.startsWith('custom_')) {
-                    const fieldId = key.replace('custom_', '');
-                    const value = fields[key];
-                    if (value instanceof File) {
-                        const fieldLabel = config.customFields?.find(f => f.id === fieldId)?.label || fieldId;
-                        const safeLabel = fieldLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                        const safeName = (fields['namaLengkap'] || 'TanpaNama').replace(/[^a-z0-9]/gi, '_');
-                        // Format: Nama_Dokumen-Nama_Santri-Waktu
-                        const filename = `${safeLabel}-${safeName}-${Date.now()}`;
-                        const storageRef = ref(storage, `tenants/${tenantId}/psb/${filename}`);
-                        const uploadTask = uploadBytes(storageRef, value).then(async (snapshot: any) => {
-                            const url = await getDownloadURL(snapshot.ref);
-                            customData[fieldId] = url;
-                        });
-                        uploadPromises.push(uploadTask);
-                    } else {
-                        customData[fieldId] = value;
-                    }
-                }
-            }
-            await Promise.all(uploadPromises);
-            pendaftarData.customData = JSON.stringify(customData);
-            const pendaftarId = Date.now().toString();
-            await setDoc(doc(db, `tenants/${tenantId}/pendaftar`, pendaftarId), {
-                ...pendaftarData,
-                id: parseInt(pendaftarId),
-                createdAt: serverTimestamp()
-            });
+            const { submitPortalPsbRegistration } = await loadFirebasePortalRuntime();
+            await submitPortalPsbRegistration({ tenantId, config, fields });
             setSubmitted(true);
         } catch (err) {
             console.error("Submission Error:", err);

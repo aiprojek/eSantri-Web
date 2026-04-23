@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
-import { listInboxFiles, processInboxFile, publishMasterData, deleteInboxFile, deleteMultipleInboxFiles } from '../services/syncService';
 import { SyncFileRecord, ConflictItem } from '../types';
 import { db } from '../db';
 import { formatBytes } from '../utils/formatters';
 import { ConflictResolver } from './sync/ConflictResolver';
+import { loadSyncService } from '../utils/lazyCloudServices';
 
 export const AdminSyncDashboard: React.FC = () => {
     const { settings, showToast, showConfirmation, showAlert, currentUser } = useAppContext();
@@ -24,6 +24,7 @@ export const AdminSyncDashboard: React.FC = () => {
         if (!config || config.provider === 'none') return;
         setIsLoading(true);
         try {
+            const { listInboxFiles } = await loadSyncService();
             const fileList = await listInboxFiles(config);
             
             // Check against local history to see if already merged
@@ -57,6 +58,7 @@ export const AdminSyncDashboard: React.FC = () => {
     const handleMerge = async (file: SyncFileRecord, resolveConflicts?: ConflictItem[]) => {
         setProcessingId(file.id);
         try {
+            const { processInboxFile } = await loadSyncService();
             // If resolveConflicts is provided, we are re-trying with resolved data
             const result = await processInboxFile(config, file, resolveConflicts);
             
@@ -107,6 +109,7 @@ export const AdminSyncDashboard: React.FC = () => {
             async () => {
                 setIsLoading(true);
                 try {
+                    const { publishMasterData } = await loadSyncService();
                     await publishMasterData(config);
                     showToast('Master Data Berhasil Dipublikasikan!', 'success');
                 } catch (e) {
@@ -125,6 +128,7 @@ export const AdminSyncDashboard: React.FC = () => {
             `File "${file.name}" akan dihapus permanen dari Cloud.`,
             async () => {
                 try {
+                    const { deleteInboxFile } = await loadSyncService();
                     await deleteInboxFile(config, file.path_lower);
                     setFiles(prev => prev.filter(f => f.id !== file.id));
                     showToast('File dihapus.', 'success');
@@ -149,6 +153,7 @@ export const AdminSyncDashboard: React.FC = () => {
             async () => {
                 setIsLoading(true);
                 try {
+                    const { deleteMultipleInboxFiles } = await loadSyncService();
                     const paths = mergedFiles.map(f => f.path_lower);
                     await deleteMultipleInboxFiles(config, paths);
                     setFiles(prev => prev.filter(f => f.status !== 'merged'));

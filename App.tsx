@@ -185,7 +185,8 @@ const AppContent: React.FC = () => {
         downloadBackup,
         triggerBackupCheck,
         settings, 
-        currentUser 
+        currentUser,
+        isAuthReady,
     } = useAppContext();
 
     const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
@@ -209,31 +210,46 @@ const AppContent: React.FC = () => {
     }, [isLoading, triggerBackupCheck]);
 
     useEffect(() => {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').then(registration => {
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    if (newWorker) {
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed') {
-                                if (registration.waiting) {
-                                    setWaitingWorker(registration.waiting);
-                                }
-                            }
-                        });
-                    }
+        if (!('serviceWorker' in navigator)) return;
+
+        if (import.meta.env.DEV) {
+            navigator.serviceWorker.getRegistrations()
+                .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+                .catch(error => {
+                    console.warn('Service Worker cleanup failed in dev mode:', error);
                 });
-            }).catch(error => {
-                console.warn('Service Worker registration failed (likely dev env):', error);
-            });
+            return;
         }
+
+        navigator.serviceWorker.register('/sw.js').then(registration => {
+            registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed') {
+                            if (registration.waiting) {
+                                setWaitingWorker(registration.waiting);
+                            }
+                        }
+                    });
+                }
+            });
+        }).catch(error => {
+            console.warn('Service Worker registration failed:', error);
+        });
         
         let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
+        const handleControllerChange = () => {
             if (refreshing) return;
             window.location.reload();
             refreshing = true;
-        });
+        };
+
+        navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+
+        return () => {
+            navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+        };
     }, []);
 
     useEffect(() => {
@@ -281,7 +297,7 @@ const AppContent: React.FC = () => {
         if (!currentUser) return false;
         if (currentUser.role === 'admin') return true;
         const access = currentUser.permissions[permissionKey];
-        return access !== undefined ? access !== 'none' : true; 
+        return access !== undefined ? access !== 'none' : false; 
     };
 
     const renderContent = () => {
@@ -365,6 +381,17 @@ const AppContent: React.FC = () => {
                 <div className="text-center">
                     <i className="bi bi-book-half text-5xl text-teal-600 animate-pulse"></i>
                     <p className="text-xl font-semibold text-gray-700 mt-4">Memuat data eSantri Web...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (settings.multiUserMode && !isAuthReady) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-100">
+                <div className="text-center">
+                    <i className="bi bi-shield-lock text-5xl text-teal-600 animate-pulse"></i>
+                    <p className="text-xl font-semibold text-gray-700 mt-4">Memvalidasi sesi pengguna...</p>
                 </div>
             </div>
         );

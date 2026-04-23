@@ -1,6 +1,4 @@
-
-import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from "./lazyClientLibs";
 
 /**
  * HTML Export with Offline Support
@@ -134,15 +132,18 @@ export const exportToWord = (elementId: string, fileName: string) => {
     URL.revokeObjectURL(url);
 };
 
-import * as XLSX from 'xlsx';
-
 /**
  * AutoTable Export
  * Scrapes tables from the preview area and creates a clean PDF.
  */
-export const exportToAutoTable = (elementId: string, fileName: string) => {
+export const exportToAutoTable = async (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
+    const [{ jsPDF }, autoTableModule] = await Promise.all([
+        loadJsPdf(),
+        loadJsPdfAutoTable()
+    ]);
+    const autoTable = autoTableModule.default;
 
     const doc = new jsPDF('p', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -263,9 +264,10 @@ export const exportToAutoTable = (elementId: string, fileName: string) => {
  * Excel Export by HTML Tables
  * Scrapes visual pages and tables, putting each page's table into a separate sheet.
  */
-export const exportPreviewToExcelWorksheets = (elementId: string, fileName: string) => {
+export const exportPreviewToExcelWorksheets = async (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
+    const XLSX = await loadXLSX();
 
     const pages = element.querySelectorAll('.page-break-after');
     

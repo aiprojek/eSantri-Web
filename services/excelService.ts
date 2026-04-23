@@ -1,6 +1,5 @@
-
-import * as XLSX from 'xlsx';
 import { Santri, PondokSettings, TransaksiKas, Tagihan, TransaksiKoperasi } from '../types';
+import { loadXLSX } from '../utils/lazyClientLibs';
 
 // Stub functions to satisfy TS - implementation logic resides in actual files if preserved, 
 // otherwise these placeholders prevent build errors.
@@ -16,7 +15,8 @@ const formatExcelDate = (dateVal: string | Date | undefined) => {
 };
 
 // Helper function to scrape metadata from DOM before Excel generation
-const buildWorksheetWithMeta = (excelData: any[]) => {
+const buildWorksheetWithMeta = async (excelData: any[]) => {
+    const XLSX = await loadXLSX();
     const worksheet = XLSX.utils.json_to_sheet([]);
     
     let metaLines: string[] = [];
@@ -59,7 +59,8 @@ const buildWorksheetWithMeta = (excelData: any[]) => {
 /**
  * Ekspor Data Santri ke Excel (Default Export)
  */
-export const exportSantriToExcel = (data: Santri[], settings: PondokSettings, fileName: string) => { 
+export const exportSantriToExcel = async (data: Santri[], settings: PondokSettings, fileName: string) => { 
+    const XLSX = await loadXLSX();
     const excelData = data.map((s, index) => {
         const rombel = settings.rombel.find(r => r.id === s.rombelId);
         const kelas = settings.kelas.find(k => k.id === s.kelasId);
@@ -96,7 +97,7 @@ export const exportSantriToExcel = (data: Santri[], settings: PondokSettings, fi
         };
     });
 
-    const worksheet = buildWorksheetWithMeta(excelData);
+    const worksheet = await buildWorksheetWithMeta(excelData);
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data Santri");
@@ -106,7 +107,8 @@ export const exportSantriToExcel = (data: Santri[], settings: PondokSettings, fi
 /**
  * Ekspor Kontak untuk Import HP (Format CSV-Friendly)
  */
-export const exportContactsToExcel = (data: Santri[], settings: PondokSettings, fileName: string) => { 
+export const exportContactsToExcel = async (data: Santri[], settings: PondokSettings, fileName: string) => { 
+    const XLSX = await loadXLSX();
     const excelData = data.map((s, index) => {
         return {
             'First Name': s.namaLengkap,
@@ -117,7 +119,7 @@ export const exportContactsToExcel = (data: Santri[], settings: PondokSettings, 
         };
     });
 
-    const worksheet = buildWorksheetWithMeta(excelData);
+    const worksheet = await buildWorksheetWithMeta(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Kontak Wali");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
@@ -126,7 +128,8 @@ export const exportContactsToExcel = (data: Santri[], settings: PondokSettings, 
 /**
  * Ekspor Arus Kas ke Excel
  */
-export const exportArusKasToExcel = (data: TransaksiKas[], fileName: string) => { 
+export const exportArusKasToExcel = async (data: TransaksiKas[], fileName: string) => { 
+    const XLSX = await loadXLSX();
     const excelData = data.map((t, index) => ({
         'No': index + 1,
         'Tanggal': formatExcelDate(t.tanggal),
@@ -137,7 +140,7 @@ export const exportArusKasToExcel = (data: TransaksiKas[], fileName: string) => 
         'P. Jawab': t.penanggungJawab
     }));
 
-    const worksheet = buildWorksheetWithMeta(excelData);
+    const worksheet = await buildWorksheetWithMeta(excelData);
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Arus Kas");
@@ -147,7 +150,8 @@ export const exportArusKasToExcel = (data: TransaksiKas[], fileName: string) => 
 /**
  * Ekspor Ringkasan Keuangan
  */
-export const exportFinanceSummaryToExcel = (data: Santri[], tagihan: Tagihan[], settings: PondokSettings, fileName: string) => { 
+export const exportFinanceSummaryToExcel = async (data: Santri[], tagihan: Tagihan[], settings: PondokSettings, fileName: string) => { 
+    const XLSX = await loadXLSX();
     const excelData = data.map((s, index) => {
         const santriTagihan = tagihan.filter(t => t.santriId === s.id && t.status === 'Belum Lunas');
         const totalTunggakan = santriTagihan.reduce((acc, curr) => acc + curr.nominal, 0);
@@ -162,7 +166,7 @@ export const exportFinanceSummaryToExcel = (data: Santri[], tagihan: Tagihan[], 
         };
     });
 
-    const worksheet = buildWorksheetWithMeta(excelData);
+    const worksheet = await buildWorksheetWithMeta(excelData);
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Tunggakan");
@@ -172,7 +176,8 @@ export const exportFinanceSummaryToExcel = (data: Santri[], tagihan: Tagihan[], 
 /**
  * Ekspor Template EMIS (Simplified)
  */
-export const exportEmisTemplate = (data: Santri[], settings: PondokSettings, fileName: string) => { 
+export const exportEmisTemplate = async (data: Santri[], settings: PondokSettings, fileName: string) => { 
+    const XLSX = await loadXLSX();
     const excelData = data.map(s => ({
         'NIK': s.nik || '',
         'NISN': s.nisn || '',
@@ -194,7 +199,7 @@ export const exportEmisTemplate = (data: Santri[], settings: PondokSettings, fil
         'TANGGAL LAHIR IBU': s.tanggalLahirIbu || ''
     }));
 
-    const worksheet = buildWorksheetWithMeta(excelData);
+    const worksheet = await buildWorksheetWithMeta(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Template EMIS");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
@@ -204,7 +209,8 @@ export const exportEmisTemplate = (data: Santri[], settings: PondokSettings, fil
 /**
  * Ekspor Transaksi Koperasi ke Excel
  */
-export const exportKoperasiToExcel = (transaksiList: TransaksiKoperasi[], fileName: string = 'Laporan_Koperasi') => {
+export const exportKoperasiToExcel = async (transaksiList: TransaksiKoperasi[], fileName: string = 'Laporan_Koperasi') => {
+    const XLSX = await loadXLSX();
     const data = transaksiList.map((t, index) => {
         // Flatten items for string representation
         const itemDetails = t.items.map(i => `${i.nama} (${i.qty}x)`).join(', ');
@@ -225,7 +231,7 @@ export const exportKoperasiToExcel = (transaksiList: TransaksiKoperasi[], fileNa
         };
     });
 
-    const worksheet = buildWorksheetWithMeta(data);
+    const worksheet = await buildWorksheetWithMeta(data);
     
     // Auto-width hint
     const wscols = [

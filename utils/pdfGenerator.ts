@@ -1,5 +1,4 @@
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
+import { loadHtml2Canvas, loadJsPdf } from "./lazyClientLibs";
 
 interface PdfGeneratorOptions {
     paperSize: string; // 'A4', 'F4', 'Legal', 'Letter'
@@ -22,6 +21,10 @@ const getPageDimensions = (paperSize: string): [number, number] => {
 export const generatePdf = async (elementId: string, options: PdfGeneratorOptions): Promise<void> => {
     const element = document.getElementById(elementId);
     if (!element) return;
+    const [{ jsPDF }, html2canvas] = await Promise.all([
+        loadJsPdf(),
+        loadHtml2Canvas()
+    ]);
 
     let pages: HTMLElement[] = [];
     const wrappers = element.querySelectorAll('.printable-content-wrapper');

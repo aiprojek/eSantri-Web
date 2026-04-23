@@ -1,12 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { Suspense, useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { Pendaftar, PondokSettings, Santri, RiwayatStatus } from '../../types';
 import { db } from '../../db';
-import { fetchPsbFromDropbox, getValidDropboxToken } from '../../services/syncService';
-import { PendaftarModal } from './modals/PendaftarModal';
-import { BulkPendaftarEditor } from './modals/BulkPendaftarEditor';
-import JSZip from 'jszip';
+import { loadJsZip, loadSyncService } from '../../utils/lazyCloudServices';
+import { LoadingFallback } from '../common/LoadingFallback';
+
+const PendaftarModal = React.lazy(() => import('./modals/PendaftarModal').then((module) => ({ default: module.PendaftarModal })));
+const BulkPendaftarEditor = React.lazy(() => import('./modals/BulkPendaftarEditor').then((module) => ({ default: module.BulkPendaftarEditor })));
 
 interface PsbRekapProps {
     pendaftarList: Pendaftar[];
@@ -54,6 +55,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         setIsSyncing(true);
         try {
             // Get valid token first to ensure auth
+            const { getValidDropboxToken, fetchPsbFromDropbox } = await loadSyncService();
             const token = await getValidDropboxToken(config);
             const newItems = await fetchPsbFromDropbox(token);
 
@@ -379,6 +381,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         }
 
         setIsArchiving(true);
+        const JSZip = await loadJsZip();
         const zip = new JSZip();
         let fileCount = 0;
 
@@ -633,20 +636,26 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 </div>
             )}
 
-            <PendaftarModal 
-                isOpen={isPendaftarModalOpen}
-                onClose={() => setIsPendaftarModalOpen(false)}
-                onSave={handleSavePendaftar}
-                onUpdate={handleUpdatePendaftar}
-                pendaftarData={editingPendaftar}
-                settings={settings}
-            />
+            <Suspense fallback={<LoadingFallback />}>
+                {isPendaftarModalOpen && (
+                    <PendaftarModal 
+                        isOpen={isPendaftarModalOpen}
+                        onClose={() => setIsPendaftarModalOpen(false)}
+                        onSave={handleSavePendaftar}
+                        onUpdate={handleUpdatePendaftar}
+                        pendaftarData={editingPendaftar}
+                        settings={settings}
+                    />
+                )}
 
-            <BulkPendaftarEditor
-                isOpen={isBulkEditorOpen}
-                onClose={() => setIsBulkEditorOpen(false)}
-                onSave={handleBulkSave}
-            />
+                {isBulkEditorOpen && (
+                    <BulkPendaftarEditor
+                        isOpen={isBulkEditorOpen}
+                        onClose={() => setIsBulkEditorOpen(false)}
+                        onSave={handleBulkSave}
+                    />
+                )}
+            </Suspense>
         </div>
     );
 };

@@ -1,12 +1,15 @@
 
-
-
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useMemo, useState, useEffect } from 'react';
 import { Santri, PondokSettings, Page } from '../types';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { db } from '../db';
-import { ExecutiveDashboard } from './dashboard/ExecutiveDashboard';
+
+const ExecutiveDashboard = lazy(() =>
+  import('./dashboard/ExecutiveDashboard').then((module) => ({
+    default: module.ExecutiveDashboard,
+  }))
+);
 
 interface DashboardProps {
     navigateTo: (page: Page, filters?: any) => void;
@@ -201,7 +204,15 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
         </div>
 
         {activeTab === 'analitik' ? (
-            <ExecutiveDashboard />
+            <Suspense
+                fallback={
+                    <div className="flex justify-center items-center h-64 bg-white rounded-xl shadow-sm border border-gray-100">
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600"></div>
+                    </div>
+                }
+            >
+                <ExecutiveDashboard />
+            </Suspense>
         ) : (
             <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 print:grid-cols-3 print:gap-4">

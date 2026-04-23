@@ -1,4 +1,4 @@
-import html2canvas from "html2canvas";
+import { loadHtml2Canvas } from "./lazyClientLibs";
 
 // Utility to convert DOM elements (HTML) to SVG files
 // Uses html2canvas to render HTML as a high-res bitmap embedded in SVG
@@ -7,6 +7,7 @@ import html2canvas from "html2canvas";
 export const exportReportToSvg = async (elementId: string, baseFileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
+    const html2canvas = await loadHtml2Canvas();
 
     const contentWrapper = element.querySelector('.printable-content-wrapper');
     if (!contentWrapper) return;

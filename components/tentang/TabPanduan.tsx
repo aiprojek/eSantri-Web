@@ -1,7 +1,36 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
-import { panduanData } from '../../data/panduan';
+import { panduanData, PanduanSectionData } from '../../data/panduan';
+
+const PANDUAN_ORDER: string[] = [
+    'setup',
+    'datamaster',
+    'santri',
+    'tahfizh',
+    'absensi',
+    'kesehatan',
+    'bk',
+    'bukutamu',
+    'akademik',
+    'perpustakaan',
+    'kalender',
+    'finance',
+    'asrama',
+    'koperasi',
+    'laporan_lanjutan',
+    'portal',
+    'whatsapp',
+    'cloud',
+    'firebase',
+    'admin',
+    'offline',
+    'maintenance',
+    'fitur',
+    'jurnal_mengajar',
+    'cetak_kartu',
+    'koperasi_pro',
+];
 
 const PanduanLangkah: React.FC<{ number: number; title: string; children: React.ReactNode; isLast?: boolean; color?: string }> = ({ number, title, children, isLast = false, color = 'teal' }) => {
     const colorClasses: Record<string, string> = {
@@ -52,17 +81,23 @@ const PanduanLangkah: React.FC<{ number: number; title: string; children: React.
 export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initialSection }) => {
     const { showConfirmation, onDeleteSampleData, showToast } = useAppContext();
     const [sampleDataDeleted, setSampleDataDeleted] = useState(false);
-    const [activeSectionId, setActiveSectionId] = useState<string>('setup'); // Default active section
+    const orderedPanduanData = useMemo<PanduanSectionData[]>(() => [
+        ...PANDUAN_ORDER
+            .map((id) => panduanData.find((item) => item.id === id))
+            .filter((item): item is PanduanSectionData => Boolean(item)),
+        ...panduanData.filter((item) => !PANDUAN_ORDER.includes(item.id)),
+    ], []);
+    const [activeSectionId, setActiveSectionId] = useState<string>(orderedPanduanData[0]?.id || 'setup');
 
     const handleTocClick = (id: string) => {
         setActiveSectionId(id);
     };
 
     useEffect(() => {
-        if (initialSection && panduanData.some(s => s.id === initialSection)) {
+        if (initialSection && orderedPanduanData.some(s => s.id === initialSection)) {
             setActiveSectionId(initialSection);
         }
-    }, [initialSection]);
+    }, [initialSection, orderedPanduanData]);
 
     useEffect(() => {
         const deleted = localStorage.getItem('eSantriSampleDataDeleted') === 'true';
@@ -103,7 +138,10 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
          return map[color] || 'bg-teal-600';
     };
 
-    const activeSection = panduanData.find(s => s.id === activeSectionId) || panduanData[0];
+    const activeSection = orderedPanduanData.find(s => s.id === activeSectionId) || orderedPanduanData[0];
+    if (!activeSection) {
+        return null;
+    }
 
     return (
         <div className="text-left">
@@ -136,7 +174,7 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                         onChange={(e) => setActiveSectionId(e.target.value)}
                         className="w-full pl-4 pr-10 py-3 bg-white border border-gray-300 rounded-xl shadow-sm appearance-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-medium text-gray-700"
                     >
-                        {panduanData.map(s => (
+                        {orderedPanduanData.map(s => (
                             <option key={s.id} value={s.id}>{s.title}</option>
                         ))}
                     </select>
@@ -154,7 +192,7 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                         <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Daftar Isi</h3>
                     </div>
                     <ul className="max-h-[300px] lg:max-h-[calc(100vh-200px)] overflow-y-auto custom-scrollbar">
-                        {panduanData.map(section => (
+                        {orderedPanduanData.map(section => (
                             <li key={section.id}>
                                 <button 
                                     onClick={() => handleTocClick(section.id)}

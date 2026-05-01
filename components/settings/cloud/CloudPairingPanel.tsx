@@ -15,7 +15,7 @@ export const CloudPairingPanel: React.FC<CloudPairingPanelProps> = ({
     onInputPairingCodeChange,
     onConnectViaPairing,
 }) => (
-    <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-green-50">
+    <div className="app-panel-soft grid grid-cols-1 gap-4 rounded-[24px] p-5 sm:p-6">
         <h4 className="font-bold text-green-800 text-sm">B. Setup Cepat (Untuk Staff)</h4>
         <p className="text-xs text-green-700">
             Punya kode dari Admin? Paste di sini untuk langsung terhubung tanpa login.
@@ -25,14 +25,14 @@ export const CloudPairingPanel: React.FC<CloudPairingPanelProps> = ({
                 type="text"
                 value={inputPairingCode}
                 onChange={(e) => onInputPairingCodeChange(e.target.value)}
-                className="flex-grow bg-white border border-green-300 rounded text-sm p-2.5"
+                className="app-input flex-grow text-sm"
                 placeholder="Paste kode ESANTRI-CLOUD-... disini"
                 disabled={isProcessingPairing}
             />
             <button
                 onClick={() => { void onConnectViaPairing(); }}
                 disabled={isProcessingPairing}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded text-sm font-bold disabled:bg-gray-400 flex items-center justify-center gap-2"
+                className="flex items-center justify-center gap-2 rounded-[16px] bg-green-600 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-700 disabled:bg-gray-400"
             >
                 {isProcessingPairing ? <span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span> : 'Hubungkan'}
             </button>

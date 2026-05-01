@@ -7,36 +7,27 @@ import { TabLisensi } from './tentang/TabLisensi';
 import { TabKontak } from './tentang/TabKontak';
 import { TabFaq } from './tentang/TabFaq';
 import { TabLayanan } from './tentang/TabLayanan';
+import { HeaderTabs, HeaderTabItem } from './common/HeaderTabs';
+import { PageHeader } from './common/PageHeader';
+import { SectionCard } from './common/SectionCard';
 
-const TabButton: React.FC<{
-    tabId: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan';
-    label: string;
-    icon: string;
-    isActive: boolean;
-    onClick: (id: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan') => void;
-    isSpecial?: boolean;
-}> = ({ tabId, label, icon, isActive, onClick, isSpecial }) => (
-    <button
-        onClick={() => onClick(tabId)}
-        className={`flex items-center gap-2 py-3 px-4 text-center font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 ${
-            isActive 
-                ? 'border-teal-600 text-teal-600' 
-                : isSpecial 
-                    ? 'border-transparent text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50' 
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-        }`}
-    >
-        <i className={`bi ${icon} ${isSpecial ? 'text-lg' : ''}`}></i>
-        <span>{label}</span>
-        {isSpecial && <span className="bg-yellow-100 text-yellow-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1">PRO</span>}
-    </button>
-);
+type TentangTab = 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan';
+
+const TENTANG_TABS: HeaderTabItem<TentangTab>[] = [
+    { value: 'tentang', label: 'Tentang Aplikasi', icon: 'bi-info-circle' },
+    { value: 'panduan', label: 'Panduan Pengguna', icon: 'bi-book-half' },
+    { value: 'faq', label: 'FAQ / Tanya Jawab', icon: 'bi-question-circle' },
+    { value: 'rilis', label: 'Catatan Rilis', icon: 'bi-clock-history' },
+    { value: 'lisensi', label: 'Lisensi', icon: 'bi-file-earmark-text' },
+    { value: 'kontak', label: 'Kontak', icon: 'bi-envelope' },
+    { value: 'layanan', label: 'Layanan Premium', icon: 'bi-stars' },
+];
 
 const Tentang: React.FC<{ 
-    initialTab?: 'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan';
+    initialTab?: TentangTab;
     initialSection?: string | null;
 }> = ({ initialTab = 'tentang', initialSection }) => {
-    const [activeTab, setActiveTab] = useState<'tentang' | 'panduan' | 'faq' | 'rilis' | 'kontak' | 'lisensi' | 'layanan'>(initialTab);
+    const [activeTab, setActiveTab] = useState<TentangTab>(initialTab);
 
     // Update active tab if initialTab changes (e.g. from global event)
     React.useEffect(() => {
@@ -44,30 +35,26 @@ const Tentang: React.FC<{
     }, [initialTab]);
 
     return (
-        <div>
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold text-gray-800">Tentang Aplikasi eSantri Web</h1>
-                <div className="mt-2 flex items-center gap-2">
-                    <span className="bg-teal-100 text-teal-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-teal-200">
-                        <i className="bi bi-rocket-takeoff mr-1"></i> Versi Terbaru: {latestVersion}
+        <div className="space-y-6">
+            <PageHeader
+                eyebrow="Informasi"
+                title="Tentang Aplikasi eSantri Web"
+                description="Pelajari fitur, panduan, layanan, lisensi, dan catatan rilis aplikasi dari satu pusat informasi yang lebih rapi."
+                actions={
+                    <span className="app-chip">
+                        <i className="bi bi-rocket-takeoff"></i>
+                        Versi Terbaru: {latestVersion}
                     </span>
-                </div>
-            </div>
+                }
+                tabs={<HeaderTabs tabs={TENTANG_TABS} value={activeTab} onChange={setActiveTab} />}
+            />
 
-            <div className="bg-white p-6 rounded-lg shadow-md">
-                <div className="border-b border-gray-200">
-                    <nav className="flex -mb-px overflow-x-auto">
-                        <TabButton tabId="tentang" label="Tentang Aplikasi" icon="bi-info-circle" isActive={activeTab === 'tentang'} onClick={setActiveTab} />
-                        <TabButton tabId="layanan" label="Layanan Premium" icon="bi-stars" isActive={activeTab === 'layanan'} onClick={setActiveTab} isSpecial={true} />
-                        <TabButton tabId="panduan" label="Panduan Pengguna" icon="bi-book-half" isActive={activeTab === 'panduan'} onClick={setActiveTab} />
-                        <TabButton tabId="faq" label="FAQ / Tanya Jawab" icon="bi-question-circle" isActive={activeTab === 'faq'} onClick={setActiveTab} />
-                        <TabButton tabId="rilis" label="Catatan Rilis" icon="bi-clock-history" isActive={activeTab === 'rilis'} onClick={setActiveTab} />
-                        <TabButton tabId="lisensi" label="Lisensi" icon="bi-file-earmark-text" isActive={activeTab === 'lisensi'} onClick={setActiveTab} />
-                        <TabButton tabId="kontak" label="Kontak" icon="bi-envelope" isActive={activeTab === 'kontak'} onClick={setActiveTab} />
-                    </nav>
-                </div>
-
-                <div className="mt-6">
+            <SectionCard
+                title="Pusat Informasi eSantri"
+                description="Pilih tab untuk membuka profil aplikasi, panduan pengguna, FAQ, layanan premium, lisensi, dan catatan rilis."
+                contentClassName="p-4 sm:p-5"
+            >
+                <div>
                     {activeTab === 'tentang' && <TabTentang />}
                     {activeTab === 'layanan' && <TabLayanan />}
                     {activeTab === 'panduan' && <TabPanduan initialSection={initialSection} />}
@@ -76,7 +63,7 @@ const Tentang: React.FC<{
                     {activeTab === 'lisensi' && <TabLisensi />}
                     {activeTab === 'kontak' && <TabKontak />}
                 </div>
-            </div>
+            </SectionCard>
         </div>
     );
 };

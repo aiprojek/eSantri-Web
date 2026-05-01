@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { Santri, PondokSettings, ReportType } from '../../types';
 import { useReportConfig } from '../../hooks/useReportConfig';
+import { formatAcademicYearDisplay, getAcademicYearOptions } from '../../utils/academicYear';
 
 const SantriSelector: React.FC<{
     title: string;
@@ -59,6 +60,7 @@ type ReportOptionsProps = {
 
 export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSantri, settings, selectedJenjangId }) => {
     const { activeReport, options } = config;
+    const availableAcademicYears = useMemo(() => getAcademicYearOptions(settings), [settings]);
     
     // Internal state for Rekening Koran selector
     const [rekeningSearch, setRekeningSearch] = useState('');
@@ -158,7 +160,31 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         }
     };
 
-    if (activeReport === ReportType.DashboardSummary || activeReport === ReportType.FinanceSummary) {
+    const AcademicYearSelect = ({ id }: { id?: string }) => (
+        <select
+            id={id}
+            value={options.tahunAjaran}
+            onChange={e => options.setTahunAjaran(e.target.value)}
+            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+        >
+            {availableAcademicYears.map((year) => (
+                <option key={year} value={year}>{formatAcademicYearDisplay(settings, year)}</option>
+            ))}
+        </select>
+    );
+
+    if (
+        activeReport === ReportType.DashboardSummary ||
+        activeReport === ReportType.FinanceSummary ||
+        activeReport === ReportType.OperasionalHarian ||
+        activeReport === ReportType.EarlyWarningSantri ||
+        activeReport === ReportType.KinerjaPengajar ||
+        activeReport === ReportType.TahfizhProgress ||
+        activeReport === ReportType.KelasAsramaBermasalah ||
+        activeReport === ReportType.CohortSantri ||
+        activeReport === ReportType.KepatuhanAdministrasi ||
+        activeReport === ReportType.EfektivitasPSB
+    ) {
         return (
             <div className="pt-4 border-t">
                 <p className="text-sm text-gray-600">Laporan ini akan mencakup ringkasan data keseluruhan dan tidak memerlukan opsi tambahan.</p>
@@ -455,7 +481,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                             </div>
                             <div>
                                 <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
-                                <input type="text" value={options.tahunAjaran} onChange={e => options.setTahunAjaran(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: 1446/1447 H"/>
+                                <AcademicYearSelect />
                             </div>
                         </div>
                     </div>
@@ -507,7 +533,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                         <h4 className="text-md font-semibold text-gray-700 mb-2">Informasi Tambahan</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><label htmlFor="semester-absensi" className="block mb-1 text-sm font-medium text-gray-700">Semester</label><select id="semester-absensi" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select></div>
-                            <div><label htmlFor="tahun-ajaran-absensi" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label><input type="text" id="tahun-ajaran-absensi" value={options.tahunAjaran} onChange={e => options.setTahunAjaran(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: 1446/1447 H" /></div>
+                            <div><label htmlFor="tahun-ajaran-absensi" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label><AcademicYearSelect id="tahun-ajaran-absensi" /></div>
                         </div>
                     </div>
                 </div>
@@ -530,7 +556,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                         </div>
                         <div>
                             <label htmlFor="tahun-ajaran-kedatangan" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
-                            <input type="text" id="tahun-ajaran-kedatangan" value={options.tahunAjaran} onChange={e => options.setTahunAjaran(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: 1446/1447 H" />
+                            <AcademicYearSelect id="tahun-ajaran-kedatangan" />
                         </div>
                     </div>
                 </div>
@@ -558,7 +584,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                         </div>
                         <div>
                             <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
-                            <input type="text" value={options.tahunAjaran} onChange={e => options.setTahunAjaran(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: 1446/1447 H"/>
+                            <AcademicYearSelect />
                         </div>
                     </div>
                 </div>
@@ -598,7 +624,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                     <h3 className="text-md font-semibold text-gray-700">Opsi {activeReport === ReportType.LembarRapor ? 'Lembar Rapor' : 'Rapor Lengkap'}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label htmlFor="semester" className="block mb-1 text-sm font-medium text-gray-700">Semester</label><select id="semester" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select></div>
-                        <div><label htmlFor="tahun-ajaran" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label><input type="text" id="tahun-ajaran" value={options.tahunAjaran} onChange={e => options.setTahunAjaran(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: 1446/1447 H" /></div>
+                        <div><label htmlFor="tahun-ajaran" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label><AcademicYearSelect id="tahun-ajaran" /></div>
                     </div>
                     {activeReport === ReportType.RaporLengkap && (
                         <p className="mt-3 text-xs text-gray-500 italic">

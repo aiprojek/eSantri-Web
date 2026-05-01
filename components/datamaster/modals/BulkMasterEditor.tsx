@@ -17,6 +17,11 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
     isOpen, onClose, mode, settings, onSave, initialData 
 }) => {
     const [rows, setRows] = useState<any[]>([]);
+    const parseMultiValue = (value?: string) =>
+        (value || '')
+            .split(/\n|;/)
+            .map(v => v.trim())
+            .filter(Boolean);
 
     useEffect(() => {
         if (isOpen) {
@@ -71,6 +76,11 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
             if (rest.waliKelasId) rest.waliKelasId = parseInt(rest.waliKelasId);
             if (rest.rombelId) rest.rombelId = parseInt(rest.rombelId);
             if (rest.kkm) rest.kkm = parseInt(rest.kkm);
+            if (mode === 'mapel') {
+                rest.modulList = rest.modulList?.length ? rest.modulList : parseMultiValue(rest.modul);
+                rest.linkUnduhList = rest.linkUnduhList?.length ? rest.linkUnduhList : parseMultiValue(rest.linkUnduh);
+                rest.linkPembelianList = rest.linkPembelianList?.length ? rest.linkPembelianList : parseMultiValue(rest.linkPembelian);
+            }
             return rest;
         });
 
@@ -238,13 +248,13 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
                                                 <input type="number" value={row.kkm} onChange={e => updateRow(row.tempId, 'kkm', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2 focus:ring-teal-500 focus:border-teal-500" />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input type="text" value={row.modul} onChange={e => updateRow(row.tempId, 'modul', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2 focus:ring-teal-500 focus:border-teal-500" placeholder="Safinatun Najah..." />
+                                                <input type="text" value={row.modul} onChange={e => updateRow(row.tempId, 'modul', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2 focus:ring-teal-500 focus:border-teal-500" placeholder="Pisah dgn ; jika lebih dari satu" />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input type="url" value={row.linkUnduh} onChange={e => updateRow(row.tempId, 'linkUnduh', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2 focus:ring-teal-500 focus:border-teal-500" placeholder="https://..." />
+                                                <input type="url" value={row.linkUnduh} onChange={e => updateRow(row.tempId, 'linkUnduh', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2 focus:ring-teal-500 focus:border-teal-500" placeholder="Pisah dgn ; jika lebih dari satu" />
                                             </td>
                                             <td className="px-4 py-2">
-                                                <input type="url" value={row.linkPembelian} onChange={e => updateRow(row.tempId, 'linkPembelian', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2 focus:ring-teal-500 focus:border-teal-500" placeholder="https://..." />
+                                                <input type="url" value={row.linkPembelian} onChange={e => updateRow(row.tempId, 'linkPembelian', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2 focus:ring-teal-500 focus:border-teal-500" placeholder="Pisah dgn ; jika lebih dari satu" />
                                             </td>
                                             <td className="px-4 py-2">
                                                 <select value={row.jenjangId} onChange={e => updateRow(row.tempId, 'jenjangId', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">

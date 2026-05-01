@@ -5,6 +5,8 @@ import { Pendaftar, PsbConfig } from '../types';
 import { db } from '../db';
 import { initialSettings } from '../data/mock';
 import { LoadingFallback } from './common/LoadingFallback';
+import { PageHeader } from './common/PageHeader';
+import { HeaderTabs } from './common/HeaderTabs';
 
 const PsbDashboard = React.lazy(() => import('./psb/PsbDashboard').then((module) => ({ default: module.PsbDashboard })));
 const PsbRekap = React.lazy(() => import('./psb/PsbRekap').then((module) => ({ default: module.PsbRekap })));
@@ -71,16 +73,24 @@ const PSB: React.FC = () => {
     };
 
     return (
-        <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Penerimaan Santri Baru (PSB)</h1>
-            <div className="mb-6 border-b border-gray-200">
-                <nav className="flex -mb-px overflow-x-auto gap-4">
-                    <button onClick={() => setActiveTab('dashboard')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'dashboard' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-speedometer2 mr-2"></i>Dashboard</button>
-                    <button onClick={() => setActiveTab('rekap')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'rekap' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-people-fill mr-2"></i>Rekap Pendaftar</button>
-                    {canWrite && <button onClick={() => setActiveTab('form')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'form' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-ui-checks mr-2"></i>Desain Formulir Online</button>}
-                    <button onClick={() => setActiveTab('poster')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'poster' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-stars mr-2"></i>Poster AI</button>
-                </nav>
-            </div>
+        <div className="space-y-6">
+            <PageHeader
+                eyebrow="PSB"
+                title="Penerimaan Santri Baru"
+                description="Kelola dashboard pendaftar, formulir online, rekap penerimaan, dan materi promosi PSB dalam satu ruang kerja yang konsisten."
+                tabs={
+                    <HeaderTabs
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        tabs={[
+                            { value: 'dashboard', label: 'Dashboard', icon: 'bi-speedometer2' },
+                            { value: 'rekap', label: 'Rekap Pendaftar', icon: 'bi-people-fill' },
+                            ...(canWrite ? [{ value: 'form' as const, label: 'Desain Formulir', icon: 'bi-ui-checks' }] : []),
+                            { value: 'poster', label: 'Poster AI', icon: 'bi-stars' },
+                        ]}
+                    />
+                }
+            />
             <Suspense fallback={<LoadingFallback />}>
                 {activeTab === 'dashboard' && <PsbDashboard pendaftarList={pendaftarList} config={psbConfig} settings={settings} />}
                 {activeTab === 'rekap' && <PsbRekap pendaftarList={pendaftarList} settings={settings} onImportFromWA={handleImportFromWA} onUpdateList={fetchPendaftar} canWrite={canWrite} />}

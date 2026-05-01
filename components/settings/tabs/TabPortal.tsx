@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { PondokSettings, PortalConfig, PortalContact } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { useFirebase } from '../../../contexts/FirebaseContext';
+import { SectionCard } from '../../common/SectionCard';
 
 interface TabPortalProps {
     localSettings: PondokSettings;
@@ -257,14 +258,15 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
     };
 
     return (
-        <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex flex-col items-start gap-6 lg:flex-row">
             <div className="flex-1 w-full space-y-6">
-                <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                    <div className="flex justify-between items-center mb-6 border-b pb-4">
-                        <div>
-                            <h2 className="text-xl font-bold text-gray-800">Pengaturan Portal Wali Santri</h2>
-                            <p className="text-sm text-gray-500">Konfigurasi tampilan dan fitur untuk akses wali santri via web.</p>
-                        </div>
+                <SectionCard
+                    title="Pengaturan Portal Wali Santri"
+                    description="Konfigurasi tampilan, fitur, alamat portal, dan akses publik untuk wali santri."
+                    contentClassName="space-y-6 p-6"
+                >
+                    <div className="flex items-center justify-between border-b border-app-border pb-4">
+                        <div className="text-sm text-slate-600">Portal publik untuk wali santri</div>
                         <label className="inline-flex items-center cursor-pointer">
                             <input 
                                 type="checkbox" 
@@ -273,12 +275,12 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                 className="sr-only peer"
                             />
                             <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                            <span className="ms-3 text-sm font-medium text-gray-900">Aktifkan Portal</span>
+                            <span className="ms-3 text-sm font-semibold text-slate-900">Aktifkan Portal</span>
                         </label>
                     </div>
 
                     {!portalConfig.enabled && (
-                        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg flex items-start gap-3 mb-6">
+                        <div className="mb-6 flex items-start gap-3 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
                             <i className="bi bi-exclamation-triangle text-yellow-600 text-xl"></i>
                             <div>
                                 <p className="text-sm text-yellow-800 font-medium">Portal Sedang Non-Aktif</p>
@@ -288,7 +290,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                     )}
 
                     {portalConfig.enabled && (
-                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
+                        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
                             <div className="flex flex-col md:flex-row gap-6">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-2">
@@ -300,7 +302,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                     {portalUrl ? (
                                         <div className="space-y-3">
                                             <div className="flex items-center gap-2">
-                                                <div className="flex-1 bg-white border border-blue-300 p-2 rounded text-sm font-mono text-blue-900 truncate">
+                                                <div className="flex-1 truncate rounded border border-blue-300 bg-white p-2 font-mono text-sm text-blue-900">
                                                     {portalUrl}
                                                 </div>
                                                 <button 
@@ -308,7 +310,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                                         navigator.clipboard.writeText(portalUrl);
                                                         showToast('Link portal disalin!', 'success');
                                                     }}
-                                                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors text-sm font-bold flex items-center gap-2"
+                                                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                                                 >
                                                     <i className="bi bi-clipboard"></i> Salin
                                                 </button>
@@ -343,12 +345,12 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
 
                     <div className={`space-y-8 ${!portalConfig.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
                         {/* KONFIGURASI DOMAIN */}
-                        <section className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <section className="rounded-xl border border-app-border bg-app-subtle p-4">
+                            <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
                                 <i className="bi bi-globe text-teal-600"></i> Domain / URL Web Portal
                             </h3>
                             <div className="space-y-3">
-                                <p className="text-xs text-gray-600">
+                                <p className="text-xs text-slate-600">
                                     Jika Anda menggunakan versi <strong>Desktop (Tauri)</strong> atau <strong>Android</strong>, Anda harus menghosting versi web aplikasi ini (misal di Vercel/Netlify) dan memasukkan URL-nya di sini agar link yang dibagikan ke wali santri valid.
                                 </p>
                                 <div className="flex gap-2">
@@ -357,12 +359,12 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                         value={portalConfig.baseUrl || ''}
                                         onChange={(e) => updatePortalConfig({ baseUrl: e.target.value })}
                                         placeholder="https://esantri-pondok-anda.vercel.app"
-                                        className="flex-1 p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                        className="app-input flex-1 p-2 text-sm"
                                     />
                                     {portalConfig.baseUrl && (
                                         <button 
                                             onClick={() => updatePortalConfig({ baseUrl: '' })}
-                                            className="text-xs text-red-600 hover:text-red-700 font-medium"
+                                            className="text-xs font-medium text-red-600 hover:text-red-700"
                                         >
                                             Reset
                                         </button>
@@ -382,7 +384,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                         </button>
                                     </div>
                                 )}
-                                <p className="text-[10px] text-gray-500">
+                                <p className="text-[10px] text-slate-500">
                                     * Kosongkan untuk menggunakan domain saat ini secara otomatis.
                                 </p>
                             </div>
@@ -411,7 +413,7 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
 
                         {/* VISIBILITAS DATA */}
                         <section>
-                            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
                                 <i className="bi bi-eye text-teal-600"></i> Visibilitas Data
                             </h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -423,10 +425,10 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                     { id: 'showHealth', label: 'Kesehatan Santri', icon: 'bi-heart-pulse' },
                                     { id: 'showLibrary', label: 'Perpustakaan', icon: 'bi-journal-bookmark' },
                                 ].map((item) => (
-                                    <label key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-white hover:shadow-sm transition-all cursor-pointer">
+                                    <label key={item.id} className="flex cursor-pointer items-center justify-between rounded-lg border border-app-border bg-app-subtle p-3 transition-all hover:bg-white hover:shadow-sm">
                                         <div className="flex items-center gap-3">
-                                            <i className={`bi ${item.icon} text-gray-500`}></i>
-                                            <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                                            <i className={`bi ${item.icon} text-slate-500`}></i>
+                                            <span className="text-sm font-medium text-slate-700">{item.label}</span>
                                         </div>
                                         <input 
                                             type="checkbox" 
@@ -441,27 +443,27 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
 
                         {/* INFORMASI & PENGUMUMAN */}
                         <section>
-                            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
                                 <i className="bi bi-megaphone text-teal-600"></i> Informasi & Pengumuman
                             </h3>
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block mb-1 text-xs font-medium text-gray-600">Pesan Selamat Datang</label>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Pesan Selamat Datang</label>
                                     <input 
                                         type="text" 
                                         value={portalConfig.welcomeMessage}
                                         onChange={(e) => updatePortalConfig({ welcomeMessage: e.target.value })}
-                                        className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm"
+                                        className="app-input w-full p-2.5 text-sm"
                                         placeholder="Contoh: Selamat Datang di Portal Wali Santri"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block mb-1 text-xs font-medium text-gray-600">Pengumuman Penting (Muncul di Dashboard Portal)</label>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Pengumuman Penting (Muncul di Dashboard Portal)</label>
                                     <textarea 
                                         value={portalConfig.announcement}
                                         onChange={(e) => updatePortalConfig({ announcement: e.target.value })}
                                         rows={3}
-                                        className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm"
+                                        className="app-input w-full p-2.5 text-sm"
                                         placeholder="Tulis pengumuman atau informasi penting untuk wali santri..."
                                     />
                                 </div>
@@ -471,27 +473,27 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                         {/* KONTAK PENTING */}
                         <section>
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
                                     <i className="bi bi-person-lines-fill text-teal-600"></i> Kontak Penting
                                 </h3>
                                 <button 
                                     onClick={handleAddContact}
-                                    className="text-xs bg-teal-50 text-teal-600 hover:bg-teal-100 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1"
+                                    className="inline-flex items-center gap-1 rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-600 hover:bg-teal-100"
                                 >
                                     <i className="bi bi-plus-lg"></i> Tambah Kontak
                                 </button>
                             </div>
                             <div className="space-y-3">
                                 {portalConfig.contacts.length === 0 && (
-                                    <p className="text-xs text-gray-400 italic text-center py-4 bg-gray-50 rounded-lg border border-dashed">Belum ada kontak yang ditambahkan.</p>
+                                    <p className="rounded-lg border border-dashed border-app-border bg-app-subtle py-4 text-center text-xs italic text-slate-400">Belum ada kontak yang ditambahkan.</p>
                                 )}
                                 {portalConfig.contacts.map((contact) => (
-                                    <div key={contact.id} className="flex flex-col sm:flex-row gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <div key={contact.id} className="flex flex-col gap-3 rounded-lg border border-app-border bg-app-subtle p-3 sm:flex-row">
                                         <div className="flex-shrink-0">
                                             <select 
                                                 value={contact.icon}
                                                 onChange={(e) => handleUpdateContact(contact.id, { icon: e.target.value })}
-                                                className="p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                className="app-select p-2 text-sm"
                                             >
                                                 {ICONS.map(icon => (
                                                     <option key={icon} value={icon}>{icon.replace('bi-', '')}</option>
@@ -504,14 +506,14 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                                 value={contact.label}
                                                 onChange={(e) => handleUpdateContact(contact.id, { label: e.target.value })}
                                                 placeholder="Label (misal: Admin Keuangan)"
-                                                className="p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                className="app-input p-2 text-sm"
                                             />
                                             <input 
                                                 type="text" 
                                                 value={contact.value}
                                                 onChange={(e) => handleUpdateContact(contact.id, { value: e.target.value })}
                                                 placeholder="Nomor HP / Email / Link"
-                                                className="p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                className="app-input p-2 text-sm"
                                             />
                                         </div>
                                         <button 
@@ -528,36 +530,36 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                         {/* LINK KUSTOM */}
                         <section>
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
                                     <i className="bi bi-link-45deg text-teal-600"></i> Link Eksternal Kustom
                                 </h3>
                                 <button 
                                     onClick={handleAddLink}
-                                    className="text-xs bg-teal-50 text-teal-600 hover:bg-teal-100 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1"
+                                    className="inline-flex items-center gap-1 rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-600 hover:bg-teal-100"
                                 >
                                     <i className="bi bi-plus-lg"></i> Tambah Link
                                 </button>
                             </div>
                             <div className="space-y-3">
                                 {portalConfig.customLinks.length === 0 && (
-                                    <p className="text-xs text-gray-400 italic text-center py-4 bg-gray-50 rounded-lg border border-dashed">Belum ada link kustom.</p>
+                                    <p className="rounded-lg border border-dashed border-app-border bg-app-subtle py-4 text-center text-xs italic text-slate-400">Belum ada link kustom.</p>
                                 )}
                                 {portalConfig.customLinks.map((link, idx) => (
-                                    <div key={idx} className="flex gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <div key={idx} className="flex gap-3 rounded-lg border border-app-border bg-app-subtle p-3">
                                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
                                             <input 
                                                 type="text" 
                                                 value={link.label}
                                                 onChange={(e) => handleUpdateLink(idx, { label: e.target.value })}
                                                 placeholder="Nama Link (misal: Website Yayasan)"
-                                                className="p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                className="app-input p-2 text-sm"
                                             />
                                             <input 
                                                 type="text" 
                                                 value={link.url}
                                                 onChange={(e) => handleUpdateLink(idx, { url: e.target.value })}
                                                 placeholder="URL (https://...)"
-                                                className="p-2 bg-white border border-gray-300 rounded-lg text-sm"
+                                                className="app-input p-2 text-sm"
                                             />
                                         </div>
                                         <button 
@@ -572,15 +574,15 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                         </section>
                     </div>
 
-                    <div className="mt-8 pt-6 border-t flex justify-end">
+                    <div className="mt-8 flex justify-end border-t border-app-border pt-6">
                         <button
                             onClick={() => onSaveSettings(localSettings)}
-                            className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-md transition-all flex items-center gap-2"
+                            className="app-button-primary inline-flex items-center gap-2 px-8 py-2.5"
                         >
                             <i className="bi bi-save"></i> Simpan Pengaturan Portal
                         </button>
                     </div>
-                </div>
+                </SectionCard>
             </div>
 
             {/* PREVIEW PANEL */}

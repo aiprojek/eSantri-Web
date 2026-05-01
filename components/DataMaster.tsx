@@ -1,16 +1,27 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PondokSettings } from '../types';
 import { useAppContext } from '../AppContext';
 import { TabTenagaPendidik } from './datamaster/TabTenagaPendidik';
 import { TabStrukturPendidikan } from './datamaster/TabStrukturPendidikan';
 import { TabMataPelajaran } from './datamaster/TabMataPelajaran';
+import { TabTahunAjaran } from './datamaster/TabTahunAjaran';
+import { PageHeader } from './common/PageHeader';
+import { HeaderTabs } from './common/HeaderTabs';
+import { getDefaultAcademicYear } from '../utils/academicYear';
 
 const DataMaster: React.FC = () => {
     const { settings, onSaveSettings, showConfirmation, showToast, currentUser } = useAppContext();
     const [localSettings, setLocalSettings] = useState<PondokSettings>(settings);
-    const [activeTab, setActiveTab] = useState<'pendidik' | 'struktur' | 'mapel'>('pendidik');
+    const [activeTab, setActiveTab] = useState<'pendidik' | 'struktur' | 'mapel' | 'tahun_ajaran'>('pendidik');
     const [isSaving, setIsSaving] = useState(false);
+    const hasUnsavedChanges = useMemo(() => {
+        try {
+            return JSON.stringify(localSettings) !== JSON.stringify(settings);
+        } catch {
+            return false;
+        }
+    }, [localSettings, settings]);
 
     // Permission Check
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.datamaster === 'write';
@@ -31,7 +42,15 @@ const DataMaster: React.FC = () => {
             async () => {
                 setIsSaving(true);
                 try {
-                    await onSaveSettings(localSettings);
+                    const activeAcademicYear = getDefaultAcademicYear(localSettings);
+                    const payload = {
+                        ...localSettings,
+                        psbConfig: {
+                            ...localSettings.psbConfig,
+                            tahunAjaranAktif: activeAcademicYear,
+                        },
+                    };
+                    await onSaveSettings(payload);
                     showToast('Data Akademik berhasil disimpan!', 'success');
                 } catch (error) {
                     console.error("Failed to save settings:", error);
@@ -44,36 +63,32 @@ const DataMaster: React.FC = () => {
         );
     };
 
-    const TabButton: React.FC<{ id: string; label: string; icon: string }> = ({ id, label, icon }) => (
-        <button
-            onClick={() => setActiveTab(id as any)}
-            className={`flex items-center gap-2 py-3 px-4 text-center font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 ${
-                activeTab === id
-                    ? 'border-teal-600 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-        >
-            <i className={`bi ${icon}`}></i>
-            <span>{label}</span>
-        </button>
-    );
-
     return (
-        <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Data Akademik (Data Master)</h1>
+        <div className="space-y-6">
+            <PageHeader
+                eyebrow="Pendidikan"
+                title="Data Akademik (Data Master)"
+                description={hasUnsavedChanges
+                    ? "Kelola data akademik. Ada perubahan yang belum disimpan."
+                    : "Kelola tenaga pendidik, struktur pendidikan, dan mata pelajaran dari pusat data akademik yang lebih rapi."}
+                tabs={
+                    <HeaderTabs
+                        value={activeTab}
+                        onChange={(next) => setActiveTab(next as any)}
+                        tabs={[
+                            { value: 'pendidik', label: 'Tenaga Pendidik', icon: 'bi-person-badge-fill' },
+                            { value: 'struktur', label: 'Struktur Pendidikan', icon: 'bi-diagram-3-fill' },
+                            { value: 'mapel', label: 'Mata Pelajaran', icon: 'bi-book-half' },
+                            { value: 'tahun_ajaran', label: 'Tahun Ajaran', icon: 'bi-calendar-range-fill' },
+                        ]}
+                    />
+                }
+            />
             {!canWrite && (
                 <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 text-sm rounded border border-yellow-200 flex items-center">
                     <i className="bi bi-eye-fill mr-2"></i> Mode Lihat Saja: Anda tidak memiliki akses untuk mengubah data master.
                 </div>
             )}
-
-            <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200">
-                <nav className="flex -mb-px overflow-x-auto">
-                    <TabButton id="pendidik" label="Tenaga Pendidik" icon="bi-person-badge-fill" />
-                    <TabButton id="struktur" label="Struktur Pendidikan" icon="bi-diagram-3-fill" />
-                    <TabButton id="mapel" label="Mata Pelajaran" icon="bi-book-half" />
-                </nav>
-            </div>
 
             <div className="space-y-6">
                 {activeTab === 'pendidik' && (
@@ -97,11 +112,18 @@ const DataMaster: React.FC = () => {
                         canWrite={canWrite} 
                     />
                 )}
+                {activeTab === 'tahun_ajaran' && (
+                    <TabTahunAjaran
+                        localSettings={localSettings}
+                        handleInputChange={handleInputChange}
+                        canWrite={canWrite}
+                    />
+                )}
             </div>
 
             {canWrite && (
                  <div className="mt-6 flex justify-end sticky bottom-4 z-10">
-                    <button onClick={handleSaveSettings} disabled={isSaving} className="text-white bg-teal-700 hover:bg-teal-800 focus:ring-4 focus:ring-teal-300 font-medium rounded-lg text-sm px-8 py-3 flex items-center justify-center min-w-[190px] disabled:bg-teal-400 disabled:cursor-not-allowed shadow-lg transition-transform hover:-translate-y-1">
+                    <button onClick={handleSaveSettings} disabled={isSaving || !hasUnsavedChanges} className="text-white bg-teal-700 hover:bg-teal-800 focus:ring-4 focus:ring-teal-300 font-medium rounded-lg text-sm px-8 py-3 flex items-center justify-center min-w-[190px] disabled:bg-teal-400 disabled:cursor-not-allowed shadow-lg transition-transform hover:-translate-y-1">
                         {isSaving ? (
                             <>
                                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -112,7 +134,7 @@ const DataMaster: React.FC = () => {
                             </>
                         ) : (
                             <>
-                                <i className="bi bi-save-fill mr-2"></i> Simpan Perubahan
+                                <i className="bi bi-save-fill mr-2"></i> {hasUnsavedChanges ? 'Simpan Perubahan' : 'Tidak Ada Perubahan'}
                             </>
                         )}
                     </button>

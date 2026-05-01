@@ -16,7 +16,7 @@ const ServiceCard: React.FC<{
     <div className={`bg-white rounded-2xl shadow-sm border flex flex-col h-full relative transition-transform hover:-translate-y-1 hover:shadow-lg ${isPopular ? 'border-teal-500 ring-2 ring-teal-500 ring-opacity-20' : 'border-gray-200'}`}>
         {isPopular && (
             <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-teal-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-wide">
-                Paling Diminati
+                Rekomendasi
             </div>
         )}
         <div className="p-6 flex-grow">

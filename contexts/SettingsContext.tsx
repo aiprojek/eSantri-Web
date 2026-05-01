@@ -5,6 +5,7 @@ import { PondokSettings, BackupModalState } from '../types';
 import { db, PondokSettingsWithId } from '../db';
 import { initialSettings, initialSantri } from '../data/mock';
 import { logActivity as logActivityHelper } from '../services/logService';
+import { CURRENT_PERMISSION_VERSION, migrateUserPermissions } from '../services/permissionMigrationService';
 
 interface SettingsContextType {
     settings: PondokSettingsWithId;
@@ -24,6 +25,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [isLoading, setIsLoading] = useState(true);
     const [backupModal, setBackupModal] = useState<BackupModalState>({ isOpen: false, reason: 'periodic' });
     const hasCheckedBackupRef = useRef(false);
+    const hasMigratedPermissionsRef = useRef(false);
 
     // Core Data - Loaded via LiveQuery for reactivity
     const settingsList = useLiveQuery(() => db.settings.toArray(), []) || [];
@@ -39,6 +41,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             psbConfig: { ...initialSettings.psbConfig, ...(rawSettings.psbConfig || {}) },
             cloudSyncConfig: { ...initialSettings.cloudSyncConfig, ...(rawSettings.cloudSyncConfig || {}) },
             backupConfig: { ...initialSettings.backupConfig, ...(rawSettings.backupConfig || {}) },
+            aiConfig: { ...initialSettings.aiConfig, ...(rawSettings.aiConfig || {}) },
             portalConfig: { ...initialSettings.portalConfig, ...(rawSettings.portalConfig || {}) },
             nisSettings: { 
                 ...initialSettings.nisSettings, 
@@ -75,6 +78,59 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
         checkInit();
     }, []);
+
+    useEffect(() => {
+        if (isLoading || hasMigratedPermissionsRef.current) return;
+
+        hasMigratedPermissionsRef.current = true;
+
+        const migrateLegacyPermissions = async () => {
+            const allUsers = await db.users.toArray();
+            if (allUsers.length === 0) return;
+
+            const migratedUsers: Array<{ id: number; username: string; reason: string }> = [];
+            for (const user of allUsers) {
+                const result = migrateUserPermissions(user);
+                if (result.changed) {
+                    await db.users.put(result.user);
+                    migratedUsers.push({
+                        id: user.id,
+                        username: user.username,
+                        reason: result.reason,
+                    });
+                }
+            }
+
+            if (migratedUsers.length > 0) {
+                localStorage.setItem(
+                    'esantri_permission_migration_report',
+                    JSON.stringify({
+                        timestamp: new Date().toISOString(),
+                        targetVersion: CURRENT_PERMISSION_VERSION,
+                        migratedCount: migratedUsers.length,
+                        migratedUsers,
+                    })
+                );
+
+                await logActivityHelper(
+                    'UPDATE',
+                    'users',
+                    'permission-migration',
+                    null,
+                    {
+                        targetVersion: CURRENT_PERMISSION_VERSION,
+                        migratedCount: migratedUsers.length,
+                        migratedUsers,
+                    },
+                    'Admin/System'
+                );
+            }
+        };
+
+        migrateLegacyPermissions().catch((error) => {
+            console.error('Permission migration failed:', error);
+        });
+    }, [isLoading]);
 
     const logActivity = async (tableName: string, operation: 'INSERT' | 'UPDATE' | 'DELETE', recordId: string, oldData?: any, newData?: any) => {
         // Assume context is passed or default to System if unknown. 
@@ -115,13 +171,16 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             saldoSantri: await db.saldoSantri.toArray(), 
             transaksiSaldo: await db.transaksiSaldo.toArray(), 
             transaksiKas: await db.transaksiKas.toArray(), 
+            chartOfAccounts: await db.chartOfAccounts.toArray(),
             suratTemplates: await db.suratTemplates.toArray(), 
             arsipSurat: await db.arsipSurat.toArray(), 
             pendaftar: await db.pendaftar.toArray(), 
             auditLogs: await db.auditLogs.toArray(), 
             users: await db.users.toArray(), 
+            syncHistory: await db.syncHistory.toArray(),
             raporRecords: await db.raporRecords.toArray(), 
             absensi: await db.absensi.toArray(),
+            jurnalMengajar: await db.jurnalMengajar.toArray(),
             tahfizh: await db.tahfizh.toArray(),
             buku: await db.buku.toArray(),
             sirkulasi: await db.sirkulasi.toArray(),
@@ -141,6 +200,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             keuanganKoperasi: await db.keuanganKoperasi.toArray(),
             pendingOrders: await db.pendingOrders.toArray(),
             diskon: await db.diskon.toArray(),
+            suppliers: await db.suppliers.toArray(),
+            pembayaranHutang: await db.pembayaranHutang.toArray(),
+            warehouses: await db.warehouses.toArray(),
+            stockTransfers: await db.stockTransfers.toArray(),
             
             version: '3.0',
             timestamp: new Date().toISOString(),

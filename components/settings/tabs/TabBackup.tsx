@@ -4,11 +4,71 @@ import { PondokSettings, BackupFrequency } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { db } from '../../../db';
 import { formatBytes } from '../../../utils/formatters';
+import { SectionCard } from '../../common/SectionCard';
+import {
+    CURRENT_PERMISSION_VERSION,
+    migrateUserPermissions,
+    type PermissionMigrationItem,
+} from '../../../services/permissionMigrationService';
 
 interface TabBackupProps {
     localSettings: PondokSettings;
     setLocalSettings: React.Dispatch<React.SetStateAction<PondokSettings>>;
 }
+
+type BackupPayload = Record<string, unknown>;
+
+const RESTORE_TABLE_CONFIG: Array<{ key: string; label: string; table: any; aliases?: string[] }> = [
+    { key: 'settings', label: 'Pengaturan', table: db.settings, aliases: ['config'] },
+    { key: 'santri', label: 'Santri', table: db.santri },
+    { key: 'tagihan', label: 'Tagihan', table: db.tagihan },
+    { key: 'pembayaran', label: 'Pembayaran', table: db.pembayaran },
+    { key: 'saldoSantri', label: 'Saldo Santri', table: db.saldoSantri },
+    { key: 'transaksiSaldo', label: 'Transaksi Saldo', table: db.transaksiSaldo },
+    { key: 'transaksiKas', label: 'Buku Kas', table: db.transaksiKas },
+    { key: 'chartOfAccounts', label: 'Chart of Accounts', table: db.chartOfAccounts, aliases: ['coa'] },
+    { key: 'suratTemplates', label: 'Template Surat', table: db.suratTemplates },
+    { key: 'arsipSurat', label: 'Arsip Surat', table: db.arsipSurat },
+    { key: 'pendaftar', label: 'Pendaftar PSB', table: db.pendaftar },
+    { key: 'auditLogs', label: 'Audit Log', table: db.auditLogs },
+    { key: 'users', label: 'User', table: db.users },
+    { key: 'syncHistory', label: 'Riwayat Sync', table: db.syncHistory },
+    { key: 'raporRecords', label: 'Rapor', table: db.raporRecords },
+    { key: 'absensi', label: 'Absensi', table: db.absensi },
+    { key: 'jurnalMengajar', label: 'Jurnal Mengajar', table: db.jurnalMengajar },
+    { key: 'tahfizh', label: 'Tahfizh', table: db.tahfizh },
+    { key: 'inventaris', label: 'Inventaris', table: db.inventaris },
+    { key: 'calendarEvents', label: 'Kalender', table: db.calendarEvents },
+    { key: 'buku', label: 'Buku Perpustakaan', table: db.buku },
+    { key: 'sirkulasi', label: 'Sirkulasi Perpustakaan', table: db.sirkulasi },
+    { key: 'obat', label: 'Data Obat', table: db.obat },
+    { key: 'kesehatanRecords', label: 'Kesehatan', table: db.kesehatanRecords },
+    { key: 'bkSessions', label: 'BK', table: db.bkSessions },
+    { key: 'bukuTamu', label: 'Buku Tamu', table: db.bukuTamu },
+    { key: 'jadwalPelajaran', label: 'Jadwal Pelajaran', table: db.jadwalPelajaran },
+    { key: 'arsipJadwal', label: 'Arsip Jadwal', table: db.arsipJadwal },
+    { key: 'payrollRecords', label: 'Payroll', table: db.payrollRecords },
+    { key: 'piketSchedules', label: 'Piket', table: db.piketSchedules },
+    { key: 'produkKoperasi', label: 'Produk Koperasi', table: db.produkKoperasi },
+    { key: 'transaksiKoperasi', label: 'Transaksi Koperasi', table: db.transaksiKoperasi },
+    { key: 'riwayatStok', label: 'Riwayat Stok', table: db.riwayatStok },
+    { key: 'keuanganKoperasi', label: 'Keuangan Koperasi', table: db.keuanganKoperasi },
+    { key: 'pendingOrders', label: 'Pending Order', table: db.pendingOrders },
+    { key: 'diskon', label: 'Diskon', table: db.diskon },
+    { key: 'suppliers', label: 'Supplier', table: db.suppliers },
+    { key: 'pembayaranHutang', label: 'Pembayaran Hutang', table: db.pembayaranHutang },
+    { key: 'warehouses', label: 'Gudang', table: db.warehouses },
+    { key: 'stockTransfers', label: 'Transfer Stok', table: db.stockTransfers },
+];
+
+const getArrayFromBackup = (payload: BackupPayload, key: string, aliases: string[] = []): unknown[] | null => {
+    const candidates = [key, ...aliases];
+    for (const candidate of candidates) {
+        const value = payload[candidate];
+        if (Array.isArray(value)) return value;
+    }
+    return null;
+};
 
 const HealthDashboard: React.FC = () => {
     const [stats, setStats] = useState<{
@@ -66,12 +126,12 @@ const HealthDashboard: React.FC = () => {
     if (!stats) return <div className="animate-pulse bg-gray-100 h-40 rounded-lg"></div>;
 
     return (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+        <div className="mb-6 rounded-xl border border-app-border bg-app-subtle p-4">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
                     <i className="bi bi-heart-pulse text-red-500"></i> Dashboard Kesehatan Penyimpanan Lokal
                 </h3>
-                <button onClick={refreshHealth} className="text-xs text-blue-600 hover:underline">
+                <button onClick={refreshHealth} className="text-xs font-semibold text-blue-600 hover:underline">
                     <i className="bi bi-arrow-clockwise"></i> Refresh
                 </button>
             </div>
@@ -121,7 +181,7 @@ const HealthDashboard: React.FC = () => {
 };
 
 export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSettings }) => {
-    const { downloadBackup, showConfirmation, showToast } = useAppContext();
+    const { downloadBackup, showConfirmation, showToast, showAlert } = useAppContext();
     const restoreInputRef = useRef<HTMLInputElement>(null);
 
     const handleBackupConfigChange = (frequency: BackupFrequency) => {
@@ -144,30 +204,77 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                 const jsonString = e.target?.result as string;
                 const data = JSON.parse(jsonString);
 
-                if (!data.settings || !data.santri) {
+                if (!data || typeof data !== 'object') {
                     throw new Error('File cadangan tidak valid atau rusak.');
+                }
+
+                const payload = data as BackupPayload;
+                const restorePlan: Array<(typeof RESTORE_TABLE_CONFIG)[number] & { rows: unknown[] }> = [];
+                for (const cfg of RESTORE_TABLE_CONFIG) {
+                    const rows = getArrayFromBackup(payload, cfg.key, cfg.aliases);
+                    if (rows) {
+                        restorePlan.push({ ...cfg, rows });
+                    }
+                }
+
+                if (restorePlan.length === 0) {
+                    throw new Error('Tidak ada tabel backup yang dikenali. Pastikan file berasal dari eSantri.');
                 }
                 
                 showConfirmation(
                     'Konfirmasi Pemulihan Data',
-                    'PERHATIAN: Tindakan ini akan MENGHAPUS SEMUA DATA saat ini dan menggantinya dengan data dari file cadangan. Apakah Anda yakin ingin melanjutkan?',
+                    'PERHATIAN: Data yang tersedia pada file backup akan menggantikan data saat ini. Lanjutkan pemulihan?',
                     async () => {
                         try {
-                           await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.suratTemplates, db.arsipSurat, db.pendaftar, db.auditLogs, db.users, async () => {
-                                await db.settings.clear(); if(data.settings) await db.settings.bulkPut(data.settings);
-                                await db.santri.clear(); if(data.santri) await db.santri.bulkPut(data.santri);
-                                await db.tagihan.clear(); if(data.tagihan) await db.tagihan.bulkPut(data.tagihan);
-                                await db.pembayaran.clear(); if(data.pembayaran) await db.pembayaran.bulkPut(data.pembayaran);
-                                await db.saldoSantri.clear(); if(data.saldoSantri) await db.saldoSantri.bulkPut(data.saldoSantri);
-                                await db.transaksiSaldo.clear(); if(data.transaksiSaldo) await db.transaksiSaldo.bulkPut(data.transaksiSaldo);
-                                await db.transaksiKas.clear(); if(data.transaksiKas) await db.transaksiKas.bulkPut(data.transaksiKas);
-                                await db.suratTemplates.clear(); if(data.suratTemplates) await db.suratTemplates.bulkPut(data.suratTemplates);
-                                await db.arsipSurat.clear(); if(data.arsipSurat) await db.arsipSurat.bulkPut(data.arsipSurat);
-                                await db.pendaftar.clear(); if(data.pendaftar) await db.pendaftar.bulkPut(data.pendaftar);
-                                await db.auditLogs.clear(); if(data.auditLogs) await db.auditLogs.bulkPut(data.auditLogs);
-                                await db.users.clear(); if(data.users) await db.users.bulkPut(data.users);
-                           });
-                           showToast('Data berhasil dipulihkan. Aplikasi akan dimuat ulang.', 'success');
+                            const permissionMigrationItems: PermissionMigrationItem[] = [];
+                            const txTables = restorePlan.map((item) => item.table);
+                            await (db as any).transaction('rw', ...txTables, async () => {
+                                for (const item of restorePlan) {
+                                    await item.table.clear();
+                                    if (item.rows.length === 0) continue;
+
+                                    if (item.key === 'users') {
+                                        const normalizedUsers = (item.rows as any[]).map((rawUser) => {
+                                            const result = migrateUserPermissions(rawUser as any);
+                                            if (result.changed) {
+                                                permissionMigrationItems.push({
+                                                    userId: result.user.id,
+                                                    username: result.user.username,
+                                                    role: result.user.role,
+                                                    fromVersion: (rawUser as any)?.permissionVersion ?? 0,
+                                                    toVersion: result.user.permissionVersion ?? CURRENT_PERMISSION_VERSION,
+                                                    reason: result.reason,
+                                                });
+                                            }
+                                            return result.user;
+                                        });
+                                        await item.table.bulkPut(normalizedUsers);
+                                    } else {
+                                        await item.table.bulkPut(item.rows);
+                                    }
+                                }
+                            });
+
+                            const restoredKeys = restorePlan.map((item) => item.key);
+                            const restoredLabels = RESTORE_TABLE_CONFIG
+                                .filter((cfg) => restoredKeys.includes(cfg.key))
+                                .map((cfg) => cfg.label);
+                            const skippedLabels = RESTORE_TABLE_CONFIG
+                                .filter((cfg) => !restoredKeys.includes(cfg.key))
+                                .map((cfg) => cfg.label);
+
+                            showToast(`Restore berhasil untuk ${restorePlan.length} tabel. Aplikasi akan dimuat ulang.`, 'success');
+                            const migrationSummary = permissionMigrationItems.length > 0
+                                ? `\n\nMigrasi Permission Otomatis (${permissionMigrationItems.length} user, target v${CURRENT_PERMISSION_VERSION}):\n${permissionMigrationItems
+                                    .slice(0, 15)
+                                    .map((item) => `- ${item.username} (${item.role}): ${item.reason}`)
+                                    .join('\n')}${permissionMigrationItems.length > 15 ? '\n- ...dan lainnya' : ''}`
+                                : '\n\nMigrasi Permission Otomatis: tidak ada user legacy yang perlu dimigrasi.';
+
+                            showAlert(
+                                'Laporan Hasil Restore',
+                                `Data diperbarui (${restoredLabels.length}): ${restoredLabels.join(', ') || '-'}\n\nTidak ditemukan di file backup (${skippedLabels.length}): ${skippedLabels.join(', ') || '-'}${migrationSummary}`
+                            );
                            setTimeout(() => window.location.reload(), 1500);
                         } catch(dbError) {
                             console.error('Failed to restore data to DB:', dbError);
@@ -191,32 +298,38 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-            <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Cadangkan & Pulihkan Data Lokal</h2>
+        <SectionCard
+            title="Cadangkan & Pulihkan Data Lokal"
+            description="Kelola backup manual, jadwal pengingat backup, dan restore data dari file JSON."
+            contentClassName="space-y-6 p-6"
+        >
             
             <HealthDashboard />
 
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
-                    <h3 className="text-lg font-semibold text-gray-800">Cadangkan Data (Manual)</h3>
-                    <p className="text-sm text-gray-600 mt-1 mb-4">Simpan salinan semua data santri dan pengaturan ke dalam satu file JSON di komputer Anda.</p>
-                    <div className="bg-yellow-50 p-3 rounded-md border border-yellow-200 mb-4">
-                        <h4 className="text-sm font-semibold text-yellow-800 mb-2">Pengingat Backup Otomatis</h4>
+                    <h3 className="text-lg font-semibold text-slate-800">Cadangkan Data (Manual)</h3>
+                    <p className="mb-4 mt-1 text-sm text-slate-600">Simpan salinan semua data santri dan pengaturan ke dalam satu file JSON di komputer Anda.</p>
+                    <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-3">
+                        <h4 className="mb-2 text-sm font-semibold text-yellow-800">Pengingat Backup Otomatis</h4>
                         <div className="flex flex-wrap gap-2">
                             {[{ value: 'daily', label: 'Setiap Hari' }, { value: 'weekly', label: 'Setiap Minggu' }, { value: 'never', label: 'Matikan' }].map(opt => (
-                                <label key={opt.value} className="flex items-center gap-2 bg-white px-3 py-1.5 rounded border cursor-pointer hover:bg-gray-50"><input type="radio" name="backupFreq" value={opt.value} checked={localSettings.backupConfig?.frequency === opt.value} onChange={() => handleBackupConfigChange(opt.value as any)} className="text-teal-600 focus:ring-teal-500"/><span className="text-sm text-gray-700">{opt.label}</span></label>
+                                <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded border bg-white px-3 py-1.5 hover:bg-gray-50">
+                                    <input type="radio" name="backupFreq" value={opt.value} checked={localSettings.backupConfig?.frequency === opt.value} onChange={() => handleBackupConfigChange(opt.value as any)} className="text-teal-600 focus:ring-teal-500"/>
+                                    <span className="text-sm text-gray-700">{opt.label}</span>
+                                </label>
                             ))}
                         </div>
                     </div>
-                    <button onClick={downloadBackup} className="w-full sm:w-auto text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 flex items-center justify-center gap-2"><i className="bi bi-download"></i><span>Unduh Cadangan Data</span></button>
+                    <button onClick={downloadBackup} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 sm:w-auto"><i className="bi bi-download"></i><span>Unduh Cadangan Data</span></button>
                 </div>
                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800">Pulihkan Data (Manual)</h3>
-                    <p className="text-sm text-gray-600 mt-1 mb-4">Pulihkan data dari file cadangan JSON. Tindakan ini tidak dapat dibatalkan.</p>
+                    <h3 className="text-lg font-semibold text-slate-800">Pulihkan Data (Manual)</h3>
+                    <p className="mb-4 mt-1 text-sm text-slate-600">Pulihkan data dari file cadangan JSON. Tindakan ini tidak dapat dibatalkan.</p>
                     <input type="file" accept=".json" onChange={handleRestoreHandler} ref={restoreInputRef} id="restore-input" className="hidden" />
-                    <label htmlFor="restore-input" className="w-full sm:w-auto cursor-pointer text-white bg-green-600 hover:bg-green-700 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 flex items-center justify-center gap-2"><i className="bi bi-upload"></i><span>Pilih File Cadangan</span></label>
+                    <label htmlFor="restore-input" className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 sm:w-auto"><i className="bi bi-upload"></i><span>Pilih File Cadangan</span></label>
                 </div>
             </div>
-        </div>
+        </SectionCard>
     );
 };

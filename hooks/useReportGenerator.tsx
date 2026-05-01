@@ -4,7 +4,25 @@ import { Santri, PondokSettings, ReportType, RiwayatStatus } from '../types';
 import { generateBiodataReports, generateCardReports, generateLabelReports } from '../components/reports/modules/IdentityReports';
 import { generateNilaiReports, generateTableReport, generateRaporLengkapReports, JurnalMengajarTemplate, KesehatanRekapTemplate, KonselingRekapTemplate } from '../components/reports/modules/AcademicReports';
 import { FinanceSummaryTemplate, LaporanArusKasTemplate, RekeningKoranSantriTemplate } from '../components/reports/modules/FinancialReports';
-import { DaftarWaliKelasTemplate, LaporanKontakTemplate, LaporanKontakStafTemplate, LaporanMapelTemplate, LaporanAsramaTemplate, LaporanMutasiTemplate, LembarPembinaanTemplate, FormulirIzinTemplate, DashboardSummaryTemplate } from '../components/reports/modules/AdministrativeReports';
+import {
+    DaftarWaliKelasTemplate,
+    LaporanKontakTemplate,
+    LaporanKontakStafTemplate,
+    LaporanMapelTemplate,
+    LaporanAsramaTemplate,
+    LaporanMutasiTemplate,
+    LembarPembinaanTemplate,
+    FormulirIzinTemplate,
+    DashboardSummaryTemplate,
+    OperasionalHarianTemplate,
+    EarlyWarningSantriTemplate,
+    KinerjaPengajarTemplate,
+    TahfizhProgressTemplate,
+    KelasAsramaBermasalahTemplate,
+    CohortSantriTemplate,
+    KepatuhanAdministrasiTemplate,
+    EfektivitasPSBTemplate
+} from '../components/reports/modules/AdministrativeReports';
 import { chunkArray } from '../components/reports/modules/Common';
 
 export const useReportGenerator = (settings: PondokSettings) => {
@@ -68,8 +86,60 @@ export const useReportGenerator = (settings: PondokSettings) => {
             case ReportType.DashboardSummary:
                 previews.push({ content: <DashboardSummaryTemplate santriList={data} settings={settings} />, orientation: 'portrait' });
                 break;
+            case ReportType.OperasionalHarian:
+                previews.push({
+                    content: (
+                        <OperasionalHarianTemplate
+                            settings={settings}
+                            absensiList={options.absensiList || []}
+                            jurnalMengajarList={options.jurnalMengajarList || []}
+                            kesehatanRecords={options.kesehatanRecords || []}
+                            bkSessions={options.bkSessions || []}
+                            transaksiKasList={options.allKas || []}
+                            pendaftarList={options.pendaftarList || []}
+                        />
+                    ),
+                    orientation: 'portrait'
+                });
+                break;
+            case ReportType.EarlyWarningSantri:
+                previews.push({
+                    content: (
+                        <EarlyWarningSantriTemplate
+                            settings={settings}
+                            santriList={data}
+                            absensiList={options.absensiList || []}
+                            kesehatanRecords={options.kesehatanRecords || []}
+                            bkSessions={options.bkSessions || []}
+                            tagihanList={options.tagihanList || []}
+                        />
+                    ),
+                    orientation: 'landscape'
+                });
+                break;
             case ReportType.FinanceSummary:
                 previews.push({ content: <FinanceSummaryTemplate santriList={data} tagihanList={options.tagihanList} pembayaranList={options.pembayaranList} settings={settings} />, orientation: 'portrait' });
+                break;
+            case ReportType.KinerjaPengajar:
+                previews.push({ content: <KinerjaPengajarTemplate settings={settings} jurnalMengajarList={options.jurnalMengajarList || []} />, orientation: 'landscape' });
+                break;
+            case ReportType.TahfizhProgress:
+                previews.push({ content: <TahfizhProgressTemplate settings={settings} santriList={data} tahfizhList={options.tahfizhList || []} />, orientation: 'landscape' });
+                break;
+            case ReportType.KelasAsramaBermasalah:
+                previews.push({
+                    content: (
+                        <KelasAsramaBermasalahTemplate
+                            settings={settings}
+                            santriList={data}
+                            absensiList={options.absensiList || []}
+                            kesehatanRecords={options.kesehatanRecords || []}
+                            bkSessions={options.bkSessions || []}
+                            tagihanList={options.tagihanList || []}
+                        />
+                    ),
+                    orientation: 'landscape'
+                });
                 break;
             case ReportType.LaporanArusKas:
                 previews.push({ content: <LaporanArusKasTemplate settings={settings} options={options} />, orientation: 'portrait' });
@@ -106,6 +176,15 @@ export const useReportGenerator = (settings: PondokSettings) => {
                 });
                 events.sort((a,b) => new Date(a.mutasi.tanggal).getTime() - new Date(b.mutasi.tanggal).getTime());
                 previews.push({ content: <LaporanMutasiTemplate mutasiEvents={events} settings={settings} startDate={options.mutasiStartDate} endDate={options.mutasiEndDate} />, orientation: 'landscape' });
+                break;
+            case ReportType.CohortSantri:
+                previews.push({ content: <CohortSantriTemplate settings={settings} santriList={data} />, orientation: 'portrait' });
+                break;
+            case ReportType.KepatuhanAdministrasi:
+                previews.push({ content: <KepatuhanAdministrasiTemplate settings={settings} santriList={data} />, orientation: 'landscape' });
+                break;
+            case ReportType.EfektivitasPSB:
+                previews.push({ content: <EfektivitasPSBTemplate settings={settings} pendaftarList={options.pendaftarList || []} />, orientation: 'portrait' });
                 break;
             case ReportType.LembarPembinaan:
                 data.forEach(santri => previews.push({ content: <LembarPembinaanTemplate santri={santri} settings={settings} />, orientation: 'portrait' }));

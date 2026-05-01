@@ -32,17 +32,34 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const [isArchiving, setIsArchiving] = useState(false);
 
     // Submission method from settings
-    const method = settings.psbConfig.submissionMethod;
+    const method = settings.psbConfig.submissionMethod === 'portal' ? 'hybrid' : settings.psbConfig.submissionMethod;
     const scriptUrl = settings.psbConfig.googleScriptUrl;
 
     const filteredData = useMemo(() => {
         return pendaftarList.filter(p => {
             const matchSearch = p.namaLengkap.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                               (p.nisn && p.nisn.includes(searchTerm));
+                               (p.nisn && p.nisn.includes(searchTerm)) ||
+                               (p.nomorHpWali && p.nomorHpWali.includes(searchTerm));
             const matchJenjang = !filterJenjang || p.jenjangId === parseInt(filterJenjang);
             return matchSearch && matchJenjang;
         });
     }, [pendaftarList, searchTerm, filterJenjang]);
+
+    const psbStats = useMemo(() => {
+        return {
+            total: pendaftarList.length,
+            baru: pendaftarList.filter((p) => p.status === 'Baru').length,
+            diterima: pendaftarList.filter((p) => p.status === 'Diterima').length,
+            cadangan: pendaftarList.filter((p) => p.status === 'Cadangan').length,
+        };
+    }, [pendaftarList]);
+
+    const getStatusBadgeClass = (status: string) => {
+        if (status === 'Diterima') return 'bg-green-100 text-green-800';
+        if (status === 'Cadangan') return 'bg-yellow-50 text-yellow-800';
+        if (status === 'Baru') return 'bg-blue-100 text-blue-800';
+        return 'bg-red-100 text-red-800';
+    };
 
     const handleInternalSync = async () => {
         if (!canWrite) return;
@@ -91,6 +108,10 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         if (!canWrite) return;
         if (!scriptUrl) {
             showAlert('URL Script Kosong', 'Harap isi URL Google Web App di menu Desain Formulir.');
+            return;
+        }
+        if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(scriptUrl.trim())) {
+            showAlert('URL Script Tidak Valid', 'Gunakan URL deployment Google Apps Script yang berakhiran /exec.');
             return;
         }
 
@@ -468,13 +489,13 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     return (
         <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow-md">
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+                <div className="space-y-4 mb-6">
                     <div>
                         <h2 className="text-xl font-bold text-gray-700">Data Pendaftar</h2>
                         <p className="text-xs text-gray-500">Kelola dan sinkronkan data santri baru.</p>
                     </div>
                     {canWrite && (
-                        <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+                        <div className="flex flex-wrap gap-2 w-full">
                             {/* TOMBOL GOOGLE SYNC (Hanya muncul jika mode Google Sheet / Hybrid) */}
                             {(method === 'google_sheet' || method === 'hybrid') && (
                                 <button 
@@ -519,6 +540,25 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     )}
                 </div>
 
+                <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-4">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Total</div>
+                        <div className="text-lg font-black text-slate-800">{psbStats.total}</div>
+                    </div>
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600">Baru</div>
+                        <div className="text-lg font-black text-blue-800">{psbStats.baru}</div>
+                    </div>
+                    <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-green-600">Diterima</div>
+                        <div className="text-lg font-black text-green-800">{psbStats.diterima}</div>
+                    </div>
+                    <div className="rounded-lg border border-yellow-100 bg-yellow-50 px-3 py-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-yellow-600">Cadangan</div>
+                        <div className="text-lg font-black text-yellow-800">{psbStats.cadangan}</div>
+                    </div>
+                </div>
+
                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
                     <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Cari nama atau NISN..." className="flex-grow border rounded-lg p-2.5 text-sm"/>
                     <select value={filterJenjang} onChange={e => setFilterJenjang(e.target.value)} className="border rounded-lg p-2.5 text-sm sm:w-48">
@@ -527,7 +567,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     </select>
                 </div>
 
-                <div className="overflow-x-auto border rounded-lg">
+                <div className="hidden md:block overflow-x-auto border rounded-lg">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 text-gray-600 font-semibold border-b">
                             <tr>
@@ -584,7 +624,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                             ) : '-'}
                                         </td>
                                         <td className="p-3 text-center">
-                                            <span className={`px-2 py-1 text-xs rounded-full ${p.status === 'Baru' ? 'bg-blue-100 text-blue-800' : p.status === 'Diterima' ? 'bg-green-100 text-green-800' : p.status === 'Cadangan' ? 'bg-yellow-50 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                                            <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadgeClass(p.status)}`}>
                                                 {p.status}
                                             </span>
                                         </td>
@@ -613,6 +653,69 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                             {filteredData.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-gray-500">Tidak ada data pendaftar.</td></tr>}
                         </tbody>
                     </table>
+                </div>
+                <div className="space-y-3 md:hidden">
+                    {filteredData.map((p) => {
+                        const customData = p.customData ? JSON.parse(p.customData) : {};
+                        const files = Object.keys(customData).filter((key) => {
+                            const val = customData[key];
+                            return typeof val === 'string' && (val.startsWith('data:') || val.startsWith('http'));
+                        });
+
+                        return (
+                            <article key={p.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+                                <div className="mb-2 flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <h4 className="truncate text-sm font-bold text-slate-800">{p.namaLengkap}</h4>
+                                        <p className="text-xs text-slate-500">{new Date(p.tanggalDaftar).toLocaleDateString('id-ID')}</p>
+                                    </div>
+                                    <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${getStatusBadgeClass(p.status)}`}>{p.status}</span>
+                                </div>
+                                <div className="space-y-1 text-xs text-slate-600">
+                                    <p><span className="font-semibold text-slate-700">Jenjang:</span> {settings.jenjang.find(j => j.id === p.jenjangId)?.nama || '-'}</p>
+                                    <p><span className="font-semibold text-slate-700">Wali:</span> {p.namaWali || '-'} {p.nomorHpWali ? `(${p.nomorHpWali})` : ''}</p>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                    {files.length > 0 ? files.map((fKey) => {
+                                        const val = customData[fKey];
+                                        const isLink = val.startsWith('http');
+                                        return (
+                                            <button
+                                                key={fKey}
+                                                onClick={() => handleOpenDocument(val)}
+                                                className={`px-2 py-0.5 rounded border text-[10px] flex items-center gap-1 ${isLink ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}
+                                            >
+                                                <i className={`bi ${isLink ? 'bi-link-45deg' : 'bi-file-earmark-pdf'}`}></i>
+                                                {fKey.replace(/_/g, ' ')}
+                                            </button>
+                                        );
+                                    }) : (
+                                        <span className="text-[11px] text-slate-400">Tidak ada dokumen</span>
+                                    )}
+                                </div>
+                                {canWrite && (
+                                    <div className="mt-3 flex justify-end gap-2">
+                                        {p.status === 'Baru' && (
+                                            <button onClick={() => handleAccept(p)} className="h-9 w-9 rounded-lg border border-green-200 bg-green-50 text-green-700">
+                                                <i className="bi bi-check-lg"></i>
+                                            </button>
+                                        )}
+                                        <button onClick={() => { setEditingPendaftar(p); setIsPendaftarModalOpen(true); }} className="h-9 w-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-700">
+                                            <i className="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button onClick={() => handleDelete(p.id)} className="h-9 w-9 rounded-lg border border-red-200 bg-red-50 text-red-700">
+                                            <i className="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                )}
+                            </article>
+                        );
+                    })}
+                    {filteredData.length === 0 && (
+                        <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+                            Tidak ada data pendaftar.
+                        </div>
+                    )}
                 </div>
             </div>
 

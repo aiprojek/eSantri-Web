@@ -7,6 +7,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { Buku, Sirkulasi as SirkulasiType } from '../types';
+import { PageHeader } from './common/PageHeader';
+import { HeaderTabs } from './common/HeaderTabs';
 
 const Perpustakaan: React.FC = () => {
     const { currentUser, showToast } = useAppContext();
@@ -54,6 +56,13 @@ const Perpustakaan: React.FC = () => {
              showToast('Stok buku habis atau tidak ditemukan.', 'error');
              return;
          }
+         const masihDipinjam = sirkulasiList.some(
+            (item) => item.status === 'Dipinjam' && item.bukuId === bukuId && item.santriId === santriId
+         );
+         if (masihDipinjam) {
+            showToast('Buku ini masih tercatat dipinjam oleh santri yang sama.', 'error');
+            return;
+         }
 
          const today = new Date();
          const dueDate = new Date(today);
@@ -80,6 +89,10 @@ const Perpustakaan: React.FC = () => {
         if (!canWrite) return;
         const sirkulasi = sirkulasiList.find(s => s.id === sirkulasiId);
         if (!sirkulasi) return;
+        if (sirkulasi.status !== 'Dipinjam') {
+            showToast('Transaksi ini sudah diproses sebelumnya.', 'info');
+            return;
+        }
         const buku = bukuList.find(b => b.id === sirkulasi.bukuId);
 
         await (db as any).transaction('rw', db.sirkulasi, db.buku, async () => {
@@ -99,21 +112,22 @@ const Perpustakaan: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-gray-800">Perpustakaan Digital</h1>
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 sticky top-0 z-40">
-                <nav className="flex -mb-px">
-                    <button onClick={() => setActiveTab('katalog')} className={`flex-1 py-4 text-center border-b-2 font-medium text-sm transition-colors ${activeTab === 'katalog' ? 'border-teal-600 text-teal-600 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                        <i className="bi bi-book mr-2"></i> Katalog Buku
-                    </button>
-                    <button onClick={() => setActiveTab('sirkulasi')} className={`flex-1 py-4 text-center border-b-2 font-medium text-sm transition-colors ${activeTab === 'sirkulasi' ? 'border-teal-600 text-teal-600 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                        <i className="bi bi-arrow-left-right mr-2"></i> Sirkulasi
-                    </button>
-                    <button onClick={() => setActiveTab('cetak')} className={`flex-1 py-4 text-center border-b-2 font-medium text-sm transition-colors ${activeTab === 'cetak' ? 'border-teal-600 text-teal-600 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                        <i className="bi bi-printer mr-2"></i> Cetak Kartu
-                    </button>
-                </nav>
-            </div>
+            <PageHeader
+                eyebrow="Pendidikan"
+                title="Perpustakaan Digital"
+                description="Kelola katalog buku, sirkulasi peminjaman, dan pencetakan kartu perpustakaan dari panel yang lebih konsisten."
+                tabs={
+                    <HeaderTabs
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        tabs={[
+                            { value: 'katalog', label: 'Katalog Buku', icon: 'bi-book' },
+                            { value: 'sirkulasi', label: 'Sirkulasi', icon: 'bi-arrow-left-right' },
+                            { value: 'cetak', label: 'Cetak Kartu', icon: 'bi-printer' },
+                        ]}
+                    />
+                }
+            />
 
             <div className="min-h-[500px]">
                 {activeTab === 'katalog' && (

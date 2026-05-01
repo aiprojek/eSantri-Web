@@ -1,11 +1,15 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
 import { useForm } from 'react-hook-form';
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { BukuTamu as BukuTamuType } from '../types';
+import { PageHeader } from './common/PageHeader';
+import { SectionCard } from './common/SectionCard';
+import { EmptyState } from './common/EmptyState';
+import { HeaderTabs } from './common/HeaderTabs';
 
 interface BukuTamuModalProps {
     isOpen: boolean;
@@ -15,17 +19,28 @@ interface BukuTamuModalProps {
 
 const BukuTamuModal: React.FC<BukuTamuModalProps> = ({ isOpen, onClose, onSave }) => {
     const { santriList } = useSantriContext();
-    const { currentUser } = useAppContext();
+    const { currentUser, showAlert } = useAppContext();
     const { register, handleSubmit, reset, watch, setValue } = useForm<BukuTamuType>();
     
     const [searchSantri, setSearchSantri] = useState('');
     const [selectedSantriId, setSelectedSantriId] = useState<number | null>(null);
     const watchKategori = watch('kategori', 'Wali Santri');
 
+    useEffect(() => {
+        if (watchKategori !== 'Wali Santri') {
+            setSelectedSantriId(null);
+            setSearchSantri('');
+        }
+    }, [watchKategori]);
+
     const filteredSantri = useMemo(() => {
         if (!searchSantri) return [];
         return santriList
-            .filter(s => s.status === 'Aktif' && s.namaLengkap.toLowerCase().includes(searchSantri.toLowerCase()))
+            .filter(
+                (s) =>
+                    s.status === 'Aktif' &&
+                    (s.namaLengkap.toLowerCase().includes(searchSantri.toLowerCase()) || s.nis.includes(searchSantri))
+            )
             .slice(0, 5);
     }, [santriList, searchSantri]);
 
@@ -47,6 +62,11 @@ const BukuTamuModal: React.FC<BukuTamuModalProps> = ({ isOpen, onClose, onSave }
     };
 
     const onSubmit = async (data: BukuTamuType) => {
+        if (watchKategori === 'Wali Santri' && !selectedSantriId) {
+            showAlert('Santri Belum Dipilih', 'Untuk kategori Wali Santri, pilih dulu santri yang dikunjungi.');
+            return;
+        }
+
         const now = new Date();
         const finalData = {
             ...data,
@@ -110,7 +130,7 @@ const BukuTamuModal: React.FC<BukuTamuModalProps> = ({ isOpen, onClose, onSave }
                         </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Nama Tamu</label>
                             <input type="text" {...register('namaTamu', { required: true })} className="w-full border rounded-lg p-2.5 text-sm" placeholder="Nama Lengkap" />
@@ -135,7 +155,7 @@ const BukuTamuModal: React.FC<BukuTamuModalProps> = ({ isOpen, onClose, onSave }
 
                     <div className="p-3 bg-gray-100 rounded-lg border border-gray-200">
                         <label className="block text-xs font-bold text-gray-600 mb-2"><i className="bi bi-car-front-fill mr-1"></i> Data Kendaraan (Opsional)</label>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                                 <select {...register('kendaraan')} className="w-full border rounded p-2 text-sm">
                                     <option value="">- Jenis -</option>
@@ -171,6 +191,11 @@ const BukuTamu: React.FC = () => {
 
     const activeGuests = useMemo(() => {
         return records.filter(r => r.status === 'Bertamu').sort((a,b) => new Date(b.jamMasuk).getTime() - new Date(a.jamMasuk).getTime());
+    }, [records]);
+
+    const todayGuestCount = useMemo(() => {
+        const today = new Date().toISOString().split('T')[0];
+        return records.filter((r) => r.tanggal === today).length;
     }, [records]);
 
     const historyGuests = useMemo(() => {
@@ -223,19 +248,26 @@ const BukuTamu: React.FC = () => {
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
-                        <i className="bi bi-shield-check text-teal-600"></i> Buku Tamu & Keamanan
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">Catat lalu lintas tamu dan wali santri untuk keamanan pondok.</p>
-                </div>
-                {canWrite && (
-                    <button onClick={() => setIsModalOpen(true)} className="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-teal-700 shadow-lg flex items-center gap-2 transition-transform hover:-translate-y-1">
-                        <i className="bi bi-person-plus-fill text-xl"></i> Check-In Baru
+            <PageHeader
+                eyebrow="Administrasi"
+                title="Buku Tamu & Keamanan"
+                description="Pantau kunjungan tamu aktif dan riwayat keluar-masuk untuk mendukung keamanan pondok."
+                actions={canWrite ? (
+                    <button onClick={() => setIsModalOpen(true)} className="app-button-primary px-6 py-3 text-sm">
+                        <i className="bi bi-person-plus-fill"></i> Check-In Baru
                     </button>
-                )}
-            </div>
+                ) : undefined}
+                tabs={
+                    <HeaderTabs
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        tabs={[
+                            { value: 'active', label: 'Tamu Aktif (Di Dalam)', mobileLabel: 'Tamu Aktif', badge: <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold text-current">{activeGuests.length}</span> },
+                            { value: 'history', label: 'Riwayat Kunjungan' },
+                        ]}
+                    />
+                }
+            />
 
             {/* SOP Security Widget */}
             <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg shadow-sm">
@@ -247,25 +279,23 @@ const BukuTamu: React.FC = () => {
                 </ul>
             </div>
 
-            {/* Tabs */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <div className="flex border-b">
-                    <button 
-                        onClick={() => setActiveTab('active')} 
-                        className={`flex-1 py-4 text-center font-bold text-sm border-b-2 transition-colors ${activeTab === 'active' ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                    >
-                        <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full mr-2">{activeGuests.length}</span>
-                        Tamu Aktif (Di Dalam)
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('history')} 
-                        className={`flex-1 py-4 text-center font-bold text-sm border-b-2 transition-colors ${activeTab === 'history' ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                    >
-                        Riwayat Kunjungan
-                    </button>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-teal-100 bg-teal-50 px-4 py-3">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-teal-700">Tamu Aktif</div>
+                    <div className="text-2xl font-black text-teal-900">{activeGuests.length}</div>
                 </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Kunjungan Hari Ini</div>
+                    <div className="text-2xl font-black text-slate-800">{todayGuestCount}</div>
+                </div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-blue-700">Riwayat Tersimpan</div>
+                    <div className="text-2xl font-black text-blue-900">{records.length}</div>
+                </div>
+            </div>
 
-                <div className="p-6">
+            <SectionCard title="Aktivitas Tamu" description="Buka daftar tamu aktif atau riwayat kunjungan dari satu panel yang lebih konsisten." contentClassName="p-6">
+                <div>
                     {activeTab === 'active' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {activeGuests.map(guest => (
@@ -312,10 +342,7 @@ const BukuTamu: React.FC = () => {
                                 </div>
                             ))}
                             {activeGuests.length === 0 && (
-                                <div className="col-span-full text-center py-12 text-gray-400 border-2 border-dashed rounded-xl bg-gray-50">
-                                    <i className="bi bi-building-check text-4xl mb-2 opacity-50 block"></i>
-                                    Tidak ada tamu aktif saat ini.
-                                </div>
+                                <div className="col-span-full"><EmptyState icon="bi-building-check" title="Tidak ada tamu aktif" description="Belum ada tamu yang sedang berada di lingkungan pondok saat ini." /></div>
                             )}
                         </div>
                     )}
@@ -328,12 +355,12 @@ const BukuTamu: React.FC = () => {
                                     placeholder="Cari Riwayat Nama / Plat Nomor..." 
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
-                                    className="w-full border rounded-lg p-2.5 text-sm"
+                                    className="app-input w-full p-2.5 text-sm"
                                 />
                             </div>
-                            <div className="overflow-x-auto border rounded-lg">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
+                            <div className="hidden md:block app-table-shell overflow-x-auto">
+                                <table className="app-table text-sm text-left">
+                                    <thead className="text-xs uppercase">
                                         <tr>
                                             <th className="px-4 py-3">Tanggal</th>
                                             <th className="px-4 py-3">Nama Tamu</th>
@@ -359,14 +386,43 @@ const BukuTamu: React.FC = () => {
                                                 <td className="px-4 py-2 text-xs text-gray-500">{g.petugas}</td>
                                             </tr>
                                         ))}
-                                        {historyGuests.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-gray-400">Belum ada riwayat.</td></tr>}
+                                        {historyGuests.length === 0 && <tr><td colSpan={7} className="p-4"><EmptyState icon="bi-clock-history" title="Belum ada riwayat tamu" description="Riwayat check-in dan check-out akan tampil di sini." /></td></tr>}
                                     </tbody>
                                 </table>
+                            </div>
+                            <div className="space-y-3 md:hidden">
+                                {historyGuests.map((g) => (
+                                    <article key={g.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+                                        <div className="mb-2 flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-semibold text-slate-500">{new Date(g.tanggal).toLocaleDateString('id-ID')}</p>
+                                                <h4 className="truncate text-sm font-bold text-slate-800">{g.namaTamu}</h4>
+                                            </div>
+                                            <span className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700">{g.kategori}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-600">{g.keperluan} {g.santriId ? '(Wali Santri)' : ''}</p>
+                                        {g.platNomor && (
+                                            <p className="mt-1 text-xs font-mono text-slate-500">{g.platNomor}</p>
+                                        )}
+                                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                            <div className="rounded-lg border border-green-200 bg-green-50 px-2 py-1.5 text-green-700">
+                                                Masuk: {new Date(g.jamMasuk).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}
+                                            </div>
+                                            <div className="rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
+                                                Keluar: {g.jamKeluar ? new Date(g.jamKeluar).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-'}
+                                            </div>
+                                        </div>
+                                        <p className="mt-2 text-[11px] text-slate-500">Petugas: {g.petugas}</p>
+                                    </article>
+                                ))}
+                                {historyGuests.length === 0 && (
+                                    <EmptyState icon="bi-clock-history" title="Belum ada riwayat tamu" description="Riwayat check-in dan check-out akan tampil di sini." />
+                                )}
                             </div>
                         </div>
                     )}
                 </div>
-            </div>
+            </SectionCard>
 
             <BukuTamuModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleAddGuest} />
         </div>

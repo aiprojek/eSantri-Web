@@ -12,6 +12,11 @@ interface PsbFormBuilderProps {
 
 export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings, onSave }) => {
     const { showToast, showConfirmation } = useAppContext();
+    const normalizeSubmissionMethod = (method?: PsbSubmissionMethod): PsbSubmissionMethod => {
+        if (method === 'portal') return 'hybrid';
+        return method || 'whatsapp';
+    };
+    const isScriptUrlValid = (url: string) => /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(url.trim());
     const [localConfig, setLocalConfig] = useState<PsbConfig>({
         ...config,
         // Backward compatibility: If undefined, assume all active fields are required (old behavior) or init empty
@@ -24,9 +29,12 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const [newDoc, setNewDoc] = useState('');
     
     // State for submission method
-    const [submissionMethod, setSubmissionMethod] = useState<PsbSubmissionMethod>(config.submissionMethod || 'whatsapp');
+    const [submissionMethod, setSubmissionMethod] = useState<PsbSubmissionMethod>(normalizeSubmissionMethod(config.submissionMethod));
     const [googleScriptUrl, setGoogleScriptUrl] = useState(config.googleScriptUrl || '');
     const [showScriptHelper, setShowScriptHelper] = useState(false);
+    const previewViewportRef = useRef<HTMLDivElement | null>(null);
+    const [manualZoom, setManualZoom] = useState(1);
+    const [smartZoomScale, setSmartZoomScale] = useState(1);
 
     const styles: {id: PsbDesignStyle, label: string}[] = [
         { id: 'classic', label: 'Klasik Tradisional' },
@@ -144,9 +152,13 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
 
     // Save Logic wrapper to include new fields
     const handleFinalSave = () => {
+        if (submissionMethod !== 'whatsapp' && !isScriptUrlValid(googleScriptUrl)) {
+            showToast('URL Google Script belum valid. Gunakan link deployment yang berakhiran /exec.', 'error');
+            return;
+        }
         const configToSave = {
             ...localConfig,
-            submissionMethod,
+            submissionMethod: normalizeSubmissionMethod(submissionMethod),
             googleScriptUrl
         };
         onSave(configToSave);
@@ -155,6 +167,10 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const handleSaveTemplate = () => {
         if (!templateName.trim()) {
             showToast('Nama formulir/template tidak boleh kosong.', 'error');
+            return;
+        }
+        if (submissionMethod !== 'whatsapp' && !isScriptUrlValid(googleScriptUrl)) {
+            showToast('URL Google Script belum valid. Simpan template dibatalkan.', 'error');
             return;
         }
 
@@ -168,7 +184,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             requiredStandardFields: localConfig.requiredStandardFields, // Save required state
             requiredDocuments: localConfig.requiredDocuments,
             customFields: localConfig.customFields || [],
-            submissionMethod, 
+            submissionMethod: normalizeSubmissionMethod(submissionMethod),
             googleScriptUrl 
         };
 
@@ -201,7 +217,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                     templates: prev.templates
                 }));
                 // Update specific states for method
-                setSubmissionMethod(tpl.submissionMethod || 'whatsapp');
+                setSubmissionMethod(normalizeSubmissionMethod(tpl.submissionMethod));
                 setGoogleScriptUrl(tpl.googleScriptUrl || '');
                 
                 setTemplateName(tpl.name);
@@ -287,10 +303,53 @@ function doPost(e) {
     
     var folderId = "GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA"; // Optional
     
+    function toSlug(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-{2,}/g, '-');
+    }
+    
+    function detectDocPrefix(fieldKey, originalName, fieldLabel) {
+      var source = String(fieldKey || '') + ' ' + String(originalName || '') + ' ' + String(fieldLabel || '');
+      source = source.toLowerCase();
+      if (source.indexOf('kartu keluarga') !== -1 || source.indexOf(' kk') !== -1 || source.indexOf('kk ') !== -1 || source === 'kk') return 'kk';
+      if (source.indexOf('akta') !== -1) return 'akta';
+      if (source.indexOf('ijazah') !== -1) return 'ijazah';
+      if (source.indexOf('rapor') !== -1 || source.indexOf('raport') !== -1) return 'rapor';
+      if (source.indexOf('pasfoto') !== -1 || source.indexOf('foto') !== -1) return 'foto';
+      if (source.indexOf('kip') !== -1) return 'kip';
+      if (source.indexOf('ktp') !== -1) return 'ktp';
+      return 'dokumen';
+    }
+    
+    function extractExtension(fileName, mimeType) {
+      var original = String(fileName || '');
+      var dotIndex = original.lastIndexOf('.');
+      if (dotIndex > -1 && dotIndex < original.length - 1) {
+        return original.substring(dotIndex).toLowerCase();
+      }
+      if (mimeType === 'application/pdf') return '.pdf';
+      if (mimeType === 'image/jpeg') return '.jpg';
+      if (mimeType === 'image/png') return '.png';
+      return '';
+    }
+    
+    function buildSmartFileName(fieldKey, fileData, payload) {
+      var santriName = payload.namaLengkap || payload.namaSantri || payload.nama || 'santri';
+      var prefix = detectDocPrefix(fieldKey, fileData.name, fileData.fieldLabel);
+      var safeName = toSlug(santriName) || 'santri';
+      var ext = extractExtension(fileData.name, fileData.mime);
+      var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
+      return prefix + '-' + safeName + '-' + stamp + ext;
+    }
+    
     for (var key in data) {
         if (typeof data[key] === 'object' && data[key] !== null && data[key].isFile) {
             var fileData = data[key];
-            var blob = Utilities.newBlob(Utilities.base64Decode(fileData.data.split(',')[1]), fileData.mime, fileData.name);
+            var smartName = buildSmartFileName(key, fileData, data);
+            var blob = Utilities.newBlob(Utilities.base64Decode(fileData.data.split(',')[1]), fileData.mime, smartName);
             var file;
             if (folderId && folderId !== "GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA") {
                  file = DriveApp.getFolderById(folderId).createFile(blob);
@@ -481,7 +540,7 @@ function doPost(e) {
         
         const closeDiv = (style === 'modern' || style === 'bold') ? '</div>' : '';
         const buttonIcon = submissionMethod === 'whatsapp' ? 'bi bi-whatsapp' : submissionMethod === 'hybrid' ? 'bi bi-cloud-check-fill' : 'bi bi-send-fill';
-        const buttonText = submissionMethod === 'whatsapp' ? 'Kirim Data via WhatsApp' : submissionMethod === 'hybrid' ? 'Kirim Data (Cloud + WA)' : 'Kirim Pendaftaran';
+        const buttonText = submissionMethod === 'whatsapp' ? 'Kirim Data via WhatsApp' : submissionMethod === 'hybrid' ? 'Kirim Data (Cloud + WA)' : 'Kirim ke Google Sheet';
         const buttonColor = submissionMethod === 'whatsapp' ? 'bg-green-600 hover:bg-green-700' : submissionMethod === 'hybrid' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-blue-600 hover:bg-blue-700';
         
         const adminPhone = localConfig.nomorHpAdmin.replace(/^0/, '62');
@@ -489,9 +548,15 @@ function doPost(e) {
         if (submissionMethod === 'whatsapp') {
              submitScript = `<script>function submitForm(){const form=document.getElementById('psbForm');if(!form.checkValidity()){form.reportValidity();return;}const btn=document.getElementById('submit-btn');const originalContent=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Memproses...';const formData=new FormData(form);const data={tanggalDaftar:new Date().toISOString(),status:'Baru'};const customData={};formData.forEach((value,key)=>{if(key.startsWith('custom_')){customData[key.replace('custom_','')]=value;}else if(key==='docs[]'){if(!data.docs)data.docs=[];data.docs.push(value);}else{data[key]=value;}});data.customData=JSON.stringify(customData);let message="*Pendaftaran Santri Baru*\\n*${settings.namaPonpes}*\\n\\n";message+="Nama: "+data.namaLengkap+"\\n";message+="Jenjang: "+"${jenjangName}"+"\\n";message+="Wali: "+(data.namaWali||data.namaAyah||'-')+"\\n";message+="\\n--------------------------------\\n";message+="PSB_START\\n"+JSON.stringify(data)+"\\nPSB_END";message+="\\n--------------------------------\\n";message+="\\n_Harap lampirkan foto/dokumen pendukung secara manual di chat ini._";setTimeout(()=>{window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');btn.disabled=false;btn.innerHTML=originalContent;},1000);}</script>`;
         } else if (submissionMethod === 'google_sheet') {
-             submitScript = `<script>function readFile(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true});reader.onerror=reject;reader.readAsDataURL(file);});}async function submitForm(){const form=document.getElementById('psbForm');if(!form.checkValidity()){form.reportValidity();return;}const btn=document.getElementById('submit-btn');const originalContent=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Mengirim Data & File...';try{const formData=new FormData(form);const data={};const filePromises=[];for(const [key,value] of formData.entries()){if(value instanceof File){if(value.size>0){if(value.size>5*1024*1024){alert('File '+value.name+' terlalu besar (Max 5MB)');throw new Error('File too large');}filePromises.push(readFile(value).then(fileObj=>{data[key]=fileObj;}));}}else{if(data[key]){data[key]=data[key]+", "+value;}else{data[key]=value;}}}await Promise.all(filePromises);data.tanggalDaftar=new Date().toISOString();data.jenjangId="${localConfig.targetJenjangId||''}";data.sheetName="${targetSheetName}";await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});alert("Pendaftaran Berhasil! Data dan File telah tersimpan.");form.reset();}catch(error){console.error('Error!',error);if(error.message!=='File too large'){alert("Terjadi kesalahan koneksi.");}}finally{btn.disabled=false;btn.innerHTML=originalContent;}}</script>`;
+             submitScript = `<script>
+function readFile(file, fieldLabel){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true,fieldLabel:fieldLabel||''});reader.onerror=reject;reader.readAsDataURL(file);});}
+async function submitForm(){const form=document.getElementById('psbForm');if(!form.checkValidity()){form.reportValidity();return;}const btn=document.getElementById('submit-btn');const originalContent=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Mengirim Data & File...';try{const formData=new FormData(form);const data={};const filePromises=[];for(const [key,value] of formData.entries()){if(value instanceof File){if(value.size>0){if(value.size>5*1024*1024){alert('File '+value.name+' terlalu besar (Max 5MB)');throw new Error('File too large');}const inputEl=form.querySelector('[name="'+key+'"]');const fieldLabel=inputEl?.closest('div')?.querySelector('label')?.textContent?.trim()||key;filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[key]=fileObj;}));}}else{if(data[key]){data[key]=data[key]+", "+value;}else{data[key]=value;}}}await Promise.all(filePromises);data.tanggalDaftar=new Date().toISOString();data.jenjangId="${localConfig.targetJenjangId||''}";data.sheetName="${targetSheetName}";await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});alert("Pendaftaran Berhasil! Data dan File telah tersimpan.");form.reset();}catch(error){console.error('Error!',error);if(error.message!=='File too large'){alert("Terjadi kesalahan koneksi.");}}finally{btn.disabled=false;btn.innerHTML=originalContent;}}
+</script>`;
         } else {
-             submitScript = `<script>function readFile(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true});reader.onerror=reject;reader.readAsDataURL(file);});}async function submitForm(){const form=document.getElementById('psbForm');if(!form.checkValidity()){form.reportValidity();return;}const btn=document.getElementById('submit-btn');const originalContent=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Menyimpan ke Cloud...';try{const formData=new FormData(form);const data={};const filePromises=[];for(const [key,value] of formData.entries()){if(value instanceof File){if(value.size>0){if(value.size>5*1024*1024){alert('File '+value.name+' terlalu besar (Max 5MB)');throw new Error('File too large');}filePromises.push(readFile(value).then(fileObj=>{data[key]=fileObj;}));}}else{if(data[key]){data[key]=data[key]+", "+value;}else{data[key]=value;}}}await Promise.all(filePromises);data.tanggalDaftar=new Date().toISOString();data.jenjangId="${localConfig.targetJenjangId||''}";data.sheetName="${targetSheetName}";const textOnlyData={...data};for(let key in textOnlyData){if(typeof textOnlyData[key]==='object'&&textOnlyData[key]!==null&&textOnlyData[key].isFile){delete textOnlyData[key];textOnlyData[key+'_status']="[File di Cloud/HP User]";}}const jsonString=JSON.stringify(textOnlyData);const encodedBackup=btoa(unescape(encodeURIComponent(jsonString)));let cloudSuccess=false;try{await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});cloudSuccess=true;}catch(err){console.error("Cloud Upload Failed",err);}btn.innerHTML='<i class="bi bi-whatsapp mr-1"></i> Membuka WhatsApp...';let message="Assalamu'alaikum Admin,\\nSaya sudah mengisi formulir pendaftaran santri baru.\\n\\n*Data Santri*\\nNama: "+data.namaLengkap+"\\nJenjang: "+"${jenjangName}"+"\\nWali: "+(data.namaWali||data.namaAyah||'-')+"\\nStatus Upload: "+(cloudSuccess?"✅ Sukses ke Server":"⚠️ Gagal/Pending")+"\\n\\n*KODE BACKUP DATA (JANGAN DIHAPUS):*\\nPSB_BACKUP_START\\n"+encodedBackup+"\\nPSB_BACKUP_END\\n\\n_Jika server error, Admin dapat menyalin pesan ini ke menu 'Impor WA'._";setTimeout(()=>{window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');if(cloudSuccess){alert("Pendaftaran Berhasil! Data tersimpan di Cloud & WhatsApp Admin akan terbuka.");}else{alert("Koneksi ke Server Cloud bermasalah, tapi Data Aman di WhatsApp. Silakan kirim pesan WA yang terbuka.");}form.reset();btn.disabled=false;btn.innerHTML=originalContent;},1000);}catch(error){console.error('Error!',error);if(error.message!=='File too large'){alert("Terjadi kesalahan. Pastikan file tidak terlalu besar.");}btn.disabled=false;btn.innerHTML=originalContent;}}</script>`;
+             submitScript = `<script>
+function readFile(file, fieldLabel){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true,fieldLabel:fieldLabel||''});reader.onerror=reject;reader.readAsDataURL(file);});}
+async function submitForm(){const form=document.getElementById('psbForm');if(!form.checkValidity()){form.reportValidity();return;}const btn=document.getElementById('submit-btn');const originalContent=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Menyimpan ke Cloud...';try{const formData=new FormData(form);const data={};const filePromises=[];for(const [key,value] of formData.entries()){if(value instanceof File){if(value.size>0){if(value.size>5*1024*1024){alert('File '+value.name+' terlalu besar (Max 5MB)');throw new Error('File too large');}const inputEl=form.querySelector('[name="'+key+'"]');const fieldLabel=inputEl?.closest('div')?.querySelector('label')?.textContent?.trim()||key;filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[key]=fileObj;}));}}else{if(data[key]){data[key]=data[key]+", "+value;}else{data[key]=value;}}}await Promise.all(filePromises);data.tanggalDaftar=new Date().toISOString();data.jenjangId="${localConfig.targetJenjangId||''}";data.sheetName="${targetSheetName}";const textOnlyData={...data};for(let key in textOnlyData){if(typeof textOnlyData[key]==='object'&&textOnlyData[key]!==null&&textOnlyData[key].isFile){delete textOnlyData[key];textOnlyData[key+'_status']="[File di Cloud/HP User]";}}const jsonString=JSON.stringify(textOnlyData);const encodedBackup=btoa(unescape(encodeURIComponent(jsonString)));let cloudSuccess=false;try{await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});cloudSuccess=true;}catch(err){console.error("Cloud Upload Failed",err);}btn.innerHTML='<i class="bi bi-whatsapp mr-1"></i> Membuka WhatsApp...';let message="Assalamu'alaikum Admin,\\nSaya sudah mengisi formulir pendaftaran santri baru.\\n\\n*Data Santri*\\nNama: "+data.namaLengkap+"\\nJenjang: "+"${jenjangName}"+"\\nWali: "+(data.namaWali||data.namaAyah||'-')+"\\nStatus Upload: "+(cloudSuccess?"✅ Sukses ke Server":"⚠️ Gagal/Pending")+"\\n\\n*KODE BACKUP DATA (JANGAN DIHAPUS):*\\nPSB_BACKUP_START\\n"+encodedBackup+"\\nPSB_BACKUP_END\\n\\n_Jika server error, Admin dapat menyalin pesan ini ke menu 'Impor WA'._";setTimeout(()=>{window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');if(cloudSuccess){alert("Pendaftaran Berhasil! Data tersimpan di Cloud & WhatsApp Admin akan terbuka.");}else{alert("Koneksi ke Server Cloud bermasalah, tapi Data Aman di WhatsApp. Silakan kirim pesan WA yang terbuka.");}form.reset();btn.disabled=false;btn.innerHTML=originalContent;},1000);}catch(error){console.error('Error!',error);if(error.message!=='File too large'){alert("Terjadi kesalahan. Pastikan file tidak terlalu besar.");}btn.disabled=false;btn.innerHTML=originalContent;}}
+</script>`;
         }
 
         // --- INJECT DEADLINE LOGIC ---
@@ -530,7 +595,7 @@ function doPost(e) {
         </script>
         `;
 
-        return `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pendaftaran ${settings.namaPonpes}</title><style>${standaloneStyles}@media print{@page{size:A4;margin:0}body{background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.printable-content-wrapper{box-shadow:none!important;margin:0!important}}.screen-only{display:block}.print-only{display:none}@media print{.screen-only{display:none}.print-only{display:block}}</style></head><body class="${bodyClass}"><div class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${submissionMethod === 'whatsapp' ? 'Data dikirim ke WA Admin.' : submissionMethod === 'hybrid' ? 'Data tersimpan otomatis ke Cloud & Notifikasi Backup ke WA Admin.' : 'Data tersimpan otomatis ke sistem pondok.'}</p></div></form>${closeDiv}</div>${submitScript}${deadlineCheckScript}</body></html>`;
+        return `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pendaftaran ${settings.namaPonpes}</title><style>${standaloneStyles}@media print{@page{size:A4;margin:0}body{background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.printable-content-wrapper{box-shadow:none!important;margin:0!important}}.screen-only{display:block}.print-only{display:none}@media print{.screen-only{display:none}.print-only{display:block}}</style></head><body class="${bodyClass}"><div class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${submissionMethod === 'whatsapp' ? 'Data dikirim ke WA Admin.' : submissionMethod === 'hybrid' ? 'Data tersimpan otomatis ke Cloud & Notifikasi Backup ke WA Admin.' : 'Data tersimpan otomatis ke Google Sheet.'}</p></div><div class="mt-8 pt-4 border-t text-center text-xs text-gray-500"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div>${submitScript}${deadlineCheckScript}</body></html>`;
     };
 
     const handleDownloadPdf = () => {
@@ -555,6 +620,43 @@ function doPost(e) {
         }
     };
 
+    const handleDownloadForm = () => {
+        const html = generateHtml();
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'Form_PSB.html';
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    useEffect(() => {
+        const viewport = previewViewportRef.current;
+        if (!viewport) return;
+
+        const calculateZoom = () => {
+            const containerWidth = viewport.clientWidth;
+            const baseContentWidth = 980;
+            if (baseContentWidth > containerWidth - 24) {
+                setSmartZoomScale((containerWidth - 24) / baseContentWidth);
+            } else {
+                setSmartZoomScale(1);
+            }
+        };
+
+        const observer = new ResizeObserver(calculateZoom);
+        observer.observe(viewport);
+        window.addEventListener('resize', calculateZoom);
+        const timer = setTimeout(calculateZoom, 120);
+
+        return () => {
+            clearTimeout(timer);
+            observer.disconnect();
+            window.removeEventListener('resize', calculateZoom);
+        };
+    }, [localConfig, templateName, submissionMethod, googleScriptUrl]);
+
     useEffect(() => {
         const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
         if (iframe) {
@@ -566,7 +668,7 @@ function doPost(e) {
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
-            <div className="lg:col-span-4 bg-white p-6 rounded-lg shadow-md overflow-y-auto h-full space-y-6 text-sm">
+            <div className="lg:col-span-4 bg-white p-6 rounded-lg shadow-md overflow-y-auto h-auto lg:h-full space-y-6 text-sm">
                 
                 {/* 1. CONFIG UTAMA */}
                 <div>
@@ -608,46 +710,17 @@ function doPost(e) {
                                 <option value="whatsapp">WhatsApp (Teks Langsung)</option>
                                 <option value="google_sheet">Google Sheet (Web App)</option>
                                 <option value="hybrid">Hybrid (Sheet + WA Backup)</option>
-                                <option value="portal">Firebase Portal (Direct Cloud)</option>
                             </select>
+                            <p className="mt-1 text-[10px] text-gray-500">Gunakan <strong>Hybrid</strong> untuk upload berkas langsung ke cloud dengan backup WA otomatis.</p>
                         </div>
 
-                        {submissionMethod === 'portal' && (
-                            <div className="p-3 bg-teal-50 border border-teal-200 rounded-lg">
-                                <label className="block text-[10px] font-bold text-teal-700 uppercase tracking-wider mb-1">URL Portal PSB Anda</label>
-                                {settings.cloudSyncConfig?.firebasePairedTenantId ? (
-                                    <div className="space-y-2">
-                                        <div className="flex gap-1">
-                                            <input 
-                                                readOnly 
-                                                value={`${window.location.origin}/psb/${settings.cloudSyncConfig.firebasePairedTenantId}${activeTemplateId ? '/' + activeTemplateId : ''}`}
-                                                className="flex-1 text-[10px] bg-white border border-teal-200 p-1.5 rounded truncate font-mono"
-                                            />
-                                            <button 
-                                                onClick={() => {
-                                                    const url = `${window.location.origin}/psb/${settings.cloudSyncConfig.firebasePairedTenantId}${activeTemplateId ? '/' + activeTemplateId : ''}`;
-                                                    navigator.clipboard.writeText(url);
-                                                    showToast('Link PSB disalin!', 'success');
-                                                }}
-                                                className="bg-teal-600 text-white px-2 rounded hover:bg-teal-700"
-                                            >
-                                                <i className="bi bi-clipboard text-xs"></i>
-                                            </button>
-                                        </div>
-                                        <p className="text-[9px] text-teal-600 italic">Data pendaftar akan masuk langsung ke database Firebase (Cloud) dan tersinkron ke aplikasi lokal.</p>
-                                    </div>
-                                ) : (
-                                    <div className="text-[10px] text-red-600 font-medium">
-                                        <i className="bi bi-exclamation-triangle"></i> Hubungkan Cloud Firebase terlebih dahulu di menu Pengaturan.
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {submissionMethod !== 'whatsapp' && submissionMethod !== 'portal' && (
+                        {submissionMethod !== 'whatsapp' && (
                             <div className="p-2 bg-gray-50 rounded border text-xs">
                                 <label className="font-bold block mb-1">URL Google Script</label>
                                 <input type="text" value={googleScriptUrl} onChange={e => setGoogleScriptUrl(e.target.value)} placeholder="https://script.google.com/..." className="w-full border rounded p-1 mb-1" />
+                                {googleScriptUrl.trim() && !isScriptUrlValid(googleScriptUrl) && (
+                                    <p className="text-[10px] text-red-600 mb-1">URL belum valid. Gunakan URL deployment Web App yang berakhiran <code>/exec</code>.</p>
+                                )}
                                 <button onClick={() => setShowScriptHelper(!showScriptHelper)} className="text-blue-600 underline">Lihat Kode Script</button>
                                 {showScriptHelper && <textarea readOnly value={googleAppsScriptCode} className="w-full h-24 mt-1 border text-[10px]" />}
                             </div>
@@ -746,19 +819,63 @@ function doPost(e) {
                 </div>
             </div>
             
-            <div className="lg:col-span-8 flex flex-col h-full bg-gray-200 rounded-lg overflow-hidden border border-gray-300">
-                <div className="bg-white p-3 border-b flex justify-between items-center shadow-sm">
-                     <div className="flex flex-col">
-                        <h3 className="font-bold text-gray-700"><i className="bi bi-eye mr-2"></i>Live Preview</h3>
-                        {templateName && <span className="text-[10px] text-teal-600 font-medium italic">Sheet/Tab Tujuan: {templateName.replace(/[:\/\\?*\[\]]/g, "_")}</span>}
-                    </div>
-                    <div className="flex gap-2">
-                        <button onClick={handleDownloadPdf} className="bg-gray-700 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-800 flex items-center gap-2"><i className="bi bi-file-pdf"></i> Cetak / PDF</button>
-                        <button onClick={() => { const html = generateHtml(); const b = new Blob([html], {type:'text/html'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='Form_PSB.html'; a.click(); }} className="bg-teal-600 text-white px-3 py-1.5 rounded text-sm hover:bg-teal-700"><i className="bi bi-filetype-html"></i> Download File Formulir</button>
+            <div className="lg:col-span-8 flex flex-col h-[62vh] min-h-[420px] lg:h-full bg-gray-200 rounded-lg overflow-hidden border border-gray-300">
+                <div className="bg-white p-3 border-b shadow-sm">
+                    <div className="flex flex-col gap-3">
+                        <div className="flex flex-col">
+                            <h3 className="font-bold text-gray-700"><i className="bi bi-eye mr-2"></i>Live Preview</h3>
+                            {templateName && <span className="text-[10px] text-teal-600 font-medium italic">Sheet/Tab Tujuan: {templateName.replace(/[:\/\\?*\[\]]/g, "_")}</span>}
+                            <span className="text-[10px] text-gray-500">Smart Zoom aktif. Lebar menyesuaikan layar, tinggi tetap utuh.</span>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="inline-flex w-fit items-center rounded-lg border border-slate-300 bg-slate-50 p-1">
+                                <button
+                                    onClick={() => setManualZoom(z => Math.max(0.5, Number((z - 0.1).toFixed(2))))}
+                                    className="h-8 w-8 rounded-md text-slate-700 transition hover:bg-white"
+                                    title="Zoom Out"
+                                >
+                                    <i className="bi bi-dash-lg"></i>
+                                </button>
+                                <span className="w-14 text-center text-xs font-semibold text-slate-700">
+                                    {Math.round(smartZoomScale * manualZoom * 100)}%
+                                </span>
+                                <button
+                                    onClick={() => setManualZoom(z => Math.min(2, Number((z + 0.1).toFixed(2))))}
+                                    className="h-8 w-8 rounded-md text-slate-700 transition hover:bg-white"
+                                    title="Zoom In"
+                                >
+                                    <i className="bi bi-plus-lg"></i>
+                                </button>
+                                <button
+                                    onClick={() => setManualZoom(1)}
+                                    className="ml-1 h-8 rounded-md px-2 text-[11px] font-semibold text-teal-700 transition hover:bg-white"
+                                    title="Reset Zoom"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:min-w-[360px]">
+                                <button onClick={handleDownloadPdf} className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm hover:bg-gray-800 flex items-center justify-center gap-2">
+                                    <i className="bi bi-file-pdf"></i> Cetak / PDF
+                                </button>
+                                <button onClick={handleDownloadForm} className="w-full bg-teal-600 text-white px-3 py-2 rounded text-sm hover:bg-teal-700 flex items-center justify-center gap-2">
+                                    <i className="bi bi-filetype-html"></i> Download Formulir
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div className="flex-grow bg-gray-500/10 p-4 overflow-hidden">
-                    <iframe id="preview-frame" className="w-full h-full bg-white shadow-lg rounded" title="Form Preview" style={{ border: 'none' }}></iframe>
+                <div ref={previewViewportRef} className="flex-grow bg-gray-500/10 p-3 sm:p-4 overflow-auto">
+                    <div
+                        className="origin-top-left transition-transform duration-200"
+                        style={{
+                            width: `${100 / (smartZoomScale * manualZoom)}%`,
+                            height: `${100 / (smartZoomScale * manualZoom)}%`,
+                            transform: `scale(${smartZoomScale * manualZoom})`
+                        }}
+                    >
+                        <iframe id="preview-frame" className="w-full h-full bg-white shadow-lg rounded border border-gray-200" title="Form Preview" style={{ border: 'none' }}></iframe>
+                    </div>
                 </div>
             </div>
         </div>

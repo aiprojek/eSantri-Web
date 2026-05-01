@@ -116,6 +116,38 @@ export const initialSettings: PondokSettings = {
     backupConfig: {
         frequency: 'weekly'
     },
+    aiConfig: {
+        provider: 'pollinations',
+        preferByok: false,
+        openaiApiKey: '',
+        openaiModel: 'gpt-4.1-mini',
+        openaiImageModel: 'gpt-image-1',
+        geminiApiKey: '',
+        geminiModel: 'gemini-2.5-flash',
+        openrouterApiKey: '',
+        openrouterModel: 'openai/gpt-4.1-mini',
+        openrouterAutoFreeFallback: true,
+        openrouterFreeModelPool: [],
+        enablePosterImageGeneration: true,
+        openaiLastTestAt: '',
+        openaiLastTestOk: undefined,
+        geminiLastTestAt: '',
+        geminiLastTestOk: undefined,
+        openrouterLastTestAt: '',
+        openrouterLastTestOk: undefined
+    },
+    academicYears: [
+        {
+            id: 'ta-default',
+            labelMasehi: `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
+            masehiStartMonth: 7,
+            masehiStartYear: new Date().getFullYear(),
+            masehiEndMonth: 6,
+            masehiEndYear: new Date().getFullYear() + 1,
+            hijriEnabled: false,
+            isActive: true
+        }
+    ],
     portalConfig: {
         enabled: false,
         theme: 'teal',

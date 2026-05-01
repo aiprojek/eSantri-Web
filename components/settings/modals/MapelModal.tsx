@@ -17,6 +17,15 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
     const { showAlert } = useAppContext();
     const { mode, jenjangId, item } = modalData;
     const [mapel, setMapel] = useState<Partial<MataPelajaran>>({});
+    const [modulText, setModulText] = useState('');
+    const [linkUnduhText, setLinkUnduhText] = useState('');
+    const [linkPembelianText, setLinkPembelianText] = useState('');
+
+    const normalizeList = (input: string): string[] =>
+        input
+            .split('\n')
+            .map(v => v.trim())
+            .filter(Boolean);
 
     useEffect(() => {
         if (isOpen) {
@@ -27,6 +36,19 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
                 linkPembelian: '',
                 kkm: 70
             });
+            const source: Partial<MataPelajaran> = item || {};
+            const modulItems = (source.modulList && source.modulList.length > 0)
+                ? source.modulList
+                : (source.modul ? [source.modul] : []);
+            const unduhItems = (source.linkUnduhList && source.linkUnduhList.length > 0)
+                ? source.linkUnduhList
+                : (source.linkUnduh ? [source.linkUnduh] : []);
+            const beliItems = (source.linkPembelianList && source.linkPembelianList.length > 0)
+                ? source.linkPembelianList
+                : (source.linkPembelian ? [source.linkPembelian] : []);
+            setModulText(modulItems.join('\n'));
+            setLinkUnduhText(unduhItems.join('\n'));
+            setLinkPembelianText(beliItems.join('\n'));
         }
     }, [isOpen, item]);
 
@@ -42,9 +64,12 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
             id: item?.id || Date.now(),
             nama: mapel.nama.trim(),
             jenjangId: jenjangId,
-            modul: mapel.modul,
-            linkUnduh: mapel.linkUnduh,
-            linkPembelian: mapel.linkPembelian,
+            modul: normalizeList(modulText)[0] || '',
+            linkUnduh: normalizeList(linkUnduhText)[0] || '',
+            linkPembelian: normalizeList(linkPembelianText)[0] || '',
+            modulList: normalizeList(modulText),
+            linkUnduhList: normalizeList(linkUnduhText),
+            linkPembelianList: normalizeList(linkPembelianText),
             kkm: mapel.kkm
         };
         
@@ -80,36 +105,39 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
                                 className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
                             />
                         </div>
-                        <div>
-                            <label className="block mb-1 text-sm font-medium text-gray-700">Nama Modul/Kitab</label>
-                            <input 
-                                type="text" 
-                                value={mapel.modul || ''} 
-                                onChange={(e) => setMapel({...mapel, modul: e.target.value})} 
-                                placeholder="Contoh: Safinatun Najah"
-                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
+                        <div className="col-span-2">
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Nama Modul/Kitab (boleh lebih dari satu)</label>
+                            <textarea
+                                value={modulText}
+                                onChange={(e) => setModulText(e.target.value)}
+                                rows={3}
+                                placeholder={"Contoh:\nSafinatun Najah\nFathul Qarib"}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"
                             />
+                            <p className="mt-1 text-[11px] text-gray-500">Satu baris = satu modul/kitab.</p>
                         </div>
                     </div>
                     <div>
-                        <label className="block mb-1 text-sm font-medium text-gray-700">Link Unduh Modul (e-book)</label>
-                        <input 
-                            type="url" 
-                            value={mapel.linkUnduh || ''} 
-                            onChange={(e) => setMapel({...mapel, linkUnduh: e.target.value})} 
-                            placeholder="https://..."
-                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
+                        <label className="block mb-1 text-sm font-medium text-gray-700">Link Unduh Modul (boleh lebih dari satu)</label>
+                        <textarea
+                            value={linkUnduhText}
+                            onChange={(e) => setLinkUnduhText(e.target.value)}
+                            rows={3}
+                            placeholder={"https://...\nhttps://..."}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"
                         />
+                        <p className="mt-1 text-[11px] text-gray-500">Satu baris = satu link unduh.</p>
                     </div>
                     <div>
-                        <label className="block mb-1 text-sm font-medium text-gray-700">Link Pembelian Kitab Fisik</label>
-                        <input 
-                            type="url" 
-                            value={mapel.linkPembelian || ''} 
-                            onChange={(e) => setMapel({...mapel, linkPembelian: e.target.value})} 
-                            placeholder="https://tokopedia.com/..."
-                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
+                        <label className="block mb-1 text-sm font-medium text-gray-700">Link Pembelian Kitab Fisik (boleh lebih dari satu)</label>
+                        <textarea
+                            value={linkPembelianText}
+                            onChange={(e) => setLinkPembelianText(e.target.value)}
+                            rows={3}
+                            placeholder={"https://tokopedia.com/...\nhttps://shopee.co.id/..."}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"
                         />
+                        <p className="mt-1 text-[11px] text-gray-500">Satu baris = satu link beli.</p>
                     </div>
                 </div>
                 <div className="p-4 border-t flex justify-end space-x-2 bg-gray-50 rounded-b-lg">

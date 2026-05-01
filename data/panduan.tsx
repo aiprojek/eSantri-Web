@@ -19,7 +19,7 @@ export interface PanduanSectionData {
 export const panduanData: PanduanSectionData[] = [
     {
         id: 'setup',
-        badge: 1,
+        badge: 0,
         badgeColor: 'purple',
         title: 'Persiapan & Keamanan Sistem',
         steps: [
@@ -107,6 +107,10 @@ export const panduanData: PanduanSectionData[] = [
                         <div className="border-l-4 border-indigo-500 pl-3 py-1 bg-indigo-50">
                             <h4 className="font-bold text-indigo-800 text-sm">Menambah User Staff</h4>
                             <p className="text-xs">Gunakan tombol <strong>"Ambil dari Data Guru"</strong> di menu Pengaturan Akun. Username akan dibuat otomatis. <br/><strong>Password Default:</strong> <code>123456</code> (Bisa diubah di tabel).</p>
+                            <ul className="list-disc pl-4 mt-2 text-xs text-indigo-700 space-y-1">
+                                <li>Saat bulk, Anda bisa atur <strong>Role</strong>, <strong>Preset Izin</strong>, dan <strong>Izin Sync</strong> per user.</li>
+                                <li>Gunakan tombol <strong>Atur/Kustom</strong> untuk mengatur hak akses <strong>per modul</strong> (Blokir/Lihat/Edit) sebelum user dibuat.</li>
+                            </ul>
                         </div>
                         <div className="border-l-4 border-red-500 pl-3 py-1 bg-red-50">
                             <h4 className="font-bold text-red-800 text-sm">Fitur Lupa Password Staff (Mandiri)</h4>
@@ -134,6 +138,105 @@ export const panduanData: PanduanSectionData[] = [
                                 <li><strong>Password Lokal:</strong> Jika Anda lupa password lokal untuk masuk ke aplikasi, gunakan tombol <strong>"Update Data Akun dari Cloud"</strong> di halaman login. Sistem akan mengambil data user terbaru dari Firebase (termasuk password yang mungkin sudah direset oleh Admin Utama).</li>
                             </ul>
                         </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Update Hak Akses Saat Ada Fitur Baru',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <p>Setiap kali aplikasi menambah modul/fitur baru, lakukan pengecekan hak akses di <strong>Pengaturan &gt; User &amp; Keamanan</strong>.</p>
+                        <div className="rounded border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-900">
+                            <strong>Perilaku default:</strong> akun staff lama yang belum memiliki izin untuk fitur baru akan dianggap <strong>tidak punya akses</strong> sampai Admin memperbarui permission-nya.
+                        </div>
+                        <ol className="list-decimal pl-5 text-xs text-gray-700 space-y-1">
+                            <li>Buka daftar user, pilih akun staff yang relevan.</li>
+                            <li>Aktifkan izin modul baru sesuai kebutuhan (Read / Write).</li>
+                            <li>Simpan perubahan, lalu minta staff login ulang atau update data akun dari cloud.</li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: 'Backup & Restore (Yang Perlu Dipahami Operator)',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li>Backup JSON mencakup pengaturan dan seluruh data modul inti aplikasi.</li>
+                            <li>Saat restore selesai, sistem menampilkan <strong>Laporan Hasil Restore</strong> berisi data apa yang diperbarui dan data apa yang tidak ditemukan di file backup.</li>
+                            <li>Jika ada tabel yang tidak ditemukan, biasanya karena backup berasal dari versi lama atau fitur tersebut belum dipakai saat backup dibuat.</li>
+                        </ul>
+                        <p className="text-xs text-gray-600">Saran operasional: lakukan backup rutin mingguan dan simpan minimal 2 file cadangan terakhir di lokasi berbeda.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Pengaturan AI (BYOK OpenAI / Gemini)',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <p>Fitur AI di eSantri (Draft Surat, Insight Dashboard, dan Generator Poster) bisa memakai mode gratis atau API key milik Anda sendiri.</p>
+                        <ol className="list-decimal pl-5 text-xs text-gray-700 space-y-1">
+                            <li>Buka <strong>Pengaturan &gt; Umum &gt; AI Assistant (BYOK)</strong>.</li>
+                            <li>Pilih provider utama: <strong>Pollinations</strong>, <strong>OpenAI</strong>, <strong>Gemini</strong>, atau <strong>OpenRouter</strong>.</li>
+                            <li>Jika pakai BYOK, isi API key dan model yang sesuai.</li>
+                            <li>Klik <strong>Uji Koneksi OpenAI</strong> / <strong>Uji Koneksi Gemini</strong> untuk validasi sebelum digunakan di modul.</li>
+                            <li>Jika pakai OpenRouter: klik <strong>Refresh Model</strong>, filter model gratis (<code>:free</code>), lalu pilih model aktif.</li>
+                            <li>Aktifkan <strong>Auto fallback ke model gratis</strong> agar saat limit model aktif habis, sistem mencoba model gratis lain dari daftar.</li>
+                            <li>Cek indikator status <strong>Sehat/Gagal</strong> dan waktu <strong>Terakhir tes</strong> di panel AI.</li>
+                            <li>Aktifkan <strong>Prioritaskan BYOK</strong> agar sistem memakai API key Anda dulu, lalu fallback ke mode gratis jika gagal.</li>
+                            <li>Konfigurasi AI bersifat <strong>global aplikasi</strong>, jadi user non-admin yang punya akses fitur AI akan otomatis memakai konfigurasi API dari admin inti.</li>
+                            <li>Untuk poster, aktifkan <strong>Generate Desain Poster langsung di aplikasi</strong> lalu gunakan tombol Generate di modul PSB Poster Maker.</li>
+                        </ol>
+                        <div className="rounded border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-900">
+                            <strong>Catatan:</strong> API key disimpan di perangkat/database aplikasi Anda. Batasi akses perangkat admin dan lakukan backup terenkripsi sesuai SOP internal pondok.
+                        </div>
+                    </div>
+                )
+            }
+        ]
+    },
+    {
+        id: 'datamaster',
+        badge: 'UPDATE',
+        badgeColor: 'teal',
+        title: 'Data Master',
+        steps: [
+            {
+                title: 'Panduan Penggunaan Data Master',
+                content: (
+                    <div className="bg-teal-50 p-4 rounded-lg border-l-4 border-teal-500 text-sm text-gray-700">
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Indikator Perubahan Belum Disimpan</strong> membantu operator mengetahui kapan data benar-benar perlu disimpan.</li>
+                            <li><strong>Tahun Ajaran</strong> tersedia dalam tampilan mobile yang lebih nyaman (mode kartu/accordion), sementara desktop tetap memakai tabel penuh.</li>
+                            <li><strong>Mata Pelajaran</strong> mendukung multi entri untuk <em>Modul/Kitab</em>, <em>Link Unduh</em>, dan <em>Link Beli</em>.</li>
+                            <li>Kompatibilitas tetap dijaga: data lama (single field) tetap bisa dibaca normal.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: 'Cara Input Multi Modul/Link Mapel',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <p>Untuk mapel yang punya lebih dari satu kitab/modul atau lebih dari satu tautan:</p>
+                        <ol className="list-decimal pl-5 space-y-1">
+                            <li>Buka <strong>Data Master &gt; Mata Pelajaran</strong>, lalu tambah/edit mapel.</li>
+                            <li>Isi <strong>satu baris per item</strong> pada kolom Modul/Kitab, Link Unduh, dan Link Beli.</li>
+                            <li>Untuk mode <strong>Bulk Editor</strong>, bisa dipisah dengan tanda <code>;</code> atau baris baru.</li>
+                        </ol>
+                        <p className="text-xs text-gray-600">Contoh: <code>Fathul Qorib;Taqrib;Jurumiyah</code></p>
+                    </div>
+                )
+            },
+            {
+                title: 'Praktik Aman Sebelum Simpan',
+                content: (
+                    <div className="bg-gray-50 p-3 rounded border text-sm">
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li>Selesaikan edit per tab, lalu cek indikator perubahan.</li>
+                            <li>Simpan hanya saat semua field inti sudah valid.</li>
+                            <li>Jika kerja tim, lakukan sinkronisasi setelah sesi input selesai agar data terbaru terbaca perangkat lain.</li>
+                        </ul>
                     </div>
                 )
             }
@@ -211,7 +314,7 @@ export const panduanData: PanduanSectionData[] = [
                             <h4 className="font-bold text-blue-800 text-sm">2. Sisi Staff (Pengurus)</h4>
                             <p className="text-xs">Staff login dengan <strong>akun Google mereka sendiri</strong>, lalu masukkan Pairing Code dari Admin di kolom "Setup Cepat".</p>
                             <p className="text-[10px] mt-1 text-blue-700 font-bold"><i className="bi bi-shield-check"></i> AUTOMATIC REDIRECT: Jika Admin mengaktifkan Multi-User, setelah Pairing berhasil, Anda akan otomatis diarahkan ke halaman <strong>Login</strong> demi keamanan.</p>
-                            <p className="text-[10px] mt-1 text-teal-700"><strong>DATA LENGKAP:</strong> Bukan hanya Santri, kini Data Master (Jenjang, Kelas, Matpel) dan Pengaturan juga ikut tersinkron otomatis.</p>
+                            <p className="text-[10px] mt-1 text-teal-700"><strong>DATA LENGKAP:</strong> Sinkronisasi mencakup Data Santri, Data Master (Jenjang, Kelas, Matpel), dan Pengaturan.</p>
                         </div>
                         <p className="text-[10px] text-gray-500 italic">* Metode ini lebih aman karena Staff tidak perlu tahu password akun Google Admin.</p>
                     </div>
@@ -560,16 +663,49 @@ export const panduanData: PanduanSectionData[] = [
         title: 'Manajemen Santri',
         steps: [
             {
-                title: 'Input Data Santri',
+                title: 'Alur Input Data Santri (Manual + Bulk)',
                 content: (
                     <>
-                         <p>Tiga cara memasukkan data:</p>
+                        <p>Mulai dari cara ini agar operasional rapi dan cepat:</p>
                         <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                             <li><strong>Manual:</strong> Klik "Tambah Santri" untuk input detail satu per satu lengkap dengan foto.</li>
                             <li><strong>Tambah Massal:</strong> Klik "Tambah Massal" untuk input cepat dalam bentuk tabel (seperti Excel) langsung di aplikasi.</li>
                             <li><strong>Impor CSV:</strong> Gunakan template CSV untuk migrasi data ratusan santri sekaligus dari aplikasi lain.</li>
+                            <li><strong>Edit Massal:</strong> Gunakan saat memperbarui banyak santri sekaligus (kelas, status, data identitas, dll).</li>
                         </ul>
                     </>
+                )
+            },
+            {
+                title: 'Workflow Bulk Editor (Direkomendasikan)',
+                content: (
+                    <div className="space-y-2 text-sm text-gray-700">
+                        <p>Agar cepat dan minim salah, gunakan alur berikut di Bulk Editor:</p>
+                        <ol className="list-decimal pl-5 space-y-1">
+                            <li>Pilih <strong>Preset Import</strong> sesuai sumber data (Auto, Internal, EMIS, Simple).</li>
+                            <li>Tentukan <strong>Validation Profile</strong> (`Basic` atau `Strict`).</li>
+                            <li>Masukkan data via <strong>Smart Import</strong>, <strong>Paste Excel</strong>, atau paste langsung ke grid (`Ctrl+V`).</li>
+                            <li>Perbaiki error dengan <strong>Lompat ke Error</strong> dan <strong>Perbaiki Otomatis</strong>.</li>
+                            <li>Pastikan ringkasan kualitas data sudah aman, lalu simpan.</li>
+                        </ol>
+                        <div className="rounded border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">
+                            Bulk Editor mendukung <strong>Simpan Draft</strong>, <strong>Muat Draft</strong>, dan <strong>Hapus Draft</strong> (terpisah untuk mode Tambah dan Edit).
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Fitur Spreadsheet & Kontrol Kualitas Data',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Copy range:</strong> klik sel awal, <code>Shift+klik</code> sel akhir, lalu <code>Ctrl+C</code>.</li>
+                            <li><strong>Reset seleksi:</strong> <code>Esc</code>.</li>
+                            <li><strong>Undo/Redo:</strong> tombol toolbar atau <code>Ctrl+Z</code> / <code>Ctrl+Y</code>.</li>
+                            <li><strong>Data Quality Summary:</strong> total baris, valid/invalid, duplikat NIS, duplikat NIK.</li>
+                            <li><strong>Audit Trail:</strong> catatan aktivitas input (import, edit, auto-fix, undo/redo, simpan).</li>
+                        </ul>
+                    </div>
                 )
             },
             {
@@ -610,11 +746,10 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Akses Menu Input Jurnal',
                 content: (
                      <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Akademik</strong>.</li>
-                        <li>Pilih tab <strong>Kehadiran Kelas</strong>.</li>
-                        <li>Pilih Rombel / Kelas yang sedang diajar pada kolom di sebelah halaman.</li>
-                        <li>Di pojok kanan bawah, terdapat tombol Add berbentuk <strong>Pensil Terbang (Floating Action Button)</strong>.</li>
-                        <li>Klik <strong>Tambah Jurnal Mengajar</strong> dari menu yang muncul.</li>
+                        <li>Buka menu <strong>Absensi</strong> lalu pilih Rombel dan Tanggal.</li>
+                        <li>Jika ingin isi jurnal tanpa input absensi, klik tombol <strong>Isi Jurnal Saja</strong> pada panel status rombel.</li>
+                        <li>Jika sedang input absensi, klik tombol <strong>Isi Jurnal / Agenda</strong> di bagian bawah.</li>
+                        <li>Alternatif monitoring tetap tersedia di menu <strong>Akademik &gt; Jurnal Mengajar (Log)</strong>.</li>
                     </ul>
                 )
             },
@@ -688,7 +823,7 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Desain Sisi Belakang & Tata Tertib',
                 content: (
                     <div className="space-y-3">
-                        <p className="text-sm">Kartu santri kini mendukung desain sisi belakang (Backside) otomatis. Di panel kiri, atur "Layout Sisi Belakang":</p>
+                        <p className="text-sm">Kartu santri mendukung desain sisi belakang (Backside) otomatis. Di panel kiri, atur "Layout Sisi Belakang":</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                             <div className="bg-indigo-50 p-2 border border-indigo-200 rounded">
                                 <strong>Berdampingan (Depan & Belakang)</strong><br />
@@ -841,7 +976,8 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Integrasi Absensi & Cetak Surat',
                 content: (
                      <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Absensi Otomatis:</strong> Jika status pemeriksaan adalah 'Rawat Inap' atau 'Rujuk', sistem otomatis menandai santri tersebut 'Sakit' (S) di menu Absensi pada tanggal tersebut.</li>
+                        <li><strong>Absensi Otomatis:</strong> Jika status pemeriksaan adalah <strong>Rawat Inap (Pondok)</strong> atau <strong>Rujuk RS/Klinik</strong>, sistem otomatis menandai santri tersebut <strong>Sakit (S)</strong> di menu Absensi pada tanggal tersebut.</li>
+                        <li><strong>Catatan:</strong> Status <strong>Rawat Jalan</strong> tidak mengubah absensi otomatis agar tidak menandai sakit berlebihan.</li>
                         <li><strong>Cetak Surat:</strong> Klik ikon printer pada tabel rekam medis untuk mencetak Surat Keterangan Sakit resmi untuk izin sekolah/kamar.</li>
                     </ul>
                 )
@@ -936,9 +1072,10 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
                         <li>Buka menu <strong>Absensi</strong>.</li>
-                        <li>Pilih Kelas dan Tanggal.</li>
+                        <li>Pilih Jenjang, Kelas, Rombel, dan Tanggal.</li>
                         <li>Status default adalah 'Hadir' (H). Klik status santri untuk mengubah (Izin, Sakit, Alpa).</li>
-                        <li>Klik <strong>Simpan Absensi</strong>.</li>
+                        <li>Untuk status <strong>S/I/A</strong>, isi keterangan (wajib) sebelum simpan.</li>
+                        <li>Klik <strong>Simpan Data Absensi</strong> atau <strong>Simpan &amp; Tanggal Berikutnya</strong>.</li>
                     </ol>
                 )
             },
@@ -960,11 +1097,13 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 bg-gray-50 p-2 rounded">
                         <li>Buka menu <strong>Absensi</strong>.</li>
-                        <li>Pilih <strong>Rombel</strong> yang akan diabsen. Tanggal otomatis terisi hari ini (bisa diubah jika input mundur).</li>
+                        <li>Klik panel <strong>Pilih kelas, rombel, dan tanggal</strong> untuk membuka drawer pengaturan sesi absensi.</li>
+                        <li>Pilih Jenjang, Kelas, Rombel, dan Tanggal (tanggal bisa mundur/maju).</li>
                         <li>Klik tombol <strong>"Lanjut"</strong>.</li>
                         <li>Tips Cepat: Klik tombol <strong>"Tandai Semua Hadir"</strong> di pojok kanan atas. Semua status santri akan berubah menjadi (H).</li>
                         <li>Ubah status santri yang tidak hadir (Sakit/Izin/Alpha) dengan mengklik tombol huruf di sebelah namanya.</li>
-                        <li>Klik <strong>Simpan Absensi</strong> di bagian bawah.</li>
+                        <li>Isi keterangan jika status santri <strong>bukan Hadir</strong>.</li>
+                        <li>Klik <strong>Simpan Data Absensi</strong> di bagian bawah.</li>
                     </ol>
                 )
             },
@@ -1187,6 +1326,48 @@ export const panduanData: PanduanSectionData[] = [
                         </ol>
                     </>
                 )
+            },
+            {
+                title: 'Buku Kas Umum (Filter, Preset, Ekspor)',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <p>Modul <strong>Buku Kas</strong> adalah buku besar kas pondok untuk memantau arus masuk/keluar dan posisi saldo aktual harian.</p>
+                        <p className="text-xs text-gray-600">Tujuan utamanya: memastikan uang fisik, transaksi kasir, dan laporan bendahara tetap sinkron.</p>
+                        <ol className="list-decimal pl-5 space-y-1 bg-gray-50 p-2 rounded">
+                            <li>Gunakan preset tanggal cepat: <strong>Hari Ini</strong>, <strong>7 Hari</strong>, atau <strong>30 Hari</strong>.</li>
+                            <li>Gunakan <strong>Reset Filter</strong> untuk kembali ke tampilan netral.</li>
+                            <li>Filter transaksi dengan kombinasi <strong>Tanggal</strong>, <strong>Jenis</strong>, dan <strong>Kategori</strong>.</li>
+                            <li>Ekspor hasil sesuai filter aktif via tombol <strong>CSV</strong> atau <strong>Excel</strong>.</li>
+                        </ol>
+                        <p className="text-xs text-gray-600">Catatan: file ekspor mengikuti data yang sedang tersaring, bukan seluruh transaksi.</p>
+                    </div>
+                )
+            },
+            {
+                title: 'Hubungan Buku Kas dengan Modul Keuangan Utama',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="bg-teal-50 p-3 rounded border border-teal-200">
+                            <p className="font-semibold text-teal-800 mb-1">Alur data antar modul</p>
+                            <ol className="list-decimal pl-5 space-y-1 text-teal-900">
+                                <li><strong>Status Pembayaran:</strong> pembayaran santri tercatat lebih dulu sebagai transaksi operasional.</li>
+                                <li><strong>Setoran Kas:</strong> transaksi yang sudah divalidasi dipindahkan ke Buku Kas sebagai pemasukan resmi.</li>
+                                <li><strong>Penggajian:</strong> posting payroll menambahkan pengeluaran otomatis ke Buku Kas.</li>
+                                <li><strong>Buku Kas:</strong> menjadi titik kontrol akhir saldo kas pondok.</li>
+                            </ol>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                            <p className="font-semibold mb-1">SOP ringkas bendahara</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                                <li>Pagi: cek saldo akhir Buku Kas sebagai saldo awal kerja.</li>
+                                <li>Siang/Sore: lakukan <strong>Setoran Kas</strong> untuk transaksi kasir/pembayaran yang sudah valid.</li>
+                                <li>Akhir hari: cocokkan saldo Buku Kas dengan uang fisik/laporan transfer.</li>
+                                <li>Akhir pekan: ekspor CSV/Excel berdasarkan periode untuk arsip dan pelaporan pengurus.</li>
+                            </ul>
+                        </div>
+                    </div>
+                )
             }
         ]
     },
@@ -1242,10 +1423,12 @@ export const panduanData: PanduanSectionData[] = [
                     <>
                         <div className="mb-2">Gunakan menu <strong>PSB</strong> untuk mengelola pendaftaran santri baru secara online/offline.</div>
                         <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                             <li><strong>Portal PSB (Firebase):</strong> Pendaftaran kini bisa melalui Portal khusus yang terintegrasi dengan Firebase Firestore. Data pendaftar masuk secara real-time.</li>
-                             <li><strong>Upload Berkas:</strong> Berkas yang diunggah pendaftar akan otomatis diubah namanya menjadi <code>Nama_Dokumen-Nama_Santri-Waktu.[ext]</code> agar rapi untuk diarsip secara offline.</li>
+                             <li><strong>Hybrid (Google Sheet + WA Backup):</strong> Form pendaftaran mengirim data ke Google Sheet/Drive sekaligus menyiapkan backup notifikasi ke WhatsApp admin.</li>
+                             <li><strong>Upload Berkas:</strong> Berkas yang diunggah pendaftar otomatis direname ke pola <code>dokumen-nama-santri-waktu.[ext]</code> agar arsip lebih rapi.</li>
                              <li><strong>Desain Formulir:</strong> Buat formulir pendaftaran custom di menu <em>Desain Formulir Online</em>.</li>
                              <li><strong>Smart Script:</strong> Jika menggunakan Google Spreadsheet, Anda cukup menggunakan satu script untuk banyak jenis formulir.</li>
+                             <li><strong>Catatan Multi Formulir:</strong> Form bisa lebih dari satu, tetapi sinkron rekap Google Sheet membaca URL GAS aktif global. Untuk operasional paling stabil, gunakan <strong>satu GAS utama</strong> dan bedakan data per <code>sheetName</code>.</li>
+                             <li><strong>Metode WhatsApp:</strong> Multi formulir tetap bisa via copy-paste kode <code>PSB_START...PSB_END</code> atau <code>PSB_BACKUP_START...PSB_BACKUP_END</code> ke menu Impor WA.</li>
                              <li><strong>Rekap & Seleksi:</strong> Kelola data masuk di menu <em>Rekap Pendaftar</em>. Klik tombol "Terima" untuk memindahkan pendaftar resmi menjadi Santri Aktif secara otomatis.</li>
                         </ul>
                     </>
@@ -1526,6 +1709,57 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
+        id: 'laporan_lanjutan',
+        badge: 'UPDATE',
+        badgeColor: 'indigo',
+        title: 'Modul Laporan (Lengkap)',
+        steps: [
+            {
+                title: 'Daftar Laporan & Fungsinya',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                        <li><strong>Laporan Santri & Identitas:</strong> daftar santri, buku induk, kartu santri, kelengkapan data, dan arsip status.</li>
+                        <li><strong>Laporan Akademik:</strong> rekap nilai, rapor, jurnal mengajar, progres pembelajaran, dan dokumen pendukung kelas.</li>
+                        <li><strong>Laporan Tahfizh:</strong> mutaba’ah setoran, progres hafalan per santri, dan ringkasan capaian per rombel.</li>
+                        <li><strong>Laporan Absensi & Kedisiplinan:</strong> rekap hadir/izin/sakit/alfa per periode dan ringkasan kedisiplinan kelas.</li>
+                        <li><strong>Laporan Keuangan:</strong> tunggakan, status pembayaran, arus kas, payroll, uang saku, dan ringkasan setoran.</li>
+                        <li><strong>Laporan PSB:</strong> rekap pendaftar, status seleksi, efektivitas funnel, serta arsip formulir/berkas.</li>
+                        <li><strong>Laporan Sarpras & Aset:</strong> daftar inventaris, kondisi aset, aset bergerak, dan ringkasan valuasi.</li>
+                        <li><strong>Laporan Administratif:</strong> buku tamu, surat menyurat, dan dokumen administrasi operasional.</li>
+                        <li><strong>Snapshot Operasional Harian:</strong> ringkasan 1 halaman untuk pimpinan (absensi, layanan, kas, dan PSB harian).</li>
+                        <li><strong>Early Warning Santri:</strong> deteksi dini santri berisiko dari kombinasi absensi, BK, kesehatan, dan tunggakan.</li>
+                        <li><strong>Perkembangan Tahfizh:</strong> rekap total setoran dan persentase kelancaran per santri.</li>
+                        <li><strong>Kinerja Pengajar:</strong> ringkasan performa berdasarkan jurnal mengajar yang terisi.</li>
+                        <li><strong>Kelas/Asrama Bermasalah:</strong> peringkat rombel/gedung dengan indikator masalah tertinggi.</li>
+                        <li><strong>Cohort Santri:</strong> retensi dan outcome santri berdasarkan tahun masuk.</li>
+                        <li><strong>Kepatuhan Administrasi:</strong> daftar santri yang data intinya belum lengkap.</li>
+                        <li><strong>Efektivitas PSB:</strong> funnel status pendaftar dan distribusi jalur/gelombang.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Cara Pakai Cepat',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-1 text-sm bg-gray-50 p-3 rounded border border-gray-200">
+                        <li>Buka menu <strong>Laporan</strong>, pilih kategori laporan yang dibutuhkan.</li>
+                        <li>Gunakan filter Marhalah/Kelas/Rombel untuk laporan berbasis santri (misalnya Early Warning atau Tahfizh).</li>
+                        <li>Klik <strong>Tampilkan Preview</strong> untuk melihat hasil.</li>
+                        <li>Untuk hasil paling presisi, gunakan <strong>Unduh &gt; PDF Visual (Akurat)</strong> atau <strong>Cetak</strong> lalu pilih Save as PDF.</li>
+                    </ol>
+                )
+            },
+            {
+                title: 'Catatan Interpretasi',
+                color: 'orange',
+                content: (
+                    <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm text-orange-900">
+                        Laporan strategis bersifat <strong>indikatif</strong> untuk membantu prioritas pembinaan. Keputusan final tetap perlu musyawarah tim pengasuhan, wali kelas, dan pimpinan pondok.
+                    </div>
+                )
+            }
+        ]
+    },
+    {
         id: 'whatsapp',
         badge: 'NEW',
         badgeColor: 'green',
@@ -1540,6 +1774,9 @@ export const panduanData: PanduanSectionData[] = [
                         </p>
                         <p>
                             <strong>Metode Semi-Otomatis (Redirect):</strong> Aplikasi menyusun pesan cerdas (menggunakan variabel), lalu mengarahkan Anda ke WhatsApp Web/Desktop. Anda tinggal menekan tombol <em>Send</em>. Metode ini 100% aman karena tidak menggunakan API ilegal yang berisiko blokir.
+                        </p>
+                        <p>
+                            <strong>Indikator WA Redirect Ready:</strong> Menunjukkan perangkat Anda sedang online dan siap membuka redirect WhatsApp. Jika offline, tombol kirim akan dinonaktifkan.
                         </p>
                     </div>
                 )
@@ -1580,6 +1817,7 @@ export const panduanData: PanduanSectionData[] = [
                         <li>Centang santri yang akan dikirimi pesan (atau centang header untuk pilih semua yang tampil).</li>
                         <li>Klik tombol <strong>Kirim Ke [X] Santri</strong> di pojok kanan atas.</li>
                         <li>Sistem akan membuka tab WhatsApp satu per satu. Anda cukup klik <strong>Send</strong> di setiap jendela yang terbuka.</li>
+                        <li>Untuk pengumuman umum atau grup, gunakan menu <strong>Siaran Umum / Grup</strong> lalu klik <strong>Buka Composer WA</strong>.</li>
                     </ol>
                 )
             }
@@ -1597,7 +1835,7 @@ export const panduanData: PanduanSectionData[] = [
                     <div className="space-y-3">
                         <p className="text-sm text-gray-700">Filter ini memungkinkan koperasi pondok mengelola stok di berbagai lokasi (misal: Toko Atas, Toko Bawah, Gudang Utama).</p>
                         <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-xs text-blue-800">
-                            <strong>Penting:</strong> Setiap mutasi barang (Stok Masuk/Rusak) kini wajib memilih gudang tujuan agar data sebaran stok tetap akurat.
+                            <strong>Penting:</strong> Setiap mutasi barang (Stok Masuk/Rusak) wajib memilih gudang tujuan agar data sebaran stok tetap akurat.
                         </div>
                         <ul className="list-disc pl-5 text-sm space-y-1">
                             <li><strong>Tambah Gudang:</strong> Masukkan kode dan nama gudang di tab <em>Gudang</em>.</li>

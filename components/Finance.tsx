@@ -16,6 +16,8 @@ import { PembayaranModal } from './finance/modals/PembayaranModal';
 import { RiwayatKeuanganSantriModal } from './finance/modals/RiwayatKeuanganSantriModal';
 import { KuitansiTemplate } from './finance/print/KuitansiTemplate';
 import { SuratTagihanTemplate } from './finance/print/SuratTagihanTemplate';
+import { PageHeader } from './common/PageHeader';
+import { HeaderTabs } from './common/HeaderTabs';
 
 const Finance: React.FC = () => {
     const { settings, currentUser, showToast } = useAppContext();
@@ -36,6 +38,21 @@ const Finance: React.FC = () => {
     const [printableSuratTagihanData, setPrintableSuratTagihanData] = useState<{ santri: Santri, tunggakan: Tagihan[], total: number }[] | null>(null);
 
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.keuangan === 'write';
+
+    const financeTabs: Array<{ value: typeof activeTab; label: string; icon?: string; mobileLabel?: string }> = [
+        { value: 'dashboard', label: 'Dashboard', icon: 'bi-grid-1x2-fill' },
+        { value: 'status', label: 'Status Pembayaran', icon: 'bi-receipt' },
+        { value: 'aging', label: 'Umur Piutang', icon: 'bi-graph-down', mobileLabel: 'Piutang' },
+        { value: 'setoran', label: 'Setoran Kas', icon: 'bi-box-arrow-in-down' },
+        { value: 'uangsaku', label: 'Uang Saku', icon: 'bi-wallet2' },
+        ...(canWrite
+            ? [
+                { value: 'payroll' as const, label: 'Penggajian', icon: 'bi-cash-stack' },
+                { value: 'pengaturan' as const, label: 'Pengaturan Biaya', icon: 'bi-sliders' },
+                { value: 'redaksi' as const, label: 'Pengaturan Redaksi', icon: 'bi-chat-left-text' },
+            ]
+            : []),
+    ];
 
     useEffect(() => {
         if (printableData || printableSuratTagihanData) {
@@ -69,25 +86,19 @@ const Finance: React.FC = () => {
     };
 
     return (
-        <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Keuangan</h1>
-
-            <div className="mb-6 border-b border-gray-200">
-                <nav className="flex -mb-px overflow-x-auto">
-                    <button onClick={() => setActiveTab('dashboard')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
-                    <button onClick={() => setActiveTab('status')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'status' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Status Pembayaran</button>
-                    <button onClick={() => setActiveTab('aging')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'aging' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-graph-down mr-1"></i> Laporan Umur Piutang</button>
-                    <button onClick={() => setActiveTab('setoran')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'setoran' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-box-arrow-in-down mr-1"></i> Setoran Kas</button>
-                    <button onClick={() => setActiveTab('uangsaku')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'uangsaku' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Uang Saku</button>
-                    {canWrite && (
-                        <>
-                            <button onClick={() => setActiveTab('payroll')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'payroll' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><i className="bi bi-cash-stack mr-1"></i> Penggajian (Payroll)</button>
-                            <button onClick={() => setActiveTab('pengaturan')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'pengaturan' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Biaya</button>
-                            <button onClick={() => setActiveTab('redaksi')} className={`py-3 px-5 font-medium text-sm border-b-2 whitespace-nowrap ${activeTab === 'redaksi' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Pengaturan Redaksi</button>
-                        </>
-                    )}
-                </nav>
-            </div>
+        <div className="space-y-6">
+            <PageHeader
+                eyebrow="Keuangan"
+                title="Keuangan Santri"
+                description="Pantau dashboard finansial, status pembayaran, setoran kas, dan pengaturan biaya dari satu ruang kerja yang konsisten."
+                tabs={
+                    <HeaderTabs
+                        tabs={financeTabs}
+                        value={activeTab}
+                        onChange={(next) => setActiveTab(next as typeof activeTab)}
+                    />
+                }
+            />
             
             {activeTab === 'dashboard' && <FinanceDashboard santriList={santriList} tagihanList={tagihanList} pembayaranList={pembayaranList} settings={settings} />}
             {activeTab === 'status' && <StatusPembayaranView onBayarClick={openPembayaranModal} onHistoryClick={openHistoryModal} setPrintableSuratTagihanData={setPrintableSuratTagihanData} canWrite={canWrite} />}

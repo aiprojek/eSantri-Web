@@ -4,33 +4,26 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { db } from '../../db';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
+import { formatAcademicYearDisplay } from '../../utils/academicYear';
 
 export const TabMonitoringNilai: React.FC = () => {
     const { settings } = useAppContext();
     const { santriList } = useSantriContext();
+    const {
+        filterTahun,
+        setFilterTahun,
+        filterSemester,
+        setFilterSemester,
+        availableYears,
+        defaultAcademicYear
+    } = useAcademicPeriodFilter(settings);
     
-    // Default Filter State
-    const [filterTahun, setFilterTahun] = useState('2024/2025');
-    const [filterSemester, setFilterSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
-    const [availableYears, setAvailableYears] = useState<string[]>([]);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     
     // Stats State
     const [stats, setStats] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-
-    // Fetch Years on Mount
-    useEffect(() => {
-        const fetchYears = async () => {
-            const all = await db.raporRecords.toArray();
-            const uniqueYears: string[] = Array.from(new Set(all.map(r => r.tahunAjaran))).sort().reverse() as string[];
-            setAvailableYears(uniqueYears);
-            if (uniqueYears.length > 0 && !uniqueYears.includes(filterTahun)) {
-                setFilterTahun(uniqueYears[0]);
-            }
-        };
-        fetchYears();
-    }, []);
 
     // Calculate Stats when filter changes
     useEffect(() => {
@@ -134,7 +127,9 @@ export const TabMonitoringNilai: React.FC = () => {
                                     {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                                 </select>
                             ) : (
-                                <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold bg-gray-50/50 focus:bg-white focus:border-teal-500 transition-all outline-none" />
+                                <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold bg-gray-50/50 focus:bg-white focus:border-teal-500 transition-all outline-none">
+                                    <option value={defaultAcademicYear}>{defaultAcademicYear}</option>
+                                </select>
                             )}
                         </div>
                         <div className="min-w-[120px]">
@@ -162,7 +157,9 @@ export const TabMonitoringNilai: React.FC = () => {
                                     {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                                 </select>
                             ) : (
-                                <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-white rounded-2xl p-4 text-base font-black shadow-sm focus:border-teal-500 outline-none" />
+                                <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-white rounded-2xl p-4 text-base font-black shadow-sm focus:border-teal-500 outline-none bg-white">
+                                    <option value={defaultAcademicYear}>{defaultAcademicYear}</option>
+                                </select>
                             )}
                         </div>
                         <div>
@@ -176,7 +173,7 @@ export const TabMonitoringNilai: React.FC = () => {
 
                     <div className="p-6 bg-teal-600 rounded-[2rem] text-center shadow-xl shadow-teal-200">
                         <div className="text-[10px] font-black text-teal-100 uppercase tracking-[0.2em] mb-1">Status Pantauan</div>
-                        <div className="text-3xl font-black text-white">{filterTahun} - {filterSemester}</div>
+                        <div className="text-3xl font-black text-white">{formatAcademicYearDisplay(settings, filterTahun)} - {filterSemester}</div>
                     </div>
                 </div>
             </MobileFilterDrawer>

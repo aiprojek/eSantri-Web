@@ -34,7 +34,30 @@ export const PengaturanBiaya: React.FC = () => {
                 <button onClick={() => { setEditingBiaya(null); setIsModalOpen(true); }} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm flex items-center gap-2"><i className="bi bi-plus-circle"></i> Tambah Biaya</button>
             </div>
             
-            <div className="border rounded-lg overflow-x-auto">
+            <div className="space-y-3 md:hidden">
+                {settings.biaya.map(b => (
+                    <div key={b.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                        <p className="text-sm font-semibold text-slate-800">{b.nama}</p>
+                        <p className="text-xs text-slate-500">{b.jenis}</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                            <div className="rounded-lg bg-slate-50 p-2">
+                                <p className="text-slate-500">Nominal</p>
+                                <p className="font-semibold text-slate-800">{formatRupiah(b.nominal)}</p>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 p-2">
+                                <p className="text-slate-500">Berlaku Untuk</p>
+                                <p className="font-semibold text-slate-700">{b.jenjangId ? settings.jenjang.find(j => j.id === b.jenjangId)?.nama : 'Semua Jenjang'}</p>
+                            </div>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                            <button onClick={() => { setEditingBiaya(b); setIsModalOpen(true); }} className="rounded-md bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">Edit</button>
+                            <button onClick={() => handleDeleteBiaya(b.id)} className="rounded-md bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">Hapus</button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-lg border md:block">
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">
                         <tr>

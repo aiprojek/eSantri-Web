@@ -4,6 +4,7 @@ import { User } from '../types';
 import { db } from '../db';
 import { useLiveQuery } from "dexie-react-hooks";
 import { ADMIN_PERMISSIONS } from '../services/authService';
+import { CURRENT_PERMISSION_VERSION } from '../services/permissionMigrationService';
 
 interface AuthContextType {
     currentUser: User | null;
@@ -29,6 +30,7 @@ const VIRTUAL_ADMIN: User = {
     fullName: 'Administrator Inti',
     role: 'admin',
     permissions: ADMIN_PERMISSIONS as any,
+    permissionVersion: CURRENT_PERMISSION_VERSION,
     securityQuestion: '',
     securityAnswerHash: '',
 };

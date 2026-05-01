@@ -1,6 +1,7 @@
 
 import React, { Suspense, lazy } from 'react';
 import { PondokSettings, ReportType, Santri, Jenjang, Kelas, Rombel } from '../../types';
+import { formatAcademicYearDisplay } from '../../utils/academicYear';
 
 const ReportOptions = lazy(() =>
     import('./ReportOptions').then((module) => ({ default: module.ReportOptions }))
@@ -19,6 +20,7 @@ interface ReportFilterPanelProps {
         jenjangId: string;
         kelasId: string;
         rombelId: string;
+        tahunAjaran: string;
         status: string;
         gender: string;
         gedungId: string;
@@ -33,16 +35,24 @@ interface ReportFilterPanelProps {
     filteredSantri: Santri[];
     availableKelas: Kelas[];
     availableRombel: Rombel[];
+    availableAcademicYears: string[];
     onGenerate: () => void;
     isGenerating: boolean;
     canGenerate: boolean;
 }
 
 export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
-    activeReport, settings, filters, onFilterChange, reportConfig, filteredSantri, availableKelas, availableRombel, onGenerate, isGenerating, canGenerate
+    activeReport, settings, filters, onFilterChange, reportConfig, filteredSantri, availableKelas, availableRombel, availableAcademicYears, onGenerate, isGenerating, canGenerate
 }) => {
     
-    const isSummaryReport = activeReport === ReportType.DashboardSummary || activeReport === ReportType.FinanceSummary || activeReport === ReportType.DaftarWaliKelas;
+    const isSummaryReport = [
+        ReportType.DashboardSummary,
+        ReportType.OperasionalHarian,
+        ReportType.FinanceSummary,
+        ReportType.KinerjaPengajar,
+        ReportType.EfektivitasPSB,
+        ReportType.DaftarWaliKelas
+    ].includes(activeReport);
     const isFinancialReport = activeReport === ReportType.LaporanArusKas || activeReport === ReportType.RekeningKoranSantri;
     const isAsramaReport = activeReport === ReportType.LaporanAsrama;
     const isEmisReport = activeReport === ReportType.LaporanEMIS;
@@ -104,9 +114,15 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                                             </select>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block mb-1 text-xs font-medium text-gray-700">Status</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="col-span-2">
+                                        <label className="block mb-1 text-xs font-medium text-gray-700">Tahun Ajaran</label>
+                                        <select value={filters.tahunAjaran} onChange={e => onFilterChange('tahunAjaran', e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5">
+                                            {availableAcademicYears.map((year) => <option key={year} value={year}>{formatAcademicYearDisplay(settings, year)}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-medium text-gray-700">Status</label>
                                             <select value={filters.status} onChange={e => onFilterChange('status', e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5">
                                                 <option value="">Semua</option><option value="Aktif">Aktif</option><option value="Hiatus">Hiatus</option><option value="Lulus">Lulus</option><option value="Keluar/Pindah">Keluar</option>
                                             </select>

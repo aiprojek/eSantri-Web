@@ -26,7 +26,7 @@ export const DropboxCloudPanel: React.FC<DropboxCloudPanelProps> = ({
     onGeneratePairingCode,
 }) => (
     <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-blue-50">
+        <div className="app-panel-soft grid grid-cols-1 gap-4 rounded-[24px] p-5 sm:p-6">
             <div className="flex justify-between items-center">
                 <h4 className="font-bold text-blue-800 text-sm">A. Setup Dropbox (Mode Desktop/Manual)</h4>
                 {savedCloudConfig.dropboxRefreshToken && (
@@ -36,7 +36,7 @@ export const DropboxCloudPanel: React.FC<DropboxCloudPanelProps> = ({
                 )}
             </div>
 
-            <div className="p-3 bg-blue-100 border border-blue-200 rounded text-[11px] text-blue-900">
+            <div className="rounded-[18px] border border-blue-200 bg-blue-100 p-3 text-[11px] text-blue-900">
                 <strong>Kredensial Aplikasi:</strong> Masukkan App Key & Secret dari <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noreferrer" className="underline font-bold">Dropbox Console</a>. Keduanya wajib diisi untuk keamanan enkripsi saat membagikan akses (Pairing Code).
             </div>
 
@@ -64,7 +64,7 @@ export const DropboxCloudPanel: React.FC<DropboxCloudPanelProps> = ({
                     <label className="block mb-2 text-sm font-bold text-gray-700">Langkah Otorisasi:</label>
                     <div className="flex flex-col sm:flex-row gap-2 mb-3">
                         <div className="flex-1">
-                            <button onClick={onOpenDropboxAuth} className="w-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 py-2.5 rounded text-sm font-medium">
+                            <button onClick={onOpenDropboxAuth} className="app-button-secondary w-full py-2.5 text-sm">
                                 1. Dapatkan Kode Otorisasi (Buka Browser)
                             </button>
                         </div>
@@ -73,12 +73,12 @@ export const DropboxCloudPanel: React.FC<DropboxCloudPanelProps> = ({
                                 type="text"
                                 value={manualAuthCode}
                                 onChange={(e) => onManualAuthCodeChange(e.target.value)}
-                                className="w-full border border-gray-300 rounded p-2.5 text-sm"
+                                className="app-input text-sm"
                                 placeholder="2. Paste Kode Disini..."
                             />
                         </div>
                     </div>
-                    <button onClick={() => { void onVerifyDropboxCode(); }} disabled={isConnectingDropbox} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg text-sm flex items-center justify-center gap-2">
+                    <button onClick={() => { void onVerifyDropboxCode(); }} disabled={isConnectingDropbox} className="app-button-primary w-full px-4 py-3 text-sm">
                         {isConnectingDropbox ? 'Memverifikasi...' : '3. Verifikasi & Simpan'}
                     </button>
                 </div>
@@ -86,13 +86,13 @@ export const DropboxCloudPanel: React.FC<DropboxCloudPanelProps> = ({
                 <div className="border-t border-blue-200 pt-4">
                     {(!(localSettings.cloudSyncConfig.dropboxAppKey || savedCloudConfig.dropboxAppKey) ||
                         !(localSettings.cloudSyncConfig.dropboxAppSecret || savedCloudConfig.dropboxAppSecret)) && (
-                        <div className="mb-3 p-3 bg-red-50 border border-red-100 rounded text-[11px] text-red-700">
+                        <div className="mb-3 rounded-[18px] border border-red-100 bg-red-50 p-3 text-[11px] text-red-700">
                             <i className="bi bi-exclamation-triangle-fill mr-1"></i>
                             <strong>Perhatian:</strong> Karena Anda pengguna lama, kolom <strong>App Key</strong> dan <strong>App Secret</strong> mungkin kosong. Harap isi kembali di atas lalu klik <strong>"Simpan Perubahan"</strong> di bawah agar bisa membagikan Pairing Code.
                         </div>
                     )}
 
-                    <button onClick={() => { void onGeneratePairingCode(); }} className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2.5 px-4 rounded-lg text-sm flex items-center gap-2 shadow-sm">
+                    <button onClick={() => { void onGeneratePairingCode(); }} className="flex items-center gap-2 rounded-[16px] bg-purple-600 px-4 py-2.5 text-sm font-medium text-white shadow-soft transition-colors hover:bg-purple-700">
                         <i className="bi bi-qr-code"></i> Bagikan Sesi (Pairing Code)
                     </button>
                     <p className="text-[10px] text-purple-700 mt-2">

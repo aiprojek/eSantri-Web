@@ -184,6 +184,48 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
 
         const handleBulkDelete = () => {
             if (selectionState.length === 0) return;
+            if (listName === 'jenjang') {
+                const impactedSantri = santriList.filter(s => selectionState.includes(s.jenjangId)).length;
+                if (impactedSantri > 0) {
+                    showAlert('Penghapusan Dicegah', `Tidak dapat hapus massal Jenjang. Masih ada ${impactedSantri} santri terkait.`);
+                    return;
+                }
+                const impactedKelas = localSettings.kelas.filter(k => selectionState.includes(k.jenjangId)).length;
+                const impactedRombel = localSettings.rombel.filter(r => localSettings.kelas.some(k => selectionState.includes(k.jenjangId) && k.id === r.kelasId)).length;
+                const impactedMapel = localSettings.mataPelajaran.filter(m => selectionState.includes(m.jenjangId)).length;
+                showConfirmation(
+                    `Hapus ${selectionState.length} ${itemName}`,
+                    `Dampak: ${impactedKelas} Kelas, ${impactedRombel} Rombel, ${impactedMapel} Mapel akan ikut terhapus. Lanjutkan?`,
+                    () => {
+                        const kelasIdsToDelete = localSettings.kelas.filter(k => selectionState.includes(k.jenjangId)).map(k => k.id);
+                        handleInputChange('jenjang', localSettings.jenjang.filter(j => !selectionState.includes(j.id)) as any);
+                        handleInputChange('kelas', localSettings.kelas.filter(k => !selectionState.includes(k.jenjangId)) as any);
+                        handleInputChange('rombel', localSettings.rombel.filter(r => !kelasIdsToDelete.includes(r.kelasId)) as any);
+                        handleInputChange('mataPelajaran', localSettings.mataPelajaran.filter(m => !selectionState.includes(m.jenjangId)) as any);
+                        setSelectionState([]);
+                        showToast(`${selectionState.length} data berhasil dihapus.`, 'success');
+                    },
+                    { confirmColor: 'red' }
+                );
+                return;
+            }
+
+            if (listName === 'kelas') {
+                const impactedSantri = santriList.filter(s => selectionState.includes(s.kelasId)).length;
+                const impactedRombel = localSettings.rombel.filter(r => selectionState.includes(r.kelasId)).length;
+                if (impactedSantri > 0 || impactedRombel > 0) {
+                    showAlert('Penghapusan Dicegah', `Tidak dapat hapus massal Kelas. Dampak terdeteksi: ${impactedSantri} santri, ${impactedRombel} rombel.`);
+                    return;
+                }
+            }
+
+            if (listName === 'rombel') {
+                const impactedSantri = santriList.filter(s => selectionState.includes(s.rombelId || -1)).length;
+                if (impactedSantri > 0) {
+                    showAlert('Penghapusan Dicegah', `Tidak dapat hapus massal Rombel. Masih ada ${impactedSantri} santri terkait.`);
+                    return;
+                }
+            }
             showConfirmation(
                 `Hapus ${selectionState.length} ${itemName}`,
                 `Yakin ingin menghapus ${selectionState.length} data ${itemName} ini secara massal? Tindakan ini tidak dapat dibatalkan.`,

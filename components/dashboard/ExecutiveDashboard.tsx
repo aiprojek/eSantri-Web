@@ -37,12 +37,12 @@ export const ExecutiveDashboard: React.FC = () => {
 
     return (
         <div className="space-y-6 animate-fadeIn">
-            <div className="flex items-center justify-between">
-                <div>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
                     <h2 className="text-2xl font-bold text-gray-800">Analitik & Wawasan Strategis</h2>
                     <p className="text-sm text-gray-500">Visualisasi data pondok untuk mempermudah pengambilan keputusan.</p>
                 </div>
-                <div className="text-xs font-mono bg-white border px-3 py-1.5 rounded shadow-sm text-gray-400">
+                <div className="inline-flex w-fit items-center text-xs font-mono bg-white border px-3 py-1.5 rounded shadow-sm text-gray-400">
                     Sistem Cerdas (AI Ready)
                 </div>
             </div>

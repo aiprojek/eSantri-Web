@@ -5,13 +5,19 @@ import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporTemplate, RaporRecord, NilaiMapel, Santri, Rombel } from '../../types';
 import { db } from '../../db';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
+import { getRaporRecordsByPeriod, getRaporRecordsByPeriodAndRombel } from '../../services/academicQueries';
+import { useAcademicRaporYears } from '../../hooks/useAcademicRaporYears';
 
 export const TabInputNilaiWali: React.FC = () => {
     const { settings, showToast, currentUser, showConfirmation } = useAppContext();
     const { santriList } = useSantriContext();
+    const defaultAcademicYear = useMemo(() => getDefaultAcademicYear(settings), [settings]);
+    const archiveYears = useAcademicRaporYears();
+    const availableAcademicYears = useMemo(() => getAcademicYearOptions(settings, archiveYears), [settings, archiveYears]);
 
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-    const [tahunAjaran, setTahunAjaran] = useState<string>(settings.psbConfig?.tahunAjaranAktif || '2024/2025');
+    const [tahunAjaran, setTahunAjaran] = useState<string>(defaultAcademicYear);
     const [semester, setSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     
     // Admin Filters
@@ -77,6 +83,12 @@ export const TabInputNilaiWali: React.FC = () => {
         }
     }, [myRombel]);
 
+    useEffect(() => {
+        if (!tahunAjaran.trim()) {
+            setTahunAjaran(defaultAcademicYear);
+        }
+    }, [tahunAjaran, defaultAcademicYear]);
+
     // Filter students in the active selection
     const studentsInRombel = useMemo(() => {
         let list = santriList.filter(s => s.status === 'Aktif');
@@ -123,6 +135,7 @@ export const TabInputNilaiWali: React.FC = () => {
 
     // State for grades: { [santriId]: { [key]: value } }
     const [grades, setGrades] = useState<Record<number, Record<string, string>>>({});
+    const [existingPeriodRecords, setExistingPeriodRecords] = useState<RaporRecord[]>([]);
     const [isSaving, setIsSaving] = useState(false);
 
     // Load existing records if any
@@ -132,19 +145,16 @@ export const TabInputNilaiWali: React.FC = () => {
             
             let query;
             if (activeRombelId) {
-                query = db.raporRecords
-                    .where('[tahunAjaran+semester+rombelId]')
-                    .equals([tahunAjaran, semester, activeRombelId]);
+                query = getRaporRecordsByPeriodAndRombel(tahunAjaran, semester, activeRombelId);
             } else if (adminJenjangId) {
                 // For "All" cases, we query by year+semester and filter in memory
-                query = db.raporRecords
-                    .where('[tahunAjaran+semester]')
-                    .equals([tahunAjaran, semester]);
+                query = getRaporRecordsByPeriod(tahunAjaran, semester);
             } else {
+                setExistingPeriodRecords([]);
                 return;
             }
 
-            let existing = await query.toArray();
+            let existing = await query;
             
             // Further filter by jenjang/kelas if "All" was selected
             if (!activeRombelId && adminJenjangId) {
@@ -153,6 +163,7 @@ export const TabInputNilaiWali: React.FC = () => {
                     existing = existing.filter(r => r.kelasId === adminKelasId);
                 }
             }
+            setExistingPeriodRecords(existing);
             
             const newGrades: Record<number, Record<string, string>> = {};
             existing.forEach(rec => {
@@ -184,18 +195,10 @@ export const TabInputNilaiWali: React.FC = () => {
 
         setIsSaving(true);
         try {
+            const existingBySantri = new Map(existingPeriodRecords.map(rec => [rec.santriId, rec]));
             const promises = studentsInRombel.map(async (student) => {
                 const studentGrades = grades[student.id] || {};
-                
-                // Find existing record to update or create new
-                const existing = await db.raporRecords
-                    .where({
-                        santriId: student.id,
-                        tahunAjaran,
-                        semester,
-                        rombelId: student.rombelId
-                    })
-                    .first();
+                const existing = existingBySantri.get(student.id);
 
                 const record: RaporRecord = {
                     id: existing?.id || Date.now() + Math.floor(Math.random() * 1000),
@@ -264,7 +267,11 @@ export const TabInputNilaiWali: React.FC = () => {
                 <div className="hidden md:grid md:grid-cols-4 lg:grid-cols-6 gap-4 items-end flex-grow">
                     <div className="md:col-span-1">
                         <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Tahun Ajaran</label>
-                        <input type="text" value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all placeholder:text-gray-300" />
+                        <select value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all">
+                            {availableAcademicYears.map((year) => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
                     </div>
                     <div className="md:col-span-1">
                         <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Semester</label>
@@ -336,7 +343,11 @@ export const TabInputNilaiWali: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3">
                         <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                             <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest pl-1">Tahun Ajaran</label>
-                            <input type="text" value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="w-full border-2 border-white rounded-xl p-3 text-sm font-bold shadow-sm focus:border-teal-500 outline-none" />
+                            <select value={tahunAjaran} onChange={e => setTahunAjaran(e.target.value)} className="w-full border-2 border-white rounded-xl p-3 text-sm font-bold shadow-sm focus:border-teal-500 outline-none">
+                                {availableAcademicYears.map((year) => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                             <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest pl-1">Semester</label>

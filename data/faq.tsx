@@ -162,7 +162,7 @@ export const faqData: FaqCategoryData[] = [
             },
             {
                 question: "Bagaimana jika santri sakit (Rawat Inap)?",
-                answer: "Sistem terintegrasi otomatis. Jika Anda memilih status 'Rawat Inap' atau 'Rujuk' di menu Kesehatan, maka di menu Absensi, santri tersebut akan otomatis tercatat 'S' (Sakit) pada tanggal tersebut."
+                answer: "Sistem terintegrasi otomatis. Jika Anda memilih status 'Rawat Inap (Pondok)' atau 'Rujuk RS/Klinik' di menu Kesehatan, maka di menu Absensi santri akan otomatis tercatat 'S' (Sakit) pada tanggal tersebut. Status 'Rawat Jalan' tidak mengubah absensi otomatis."
             }
         ]
     },
@@ -289,6 +289,10 @@ export const faqData: FaqCategoryData[] = [
             {
                 question: "Apa fungsi 'Kode Pairing' di menu Sync?",
                 answer: "Kode Pairing memungkinkan Staff terhubung ke Dropbox Admin tanpa perlu login email/password akun Dropbox tersebut. Cukup Copy-Paste kode dari Admin, laptop Staff langsung terhubung."
+            },
+            {
+                question: "PSB saya punya banyak formulir dan link Google Apps Script berbeda, apakah aman?",
+                answer: "Bisa dipakai, tetapi saat ini tombol 'Ambil dari Google Sheet' di Rekap membaca satu URL GAS aktif global. Rekomendasi paling stabil: gunakan satu GAS utama untuk semua formulir, lalu pisahkan data memakai sheetName/tab per formulir."
             }
         ]
     },
@@ -308,6 +312,10 @@ export const faqData: FaqCategoryData[] = [
             {
                 question: "Apakah variabel seperti [nama_santri] bekerja?",
                 answer: "Ya! Saat Anda menekan tombol kirim, sistem akan otomatis mengganti [nama_santri] dengan nama santri yang bersangkutan, [ortu] dengan nama Ayah/Ibu, dan [nominal] dengan nilai yang relevan."
+            },
+            {
+                question: "Kalau formulir PSB lebih dari satu, apakah metode WhatsApp tetap bisa?",
+                answer: "Bisa. Selama pesan berisi blok kode PSB_START...PSB_END (atau PSB_BACKUP_START...PSB_BACKUP_END), admin cukup copy-paste ke menu Impor WA di Rekap PSB."
             },
             {
                 question: "Data saya tidak muncul nomor WA-nya?",

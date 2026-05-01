@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { TenagaPengajar, User, UserPermissions } from '../../../types';
-import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS } from '../../../services/authService';
+import { TenagaPengajar, User, UserPermissions, AccessLevel } from '../../../types';
+import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
+import { CURRENT_PERMISSION_VERSION, normalizeUserPermissions } from '../../../services/permissionMigrationService';
 import { useAppContext } from '../../../AppContext';
 
 interface BulkUserFromTeacherModalProps {
@@ -15,15 +16,26 @@ interface BulkUserFromTeacherModalProps {
 export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> = ({ 
     isOpen, onClose, onSave, teachers, existingUsers 
 }) => {
+    type PermissionPresetId = 'default' | 'admin' | (typeof ROLE_TEMPLATES)[number]['id'];
+    type BulkUserConfig = {
+        role: 'admin' | 'staff';
+        syncAdmin: boolean;
+        permissionPreset: PermissionPresetId;
+        customPermissions?: UserPermissions;
+    };
+
     const { showToast } = useAppContext();
     const [selectedTeacherIds, setSelectedTeacherIds] = useState<number[]>([]);
     const [defaultPassword, setDefaultPassword] = useState('123456');
     const [isProcessing, setIsProcessing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [defaultPermissionPreset, setDefaultPermissionPreset] = useState<PermissionPresetId>('default');
+    const [permissionEditorTeacherId, setPermissionEditorTeacherId] = useState<number | null>(null);
+    const [permissionEditorState, setPermissionEditorState] = useState<UserPermissions | null>(null);
 
-    // State untuk menyimpan konfigurasi per user (Role & Sync Permission)
-    // Format: { [teacherId]: { role: 'admin'|'staff', syncAdmin: boolean } }
-    const [userConfigs, setUserConfigs] = useState<Record<number, { role: 'admin' | 'staff', syncAdmin: boolean }>>({});
+    // State untuk menyimpan konfigurasi per user
+    // Format: { [teacherId]: { role: 'admin'|'staff', syncAdmin: boolean, permissionPreset } }
+    const [userConfigs, setUserConfigs] = useState<Record<number, BulkUserConfig>>({});
 
     // Filter guru yang namanya belum ada di tabel user (Pencocokan sederhana)
     // dan sesuai search term
@@ -53,12 +65,13 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
     };
 
     // Helper untuk update config per user
-    const handleConfigChange = (id: number, field: 'role' | 'syncAdmin', value: any) => {
+    const handleConfigChange = (id: number, field: keyof BulkUserConfig, value: any) => {
         setUserConfigs(prev => ({
             ...prev,
             [id]: {
                 role: field === 'role' ? value : (prev[id]?.role || 'staff'),
-                syncAdmin: field === 'syncAdmin' ? value : (prev[id]?.syncAdmin || false)
+                syncAdmin: field === 'syncAdmin' ? value : (prev[id]?.syncAdmin || false),
+                permissionPreset: field === 'permissionPreset' ? value : (prev[id]?.permissionPreset || defaultPermissionPreset),
             }
         }));
         
@@ -93,6 +106,30 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
         return finalUsername;
     };
 
+    const modules: Array<{ key: keyof UserPermissions; label: string }> = [
+        { key: 'santri', label: 'Data Santri' },
+        { key: 'psb', label: 'PSB Online' },
+        { key: 'whatsapp', label: 'WhatsApp Center' },
+        { key: 'bukutamu', label: 'Buku Tamu' },
+        { key: 'akademik', label: 'Akademik & Rapor' },
+        { key: 'absensi', label: 'Absensi' },
+        { key: 'tahfizh', label: 'Tahfizh' },
+        { key: 'kesehatan', label: 'Kesehatan' },
+        { key: 'bk', label: 'BK' },
+        { key: 'perpustakaan', label: 'Perpustakaan' },
+        { key: 'sarpras', label: 'Sarpras' },
+        { key: 'kalender', label: 'Kalender' },
+        { key: 'keuangan', label: 'Keuangan' },
+        { key: 'bukukas', label: 'Buku Kas' },
+        { key: 'keasramaan', label: 'Keasramaan' },
+        { key: 'koperasi', label: 'Koperasi' },
+        { key: 'surat', label: 'Surat' },
+        { key: 'laporan', label: 'Laporan' },
+        { key: 'datamaster', label: 'Data Master' },
+        { key: 'auditlog', label: 'Audit Log' },
+        { key: 'pengaturan', label: 'Pengaturan' },
+    ];
+
     const handleSave = async () => {
         if (selectedTeacherIds.length === 0) {
             showToast('Pilih minimal satu guru.', 'error');
@@ -107,21 +144,26 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
         try {
             const passwordHash = await hashString(defaultPassword);
             const securityAnswerHash = await hashString('esantri'); // Default answer for generated users
+            const resolvePermissionsFromPreset = (config: BulkUserConfig): UserPermissions => {
+                if (config.role === 'admin' || config.permissionPreset === 'admin') {
+                    return ADMIN_PERMISSIONS as UserPermissions;
+                }
+
+                const template = ROLE_TEMPLATES.find(item => item.id === config.permissionPreset);
+                const basePermissions = template ? template.permissions : DEFAULT_STAFF_PERMISSIONS;
+
+                return {
+                    ...basePermissions,
+                    syncAdmin: config.syncAdmin,
+                } as UserPermissions;
+            };
 
             const newUsers: User[] = selectedTeacherIds.map(tid => {
                 const teacher = teachers.find(t => t.id === tid)!;
-                const config = userConfigs[tid] || { role: 'staff', syncAdmin: false };
-                
-                // Tentukan Permissions berdasarkan Role & Config
-                let finalPermissions: UserPermissions;
-                if (config.role === 'admin') {
-                    finalPermissions = ADMIN_PERMISSIONS as UserPermissions;
-                } else {
-                    finalPermissions = {
-                        ...DEFAULT_STAFF_PERMISSIONS,
-                        syncAdmin: config.syncAdmin // Override sync permission
-                    } as UserPermissions;
-                }
+                const config = userConfigs[tid] || { role: 'staff', syncAdmin: false, permissionPreset: defaultPermissionPreset };
+                const finalPermissions = config.customPermissions
+                    ? ({ ...config.customPermissions, syncAdmin: config.syncAdmin } as UserPermissions)
+                    : resolvePermissionsFromPreset(config);
 
                 return {
                     id: Date.now() + Math.random(), // Unique ID
@@ -129,10 +171,19 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                     fullName: teacher.nama,
                     role: config.role,
                     passwordHash: passwordHash,
-                    permissions: finalPermissions,
+                    permissions: normalizeUserPermissions({
+                        id: -1,
+                        username: generateUsername(teacher.nama),
+                        passwordHash: '',
+                        fullName: teacher.nama,
+                        role: config.role,
+                        permissions: finalPermissions,
+                    } as User),
                     securityQuestion: 'Apa nama aplikasi ini? (Default)',
                     securityAnswerHash: securityAnswerHash,
-                    isDefaultAdmin: false
+                    isDefaultAdmin: false,
+                    permissionVersion: CURRENT_PERMISSION_VERSION,
+                    lastModified: Date.now(),
                 };
             });
 
@@ -146,9 +197,54 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
         }
     };
 
+    const openPermissionEditor = (teacherId: number) => {
+        const currentConfig = userConfigs[teacherId] || { role: 'staff', syncAdmin: false, permissionPreset: defaultPermissionPreset };
+        if (currentConfig.role === 'admin') {
+            showToast('Role Admin selalu memiliki izin penuh.', 'info');
+            return;
+        }
+        const template = ROLE_TEMPLATES.find(item => item.id === currentConfig.permissionPreset);
+        const basePermissions = currentConfig.customPermissions || ({
+            ...(template ? template.permissions : DEFAULT_STAFF_PERMISSIONS),
+            syncAdmin: currentConfig.syncAdmin,
+        } as UserPermissions);
+        setPermissionEditorTeacherId(teacherId);
+        setPermissionEditorState(basePermissions);
+    };
+
+    const updatePermissionLevel = (module: keyof UserPermissions, level: AccessLevel) => {
+        if (!permissionEditorState) return;
+        setPermissionEditorState({
+            ...permissionEditorState,
+            [module]: level,
+        });
+    };
+
+    const savePermissionEditor = () => {
+        if (!permissionEditorState || permissionEditorTeacherId === null) return;
+        setUserConfigs(prev => {
+            const current = prev[permissionEditorTeacherId] || { role: 'staff', syncAdmin: false, permissionPreset: defaultPermissionPreset };
+            return {
+                ...prev,
+                [permissionEditorTeacherId]: {
+                    ...current,
+                    syncAdmin: permissionEditorState.syncAdmin || false,
+                    customPermissions: permissionEditorState,
+                },
+            };
+        });
+        if (!selectedTeacherIds.includes(permissionEditorTeacherId)) {
+            setSelectedTeacherIds(prev => [...prev, permissionEditorTeacherId]);
+        }
+        setPermissionEditorTeacherId(null);
+        setPermissionEditorState(null);
+        showToast('Izin kustom disimpan untuk user ini.', 'success');
+    };
+
     if (!isOpen) return null;
 
     return (
+        <>
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[70] flex justify-center items-center p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col">
                 <div className="p-5 border-b flex justify-between items-center bg-gray-50">
@@ -180,6 +276,20 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                                 className="w-full border border-gray-300 rounded-lg p-2 text-sm"
                             />
                         </div>
+                        <div className="flex-grow">
+                            <label className="block text-xs font-bold text-gray-600 mb-1">Preset Izin Default</label>
+                            <select
+                                value={defaultPermissionPreset}
+                                onChange={(e) => setDefaultPermissionPreset(e.target.value as PermissionPresetId)}
+                                className="w-full border border-gray-300 rounded-lg p-2 text-sm"
+                            >
+                                <option value="default">Staff Default</option>
+                                {ROLE_TEMPLATES.map(template => (
+                                    <option key={template.id} value={template.id}>{template.label}</option>
+                                ))}
+                                <option value="admin">Admin Penuh</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -198,13 +308,15 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                                 <th className="p-3 border-b">Nama Guru</th>
                                 <th className="p-3 border-b">Preview Username</th>
                                 <th className="p-3 border-b w-32">Role</th>
+                                <th className="p-3 border-b w-44">Preset Izin</th>
+                                <th className="p-3 border-b w-28 text-center">Detail</th>
                                 <th className="p-3 border-b w-32 text-center">Izin Sync?</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {availableTeachers.map(t => {
                                 const isSelected = selectedTeacherIds.includes(t.id);
-                                const currentConfig = userConfigs[t.id] || { role: 'staff', syncAdmin: false };
+                                const currentConfig = userConfigs[t.id] || { role: 'staff', syncAdmin: false, permissionPreset: defaultPermissionPreset };
                                 
                                 return (
                                     <tr key={t.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-teal-50' : ''}`}>
@@ -232,6 +344,30 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                                                 <option value="admin">Admin</option>
                                             </select>
                                         </td>
+                                        <td className="p-3">
+                                            <select
+                                                value={currentConfig.permissionPreset}
+                                                onChange={(e) => handleConfigChange(t.id, 'permissionPreset', e.target.value)}
+                                                disabled={currentConfig.role === 'admin'}
+                                                className="text-xs border rounded p-1.5 w-full bg-white border-gray-300 disabled:bg-gray-100 disabled:text-gray-500"
+                                            >
+                                                <option value="default">Staff Default</option>
+                                                {ROLE_TEMPLATES.map(template => (
+                                                    <option key={template.id} value={template.id}>{template.label}</option>
+                                                ))}
+                                                <option value="admin">Admin Penuh</option>
+                                            </select>
+                                        </td>
+                                        <td className="p-3 text-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => openPermissionEditor(t.id)}
+                                                disabled={currentConfig.role === 'admin'}
+                                                className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                {currentConfig.customPermissions ? 'Kustom' : 'Atur'}
+                                            </button>
+                                        </td>
                                         <td className="p-3 text-center">
                                             <label className="inline-flex items-center cursor-pointer">
                                                 <input 
@@ -249,7 +385,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                             })}
                             {availableTeachers.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="p-8 text-center text-gray-400 italic">
+                                    <td colSpan={7} className="p-8 text-center text-gray-400 italic">
                                         Tidak ada data guru yang tersedia untuk ditambahkan (mungkin semua sudah jadi user).
                                     </td>
                                 </tr>
@@ -276,5 +412,74 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                 </div>
             </div>
         </div>
+        {permissionEditorTeacherId !== null && permissionEditorState && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
+                <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl">
+                    <div className="border-b px-5 py-4">
+                        <h4 className="text-base font-bold text-slate-800">Atur Izin Per Modul</h4>
+                        <p className="text-xs text-slate-500">Pengaturan ini berlaku khusus untuk user yang dipilih.</p>
+                    </div>
+                    <div className="max-h-[60vh] overflow-y-auto p-5">
+                        <div className="mb-3 rounded-lg border border-purple-200 bg-purple-50 p-3">
+                            <label className="flex items-center gap-2 text-sm font-medium text-purple-900">
+                                <input
+                                    type="checkbox"
+                                    checked={permissionEditorState.syncAdmin || false}
+                                    onChange={(e) => setPermissionEditorState({ ...permissionEditorState, syncAdmin: e.target.checked })}
+                                />
+                                Izin Kelola Sinkronisasi (Wakil Admin)
+                            </label>
+                        </div>
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="px-3 py-2 text-left">Modul</th>
+                                    <th className="px-3 py-2 text-center">Akses</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {modules.map((mod) => (
+                                    <tr key={mod.key}>
+                                        <td className="px-3 py-2 font-medium text-slate-700">{mod.label}</td>
+                                        <td className="px-3 py-2">
+                                            <div className="flex justify-center gap-2">
+                                                {(['none', 'read', 'write'] as AccessLevel[]).map(level => (
+                                                    <label key={`${mod.key}-${level}`} className="flex items-center gap-1 text-xs">
+                                                        <input
+                                                            type="radio"
+                                                            name={`bulk_perm_${mod.key}`}
+                                                            checked={permissionEditorState[mod.key] === level}
+                                                            onChange={() => updatePermissionLevel(mod.key, level)}
+                                                        />
+                                                        <span>{level === 'none' ? 'Blokir' : level === 'read' ? 'Lihat' : 'Edit'}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t bg-slate-50 px-5 py-3">
+                        <button
+                            type="button"
+                            onClick={() => { setPermissionEditorTeacherId(null); setPermissionEditorState(null); }}
+                            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="button"
+                            onClick={savePermissionEditor}
+                            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+                        >
+                            Simpan Izin Kustom
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 };

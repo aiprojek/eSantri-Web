@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { PondokSettings, PsbDesignStyle, PsbConfig, PsbPosterTemplate } from '../../types';
 import { useAppContext } from '../../AppContext';
-import { generatePosterPrompt } from '../../services/aiService';
+import { generatePosterImage, generatePosterPrompt } from '../../services/aiService';
 
 interface PsbPosterMakerProps {
     config: PsbConfig;
@@ -17,7 +17,10 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
     const [details, setDetails] = useState<string>('');
     const [customInfo, setCustomInfo] = useState<string>('');
     const [generatedPrompt, setGeneratedPrompt] = useState<string>('');
+    const [generatedImageUrl, setGeneratedImageUrl] = useState<string>('');
+    const [imageSource, setImageSource] = useState<'openai' | 'pollinations' | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
 
     // Template State
     const [templateName, setTemplateName] = useState('');
@@ -29,6 +32,8 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
             const infoString = customInfo.trim() || `Nama Pondok: ${settings.namaPonpes}`;
             const prompt = await generatePosterPrompt(style, ratio, details, infoString);
             setGeneratedPrompt(prompt);
+            setGeneratedImageUrl('');
+            setImageSource(null);
             showToast("Prompt berhasil dibuat! Silakan salin.", "success");
         } catch (error) {
             showToast("Gagal membuat prompt. Pastikan koneksi internet lancar.", "error");
@@ -41,6 +46,59 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
         if (!generatedPrompt) return;
         navigator.clipboard.writeText(generatedPrompt);
         showToast("Prompt disalin ke clipboard!", "success");
+    };
+
+    const handleGenerateImage = async () => {
+        let prompt = generatedPrompt;
+        if (!prompt) {
+            setIsLoading(true);
+            try {
+                const infoString = customInfo.trim() || `Nama Pondok: ${settings.namaPonpes}`;
+                prompt = await generatePosterPrompt(style, ratio, details, infoString);
+                setGeneratedPrompt(prompt);
+            } catch (error) {
+                showToast("Gagal membuat prompt poster.", "error");
+                setIsLoading(false);
+                return;
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        setIsGeneratingImage(true);
+        try {
+            const result = await generatePosterImage(prompt, ratio);
+            setGeneratedImageUrl(result.imageUrl);
+            setImageSource(result.source);
+            showToast(
+                result.source === 'openai'
+                    ? 'Desain poster dibuat via OpenAI.'
+                    : 'Desain poster dibuat via fallback generator.',
+                'success'
+            );
+        } catch (error) {
+            showToast('Gagal membuat desain poster otomatis.', 'error');
+        } finally {
+            setIsGeneratingImage(false);
+        }
+    };
+
+    const handleDownloadImage = async () => {
+        if (!generatedImageUrl) return;
+        try {
+            const res = await fetch(generatedImageUrl);
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `poster-psb-${Date.now()}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch {
+            showToast('Gagal mengunduh gambar poster.', 'error');
+        }
     };
 
     const handleSaveTemplate = () => {
@@ -258,7 +316,11 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
 
                 <div className="mt-4 flex justify-end gap-3 relative z-10">
                     <button 
-                        onClick={() => setGeneratedPrompt('')}
+                        onClick={() => {
+                            setGeneratedPrompt('');
+                            setGeneratedImageUrl('');
+                            setImageSource(null);
+                        }}
                         className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                         disabled={!generatedPrompt}
                     >
@@ -271,6 +333,38 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
                     >
                         <i className="bi bi-clipboard"></i> Salin Prompt
                     </button>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                    <button
+                        onClick={handleGenerateImage}
+                        disabled={isGeneratingImage || isLoading}
+                        className="px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-60"
+                    >
+                        {isGeneratingImage ? 'Membuat Desain...' : 'Generate Desain Poster'}
+                    </button>
+                    <button
+                        onClick={handleDownloadImage}
+                        disabled={!generatedImageUrl}
+                        className="px-4 py-2 bg-white text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-100 disabled:opacity-60"
+                    >
+                        Unduh PNG
+                    </button>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-gray-700 bg-gray-900 p-3">
+                    {generatedImageUrl ? (
+                        <>
+                            <img src={generatedImageUrl} alt="Preview Poster AI" className="mx-auto max-h-72 w-auto rounded-md border border-gray-700 object-contain" />
+                            <p className="mt-2 text-center text-[11px] text-gray-400">
+                                Sumber gambar: {imageSource === 'openai' ? 'OpenAI BYOK' : 'Fallback Generator'}
+                            </p>
+                        </>
+                    ) : (
+                        <p className="text-center text-xs text-gray-500">
+                            Preview desain poster akan muncul di sini setelah klik "Generate Desain Poster".
+                        </p>
+                    )}
                 </div>
                 
                 <div className="mt-4 p-3 bg-gray-700/50 rounded text-xs text-gray-400 border border-gray-600">

@@ -28,6 +28,7 @@ export const generateRecoveryKey = (): string => {
 export const ADMIN_PERMISSIONS = {
     santri: 'write',
     psb: 'write',
+    whatsapp: 'write',
     akademik: 'write', 
     absensi: 'write', 
     tahfizh: 'write',
@@ -53,6 +54,7 @@ export const ADMIN_PERMISSIONS = {
 export const DEFAULT_STAFF_PERMISSIONS = {
     santri: 'read',
     psb: 'read',
+    whatsapp: 'read',
     akademik: 'none', 
     absensi: 'write', 
     tahfizh: 'read',
@@ -140,6 +142,7 @@ export const ROLE_TEMPLATES = [
 export const DEFAULT_WALI_KELAS_PERMISSIONS = {
     santri: 'read',
     psb: 'none',
+    whatsapp: 'none',
     akademik: 'write', 
     absensi: 'write', 
     tahfizh: 'write',

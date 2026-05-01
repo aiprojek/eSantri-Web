@@ -24,9 +24,13 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
             bg: "bg-indigo-50",
             border: "border-indigo-100",
             items: [
+                { id: ReportType.OperasionalHarian, title: 'Snapshot Operasional Harian', description: "Ringkasan 1 halaman untuk pimpinan.", icon: 'bi-speedometer2', color: 'text-indigo-500' },
                 { id: ReportType.DashboardSummary, title: 'Ringkasan Dashboard', description: "Statistik utama santri & pondok.", icon: 'bi-pie-chart-fill', color: 'text-indigo-500' },
+                { id: ReportType.EarlyWarningSantri, title: 'Early Warning Santri', description: "Deteksi dini santri berisiko.", icon: 'bi-exclamation-triangle-fill', color: 'text-amber-500' },
                 { id: ReportType.FinanceSummary, title: 'Ringkasan Keuangan', description: "Rekap tunggakan & pemasukan.", icon: 'bi-graph-up', color: 'text-green-500' },
+                { id: ReportType.KinerjaPengajar, title: 'Kinerja Pengajar', description: "Rekap jurnal dan aktivitas mengajar.", icon: 'bi-person-workspace', color: 'text-cyan-600' },
                 { id: ReportType.LaporanMutasi, title: 'Laporan Mutasi', description: "Santri masuk, keluar, & lulus.", icon: 'bi-arrow-left-right', color: 'text-orange-500' },
+                { id: ReportType.CohortSantri, title: 'Cohort Santri', description: "Retensi santri per angkatan masuk.", icon: 'bi-diagram-3-fill', color: 'text-violet-600' },
             ]
         },
         {
@@ -41,10 +45,13 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
                 { id: ReportType.JurnalMengajar, title: 'Rekap Jurnal Mengajar', description: "Catatan agenda kelas.", icon: 'bi-journal-text', color: 'text-teal-600' },
                 { id: ReportType.RekapKesehatan, title: 'Rekap Kesehatan', description: "Riwayat keluhan & diagnosis santri.", icon: 'bi-heart-pulse', color: 'text-rose-500' },
                 { id: ReportType.RekapKonseling, title: 'Rekap Konseling BK', description: "Catatan bimbingan & konseling.", icon: 'bi-chat-quote', color: 'text-amber-600' },
+                { id: ReportType.TahfizhProgress, title: 'Perkembangan Tahfizh', description: "Target vs capaian setoran per santri.", icon: 'bi-journal-richtext', color: 'text-emerald-600' },
+                { id: ReportType.KelasAsramaBermasalah, title: 'Kelas/Asrama Bermasalah', description: "Ranking unit dengan risiko tertinggi.", icon: 'bi-thermometer-half', color: 'text-red-500' },
                 { id: ReportType.LembarNilai, title: 'Lembar Nilai (Kosong)', description: "Format kosong pengisian nilai.", icon: 'bi-card-checklist', color: 'text-teal-600' },
                 { id: ReportType.LembarRapor, title: 'Serah Terima Rapor', description: "Lembar pengambilan & pengembalian rapor.", icon: 'bi-journal-check', color: 'text-teal-600' },
                 { id: ReportType.RaporLengkap, title: 'Rapor Lengkap (PDF)', description: "Cetak rapor resmi per santri.", icon: 'bi-file-earmark-pdf-fill', color: 'text-red-600' },
                 { id: ReportType.LembarPembinaan, title: 'Lembar Pembinaan', description: "Catatan prestasi & pelanggaran.", icon: 'bi-file-person', color: 'text-red-500' },
+                { id: ReportType.KepatuhanAdministrasi, title: 'Kepatuhan Administrasi', description: "Cek kelengkapan data inti santri.", icon: 'bi-clipboard2-check-fill', color: 'text-blue-600' },
             ]
         },
         {
@@ -73,6 +80,7 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
                 { id: ReportType.LaporanKontak, title: 'Ekspor Kontak Wali', description: "CSV kontak wali untuk HP.", icon: 'bi-phone', color: 'text-green-600' },
                 { id: ReportType.LaporanKontakStaf, title: 'Daftar Kontak Staf', description: "List kontak pengajar & staf.", icon: 'bi-person-lines-fill', color: 'text-indigo-600' },
                 { id: ReportType.LembarKedatangan, title: 'Ceklis Kedatangan', description: "Absensi kedatangan liburan.", icon: 'bi-calendar2-check', color: 'text-gray-600' },
+                { id: ReportType.EfektivitasPSB, title: 'Efektivitas PSB', description: "Funnel pendaftar dari daftar sampai diterima.", icon: 'bi-funnel-fill', color: 'text-emerald-700' },
             ]
         }
     ], []);

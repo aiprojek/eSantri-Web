@@ -24,18 +24,18 @@ export const PortalBridgePanel: React.FC<PortalBridgePanelProps> = ({
     onSyncToPortal,
 }) => (
     <div className="mt-8 border-t pt-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-800">
             <i className="bi bi-globe2 text-blue-600"></i> Fitur Publik & Portal
         </h3>
 
-        <div className="grid grid-cols-1 gap-4 border p-4 rounded-lg bg-blue-50 border-blue-100">
+        <div className="app-panel-soft grid grid-cols-1 gap-4 rounded-[24px] border-blue-100 p-5 sm:p-6">
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-2">
                         <h4 className="font-bold text-blue-800 text-sm">Portal Wali Santri (Hybrid Bridge)</h4>
                         <button
                             onClick={onOpenPortalSettings}
-                            className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded hover:bg-blue-700 transition-colors"
+                            className="rounded-[12px] bg-blue-600 px-2 py-0.5 text-[10px] text-white transition-colors hover:bg-blue-700"
                         >
                             <i className="bi bi-gear-fill mr-1"></i> Pengaturan Lengkap
                         </button>
@@ -46,7 +46,7 @@ export const PortalBridgePanel: React.FC<PortalBridgePanelProps> = ({
                             ' Karena Anda menggunakan Dropbox/WebDAV, data ringkas akan dijembatani secara aman ke Firebase agar wali bisa mengaksesnya tanpa melihat data internal pondok.'}
                     </p>
                 </div>
-                <label className="inline-flex items-center cursor-pointer">
+                <label className="inline-flex cursor-pointer items-center">
                     <input
                         type="checkbox"
                         checked={isPortalEnabled}
@@ -67,7 +67,7 @@ export const PortalBridgePanel: React.FC<PortalBridgePanelProps> = ({
                             <button
                                 onClick={() => { void onPortalBridgeLogin(); }}
                                 disabled={isFbLoading}
-                                className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium py-2 px-4 rounded-lg text-sm flex items-center justify-center gap-2 mx-auto shadow-sm"
+                                className="app-button-secondary mx-auto px-4 py-2 text-sm"
                             >
                                 <i className="bi bi-google text-red-500"></i>
                                 Login Google (Untuk Portal)
@@ -92,7 +92,7 @@ export const PortalBridgePanel: React.FC<PortalBridgePanelProps> = ({
                                     )}
                                 </button>
                             </div>
-                            <div className="bg-gray-50 p-3 rounded border text-xs text-gray-600">
+                            <div className="rounded-[18px] border bg-gray-50 p-3 text-xs text-gray-600">
                                 <p className="font-semibold mb-1">Data yang disinkronkan ke portal:</p>
                                 <ul className="list-disc pl-4 space-y-0.5">
                                     <li>Profil Ringkas Santri (Nama, NIS, Kelas)</li>

@@ -28,7 +28,18 @@ export const KoperasiSettingsView: React.FC = () => {
     };
 
     const handleAddDiskon = async () => {
-        if (!newDiskon.nama || !newDiskon.nilai) return;
+        if (!newDiskon.nama || !newDiskon.nilai) {
+            showToast('Nama dan nilai diskon wajib diisi.', 'error');
+            return;
+        }
+        if (Number(newDiskon.nilai) <= 0) {
+            showToast('Nilai diskon harus lebih dari 0.', 'error');
+            return;
+        }
+        if (newDiskon.tipe === 'Persen' && Number(newDiskon.nilai) > 100) {
+            showToast('Diskon persen maksimal 100%.', 'error');
+            return;
+        }
         await db.diskon.add({ ...newDiskon, id: Date.now() } as Diskon);
         setNewDiskon({ nama: '', tipe: 'Nominal', nilai: 0, aktif: true });
         showToast('Diskon ditambahkan', 'success');
@@ -105,9 +116,9 @@ export const KoperasiSettingsView: React.FC = () => {
     ];
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full overflow-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 h-full overflow-auto">
             <div className="space-y-6">
-                <div className="bg-white p-6 rounded-lg shadow-md border">
+                <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border">
                     <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">Profil Koperasi</h3>
                     <div className="space-y-4">
                         <div>
@@ -133,12 +144,12 @@ export const KoperasiSettingsView: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow-md border border-orange-200">
+                <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border border-orange-200">
                     <h3 className="font-bold text-orange-800 mb-4 border-b pb-2"><i className="bi bi-tag-fill"></i> Manajemen Diskon</h3>
                     <div className="mb-4 bg-orange-50 p-3 rounded text-sm space-y-2">
                         <input type="text" value={newDiskon.nama} onChange={e => setNewDiskon({...newDiskon, nama: e.target.value})} placeholder="Nama Diskon (Jumat Berkah)" className="w-full border rounded p-1.5" />
-                        <div className="flex gap-2">
-                            <select value={newDiskon.tipe} onChange={e => setNewDiskon({...newDiskon, tipe: e.target.value as any})} className="border rounded p-1.5 w-1/3 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr_auto] gap-2">
+                            <select value={newDiskon.tipe} onChange={e => setNewDiskon({...newDiskon, tipe: e.target.value as any})} className="border rounded p-1.5 text-xs">
                                 <option value="Nominal">Rp</option>
                                 <option value="Persen">%</option>
                             </select>
@@ -166,7 +177,7 @@ export const KoperasiSettingsView: React.FC = () => {
             </div>
 
             <div className="space-y-6">
-                 <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
+                 <div className="bg-white p-4 md:p-6 rounded-lg shadow-md border border-blue-200">
                     <h3 className="font-bold text-blue-800 mb-4 border-b pb-2"><i className="bi bi-printer-fill"></i> Konfigurasi Printer</h3>
                     <div className="space-y-3">
                          <div className="flex items-center justify-between bg-gray-50 p-3 rounded border">
@@ -190,7 +201,7 @@ export const KoperasiSettingsView: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-gray-100 p-6 rounded-lg border shadow-inner flex flex-col items-center">
+                <div className="bg-gray-100 p-4 md:p-6 rounded-lg border shadow-inner flex flex-col items-center">
                     <h3 className="font-bold text-gray-600 mb-4 text-sm">Preview Layout Struk</h3>
                     <div className="shadow-lg transform scale-90 origin-top">
                         <StrukPreview items={dummyItems} settings={config} isPreview={true} />

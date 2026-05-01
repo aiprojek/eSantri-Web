@@ -6,6 +6,9 @@ import { db } from '../db';
 import { formatBytes } from '../utils/formatters';
 import { ConflictResolver } from './sync/ConflictResolver';
 import { loadSyncService } from '../utils/lazyCloudServices';
+import { PageHeader } from './common/PageHeader';
+import { SectionCard } from './common/SectionCard';
+import { EmptyState } from './common/EmptyState';
 
 export const AdminSyncDashboard: React.FC = () => {
     const { settings, showToast, showConfirmation, showAlert, currentUser } = useAppContext();
@@ -170,11 +173,7 @@ export const AdminSyncDashboard: React.FC = () => {
 
     if (!config || config.provider === 'none') {
         return (
-            <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border border-gray-200">
-                <i className="bi bi-cloud-slash text-4xl text-gray-400 mb-2"></i>
-                <p className="text-gray-500">Fitur sinkronisasi cloud belum diaktifkan.</p>
-                <p className="text-xs text-gray-400 mt-1">Silakan atur di menu Pengaturan &gt; Sync Cloud.</p>
-            </div>
+            <EmptyState icon="bi-cloud-slash" title="Sinkronisasi cloud belum aktif" description="Silakan atur provider sinkronisasi pada menu Pengaturan > Sync Cloud." />
         );
     }
 
@@ -209,33 +208,30 @@ export const AdminSyncDashboard: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                        <i className={`bi ${providerIcon}`}></i>
-                        Pusat Sinkronisasi Cloud
-                    </h1>
-                    <div className={`mt-2 inline-flex items-center gap-2 px-2 py-0.5 rounded text-xs border ${providerBg}`}>
-                        <i className="bi bi-link-45deg"></i> Terhubung ke: <strong>{providerLabel}</strong>
-                    </div>
-                    <p className="text-sm text-gray-500 mt-1">Kelola data masuk dari staff dan perbarui data master.</p>
-                </div>
-                <div className="flex gap-2">
-                    <button onClick={fetchFiles} className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 text-sm">
+            <PageHeader
+                eyebrow="Sistem"
+                title="Pusat Sinkronisasi Cloud"
+                description="Kelola data masuk dari staff, gabungkan pembaruan, dan publikasikan master data dari panel sinkronisasi yang lebih rapi."
+                actions={<div className="flex gap-2">
+                    <button onClick={fetchFiles} className="app-button-secondary px-4 py-2.5 text-sm">
                         <i className="bi bi-arrow-repeat"></i> Segarkan
                     </button>
-                    <button onClick={handlePublishMaster} disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-bold shadow-sm flex items-center gap-2">
+                    <button onClick={handlePublishMaster} disabled={isLoading} className="app-button-primary px-4 py-2.5 text-sm">
                         {isLoading ? <span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-cloud-arrow-up-fill"></i>}
                         Publikasikan Master
                     </button>
-                </div>
+                </div>}
+                className={providerBg.includes('orange') ? 'border-orange-200' : 'border-blue-200'}
+            />
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${providerBg}`}>
+                <i className="bi bi-link-45deg"></i> Terhubung ke: <strong>{providerLabel}</strong>
             </div>
 
-            <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b bg-gray-50 flex justify-between items-center">
+            <SectionCard title="Inbox: Update dari Staff" description={`Total file sinkronisasi yang terdeteksi: ${files.length}`} contentClassName="overflow-hidden">
+                <div className="flex items-center justify-between border-b border-app-border bg-gray-50 px-6 py-4">
                     <div>
-                        <h3 className="font-bold text-gray-700">Inbox: Update dari Staff</h3>
-                        <span className="text-xs text-gray-500">Total File: {files.length}</span>
+                        <h3 className="font-bold text-app-text">Inbox: Update dari Staff</h3>
+                        <span className="text-xs app-text-muted">Total File: {files.length}</span>
                     </div>
                     {files.some(f => f.status === 'merged') && (
                         <button onClick={handleDeleteMerged} disabled={isLoading} className="text-red-600 hover:bg-red-50 px-3 py-1.5 rounded text-xs font-bold border border-red-200 flex items-center gap-1 transition-colors">
@@ -243,8 +239,8 @@ export const AdminSyncDashboard: React.FC = () => {
                         </button>
                     )}
                 </div>
-                <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-gray-500 border-b">
+                <table className="app-table w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-500 border-b border-app-border">
                         <tr>
                             <th className="px-6 py-3 font-medium">Nama File</th>
                             <th className="px-6 py-3 font-medium">Ukuran</th>
@@ -286,11 +282,11 @@ export const AdminSyncDashboard: React.FC = () => {
                             </tr>
                         ))}
                         {files.length === 0 && !isLoading && (
-                            <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Tidak ada file update baru dari staff.</td></tr>
+                            <tr><td colSpan={5} className="p-4"><EmptyState icon="bi-cloud-check" title="Inbox sinkron kosong" description="Belum ada file update baru dari staff untuk digabungkan." /></td></tr>
                         )}
                     </tbody>
                 </table>
-            </div>
+            </SectionCard>
             
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
                 <p className="font-bold mb-1">Panduan Resolusi Konflik:</p>

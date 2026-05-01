@@ -1,6 +1,6 @@
 
 export type Page = 
-  | 'Dashboard' | 'Santri' | 'Absensi' | 'Tahfizh' | 'Akademik' | 'Sarpras' 
+  | 'Dashboard' | 'Santri' | 'Absensi' | 'Tahfizh' | 'Akademik' | 'Kurikulum' | 'Rapor' | 'Sarpras' 
   | 'Kalender' | 'Perpustakaan' | 'Kesehatan' | 'BK' | 'BukuTamu' | 'DataMaster' 
   | 'Keuangan' | 'Keasramaan' | 'BukuKas' | 'Koperasi' | 'Surat' | 'PSB' 
   | 'Pengaturan' | 'Laporan' | 'AuditLog' | 'WhatsApp' | 'SyncAdmin' | 'Tentang';
@@ -11,6 +11,8 @@ export const Page = {
   Absensi: 'Absensi',
   Tahfizh: 'Tahfizh',
   Akademik: 'Akademik',
+  Kurikulum: 'Kurikulum',
+  Rapor: 'Rapor',
   Sarpras: 'Sarpras',
   Kalender: 'Kalender',
   Perpustakaan: 'Perpustakaan',
@@ -37,6 +39,7 @@ export type AccessLevel = 'none' | 'read' | 'write';
 export interface UserPermissions {
     santri?: AccessLevel;
     psb?: AccessLevel;
+    whatsapp?: AccessLevel;
     akademik?: AccessLevel;
     absensi?: AccessLevel;
     tahfizh?: AccessLevel;
@@ -71,6 +74,8 @@ export interface User {
     recoveryKeyHash?: string;
     isDefaultAdmin?: boolean;
     lastLogin?: string;
+    permissionVersion?: number;
+    lastModified?: number;
 }
 
 export interface Alamat {
@@ -263,6 +268,9 @@ export interface MataPelajaran {
     modul?: string;
     linkUnduh?: string;
     linkPembelian?: string;
+    modulList?: string[];
+    linkUnduhList?: string[];
+    linkPembelianList?: string[];
     kkm?: number;
 }
 
@@ -352,6 +360,29 @@ export interface BackupConfig {
     lastBackup?: string;
 }
 
+export type AiProvider = 'pollinations' | 'openai' | 'gemini' | 'openrouter';
+
+export interface AiConfig {
+    provider: AiProvider;
+    preferByok: boolean;
+    openaiApiKey?: string;
+    openaiModel?: string;
+    openaiImageModel?: string;
+    geminiApiKey?: string;
+    geminiModel?: string;
+    openrouterApiKey?: string;
+    openrouterModel?: string;
+    openrouterAutoFreeFallback?: boolean;
+    openrouterFreeModelPool?: string[];
+    enablePosterImageGeneration?: boolean;
+    openaiLastTestAt?: string;
+    openaiLastTestOk?: boolean;
+    geminiLastTestAt?: string;
+    geminiLastTestOk?: boolean;
+    openrouterLastTestAt?: string;
+    openrouterLastTestOk?: boolean;
+}
+
 export interface JamPelajaran {
     id: number;
     urutan: number;
@@ -421,6 +452,24 @@ export interface PsbConfig {
     registrationDeadline?: string;
 }
 
+export type AcademicYearCalendarType = 'Masehi' | 'Hijriah';
+
+export interface AcademicYearConfig {
+    id: string;
+    labelMasehi: string;
+    masehiStartMonth: number;
+    masehiStartYear: number;
+    masehiEndMonth: number;
+    masehiEndYear: number;
+    hijriEnabled?: boolean;
+    labelHijriah?: string;
+    hijriStartMonth?: number;
+    hijriStartYear?: number;
+    hijriEndMonth?: number;
+    hijriEndYear?: number;
+    isActive: boolean;
+}
+
 export interface RaporTemplate {
     id: string;
     name: string;
@@ -475,6 +524,13 @@ export interface PortalConfig {
     baseUrl?: string;
 }
 
+export interface WaTemplate {
+    id: string;
+    name: string;
+    content: string;
+    lastModified?: number;
+}
+
 export interface PondokSettings {
     id?: number;
     namaYayasan: string;
@@ -504,8 +560,11 @@ export interface PondokSettings {
     nisSettings: NisSettings;
     cloudSyncConfig: CloudSyncConfig;
     backupConfig: BackupConfig;
+    aiConfig?: AiConfig;
     psbConfig: PsbConfig;
+    academicYears?: AcademicYearConfig[];
     portalConfig?: PortalConfig;
+    waTemplates?: WaTemplate[];
     
     raporTemplates?: RaporTemplate[];
     
@@ -1144,8 +1203,16 @@ export interface PembayaranHutang {
 
 export enum ReportType {
   DashboardSummary = 'DashboardSummary',
+  OperasionalHarian = 'OperasionalHarian',
+  EarlyWarningSantri = 'EarlyWarningSantri',
   FinanceSummary = 'FinanceSummary',
+  KinerjaPengajar = 'KinerjaPengajar',
+  TahfizhProgress = 'TahfizhProgress',
+  KelasAsramaBermasalah = 'KelasAsramaBermasalah',
   LaporanMutasi = 'LaporanMutasi',
+  CohortSantri = 'CohortSantri',
+  KepatuhanAdministrasi = 'KepatuhanAdministrasi',
+  EfektivitasPSB = 'EfektivitasPSB',
   Biodata = 'Biodata',
   DaftarRombel = 'DaftarRombel',
   LembarAbsensi = 'LembarAbsensi',

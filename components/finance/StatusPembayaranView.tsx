@@ -6,9 +6,11 @@ import { useFinanceContext } from '../../contexts/FinanceContext';
 import { Santri, Tagihan } from '../../types';
 import { Pagination } from '../common/Pagination';
 import { GenerateTagihanModal } from './modals/GenerateTagihanModal';
-import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { SantriFilterBar } from '../common/SantriFilterBar';
 import { formatRupiah } from '../../utils/formatters';
 import { sendManualWA, formatWAMessage, WA_TEMPLATES } from '../../services/waService';
+import { SectionCard } from '../common/SectionCard';
+import { EmptyState } from '../common/EmptyState';
 
 interface StatusPembayaranViewProps {
     onBayarClick: (santri: Santri) => void;
@@ -22,22 +24,17 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
     const { santriList } = useSantriContext();
     const { tagihanList } = useFinanceContext();
     const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
-    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     
-    const [filters, setFilters] = useState({ search: '', jenjang: '', kelas: '', rombel: '', statusTunggakan: '' });
+    const [filters, setFilters] = useState({ search: '', jenjang: '', kelas: '', rombel: '', status: '', statusTunggakan: '' });
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
-
-    const availableKelas = useMemo(() => {
-        if (!filters.jenjang) return settings.kelas;
-        return settings.kelas.filter(k => k.jenjangId === parseInt(filters.jenjang));
-      }, [filters.jenjang, settings.kelas]);
-
-    const availableRombel = useMemo(() => {
-        if (!filters.kelas) return settings.rombel.filter(r => availableKelas.map(k => k.id).includes(r.kelasId));
-        return settings.rombel.filter(r => r.kelasId === parseInt(filters.kelas));
-      }, [filters.kelas, settings.rombel, availableKelas]);
+    const btnBase = "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors";
+    const btnWa = `${btnBase} border border-green-200 bg-green-50 text-green-700 hover:bg-green-100`;
+    const btnPrimary = `${btnBase} bg-blue-600 text-white hover:bg-blue-700`;
+    const btnNeutral = `${btnBase} bg-slate-200 text-slate-700 hover:bg-slate-300`;
+    const btnBulkGhost = "flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50";
+    const btnBulkWa = "flex items-center gap-2 rounded-md border border-green-200 bg-green-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-600";
 
     const tunggakanPerSantri = useMemo(() => {
         const result = new Map<number, { total: number; count: number; tagihan: Tagihan[] }>();
@@ -67,11 +64,16 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
             const jenjangMatch = !filters.jenjang || item.santri.jenjangId === parseInt(filters.jenjang);
             const kelasMatch = !filters.kelas || item.santri.kelasId === parseInt(filters.kelas);
             const rombelMatch = !filters.rombel || item.santri.rombelId === parseInt(filters.rombel);
+            const santriStatusMatch = !filters.status || item.santri.status === filters.status;
             const statusMatch = !filters.statusTunggakan || (filters.statusTunggakan === 'menunggak' && item.tunggakan.total > 0) || (filters.statusTunggakan === 'lunas' && item.tunggakan.total === 0);
 
-            return (nameMatch || nisMatch) && jenjangMatch && kelasMatch && rombelMatch && statusMatch;
+            return (nameMatch || nisMatch) && jenjangMatch && kelasMatch && rombelMatch && santriStatusMatch && statusMatch;
         });
     }, [santriList, tunggakanPerSantri, filters]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filters]);
 
     const paginatedData = useMemo(() => {
         return dataTampilan.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -134,112 +136,110 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
     };
     
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-                <h2 className="text-xl font-bold text-gray-700">Status Pembayaran Santri</h2>
-                {canWrite && (
-                    <button onClick={() => setIsGenerateModalOpen(true)} className="w-full md:w-auto px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm flex items-center justify-center gap-2"><i className="bi bi-plus-circle"></i> Generate Tagihan</button>
-                )}
-            </div>
-             {/* Filters UI */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
-                {/* Mobile Filter Trigger */}
-                <div className="md:hidden flex gap-2">
-                    <button 
-                        onClick={() => setIsFilterDrawerOpen(true)}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
-                    >
-                        <i className="bi bi-funnel-fill"></i>
-                        <span>Filter</span>
-                    </button>
-                    <div className="flex-1 relative">
-                        <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                        <input 
-                            type="text" 
-                            placeholder="Cari..." 
-                            value={filters.search} 
-                            onChange={e => setFilters({...filters, search: e.target.value})}
-                            className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold focus:ring-teal-500 focus:border-teal-500"
-                        />
-                    </div>
-                </div>
-
-                {/* Desktop Filters */}
-                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <div className="lg:col-span-1">
-                        <input type="text" placeholder="Cari Nama atau NIS..." value={filters.search} onChange={e => setFilters({...filters, search: e.target.value})} className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:ring-teal-500"/>
-                    </div>
-                    <select value={filters.jenjang} onChange={e => setFilters({...filters, jenjang: e.target.value, kelas: '', rombel: ''})} className="bg-white border rounded-lg p-2 text-sm"><option value="">Semua Jenjang</option>{settings.jenjang.map(j=><option key={j.id} value={j.id}>{j.nama}</option>)}</select>
-                    <select value={filters.kelas} onChange={e => setFilters({...filters, kelas: e.target.value, rombel: ''})} className="bg-white border rounded-lg p-2 text-sm disabled:bg-gray-100" disabled={!filters.jenjang}><option value="">Semua Kelas</option>{availableKelas.map(k=><option key={k.id} value={k.id}>{k.nama}</option>)}</select>
-                    <select value={filters.rombel} onChange={e => setFilters({...filters, rombel: e.target.value})} className="bg-white border rounded-lg p-2 text-sm disabled:bg-gray-100" disabled={!filters.kelas}><option value="">Semua Rombel</option>{availableRombel.map(r=><option key={r.id} value={r.id}>{r.nama}</option>)}</select>
-                    <select value={filters.statusTunggakan} onChange={e => setFilters({...filters, statusTunggakan: e.target.value})} className="bg-white border rounded-lg p-2 text-sm"><option value="">Semua Status</option><option value="menunggak">Menunggak</option><option value="lunas">Lunas</option></select>
-                </div>
-            </div>
-
-            <MobileFilterDrawer 
-                isOpen={isFilterDrawerOpen} 
-                onClose={() => setIsFilterDrawerOpen(false)}
+        <SectionCard
+            title="Status Pembayaran Santri"
+            description="Pantau tunggakan per santri, saring berdasarkan status santri maupun status tagihan, lalu lanjutkan ke pembayaran atau pengingat."
+            actions={canWrite ? (
+                <button onClick={() => setIsGenerateModalOpen(true)} className="app-button-primary w-full px-4 py-2 text-sm md:w-auto"><i className="bi bi-plus-circle"></i> Generate Tagihan</button>
+            ) : undefined}
+            contentClassName="space-y-4 p-5 sm:p-6"
+        >
+            <SantriFilterBar
+                settings={settings}
+                filters={filters}
+                onChange={setFilters}
                 title="Filter Pembayaran"
-            >
-                <div className="space-y-6">
-                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Jenjang</label>
-                            <select value={filters.jenjang} onChange={e => setFilters({...filters, jenjang: e.target.value, kelas: '', rombel: ''})} className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none">
-                                <option value="">Semua Jenjang</option>
-                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Kelas</label>
-                            <select value={filters.kelas} onChange={e => setFilters({...filters, kelas: e.target.value, rombel: ''})} disabled={!filters.jenjang} className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none disabled:opacity-50">
-                                <option value="">Semua Kelas</option>
-                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-                            </select>
-                        </div>
+                searchPlaceholder="Cari Nama atau NIS..."
+                resultCount={dataTampilan.length}
+                showGender={false}
+                extraDesktop={
+                    <div>
+                        <label className="app-label mb-1.5 block pl-1">Status Tunggakan</label>
+                        <select value={filters.statusTunggakan} onChange={e => setFilters({ ...filters, statusTunggakan: e.target.value })} className="app-select w-full p-2.5 text-sm font-semibold">
+                            <option value="">Semua Tunggakan</option>
+                            <option value="menunggak">Menunggak</option>
+                            <option value="lunas">Lunas</option>
+                        </select>
                     </div>
-
-                    <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Status Pembayaran</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {[
-                                    { id: '', label: 'Semua' },
-                                    { id: 'menunggak', label: 'Menunggak' },
-                                    { id: 'lunas', label: 'Lunas' }
-                                ].map(s => (
-                                    <button 
-                                        key={s.id}
-                                        onClick={() => setFilters({...filters, statusTunggakan: s.id})}
-                                        className={`py-3 px-4 rounded-xl text-xs font-black transition-all ${filters.statusTunggakan === s.id ? 'bg-teal-600 text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-100'}`}
-                                    >
-                                        {s.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                }
+                extraMobile={
+                    <div>
+                        <label className="app-label mb-1.5 ml-1 block">Status Tunggakan</label>
+                        <select value={filters.statusTunggakan} onChange={e => setFilters({ ...filters, statusTunggakan: e.target.value })} className="app-select w-full rounded-[20px] p-4 text-base font-semibold">
+                            <option value="">Semua Tunggakan</option>
+                            <option value="menunggak">Menunggak</option>
+                            <option value="lunas">Lunas</option>
+                        </select>
                     </div>
-
-                    <div className="p-6 bg-gray-900 rounded-[2rem] text-center">
-                        <div className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">Hasil Filter</div>
-                        <div className="text-3xl font-black text-white">{dataTampilan.length} <span className="text-sm text-gray-400 font-bold uppercase tracking-widest ml-1">Santri</span></div>
-                    </div>
-                </div>
-            </MobileFilterDrawer>
+                }
+                className="mb-6"
+            />
 
             {selectedSantriIds.length > 0 && (
-                 <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 p-2 my-4 rounded-lg bg-teal-50 border border-teal-200">
+                 <div className="app-toolbar my-4">
                     <div className="text-sm font-semibold text-teal-800">{selectedSantriIds.length} santri dipilih. <button onClick={() => setSelectedSantriIds([])} className="ml-2 text-red-600 hover:underline font-medium">Batalkan</button></div>
                     <div className="flex items-center gap-2">
-                         <button onClick={() => handleBulkAction('print')} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white rounded-md hover:bg-gray-100 border"><i className="bi bi-printer"></i> Cetak Surat Tagihan</button>
-                         {canWrite && <button onClick={() => handleBulkAction('wa')} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 border"><i className="bi bi-whatsapp"></i> Kirim Notifikasi WA</button>}
+                         <button onClick={() => handleBulkAction('print')} className={btnBulkGhost}><i className="bi bi-printer"></i> Cetak Surat Tagihan</button>
+                         {canWrite && <button onClick={() => handleBulkAction('wa')} className={btnBulkWa}><i className="bi bi-whatsapp"></i> Kirim Notifikasi WA</button>}
                     </div>
                 </div>
             )}
             
-            <div className="border rounded-lg overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">
+            <div className="app-table-shell">
+            <div className="md:hidden space-y-3 p-3">
+                {paginatedData.map(({ santri, tunggakan }) => (
+                    <div key={santri.id} className={`rounded-2xl border p-3 ${selectedSantriIds.includes(santri.id) ? 'border-teal-300 bg-teal-50/60' : 'border-slate-200 bg-white'}`}>
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800">{santri.namaLengkap}</p>
+                                <p className="text-xs text-slate-500">{santri.nis}</p>
+                            </div>
+                            <input type="checkbox" checked={selectedSantriIds.includes(santri.id)} onChange={() => handleSelectOne(santri.id)} className="h-4 w-4 text-teal-600"/>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="rounded-lg bg-red-50 p-2">
+                                <p className="text-red-700">Total Tunggakan</p>
+                                <p className="font-semibold text-red-700">{formatRupiah(tunggakan.total)}</p>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 p-2">
+                                <p className="text-slate-500">Jumlah Tagihan</p>
+                                <p className="font-semibold text-slate-700">{tunggakan.count} tagihan</p>
+                            </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                                onClick={() => {
+                                    const phone = santri.teleponWali || santri.teleponAyah || santri.teleponIbu;
+                                    const message = formatWAMessage(WA_TEMPLATES.TAGIHAN, {
+                                        nama_santri: santri.namaLengkap,
+                                        ortu: santri.namaAyah || santri.namaIbu || 'Wali Santri',
+                                        nominal: tunggakan.total.toLocaleString('id-ID'),
+                                        bulan: new Date().toLocaleString('id-ID', { month: 'long' })
+                                    });
+                                    sendManualWA(phone, message);
+                                }}
+                                className={btnWa}
+                                title="Kirim Notif WA"
+                            >
+                                WA
+                            </button>
+                            {canWrite && <button onClick={() => onBayarClick(santri)} className={btnPrimary}>Bayar</button>}
+                            <button onClick={() => onHistoryClick(santri)} className={btnNeutral}>Riwayat</button>
+                        </div>
+                    </div>
+                ))}
+                {dataTampilan.length === 0 && (
+                    <EmptyState
+                        icon="bi-receipt-cutoff"
+                        title="Tidak ada status pembayaran yang cocok"
+                        description="Periksa kombinasi filter santri dan status tunggakan untuk menampilkan daftar yang relevan."
+                        compact
+                    />
+                )}
+            </div>
+            <div className="app-scrollbar hidden overflow-x-auto md:block">
+                <table className="app-table min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="text-left">
                         <tr>
                             <th className="p-3"><input type="checkbox" ref={selectAllCheckboxRef} onChange={handleSelectAllOnPage} className="h-4 w-4 text-teal-600"/></th>
                             <th className="px-4 py-2">Nama Santri</th>
@@ -248,13 +248,13 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                             <th className="px-4 py-2 text-center">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-slate-200 bg-white">
                         {paginatedData.map(({ santri, tunggakan }) => (
-                            <tr key={santri.id} className={selectedSantriIds.includes(santri.id) ? 'bg-teal-50' : ''}>
+                            <tr key={santri.id} className={selectedSantriIds.includes(santri.id) ? 'bg-teal-50/60' : 'hover:bg-teal-50/40'}>
                                 <td className="p-3"><input type="checkbox" checked={selectedSantriIds.includes(santri.id)} onChange={() => handleSelectOne(santri.id)} className="h-4 w-4 text-teal-600"/></td>
-                                <td className="px-4 py-3 whitespace-nowrap"><div className="font-semibold">{santri.namaLengkap}</div><div className="text-xs text-gray-500">{santri.nis}</div></td>
+                                <td className="whitespace-nowrap px-4 py-3"><div className="font-semibold text-slate-800">{santri.namaLengkap}</div><div className="text-xs text-slate-500">{santri.nis}</div></td>
                                 <td className="px-4 py-3 font-semibold text-red-600">{formatRupiah(tunggakan.total)}</td>
-                                <td className="px-4 py-3">{tunggakan.count} tagihan</td>
+                                <td className="px-4 py-3 text-slate-600">{tunggakan.count} tagihan</td>
                                 <td className="px-4 py-3 text-center space-x-2">
                                     <button 
                                         onClick={() => {
@@ -267,26 +267,34 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                                             });
                                             sendManualWA(phone, message);
                                         }}
-                                        className="p-1 px-2.5 bg-green-50 text-green-600 rounded-md text-sm border border-green-200 hover:bg-green-100 transition-colors"
+                                        className={btnWa}
                                         title="Kirim Notif WA"
                                     >
-                                        <i className="bi bi-whatsapp"></i>
+                                        WA
                                     </button>
-                                    {canWrite && <button onClick={() => onBayarClick(santri)} className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700">Bayar</button>}
-                                    <button onClick={() => onHistoryClick(santri)} className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-xs font-semibold hover:bg-gray-300">Riwayat</button>
+                                    {canWrite && <button onClick={() => onBayarClick(santri)} className={btnPrimary}>Bayar</button>}
+                                    <button onClick={() => onHistoryClick(santri)} className={btnNeutral}>Riwayat</button>
                                 </td>
                             </tr>
                         ))}
-                         {dataTampilan.length === 0 && (
+                        {dataTampilan.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="text-center py-10 text-gray-500">Tidak ada data santri yang cocok dengan filter.</td>
+                                <td colSpan={5} className="p-0">
+                                    <EmptyState
+                                        icon="bi-receipt-cutoff"
+                                        title="Tidak ada status pembayaran yang cocok"
+                                        description="Periksa kombinasi filter santri dan status tunggakan untuk menampilkan daftar yang relevan."
+                                        compact
+                                    />
+                                </td>
                             </tr>
                         )}
                     </tbody>
                 </table>
             </div>
+            </div>
              <div className="mt-4"><Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} /></div>
              <GenerateTagihanModal isOpen={isGenerateModalOpen} onClose={() => setIsGenerateModalOpen(false)} />
-        </div>
+        </SectionCard>
     );
 };

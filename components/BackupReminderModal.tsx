@@ -20,10 +20,10 @@ export const BackupReminderModal: React.FC<BackupReminderModalProps> = ({ isOpen
         : 'Sudah waktunya untuk melakukan backup rutin data Anda untuk keamanan.';
 
     return (
-        <div className="fixed top-24 right-5 z-[100] max-w-sm w-full bg-white rounded-lg shadow-2xl border-l-4 border-yellow-500 animate-slide-in-right p-4" role="dialog">
+        <div className="fixed inset-x-4 top-24 z-[100] w-auto max-w-sm rounded-2xl border-l-4 border-yellow-500 bg-white p-4 shadow-2xl animate-slide-in-right md:left-auto md:right-5 md:inset-x-auto md:w-full" role="dialog">
             <div className="flex justify-between items-start">
                 <div className="flex items-start gap-3">
-                    <div className="bg-yellow-100 text-yellow-600 rounded-full p-2 mt-1">
+                    <div className="mt-1 rounded-full bg-yellow-100 p-2 text-yellow-600">
                         <i className="bi bi-hdd-network text-xl"></i>
                     </div>
                     <div>
@@ -38,16 +38,16 @@ export const BackupReminderModal: React.FC<BackupReminderModalProps> = ({ isOpen
                     <i className="bi bi-x-lg"></i>
                 </button>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button 
                     onClick={onClose}
-                    className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 font-medium"
+                    className="w-full px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 sm:w-auto"
                 >
                     Nanti Saja
                 </button>
                 <button 
                     onClick={() => { onBackup(); onClose(); }}
-                    className="px-4 py-1.5 bg-yellow-500 text-white rounded-md text-sm font-medium hover:bg-yellow-600 shadow-sm flex items-center gap-2"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-yellow-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-yellow-600 sm:w-auto"
                 >
                     <i className="bi bi-download"></i> Backup Sekarang
                 </button>

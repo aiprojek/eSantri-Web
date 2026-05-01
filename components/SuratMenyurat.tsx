@@ -4,9 +4,15 @@ import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { SuratTemplate, ArsipSurat, Santri, SuratSignatory, MengetahuiConfig, TempatTanggalConfig, MarginConfig, StampConfig } from '../types';
 import { generatePdf, printToPdfNative } from '../utils/pdfGenerator';
+import { exportToHtml, exportToWord, printPreviewExact } from '../utils/exportUtils';
 import { PrintHeader } from './common/PrintHeader';
 import { SimpleEditor } from './common/SimpleEditor';
 import { generateLetterDraft } from '../services/aiService';
+import { SantriFilterBar } from './common/SantriFilterBar';
+import { PageHeader } from './common/PageHeader';
+import { SectionCard } from './common/SectionCard';
+import { EmptyState } from './common/EmptyState';
+import { HeaderTabs } from './common/HeaderTabs';
 
 // --- Helper Functions ---
 const fileToBase64 = (file: File): Promise<string> =>
@@ -87,21 +93,24 @@ const TemplateModal: React.FC<{
     }
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex justify-center items-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[90vh] flex flex-col">
-                <div className="p-4 border-b flex justify-between items-center">
-                    <h3 className="text-lg font-bold">{initialData ? 'Edit Template' : 'Buat Template Baru'}</h3>
-                    <button onClick={onClose}><i className="bi bi-x-lg"></i></button>
+        <div className="app-overlay fixed inset-0 z-[220] flex items-center justify-center p-4">
+            <div className="app-modal flex h-[90vh] w-full max-w-4xl flex-col rounded-[28px]">
+                <div className="flex items-center justify-between border-b border-app-border px-5 py-4">
+                    <div>
+                        <div className="app-label mb-1">Template Surat</div>
+                        <h3 className="text-lg font-bold text-app-text">{initialData ? 'Edit Template' : 'Buat Template Baru'}</h3>
+                    </div>
+                    <button onClick={onClose} className="app-button-ghost h-10 w-10 rounded-full p-0"><i className="bi bi-x-lg"></i></button>
                 </div>
-                <div className="p-6 overflow-y-auto flex-grow space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="app-scrollbar flex-grow space-y-4 overflow-y-auto p-6">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                            <label className="block text-sm font-medium mb-1">Nama Template</label>
-                            <input type="text" value={nama} onChange={e => setNama(e.target.value)} className="w-full border rounded p-2" placeholder="cth: Surat Izin Pulang" />
+                            <label className="mb-1 block text-sm font-medium app-text-secondary">Nama Template</label>
+                            <input type="text" value={nama} onChange={e => setNama(e.target.value)} className="app-input w-full p-2.5 text-sm" placeholder="cth: Surat Izin Pulang" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-1">Kategori</label>
-                            <select value={kategori} onChange={e => setKategori(e.target.value as any)} className="w-full border rounded p-2">
+                            <label className="mb-1 block text-sm font-medium app-text-secondary">Kategori</label>
+                            <select value={kategori} onChange={e => setKategori(e.target.value as any)} className="app-select w-full p-2.5 text-sm">
                                 <option value="Resmi">Resmi</option>
                                 <option value="Pemberitahuan">Pemberitahuan</option>
                                 <option value="Izin">Izin</option>
@@ -110,30 +119,30 @@ const TemplateModal: React.FC<{
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Judul Surat (Kop)</label>
-                        <input type="text" value={judul} onChange={e => setJudul(e.target.value)} className="w-full border rounded p-2" placeholder="cth: SURAT KETERANGAN" />
+                        <label className="mb-1 block text-sm font-medium app-text-secondary">Judul Surat (Kop)</label>
+                        <input type="text" value={judul} onChange={e => setJudul(e.target.value)} className="app-input w-full p-2.5 text-sm" placeholder="cth: SURAT KETERANGAN" />
                     </div>
                     
-                    <div className="bg-purple-50 p-3 rounded border border-purple-200">
-                        <label className="block text-xs font-bold text-purple-700 mb-1"><i className="bi bi-magic"></i> AI Magic Draft</label>
+                    <div className="app-panel-soft rounded-[24px] border border-teal-100 p-4">
+                        <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-teal-700"><i className="bi bi-magic"></i> AI Magic Draft</label>
                         <div className="flex gap-2">
-                            <input type="text" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} className="flex-grow border rounded p-2 text-sm" placeholder="cth: Buatkan surat undangan pengambilan rapot untuk wali santri..." />
-                            <button onClick={handleAiGenerate} disabled={isGeneratingAi} className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 disabled:opacity-50">
+                            <input type="text" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} className="app-input flex-grow text-sm" placeholder="cth: Buatkan surat undangan pengambilan rapot untuk wali santri..." />
+                            <button onClick={handleAiGenerate} disabled={isGeneratingAi} className="app-button-primary px-4 py-2 text-sm disabled:opacity-50">
                                 {isGeneratingAi ? 'Generating...' : 'Buat Draft'}
                             </button>
                         </div>
                     </div>
 
                     <div className="flex-grow flex flex-col">
-                        <label className="block text-sm font-medium mb-1">Isi Surat</label>
-                        <div className="flex-grow border rounded">
+                        <label className="mb-1 block text-sm font-medium app-text-secondary">Isi Surat</label>
+                        <div className="flex-grow overflow-hidden rounded-[24px] border border-app-border bg-white">
                              <SimpleEditor value={konten} onChange={setKonten} placeholder="Tulis isi surat di sini..." />
                         </div>
                     </div>
                 </div>
-                <div className="p-4 border-t flex justify-end gap-2">
-                    <button onClick={onClose} className="px-4 py-2 border rounded">Batal</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-teal-600 text-white rounded">Simpan</button>
+                <div className="flex justify-end gap-2 border-t border-app-border p-4">
+                    <button onClick={onClose} className="app-button-secondary px-4 py-2.5">Batal</button>
+                    <button onClick={handleSave} className="app-button-primary px-4 py-2.5">Simpan</button>
                 </div>
             </div>
         </div>
@@ -152,19 +161,19 @@ const ArsipViewerModal: React.FC<{
     const tempat = arsip.tempatCetak || settings.alamat.split(',')[1]?.trim() || 'Tempat';
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-[70] flex justify-center items-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col">
-                <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+        <div className="app-overlay fixed inset-0 z-[230] flex items-center justify-center p-4">
+            <div className="app-modal flex h-[90vh] w-full max-w-5xl flex-col rounded-[28px]">
+                <div className="flex items-center justify-between border-b border-app-border bg-white/80 px-5 py-4">
                     <div>
-                        <h3 className="text-lg font-bold text-gray-800">Arsip: {arsip.nomorSurat}</h3>
-                        <p className="text-sm text-gray-500">Tujuan: {arsip.tujuan} | Tgl: {new Date(arsip.tanggalBuat).toLocaleDateString()}</p>
+                        <h3 className="text-lg font-bold text-app-text">Arsip: {arsip.nomorSurat}</h3>
+                        <p className="text-sm app-text-muted">Tujuan: {arsip.tujuan} | Tgl: {new Date(arsip.tanggalBuat).toLocaleDateString()}</p>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={() => printToPdfNative('arsip-preview', `Arsip_${arsip.nomorSurat}`)} className="bg-gray-700 text-white px-3 py-1.5 rounded text-sm"><i className="bi bi-printer"></i> Cetak</button>
-                        <button onClick={onClose} className="text-gray-500 hover:text-gray-700"><i className="bi bi-x-lg text-xl"></i></button>
+                        <button onClick={() => printToPdfNative('arsip-preview', `Arsip_${arsip.nomorSurat}`)} className="app-button-secondary px-3 py-2 text-sm"><i className="bi bi-printer"></i> Cetak</button>
+                        <button onClick={onClose} className="app-button-ghost h-10 w-10 rounded-full p-0"><i className="bi bi-x-lg text-xl"></i></button>
                     </div>
                 </div>
-                <div className="flex-grow overflow-auto bg-gray-200 p-8 flex justify-center">
+                <div className="flex flex-grow justify-center overflow-auto bg-slate-100 p-8">
                     <div id="arsip-preview" className="bg-white shadow-lg p-8" style={{ width: '21cm', minHeight: '29.7cm', padding: '2cm' }}>
                          <PrintHeader settings={settings} title="" />
                          
@@ -231,24 +240,24 @@ const TemplateManager: React.FC<{
         <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {suratTemplates.map(t => (
-                    <div key={t.id} className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
+                    <div key={t.id} className="app-panel rounded-[24px] p-4 transition-all hover:-translate-y-0.5 hover:border-teal-200">
                         <div className="flex justify-between items-start mb-2">
-                            <h4 className="font-bold text-gray-800">{t.nama}</h4>
-                            <span className={`text-xs px-2 py-1 rounded-full ${t.kategori === 'Resmi' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{t.kategori}</span>
+                            <h4 className="font-bold text-app-text">{t.nama}</h4>
+                            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${t.kategori === 'Resmi' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'}`}>{t.kategori}</span>
                         </div>
-                        <p className="text-sm text-gray-500 mb-4 line-clamp-2">{t.judul}</p>
-                        <div className="text-xs text-gray-400 mb-3">
+                        <p className="mb-4 line-clamp-2 text-sm app-text-muted">{t.judul}</p>
+                        <div className="mb-3 text-xs app-text-muted">
                             <i className="bi bi-pen mr-1"></i>{t.signatories?.length || 0} Penanda Tangan
                         </div>
                         {canWrite && (
                             <div className="flex justify-end gap-2">
-                                <button onClick={() => onEdit(t)} className="text-blue-600 hover:bg-blue-50 p-2 rounded-full text-sm" title="Edit Template"><i className="bi bi-pencil-square"></i></button>
-                                <button onClick={() => onDelete(t.id)} className="text-red-600 hover:bg-red-50 p-2 rounded-full text-sm" title="Hapus Template"><i className="bi bi-trash"></i></button>
+                                <button onClick={() => onEdit(t)} className="app-button-ghost h-10 w-10 rounded-full p-0 text-sm text-blue-600 hover:bg-blue-50" title="Edit Template"><i className="bi bi-pencil-square"></i></button>
+                                <button onClick={() => onDelete(t.id)} className="app-button-ghost h-10 w-10 rounded-full p-0 text-sm text-red-600 hover:bg-red-50" title="Hapus Template"><i className="bi bi-trash"></i></button>
                             </div>
                         )}
                     </div>
                 ))}
-                {suratTemplates.length === 0 && <div className="col-span-full text-center p-8 text-gray-500">Belum ada template surat. Buat baru untuk memulai.</div>}
+                {suratTemplates.length === 0 && <div className="col-span-full"><EmptyState icon="bi-envelope-paper" title="Belum ada template surat" description="Buat template pertama untuk memulai proses surat menyurat yang lebih cepat dan konsisten." /></div>}
             </div>
         </div>
     );
@@ -265,6 +274,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     const [filterJenjangId, setFilterJenjangId] = useState<string>('');
     const [filterKelasId, setFilterKelasId] = useState<string>('');
     const [filterRombelId, setFilterRombelId] = useState<string>('');
+    const [filterStatus, setFilterStatus] = useState<string>('Aktif');
 
     // Selection State
     const [selectedSantriId, setSelectedSantriId] = useState<number | ''>(''); // For single mode
@@ -308,26 +318,21 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
     const downloadMenuRef = useRef<HTMLDivElement>(null);
 
+    const parseMarginValue = (value: string, fallback: number) => {
+        const parsed = Number.parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
     // --- Filter Logic ---
-    const availableKelas = useMemo(() => {
-        if (!filterJenjangId) return settings.kelas;
-        return settings.kelas.filter(k => k.jenjangId === parseInt(filterJenjangId));
-    }, [filterJenjangId, settings.kelas]);
-
-    const availableRombel = useMemo(() => {
-        if (!filterKelasId) return settings.rombel.filter(r => availableKelas.map(k => k.id).includes(r.kelasId));
-        return settings.rombel.filter(r => r.kelasId === parseInt(filterKelasId));
-    }, [filterKelasId, settings.rombel, availableKelas]);
-
     const filteredSantris = useMemo(() => {
         return santriList.filter(s => {
-            if (s.status !== 'Aktif') return false;
             if (filterJenjangId && s.jenjangId !== parseInt(filterJenjangId)) return false;
             if (filterKelasId && s.kelasId !== parseInt(filterKelasId)) return false;
             if (filterRombelId && s.rombelId !== parseInt(filterRombelId)) return false;
+            if (filterStatus && s.status !== filterStatus) return false;
             return true;
         }).sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap));
-    }, [santriList, filterJenjangId, filterKelasId, filterRombelId]);
+    }, [santriList, filterJenjangId, filterKelasId, filterRombelId, filterStatus]);
 
     const template = useMemo(() => suratTemplates.find(t => t.id === Number(selectedTemplateId)), [selectedTemplateId, suratTemplates]);
 
@@ -335,7 +340,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     useEffect(() => {
         setBulkSelectedIds([]);
         setSelectedSantriId('');
-    }, [generationMode, filterJenjangId, filterKelasId, filterRombelId]);
+    }, [generationMode, filterJenjangId, filterKelasId, filterRombelId, filterStatus]);
 
     // Handle Select All for Bulk
     const handleBulkToggleAll = () => {
@@ -520,64 +525,38 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     };
 
     const handleDownloadHtml = () => {
-        const previewHtml = contentWrapperRef.current?.innerHTML;
-        if (!previewHtml) {
+        if (!contentWrapperRef.current) {
             showToast("Tidak ada konten pratinjau untuk diunduh.", 'error');
             return;
         }
-
-        let allCss = '';
-        for (const sheet of Array.from(document.styleSheets)) {
-            try {
-                if (sheet.cssRules) {
-                    for (const rule of Array.from(sheet.cssRules)) {
-                        allCss += rule.cssText + '\n';
-                    }
-                }
-            } catch (e) {
-                 // Ignore CORS errors for external sheets
-            }
-        }
-    
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html lang="id">
-            <head>
-              <meta charset="UTF-8">
-              <title>Surat - ${template?.judul || 'eSantri'}</title>
-              <style>
-                 ${allCss}
-                 body { background-color: #e5e7eb; padding: 2rem; display: flex; justify-content: center; }
-                 .printable-content-wrapper { background: white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); margin: 0 auto; }
-                 .page-break-after { page-break-after: always; margin-bottom: 2rem; }
-                 @media print { 
-                    body { background-color: white; padding: 0; }
-                    .page-break-after { margin-bottom: 0; box-shadow: none; }
-                    .printable-content-wrapper { box-shadow: none !important; margin: 0 !important; }
-                    .bg-white.shadow-xl { box-shadow: none !important; }
-                 }
-              </style>
-            </head>
-            <body>
-              ${previewHtml}
-            </body>
-          </html>
-        `;
-    
-        const blob = new Blob([htmlContent], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `Surat_${nomorSurat.replace(/[\/\\:*?"<>|]/g, '-') || 'Draft'}.html`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        const originalTransform = contentWrapperRef.current.style.transform;
+        contentWrapperRef.current.style.transform = 'none';
+        exportToHtml('surat-preview-container', `Surat_${nomorSurat.replace(/[\/\\:*?"<>|]/g, '-') || 'Draft'}`);
+        contentWrapperRef.current.style.transform = originalTransform;
         setIsDownloadMenuOpen(false);
     };
 
-    const handlePrintDirect = () => {
-        window.print();
+    const handleDownloadWord = () => {
+        if (!contentWrapperRef.current) {
+            showToast("Tidak ada konten pratinjau untuk diunduh.", 'error');
+            return;
+        }
+        const originalTransform = contentWrapperRef.current.style.transform;
+        contentWrapperRef.current.style.transform = 'none';
+        exportToWord('surat-preview-container', `Surat_${nomorSurat.replace(/[\/\\:*?"<>|]/g, '-') || 'Draft'}`);
+        contentWrapperRef.current.style.transform = originalTransform;
+        setIsDownloadMenuOpen(false);
+    };
+
+    const handlePrintDirect = async () => {
+        if (!contentWrapperRef.current) return;
+        const originalTransform = contentWrapperRef.current.style.transform;
+        contentWrapperRef.current.style.transform = 'none';
+        try {
+            await printPreviewExact('surat-preview-container', `Surat_${nomorSurat.replace(/[\/\\:*?"<>|]/g, '-') || 'Draft'}`);
+        } finally {
+            contentWrapperRef.current.style.transform = originalTransform;
+        }
     };
 
     const handleSaveArchive = async () => {
@@ -624,7 +603,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-180px)]">
+        <div className="grid h-auto grid-cols-1 gap-6 lg:h-[calc(100vh-180px)] lg:grid-cols-3">
             <style>{`
                 /* SimpleEditor Output Styles for Consistency */
                 .printable-content-wrapper ul { list-style-type: disc; padding-left: 1.5em; }
@@ -639,28 +618,27 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important; 
                 }
             `}</style>
-            <div className="bg-white p-6 rounded-lg shadow-md space-y-4 overflow-y-auto no-print">
-                <h3 className="font-bold text-gray-700">1. Konfigurasi Surat</h3>
+            <SectionCard title="1. Konfigurasi Surat" description="Pilih template, atur target surat, lalu sesuaikan isi dan tata letaknya." className="no-print overflow-hidden" contentClassName="app-scrollbar space-y-4 overflow-y-auto p-6">
                 <div>
-                    <label className="block mb-1 text-sm font-medium text-gray-700">Pilih Template</label>
-                    <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(Number(e.target.value))} className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5">
+                    <label className="mb-1 block text-sm font-medium app-text-secondary">Pilih Template</label>
+                    <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value ? Number(e.target.value) : '')} className="app-select w-full p-2.5 text-sm">
                         <option value="">-- Pilih Template --</option>
                         {suratTemplates.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                     </select>
                 </div>
                 {template && (
                     <>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Nomor Surat</label>
-                                <input type="text" value={nomorSurat} onChange={e => setNomorSurat(e.target.value)} placeholder="No: ..." className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5" />
+                                <label className="mb-1 block text-sm font-medium app-text-secondary">Nomor Surat</label>
+                                <input type="text" value={nomorSurat} onChange={e => setNomorSurat(e.target.value)} placeholder="No: ..." className="app-input w-full p-2.5 text-sm" />
                             </div>
                             <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Mode Surat</label>
+                                <label className="mb-1 block text-sm font-medium app-text-secondary">Mode Surat</label>
                                 <select 
                                     value={generationMode} 
                                     onChange={(e) => setGenerationMode(e.target.value as 'single' | 'bulk')} 
-                                    className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5"
+                                    className="app-select w-full p-2.5 text-sm"
                                 >
                                     <option value="single">Perorangan</option>
                                     <option value="bulk">Mail Merge (Massal)</option>
@@ -668,27 +646,29 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                             </div>
                         </div>
                         
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                        <div className="app-panel-soft space-y-3 rounded-[24px] p-4">
                             <h4 className="text-xs font-bold text-gray-500 uppercase">Filter Data Santri</h4>
-                             <div className="grid grid-cols-2 gap-2">
-                                <select value={filterJenjangId} onChange={e => { setFilterJenjangId(e.target.value); setFilterKelasId(''); setFilterRombelId(''); }} className="bg-white border border-gray-300 text-xs rounded-lg w-full p-2">
-                                    <option value="">Semua Jenjang</option>
-                                    {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
-                                </select>
-                                <select value={filterKelasId} onChange={e => { setFilterKelasId(e.target.value); setFilterRombelId(''); }} disabled={!filterJenjangId} className="bg-white border border-gray-300 text-xs rounded-lg w-full p-2 disabled:bg-gray-100">
-                                    <option value="">Semua Kelas</option>
-                                    {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-                                </select>
-                             </div>
-                             <select value={filterRombelId} onChange={e => setFilterRombelId(e.target.value)} disabled={!filterKelasId} className="bg-white border border-gray-300 text-xs rounded-lg w-full p-2 disabled:bg-gray-100">
-                                <option value="">Semua Rombel</option>
-                                {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-                            </select>
+                            <SantriFilterBar
+                                settings={settings}
+                                filters={{ search: '', jenjang: filterJenjangId, kelas: filterKelasId, rombel: filterRombelId, status: filterStatus }}
+                                onChange={(next) => {
+                                    setFilterJenjangId(next.jenjang || '');
+                                    setFilterKelasId(next.kelas || '');
+                                    setFilterRombelId(next.rombel || '');
+                                    setFilterStatus(next.status || '');
+                                }}
+                                title="Filter Surat"
+                                resultCount={filteredSantris.length}
+                                showSearch={false}
+                                showGender={false}
+                                mobileDrawer={true}
+                                className="bg-transparent border-0 shadow-none p-0"
+                            />
 
                             {generationMode === 'single' ? (
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Pilih Santri</label>
-                                    <select value={selectedSantriId} onChange={e => setSelectedSantriId(e.target.value ? Number(e.target.value) : '')} className="bg-white border border-gray-300 text-sm rounded-lg w-full p-2.5">
+                                    <select value={selectedSantriId} onChange={e => setSelectedSantriId(e.target.value ? Number(e.target.value) : '')} className="app-select w-full p-2.5 text-sm">
                                         <option value="">(Umum / Tanpa Nama)</option>
                                         {filteredSantris.map(s => <option key={s.id} value={s.id}>{s.namaLengkap}</option>)}
                                     </select>
@@ -701,7 +681,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                                             {bulkSelectedIds.length === filteredSantris.length ? 'Hapus Semua' : 'Pilih Semua'}
                                         </button>
                                     </div>
-                                    <div className="max-h-32 overflow-y-auto border rounded-lg bg-white p-2 space-y-1">
+                                    <div className="max-h-32 space-y-1 overflow-y-auto rounded-[20px] border border-app-border bg-white p-3">
                                         {filteredSantris.length > 0 ? filteredSantris.map(s => (
                                             <div key={s.id} className="flex items-center">
                                                 <input id={`bulk-santri-${s.id}`} type="checkbox" checked={bulkSelectedIds.includes(s.id)} onChange={() => handleBulkSelectOne(s.id)} className="w-4 h-4 text-teal-600 rounded border-gray-300 focus:ring-teal-500" />
@@ -713,14 +693,14 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                             )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Tempat Surat</label>
-                                <input type="text" value={tempatSurat} onChange={e => setTempatSurat(e.target.value)} className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5" />
+                                <label className="mb-1 block text-sm font-medium app-text-secondary">Tempat Surat</label>
+                                <input type="text" value={tempatSurat} onChange={e => setTempatSurat(e.target.value)} className="app-input w-full p-2.5 text-sm" />
                             </div>
                             <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Surat</label>
-                                <input type="date" value={tanggalSurat} onChange={e => setTanggalSurat(e.target.value)} className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5" />
+                                <label className="mb-1 block text-sm font-medium app-text-secondary">Tanggal Surat</label>
+                                <input type="date" value={tanggalSurat} onChange={e => setTanggalSurat(e.target.value)} className="app-input w-full p-2.5 text-sm" />
                             </div>
                         </div>
 
@@ -731,11 +711,11 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
 
                         <div className="border-t pt-4 mt-2">
                              <h4 className="text-sm font-bold text-gray-700 mb-2">Pengaturan Margin (cm)</h4>
-                             <div className="grid grid-cols-4 gap-2">
-                                <div><label className="block text-xs text-center mb-1">Atas</label><input type="number" value={marginConfig.top} onChange={e => setMarginConfig({...marginConfig, top: parseFloat(e.target.value)})} step="0.1" className="w-full border p-1 text-sm rounded text-center"/></div>
-                                <div><label className="block text-xs text-center mb-1">Kanan</label><input type="number" value={marginConfig.right} onChange={e => setMarginConfig({...marginConfig, right: parseFloat(e.target.value)})} step="0.1" className="w-full border p-1 text-sm rounded text-center"/></div>
-                                <div><label className="block text-xs text-center mb-1">Bawah</label><input type="number" value={marginConfig.bottom} onChange={e => setMarginConfig({...marginConfig, bottom: parseFloat(e.target.value)})} step="0.1" className="w-full border p-1 text-sm rounded text-center"/></div>
-                                <div><label className="block text-xs text-center mb-1">Kiri</label><input type="number" value={marginConfig.left} onChange={e => setMarginConfig({...marginConfig, left: parseFloat(e.target.value)})} step="0.1" className="w-full border p-1 text-sm rounded text-center"/></div>
+                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                <div><label className="block text-xs text-center mb-1">Atas</label><input type="number" value={marginConfig.top} onChange={e => setMarginConfig({...marginConfig, top: parseMarginValue(e.target.value, marginConfig.top)})} step="0.1" className="w-full border p-1 text-sm rounded text-center"/></div>
+                                <div><label className="block text-xs text-center mb-1">Kanan</label><input type="number" value={marginConfig.right} onChange={e => setMarginConfig({...marginConfig, right: parseMarginValue(e.target.value, marginConfig.right)})} step="0.1" className="w-full border p-1 text-sm rounded text-center"/></div>
+                                <div><label className="block text-xs text-center mb-1">Bawah</label><input type="number" value={marginConfig.bottom} onChange={e => setMarginConfig({...marginConfig, bottom: parseMarginValue(e.target.value, marginConfig.bottom)})} step="0.1" className="w-full border p-1 text-sm rounded text-center"/></div>
+                                <div><label className="block text-xs text-center mb-1">Kiri</label><input type="number" value={marginConfig.left} onChange={e => setMarginConfig({...marginConfig, left: parseMarginValue(e.target.value, marginConfig.left)})} step="0.1" className="w-full border p-1 text-sm rounded text-center"/></div>
                              </div>
                         </div>
 
@@ -749,7 +729,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                             </div>
                              {tempatTanggalConfig.show && (
                                 <div className="bg-gray-50 p-3 rounded border space-y-2">
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                         <div>
                                             <label className="block text-xs font-medium">Posisi</label>
                                             <select value={tempatTanggalConfig.position} onChange={e => setTempatTanggalConfig({...tempatTanggalConfig, position: e.target.value as any})} className="w-full border p-1 text-sm rounded">
@@ -782,7 +762,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                             </div>
                             {mengetahui.show && (
                                 <div className="bg-gray-50 p-3 rounded border space-y-2">
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                         <div><label className="block text-xs font-medium">Jabatan/Label</label><input type="text" value={mengetahui.jabatan} onChange={e => setMengetahui({...mengetahui, jabatan: e.target.value})} className="w-full border p-1 text-sm rounded" /></div>
                                         <div><label className="block text-xs font-medium">Perataan</label><select value={mengetahui.align} onChange={e => setMengetahui({...mengetahui, align: e.target.value as any})} className="w-full border p-1 text-sm rounded"><option value="left">Kiri</option><option value="center">Tengah</option><option value="right">Kanan</option></select></div>
                                     </div>
@@ -815,39 +795,42 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                         </div>
 
                         <div className="flex gap-2 pt-2">
-                            <button onClick={() => setPreviewMode(true)} className={`flex-1 py-2 rounded-lg font-medium transition-colors ${previewMode ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                            <button onClick={() => setPreviewMode(true)} className={`${previewMode ? 'app-button-primary' : 'app-button-secondary'} flex-1 py-2`}>
                                 <i className="bi bi-eye"></i> Lihat Preview
                             </button>
                         </div>
                     </>
                 )}
-            </div>
+            </SectionCard>
 
-            <div className="lg:col-span-2 bg-gray-200 rounded-lg shadow-inner flex flex-col relative overflow-hidden" ref={previewContainerRef}>
+            <div className="app-panel-soft relative flex flex-col overflow-hidden rounded-panel lg:col-span-2" ref={previewContainerRef}>
                 {previewMode && template ? (
                     <>
                         <div className="absolute top-4 right-4 z-20 flex gap-2 no-print">
-                            {canWrite && <button onClick={handleSaveArchive} disabled={isSaving} className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 shadow-md flex items-center gap-2">
+                            {canWrite && <button onClick={handleSaveArchive} disabled={isSaving} className="app-button-primary px-3 py-2 text-sm">
                                 {isSaving ? <span className="animate-spin h-4 w-4 border-b-2 border-white rounded-full"></span> : <i className="bi bi-archive"></i>} Arsip
                             </button>}
                             
-                            <button onClick={handlePrintDirect} className="bg-gray-700 text-white px-3 py-2 rounded-lg text-sm hover:bg-gray-800 shadow-md flex items-center gap-2">
+                            <button onClick={handlePrintDirect} className="app-button-secondary px-3 py-2 text-sm">
                                 <i className="bi bi-printer"></i> Cetak
                             </button>
 
                             {/* Download Dropdown */}
                             <div className="relative" ref={downloadMenuRef}>
-                                <button onClick={() => setIsDownloadMenuOpen(!isDownloadMenuOpen)} className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 shadow-md flex items-center gap-2">
+                                <button onClick={() => setIsDownloadMenuOpen(!isDownloadMenuOpen)} className="app-button-secondary px-3 py-2 text-sm">
                                     <i className="bi bi-download"></i> Unduh <i className="bi bi-chevron-down text-xs"></i>
                                 </button>
                                 {isDownloadMenuOpen && (
-                                    <div className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                                    <div className="app-panel absolute right-0 z-50 mt-2 w-40 rounded-2xl">
                                         <div className="py-1">
-                                            <button onClick={handleDownloadPdf} className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            <button onClick={handleDownloadPdf} className="flex w-full items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                                                 <i className="bi bi-file-pdf text-red-600 mr-2"></i> Format PDF
                                             </button>
-                                            <button onClick={handleDownloadHtml} className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            <button onClick={handleDownloadHtml} className="flex w-full items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                                                 <i className="bi bi-filetype-html text-green-600 mr-2"></i> Format HTML
+                                            </button>
+                                            <button onClick={handleDownloadWord} className="flex w-full items-center px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                                                <i className="bi bi-file-earmark-word text-blue-600 mr-2"></i> Format Word
                                             </button>
                                         </div>
                                     </div>
@@ -990,10 +973,8 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                         </div>
                     </>
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                        <i className="bi bi-file-earmark-text text-6xl mb-4 opacity-50"></i>
-                        <p className="text-lg font-medium">Pratinjau Surat</p>
-                        <p className="text-sm">Pilih template dan klik "Lihat Preview" untuk menampilkan hasil.</p>
+                    <div className="flex h-full items-center justify-center p-6">
+                        <EmptyState icon="bi-file-earmark-text" title="Pratinjau surat belum tampil" description='Pilih template lalu tekan "Lihat Preview" untuk menampilkan hasil surat.' />
                     </div>
                 )}
             </div>
@@ -1007,6 +988,11 @@ const SuratMenyurat: React.FC = () => {
     
     // Permission Check
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.surat === 'write';
+    const suratTabs = [
+        { value: 'templates', label: 'Manajemen Template' },
+        { value: 'buat', label: 'Buat Surat Baru' },
+        { value: 'arsip', label: 'Arsip Surat' },
+    ] as const;
 
     // State for Modals
     const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -1049,41 +1035,68 @@ const SuratMenyurat: React.FC = () => {
     };
 
     return (
-        <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Surat Menyurat</h1>
-            
-            <div className="mb-6 border-b border-gray-200">
-                <nav className="flex -mb-px overflow-x-auto gap-4">
-                    <button onClick={() => setActiveTab('templates')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'templates' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Manajemen Template</button>
-                    <button onClick={() => setActiveTab('buat')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'buat' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Buat Surat Baru</button>
-                    <button onClick={() => setActiveTab('arsip')} className={`py-3 px-4 font-medium text-sm border-b-2 ${activeTab === 'arsip' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Arsip Surat</button>
-                </nav>
-            </div>
+        <div className="space-y-6">
+            <PageHeader
+                eyebrow="Surat"
+                title="Surat Menyurat"
+                description="Kelola template, buat surat baru, dan telusuri arsip surat keluar dengan tampilan kerja yang lebih konsisten."
+                tabs={
+                    <HeaderTabs
+                        tabs={suratTabs as unknown as { value: string; label: string }[]}
+                        value={activeTab}
+                        onChange={(value) => setActiveTab(value as 'templates' | 'buat' | 'arsip')}
+                    />
+                }
+            />
 
             {activeTab === 'templates' && (
-                <div>
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold text-gray-700">Daftar Template Surat</h3>
+                <SectionCard
+                    title="Daftar Template Surat"
+                    description="Template membantu proses surat menyurat lebih cepat, konsisten, dan siap dipakai ulang."
+                    contentClassName="p-6"
+                    actions={canWrite ? (
+                        <button onClick={() => { setEditingTemplate(undefined); setIsTemplateModalOpen(true); }} className="app-button-primary px-4 py-2.5 text-sm">
+                            <i className="bi bi-plus-lg"></i> Buat Template
+                        </button>
+                    ) : undefined}
+                >
+                    <div>
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="font-bold text-app-text">Template Aktif</h3>
+                        </div>
                         {canWrite && (
-                            <button onClick={() => { setEditingTemplate(undefined); setIsTemplateModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded text-sm hover:bg-teal-700 flex items-center gap-2">
-                                <i className="bi bi-plus-lg"></i> Buat Template
-                            </button>
+                            <></>
                         )}
                     </div>
                     <TemplateManager onEdit={(t) => { setEditingTemplate(t); setIsTemplateModalOpen(true); }} onDelete={handleDeleteTemplate} canWrite={canWrite} />
-                </div>
+                </SectionCard>
             )}
 
             {activeTab === 'buat' && <SuratGenerator canWrite={canWrite} />}
 
             {activeTab === 'arsip' && (
-                <div className="bg-white p-6 rounded-lg shadow-md">
+                <SectionCard title="Arsip Surat Keluar" description="Telusuri riwayat surat yang pernah dibuat, dicetak, dan diarsipkan." contentClassName="p-6">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold text-gray-700">Arsip Surat Keluar</h3>
+                        <h3 className="font-bold text-app-text">Arsip Surat Keluar</h3>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50 border-b">
+                    <div className="space-y-3 md:hidden">
+                        {[...arsipSuratList].sort((a,b) => new Date(b.tanggalBuat).getTime() - new Date(a.tanggalBuat).getTime()).map((arsip) => (
+                            <div key={arsip.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="mb-1 text-xs text-slate-500">{new Date(arsip.tanggalBuat).toLocaleDateString('id-ID')}</div>
+                                <div className="font-mono text-[11px] text-slate-700">{arsip.nomorSurat}</div>
+                                <div className="mt-1 text-sm font-semibold text-slate-800">{arsip.perihal}</div>
+                                <div className="mt-1 text-xs text-slate-500">Tujuan: {arsip.tujuan}</div>
+                                <div className="mt-3 flex items-center justify-end gap-2">
+                                    <button onClick={() => { setViewingArsip(arsip); setIsArsipModalOpen(true); }} className="app-button-ghost h-9 w-9 rounded-full p-0 text-blue-600" title="Lihat"><i className="bi bi-eye"></i></button>
+                                    {canWrite && <button onClick={() => handleDeleteArsip(arsip.id)} className="app-button-ghost h-9 w-9 rounded-full p-0 text-red-600" title="Hapus"><i className="bi bi-trash"></i></button>}
+                                </div>
+                            </div>
+                        ))}
+                        {arsipSuratList.length === 0 && <EmptyState icon="bi-archive" title="Belum ada arsip surat" description="Arsip surat akan tampil di sini setelah surat berhasil dibuat dan disimpan." />}
+                    </div>
+                    <div className="hidden md:block app-table-shell overflow-x-auto">
+                        <table className="app-table text-left text-sm">
+                            <thead className="border-b border-app-border">
                                 <tr>
                                     <th className="p-3">Tanggal</th>
                                     <th className="p-3">Nomor Surat</th>
@@ -1092,24 +1105,24 @@ const SuratMenyurat: React.FC = () => {
                                     <th className="p-3 text-center">Aksi</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y">
+                            <tbody className="divide-y divide-app-border">
                                 {[...arsipSuratList].sort((a,b) => new Date(b.tanggalBuat).getTime() - new Date(a.tanggalBuat).getTime()).map(arsip => (
-                                    <tr key={arsip.id} className="hover:bg-gray-50">
+                                    <tr key={arsip.id} className="hover:bg-teal-50/40">
                                         <td className="p-3 whitespace-nowrap">{new Date(arsip.tanggalBuat).toLocaleDateString('id-ID')}</td>
                                         <td className="p-3 font-mono text-xs">{arsip.nomorSurat}</td>
                                         <td className="p-3 font-medium">{arsip.perihal}</td>
                                         <td className="p-3">{arsip.tujuan}</td>
                                         <td className="p-3 text-center flex justify-center gap-2">
-                                            <button onClick={() => { setViewingArsip(arsip); setIsArsipModalOpen(true); }} className="text-blue-600 hover:text-blue-800" title="Lihat"><i className="bi bi-eye"></i></button>
-                                            {canWrite && <button onClick={() => handleDeleteArsip(arsip.id)} className="text-red-600 hover:text-red-800" title="Hapus"><i className="bi bi-trash"></i></button>}
+                                            <button onClick={() => { setViewingArsip(arsip); setIsArsipModalOpen(true); }} className="app-button-ghost h-9 w-9 rounded-full p-0 text-blue-600" title="Lihat"><i className="bi bi-eye"></i></button>
+                                            {canWrite && <button onClick={() => handleDeleteArsip(arsip.id)} className="app-button-ghost h-9 w-9 rounded-full p-0 text-red-600" title="Hapus"><i className="bi bi-trash"></i></button>}
                                         </td>
                                     </tr>
                                 ))}
-                                {arsipSuratList.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-gray-500">Belum ada arsip surat.</td></tr>}
+                                {arsipSuratList.length === 0 && <tr><td colSpan={5} className="p-4"><EmptyState icon="bi-archive" title="Belum ada arsip surat" description="Arsip surat akan tampil di sini setelah surat berhasil dibuat dan disimpan." /></td></tr>}
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </SectionCard>
             )}
 
             <TemplateModal 

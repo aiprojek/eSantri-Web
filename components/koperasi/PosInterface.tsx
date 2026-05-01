@@ -267,7 +267,7 @@ export const PosInterface: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] gap-4">
+        <div className="flex h-full min-h-0 flex-col gap-4">
             {/* Mobile Tabs */}
             <div className="lg:hidden flex bg-white rounded-lg shadow-sm border p-1 shrink-0 mb-1">
                 <button onClick={() => setMobilePosTab('products')} className={`flex-1 py-2 text-sm font-medium rounded-md ${mobilePosTab === 'products' ? 'bg-teal-100 text-teal-700' : 'text-gray-500'}`}>Katalog</button>

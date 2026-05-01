@@ -20,6 +20,14 @@ export const KoperasiFinance: React.FC = () => {
 
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+    const currentYear = new Date().getFullYear();
+
+    const filteredFinanceRecords = useMemo(() => {
+        return financeRecords.filter(f => {
+            const d = new Date(f.tanggal);
+            return d.getMonth() + 1 === filterMonth && d.getFullYear() === filterYear;
+        });
+    }, [financeRecords, filterMonth, filterYear]);
 
     // --- Statistics Logic ---
     const stats = useMemo(() => {
@@ -122,24 +130,35 @@ export const KoperasiFinance: React.FC = () => {
 
     const watchJenis = watch('jenis', 'Pengeluaran');
 
+    const resetToCurrentPeriod = () => {
+        setFilterMonth(new Date().getMonth() + 1);
+        setFilterYear(new Date().getFullYear());
+    };
+
     return (
-        <div className="space-y-6 h-full flex flex-col">
+        <div className="space-y-4 md:space-y-6 h-full flex flex-col">
             {/* Header & Filter */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-lg shadow-sm border">
+            <div className="flex flex-col gap-3 bg-white p-4 rounded-lg shadow-sm border">
                 <div>
                     <h3 className="font-bold text-gray-800">Laporan Laba & Rugi</h3>
                     <p className="text-xs text-gray-500">Periode: {new Date(filterYear, filterMonth - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
                 </div>
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                    <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    <div className="col-span-2 grid grid-cols-2 gap-2">
                         <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="border rounded p-2 text-sm bg-white">
                             {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleDateString('id-ID', {month:'long'})}</option>)}
                         </select>
                         <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="border rounded p-2 text-sm bg-white">
-                            {Array.from({length: 5}, (_, i) => <option key={i} value={new Date().getFullYear() - 2 + i}>{new Date().getFullYear() - 2 + i}</option>)}
+                            {Array.from({length: 7}, (_, i) => <option key={i} value={currentYear - 3 + i}>{currentYear - 3 + i}</option>)}
                         </select>
                     </div>
-                    <button onClick={() => { reset({ tanggal: new Date().toISOString().split('T')[0], jenis: 'Pengeluaran', jumlah: 0, deskripsi: '', kategori: '' }); setIsModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-teal-700 flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <button onClick={resetToCurrentPeriod} className="border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded text-sm font-semibold hover:bg-gray-50">
+                        Periode Kini
+                    </button>
+                    <button onClick={() => { setFilterMonth(1); setFilterYear(currentYear); }} className="border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded text-sm font-semibold hover:bg-gray-50">
+                        Jan - Des
+                    </button>
+                    <button onClick={() => { reset({ tanggal: new Date().toISOString().split('T')[0], jenis: 'Pengeluaran', jumlah: 0, deskripsi: '', kategori: '' }); setIsModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-teal-700 flex items-center gap-2 justify-center">
                         <i className="bi bi-plus-circle"></i> Catat Transaksi
                     </button>
                 </div>
@@ -177,7 +196,7 @@ export const KoperasiFinance: React.FC = () => {
                         <span>Riwayat Pemasukan & Pengeluaran Operasional</span>
                     </div>
                     <div className="overflow-auto flex-grow">
-                        <table className="w-full text-sm text-left">
+                        <table className="hidden md:table w-full text-sm text-left">
                             <thead className="bg-white text-gray-600 border-b sticky top-0 z-10">
                                 <tr>
                                     <th className="p-3">Tanggal</th>
@@ -188,10 +207,7 @@ export const KoperasiFinance: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {financeRecords.filter(f => {
-                                    const d = new Date(f.tanggal);
-                                    return d.getMonth() + 1 === filterMonth && d.getFullYear() === filterYear;
-                                }).map(item => (
+                                {filteredFinanceRecords.map(item => (
                                     <tr key={item.id} className="hover:bg-gray-50">
                                         <td className="p-3 whitespace-nowrap text-gray-500">{formatDateTime(item.tanggal)}</td>
                                         <td className="p-3">
@@ -208,9 +224,35 @@ export const KoperasiFinance: React.FC = () => {
                                         </td>
                                     </tr>
                                 ))}
-                                {financeRecords.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-gray-400">Belum ada data keuangan operasional.</td></tr>}
+                                {filteredFinanceRecords.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-gray-400">Belum ada data keuangan operasional pada periode ini.</td></tr>}
                             </tbody>
                         </table>
+                        <div className="md:hidden p-3 space-y-3">
+                            {filteredFinanceRecords.map(item => (
+                                <div key={item.id} className="border rounded-lg p-3 bg-white">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="text-xs text-gray-500">{formatDateTime(item.tanggal)}</div>
+                                        <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700">
+                                            <i className="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                    <div className="mt-2">
+                                        <span className={`px-2 py-0.5 rounded text-[11px] border ${item.jenis === 'Pemasukan' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                            {item.kategori}
+                                        </span>
+                                    </div>
+                                    <div className="mt-2 text-sm text-gray-700">{item.deskripsi}</div>
+                                    <div className={`mt-2 text-sm font-bold ${item.jenis === 'Pemasukan' ? 'text-green-600' : 'text-red-600'}`}>
+                                        {item.jenis === 'Pemasukan' ? '+' : '-'} {formatRupiah(item.jumlah)}
+                                    </div>
+                                </div>
+                            ))}
+                            {filteredFinanceRecords.length === 0 && (
+                                <div className="p-6 text-center text-sm text-gray-400 border rounded-lg">
+                                    Belum ada data keuangan operasional pada periode ini.
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -218,7 +260,7 @@ export const KoperasiFinance: React.FC = () => {
                 <div className="bg-white rounded-lg shadow border flex flex-col overflow-hidden">
                     <div className="p-3 bg-blue-50 border-b font-bold text-blue-800 text-sm">Analisis Laba per Produk</div>
                     <div className="overflow-auto flex-grow">
-                        <table className="w-full text-xs text-left">
+                        <table className="hidden md:table w-full text-xs text-left">
                             <thead className="bg-white text-gray-600 border-b sticky top-0 z-10">
                                 <tr>
                                     <th className="p-2">Produk</th>
@@ -237,6 +279,18 @@ export const KoperasiFinance: React.FC = () => {
                                 {stats.profitPerProduct.length === 0 && <tr><td colSpan={3} className="p-4 text-center text-gray-400">Tidak ada data penjualan.</td></tr>}
                             </tbody>
                         </table>
+                        <div className="md:hidden p-3 space-y-2">
+                            {stats.profitPerProduct.map(p => (
+                                <div key={p.id} className="border rounded-lg p-3 bg-white">
+                                    <div className="text-sm font-medium text-gray-800">{p.nama}</div>
+                                    <div className="mt-1 text-xs text-gray-500">Terjual: {p.qty}</div>
+                                    <div className="mt-1 text-sm font-bold text-blue-600">{formatRupiah(p.profit)}</div>
+                                </div>
+                            ))}
+                            {stats.profitPerProduct.length === 0 && (
+                                <div className="p-4 text-center text-sm text-gray-400 border rounded-lg">Tidak ada data penjualan.</div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

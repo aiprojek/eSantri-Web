@@ -3,6 +3,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { GedungAsrama, Kamar, Santri, TenagaPengajar } from '../types';
+import { SantriFilterBar } from './common/SantriFilterBar';
+import { PageHeader } from './common/PageHeader';
+import { HeaderTabs } from './common/HeaderTabs';
 
 // --- Modals for CRUD ---
 
@@ -39,7 +42,7 @@ const GedungModal: React.FC<GedungModalProps> = ({ isOpen, onClose, onSave, gedu
                     <div><label className="block mb-1 text-sm font-medium text-gray-700">Nama Gedung</label><input type="text" value={gedung.nama} onChange={e => setGedung(g => ({...g, nama: e.target.value}))} autoFocus className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                     <div><label className="block mb-1 text-sm font-medium text-gray-700">Jenis</label><select value={gedung.jenis} onChange={e => setGedung(g => ({...g, jenis: e.target.value as any}))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="Putra">Putra</option><option value="Putri">Putri</option></select></div>
                 </div>
-                <div className="p-4 border-t flex justify-end space-x-2"><button onClick={onClose} className="text-gray-500 bg-white hover:bg-gray-100 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5">Batal</button><button onClick={handleSave} className="text-white bg-teal-700 hover:bg-teal-800 font-medium rounded-lg text-sm px-5 py-2.5">Simpan</button></div>
+                <div className="p-4 border-t flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button onClick={onClose} className="w-full sm:w-auto text-gray-500 bg-white hover:bg-gray-100 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5">Batal</button><button onClick={handleSave} className="w-full sm:w-auto text-white bg-teal-700 hover:bg-teal-800 font-medium rounded-lg text-sm px-5 py-2.5">Simpan</button></div>
             </div>
         </div>
     );
@@ -82,7 +85,7 @@ const KamarModal: React.FC<KamarModalProps> = ({ isOpen, onClose, onSave, kamarD
                         <div><label className="block mb-1 text-sm font-medium text-gray-700">Musyrif/ah</label><select value={kamar.musyrifId || ''} onChange={e => setKamar(k => ({...k, musyrifId: e.target.value ? parseInt(e.target.value) : undefined}))} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Tidak Ada --</option>{settings.tenagaPengajar.map(tp => <option key={tp.id} value={tp.id}>{tp.nama}</option>)}</select></div>
                     </div>
                 </div>
-                <div className="p-4 border-t flex justify-end space-x-2"><button onClick={onClose} className="text-gray-500 bg-white hover:bg-gray-100 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5">Batal</button><button onClick={handleSave} className="text-white bg-teal-700 hover:bg-teal-800 font-medium rounded-lg text-sm px-5 py-2.5">Simpan</button></div>
+                <div className="p-4 border-t flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button onClick={onClose} className="w-full sm:w-auto text-gray-500 bg-white hover:bg-gray-100 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5">Batal</button><button onClick={handleSave} className="w-full sm:w-auto text-white bg-teal-700 hover:bg-teal-800 font-medium rounded-lg text-sm px-5 py-2.5">Simpan</button></div>
             </div>
         </div>
     );
@@ -234,10 +237,10 @@ const ManajemenAsrama: React.FC = () => {
 
     return (
          <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex justify-between items-center mb-4">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-xl font-bold text-gray-700">Manajemen Asrama & Kamar</h2>
                 {canWrite && (
-                    <button onClick={() => setGedungModalData({ mode: 'add', item: null })} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm flex items-center gap-2">
+                    <button onClick={() => setGedungModalData({ mode: 'add', item: null })} className="w-full sm:w-auto px-4 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-sm flex items-center justify-center gap-2">
                         <i className="bi bi-plus-circle"></i> Tambah Gedung
                     </button>
                 )}
@@ -273,7 +276,7 @@ const ManajemenAsrama: React.FC = () => {
                                         <p className="text-xs text-gray-500">Kapasitas: {penghuni}/{kamar.kapasitas} | Musyrif: {musyrif?.nama || '-'}</p>
                                     </div>
                                     {canWrite && (
-                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                             <button onClick={() => setKamarModalData({ mode: 'edit', item: kamar, gedungId: gedung.id })} className="text-blue-500 text-xs"><i className="bi bi-pencil-square"></i></button>
                                             <button onClick={() => handleDeleteKamar(kamar.id)} className="text-red-500 text-xs"><i className="bi bi-trash-fill"></i></button>
                                         </div>
@@ -297,21 +300,22 @@ const ManajemenAsrama: React.FC = () => {
 const PenempatanSantri: React.FC = () => {
      const { settings, showToast, showAlert, showConfirmation, currentUser } = useAppContext();
      const { santriList, onBulkUpdateSantri } = useSantriContext();
-    const { gedungAsrama, kamar, jenjang, kelas, rombel } = settings;
+    const { gedungAsrama, kamar, rombel } = settings;
     
     // Permission Check
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.keasramaan === 'write';
 
-    const [filters, setFilters] = useState({ jenjang: '', kelas: '', rombel: '', gender: '' });
+    const [filters, setFilters] = useState({ search: '', jenjang: '', kelas: '', rombel: '', status: 'Aktif', gender: '' });
     const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
 
     const santriTanpaKamar = useMemo(() => {
         return santriList.filter(s =>
             !s.kamarId &&
-            s.status === 'Aktif' &&
+            (!filters.search || s.namaLengkap.toLowerCase().includes(filters.search.toLowerCase()) || s.nis.toLowerCase().includes(filters.search.toLowerCase())) &&
             (!filters.jenjang || s.jenjangId === parseInt(filters.jenjang)) &&
             (!filters.kelas || s.kelasId === parseInt(filters.kelas)) &&
             (!filters.rombel || s.rombelId === parseInt(filters.rombel)) &&
+            (!filters.status || s.status === filters.status) &&
             (!filters.gender || s.jenisKelamin === filters.gender)
         );
     }, [santriList, filters]);
@@ -378,22 +382,38 @@ const PenempatanSantri: React.FC = () => {
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-lg shadow-md">
-                <h3 className="text-xl font-bold text-gray-700 mb-4">Santri Tanpa Kamar ({santriTanpaKamar.length})</h3>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                    <select value={filters.gender} onChange={e => setFilters(f => ({...f, gender: e.target.value}))} className="bg-gray-50 border p-2 text-sm rounded-lg"><option value="">Semua Gender</option><option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option></select>
-                     <select value={filters.jenjang} onChange={e => setFilters(f => ({...f, jenjang: e.target.value, kelas: '', rombel: ''}))} className="bg-gray-50 border p-2 text-sm rounded-lg"><option value="">Semua Jenjang</option>{jenjang.map(j=><option key={j.id} value={j.id}>{j.nama}</option>)}</select>
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="text-xl font-bold text-gray-700">Santri Tanpa Kamar ({santriTanpaKamar.length})</h3>
+                    <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-700">Dipilih: {selectedSantriIds.length}</span>
+                        {selectedSantriIds.length > 0 && (
+                            <button onClick={() => setSelectedSantriIds([])} className="text-xs font-semibold text-red-600 hover:text-red-700">
+                                Reset
+                            </button>
+                        )}
+                    </div>
                 </div>
+                <SantriFilterBar
+                    settings={settings}
+                    filters={filters}
+                    onChange={setFilters}
+                    title="Filter Penempatan Asrama"
+                    searchPlaceholder="Cari Nama atau NIS..."
+                    resultCount={santriTanpaKamar.length}
+                    showGender
+                    className="mb-4"
+                />
                  <div className="max-h-96 overflow-y-auto border rounded-md divide-y">
                      {santriTanpaKamar.map(s => (
                         <div key={s.id} className="flex items-center p-2 hover:bg-gray-50">
                             <input type="checkbox" checked={selectedSantriIds.includes(s.id)} onChange={() => handleSelectSantri(s.id)} disabled={!canWrite} className="h-4 w-4 text-teal-600 rounded mr-3 disabled:text-gray-300"/>
                             <div className={!canWrite ? "opacity-60" : ""}>
                                 <p className="font-semibold text-sm">{s.namaLengkap}</p>
-                                <p className="text-xs text-gray-500">{rombel.find(r=>r.id === s.rombelId)?.nama}</p>
+                                <p className="text-xs text-gray-500">{rombel.find(r=>r.id === s.rombelId)?.nama} · {s.status}</p>
                             </div>
                         </div>
                      ))}
-                     {santriTanpaKamar.length === 0 && <p className="text-center text-gray-500 p-8">Semua santri aktif sudah memiliki kamar.</p>}
+                     {santriTanpaKamar.length === 0 && <p className="text-center text-gray-500 p-8">Tidak ada santri tanpa kamar yang cocok dengan filter.</p>}
                 </div>
             </div>
              <div className="bg-white p-6 rounded-lg shadow-md">
@@ -409,12 +429,12 @@ const PenempatanSantri: React.FC = () => {
                                     const isFull = penghuni.length >= k.kapasitas;
                                     return (
                                     <div key={k.id} className="p-3 bg-gray-50 rounded-md border">
-                                        <div className="flex justify-between items-start">
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                             <div>
                                                 <p className="font-semibold text-gray-700">{k.nama}</p>
                                                 <p className="text-xs text-gray-500">Kapasitas: {penghuni.length}/{k.kapasitas}</p>
                                             </div>
-                                            <button onClick={() => handleTempatkan(k)} disabled={selectedSantriIds.length === 0 || isFull || !canWrite} className="px-3 py-1 bg-teal-600 text-white rounded-md text-xs font-semibold hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed">Tempatkan ({selectedSantriIds.length})</button>
+                                            <button onClick={() => handleTempatkan(k)} disabled={selectedSantriIds.length === 0 || isFull || !canWrite} className="w-full sm:w-auto px-3 py-2 bg-teal-600 text-white rounded-md text-xs font-semibold hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed">Tempatkan ({selectedSantriIds.length})</button>
                                         </div>
                                         {penghuni.length > 0 && <div className="mt-2 pt-2 border-t text-sm space-y-1">
                                             {penghuni.map(s => (
@@ -443,26 +463,25 @@ const PenempatanSantri: React.FC = () => {
 const Asrama: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'dashboard' | 'manajemen' | 'penempatan'>('dashboard');
 
-    const TabButton: React.FC<{ tabId: string, label: string }> = ({ tabId, label }) => (
-        <button
-            onClick={() => setActiveTab(tabId as any)}
-            className={`py-3 px-5 font-medium text-sm border-b-2 ${activeTab === tabId ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-        >
-            {label}
-        </button>
-    );
-
     return (
         <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Manajemen Keasramaan</h1>
-
-            <div className="mb-6 border-b border-gray-200">
-                <nav className="flex -mb-px overflow-x-auto">
-                    <TabButton tabId="dashboard" label="Dashboard Asrama" />
-                    <TabButton tabId="manajemen" label="Manajemen Asrama" />
-                    <TabButton tabId="penempatan" label="Penempatan Santri" />
-                </nav>
-            </div>
+            <PageHeader
+                eyebrow="Asrama"
+                title="Manajemen Keasramaan"
+                description="Pantau hunian, kelola gedung dan kamar, lalu tempatkan santri dengan pola filter yang konsisten antara desktop dan ponsel."
+                tabs={
+                    <HeaderTabs
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        tabs={[
+                            { value: 'dashboard', label: 'Dashboard Asrama', icon: 'bi-building' },
+                            { value: 'manajemen', label: 'Manajemen Asrama', icon: 'bi-gear' },
+                            { value: 'penempatan', label: 'Penempatan Santri', icon: 'bi-people' },
+                        ]}
+                    />
+                }
+                className="mb-6"
+            />
 
             {activeTab === 'dashboard' && <AsramaDashboard />}
             {activeTab === 'manajemen' && <ManajemenAsrama />}

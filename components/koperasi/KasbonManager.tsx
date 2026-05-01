@@ -1,13 +1,11 @@
 
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
-import { useForm } from 'react-hook-form';
 import { db } from '../../db';
-import { useAppContext } from '../../AppContext';
 import { useFinanceContext } from '../../contexts/FinanceContext';
 import { useSantriContext } from '../../contexts/SantriContext';
-import { TransaksiKoperasi, Santri } from '../../types';
-import { formatRupiah, formatDateTime } from '../../utils/formatters';
+import { TransaksiKoperasi } from '../../types';
+import { formatRupiah } from '../../utils/formatters';
 import { KasbonDetailModal } from './modals/KasbonDetailModal';
 
 export const KasbonManager: React.FC = () => {
@@ -59,7 +57,7 @@ export const KasbonManager: React.FC = () => {
             </div>
 
             <div className="flex flex-col md:flex-row gap-4 shrink-0">
-                <div className="flex bg-white rounded-lg shadow-sm border p-1">
+                <div className="grid grid-cols-2 bg-white rounded-lg shadow-sm border p-1">
                     <button onClick={() => setActiveTab('pending')} className={`px-4 py-2 text-sm font-bold rounded-md transition-all ${activeTab === 'pending' ? 'bg-red-100 text-red-700' : 'text-gray-500 hover:bg-gray-50'}`}>Belum Lunas</button>
                     <button onClick={() => setActiveTab('settled')} className={`px-4 py-2 text-sm font-bold rounded-md transition-all ${activeTab === 'settled' ? 'bg-green-100 text-green-700' : 'text-gray-500 hover:bg-gray-50'}`}>Sudah Lunas</button>
                 </div>
@@ -77,7 +75,7 @@ export const KasbonManager: React.FC = () => {
 
             <div className="bg-white border rounded-lg shadow-sm overflow-hidden flex-grow flex flex-col">
                 <div className="overflow-y-auto flex-grow">
-                    <table className="w-full text-sm text-left">
+                    <table className="hidden md:table w-full text-sm text-left">
                         <thead className="bg-gray-50 text-gray-600 sticky top-0">
                             <tr>
                                 <th className="p-3">Tanggal</th>
@@ -136,6 +134,46 @@ export const KasbonManager: React.FC = () => {
                             )}
                         </tbody>
                     </table>
+                    <div className="md:hidden p-3 space-y-3">
+                        {filteredDebts.map(trx => {
+                            const { santri, saldo } = getSantriDetails(trx);
+                            const debtAmount = trx.sisaTagihan ?? (trx.totalFinal - (trx.bayar || 0));
+                            return (
+                                <div key={trx.id} className="border rounded-lg p-3 bg-white">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <div className="text-xs text-gray-500">{new Date(trx.tanggal).toLocaleDateString('id-ID')} · {new Date(trx.tanggal).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
+                                            <div className="font-semibold text-sm text-gray-800">{trx.namaPembeli}</div>
+                                            <div className="text-[11px] text-gray-500">{trx.tipePembeli}{santri ? ` · Saldo ${formatRupiah(saldo)}` : ''}</div>
+                                        </div>
+                                        <button
+                                            onClick={() => setSelectedTrx(trx)}
+                                            className={`${activeTab === 'pending' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-blue-600 hover:bg-blue-700'} text-white px-2.5 py-1.5 rounded text-[11px] font-bold`}
+                                        >
+                                            {activeTab === 'pending' ? 'Lunasi' : 'Detail'}
+                                        </button>
+                                    </div>
+                                    <div className="mt-2 text-xs text-gray-600 truncate">{trx.items.map(i => `${i.nama} (${i.qty})`).join(', ')}</div>
+                                    {trx.catatanPembayaran && <div className="mt-1 text-xs italic text-red-500 truncate">Note: {trx.catatanPembayaran}</div>}
+                                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                                        <div className="rounded bg-gray-50 border border-gray-200 p-2">
+                                            <div className="text-gray-500">Total</div>
+                                            <div className="font-semibold text-gray-800">{formatRupiah(trx.totalFinal)}</div>
+                                        </div>
+                                        <div className="rounded bg-red-50 border border-red-200 p-2">
+                                            <div className="text-red-600">Sisa Hutang</div>
+                                            <div className={`font-bold ${debtAmount > 0 ? 'text-red-700' : 'text-green-700'}`}>{formatRupiah(debtAmount)}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {filteredDebts.length === 0 && (
+                            <div className="p-6 text-center text-sm text-gray-400 border rounded-lg">
+                                Tidak ada data kasbon {activeTab === 'pending' ? 'yang belum lunas' : 'yang sudah lunas'}.
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

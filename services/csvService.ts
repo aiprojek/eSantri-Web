@@ -29,43 +29,178 @@ const parseCsvRow = (row: string): string[] => {
 };
 
 
-const CSV_HEADERS_UPDATE = [
-    'id', 'nis', 'nik', 'nisn', 'namaLengkap', 'namaHijrah', 'kewarganegaraan',
-    'berkebutuhanKhusus', 'jenisSantri', 'statusKeluarga', 'tempatLahir', 'tanggalLahir', 'jenisKelamin',
-    'anakKe', 'alamat_detail', 'alamat_desa', 'alamat_kecamatan', 'alamat_kabupaten', 'alamat_provinsi', 'alamat_kodepos',
-    'tinggiBadan', 'beratBadan', 'jarakKePondok',
-    'jumlahSaudara', 'riwayatPenyakit', 'prestasi_json', 'pelanggaran_json', 'riwayatStatus_json', 'hobi_json', 'tanggalMasuk', 'sekolahAsal',
-    'alamatSekolahAsal', 'namaAyah', 'nikAyah', 'tempatLahirAyah', 'tanggalLahirAyah',
-    'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'alamatAyah_detail', 'agamaAyah',
-    'statusAyah', 'teleponAyah', 'namaIbu', 'nikIbu', 'tempatLahirIbu', 'tanggalLahirIbu',
-    'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'alamatIbu_detail', 'agamaIbu', 'statusIbu',
-    'teleponIbu', 'namaWali', 'tempatLahirWali', 'tanggalLahirWali', 'pekerjaanWali',
-    'pendidikanWali', 'penghasilanWali', 'agamaWali', 'statusWali', 'statusHidupWali', 'alamatWali_detail',
-    'teleponWali', 'jenjangId', 'kelasId', 'rombelId', 'status', 'tanggalStatus', 'fotoUrl'
-];
+const SANTRI_CSV_HEADERS_UPDATE = [
+    'id',
+    'namaLengkap',
+    'namaHijrah',
+    'nis',
+    'nik',
+    'nisn',
+    'jenisKelamin',
+    'tempatLahir',
+    'tanggalLahir',
+    'kewarganegaraan',
+    'statusKeluarga',
+    'jenisSantri',
+    'berkebutuhanKhusus',
+    'jenjangId',
+    'kelasId',
+    'rombelId',
+    'tanggalMasuk',
+    'status',
+    'alamat_detail',
+    'alamat_desa',
+    'alamat_kecamatan',
+    'alamat_kabupaten',
+    'alamat_provinsi',
+    'alamat_kodepos',
+    'namaAyah',
+    'statusAyah',
+    'tempatLahirAyah',
+    'tanggalLahirAyah',
+    'nikAyah',
+    'pendidikanAyah',
+    'pekerjaanAyah',
+    'penghasilanAyah',
+    'teleponAyah',
+    'namaIbu',
+    'statusIbu',
+    'tempatLahirIbu',
+    'tanggalLahirIbu',
+    'nikIbu',
+    'pendidikanIbu',
+    'pekerjaanIbu',
+    'penghasilanIbu',
+    'teleponIbu',
+    'namaWali',
+    'statusWali',
+    'statusHidupWali',
+    'pendidikanWali',
+    'pekerjaanWali',
+    'penghasilanWali',
+    'teleponWali'
+] as const;
 
-const CSV_HEADERS_ADD = CSV_HEADERS_UPDATE.filter(h => h !== 'id');
+const SANTRI_CSV_HEADERS_ADD = SANTRI_CSV_HEADERS_UPDATE.filter(h => h !== 'id');
+type SantriCsvHeader = typeof SANTRI_CSV_HEADERS_UPDATE[number];
+
+const normalizeSantriCsvHeader = (header: string): string =>
+    header.toLowerCase().replace(/[\s\-./()]/g, '').replace(/_/g, '');
+
+const SANTRI_CSV_HEADER_ALIASES: Record<string, SantriCsvHeader> = {
+    id: 'id',
+    namalengkap: 'namaLengkap',
+    namahijrah: 'namaHijrah',
+    nis: 'nis',
+    nik: 'nik',
+    nisn: 'nisn',
+    jeniskelamin: 'jenisKelamin',
+    gender: 'jenisKelamin',
+    sex: 'jenisKelamin',
+    tempelahir: 'tempatLahir',
+    tempatlahir: 'tempatLahir',
+    tanggallahir: 'tanggalLahir',
+    tgllahir: 'tanggalLahir',
+    kewarganegaraan: 'kewarganegaraan',
+    statuskeluarga: 'statusKeluarga',
+    jenissantri: 'jenisSantri',
+    berkebutuhankhusus: 'berkebutuhanKhusus',
+    jenjangid: 'jenjangId',
+    kelasid: 'kelasId',
+    rombelid: 'rombelId',
+    tanggalmasuk: 'tanggalMasuk',
+    status: 'status',
+    alamatdetail: 'alamat_detail',
+    alamatdesa: 'alamat_desa',
+    alamatdesakelurahan: 'alamat_desa',
+    alamatkecamatan: 'alamat_kecamatan',
+    alamatkabupaten: 'alamat_kabupaten',
+    alamatkabupatenkota: 'alamat_kabupaten',
+    alamatprovinsi: 'alamat_provinsi',
+    alamatkodepos: 'alamat_kodepos',
+    namaayah: 'namaAyah',
+    statusayah: 'statusAyah',
+    tempatlahirayah: 'tempatLahirAyah',
+    tanggallahirayah: 'tanggalLahirAyah',
+    nikayah: 'nikAyah',
+    pendidikanayah: 'pendidikanAyah',
+    pekerjaanayah: 'pekerjaanAyah',
+    penghasilanayah: 'penghasilanAyah',
+    teleponayah: 'teleponAyah',
+    hpayah: 'teleponAyah',
+    namaibu: 'namaIbu',
+    statusibu: 'statusIbu',
+    tempatlahiribu: 'tempatLahirIbu',
+    tanggallahiribu: 'tanggalLahirIbu',
+    nikibu: 'nikIbu',
+    pendidikanibu: 'pendidikanIbu',
+    pekerjaanibu: 'pekerjaanIbu',
+    penghasilanibu: 'penghasilanIbu',
+    teleponibu: 'teleponIbu',
+    hpibu: 'teleponIbu',
+    namawali: 'namaWali',
+    statuswali: 'statusWali',
+    statushidupwali: 'statusHidupWali',
+    pendidikanwali: 'pendidikanWali',
+    pekerjaanwali: 'pekerjaanWali',
+    penghasilanwali: 'penghasilanWali',
+    teleponwali: 'teleponWali',
+    hpwali: 'teleponWali',
+    // Backward compatibility for legacy headers
+    alamatayahdetail: 'alamat_detail',
+    alamatibudetail: 'alamat_detail',
+    alamatwalidetail: 'alamat_detail',
+};
+
+const normalizeSantriDate = (value: unknown): string | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const raw = String(value).trim();
+    if (!raw) return undefined;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+        const [d, m, y] = raw.split('/');
+        return `${y}-${m}-${d}`;
+    }
+    if (/^\d{1,2}[\/-]\d{1,2}[\/-]\d{4}$/.test(raw)) {
+        const [d, m, y] = raw.split(/[/-]/);
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    return undefined;
+};
 
 export const generateSantriCsvForUpdate = (santriList: Santri[]): string => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    const headers = CSV_HEADERS_UPDATE;
+    let csvContent = "";
+    const headers = SANTRI_CSV_HEADERS_UPDATE;
     csvContent += headers.join(",") + "\r\n";
 
     santriList.forEach(santri => {
         const rowData = headers.map(header => {
-            let value;
-            if (header.startsWith('alamat_')) {
-              const key = header.replace('alamat_', '');
-              value = (santri.alamat as any)[key === 'detail' ? 'detail' : key.replace(/_([a-z])/g, g => g[1].toUpperCase())];
-            } else {
-              value = (santri as any)[header];
+            let value: unknown;
+            switch (header) {
+                case 'alamat_detail':
+                    value = santri.alamat?.detail;
+                    break;
+                case 'alamat_desa':
+                    value = santri.alamat?.desaKelurahan;
+                    break;
+                case 'alamat_kecamatan':
+                    value = santri.alamat?.kecamatan;
+                    break;
+                case 'alamat_kabupaten':
+                    value = santri.alamat?.kabupatenKota;
+                    break;
+                case 'alamat_provinsi':
+                    value = santri.alamat?.provinsi;
+                    break;
+                case 'alamat_kodepos':
+                    value = santri.alamat?.kodePos;
+                    break;
+                default:
+                    value = (santri as any)[header];
             }
-            
             if (value === undefined || value === null) return "";
-            if (header === 'prestasi_json') value = JSON.stringify(santri.prestasi || []);
-            if (header === 'pelanggaran_json') value = JSON.stringify(santri.pelanggaran || []);
-            if (header === 'hobi_json') value = JSON.stringify(santri.hobi || []);
-            if (header === 'riwayatStatus_json') value = JSON.stringify(santri.riwayatStatus || []);
 
             const stringValue = String(value);
             if (stringValue.includes(',') || stringValue.includes('"')) {
@@ -81,14 +216,14 @@ export const generateSantriCsvForUpdate = (santriList: Santri[]): string => {
 
 
 export const generateSantriCsvTemplate = (): string => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += CSV_HEADERS_ADD.join(",") + "\r\n";
+    let csvContent = "";
+    csvContent += SANTRI_CSV_HEADERS_ADD.join(",") + "\r\n";
     return csvContent;
 };
 
 // New function to generate Contact CSV (Google Contact Format compatible)
 export const generateContactCsv = (santriList: Santri[], settings: PondokSettings): string => {
-    let csvContent = "data:text/csv;charset=utf-8,";
+    let csvContent = "";
     // Standard Google CSV Headers (Full list for better compatibility)
     const headers = [
         'Name', 'Given Name', 'Additional Name', 'Family Name', 'Yomi Name', 'Given Name Yomi', 'Additional Name Yomi', 'Family Name Yomi', 'Name Prefix', 'Name Suffix', 'Initials', 'Nickname', 'Short Name', 'Maiden Name', 'Birthday', 'Gender', 'Location', 'Billing Information', 'Directory Server', 'Mileage', 'Occupation', 'Hobby', 'Sensitivity', 'Priority', 'Subject', 'Notes', 'Language', 'Photo', 'Group Membership',
@@ -173,7 +308,7 @@ const PSB_HEADER_MAP: Record<string, keyof Pendaftar> = {
 };
 
 export const generatePsbCsvTemplate = (): string => {
-    let csvContent = "data:text/csv;charset=utf-8,";
+    let csvContent = "";
     const headers = Object.keys(PSB_HEADER_MAP);
     csvContent += headers.join(",") + "\r\n";
     // Add example row
@@ -182,7 +317,7 @@ export const generatePsbCsvTemplate = (): string => {
 };
 
 export const generatePendaftarCsv = (pendaftarList: Pendaftar[]): string => {
-    let csvContent = "data:text/csv;charset=utf-8,";
+    let csvContent = "";
     const headers = Object.keys(PSB_HEADER_MAP); // Use readable headers
     csvContent += headers.join(",") + "\r\n";
 
@@ -382,11 +517,12 @@ export const parseSantriCsv = (
 
     const headerRow = rows[0].trim();
     const headers = parseCsvRow(headerRow);
+    const mappedHeaders = headers.map((header) => SANTRI_CSV_HEADER_ALIASES[normalizeSantriCsvHeader(header)]);
     
     const result: ParsedCsvResult = { mode, toAdd: [], toUpdate: [], errors: [] };
 
-    if (mode === 'update' && headers[0] !== 'id') {
-         throw new Error("Mode 'Perbarui' memerlukan kolom 'id' sebagai kolom pertama.");
+    if (mode === 'update' && !mappedHeaders.includes('id')) {
+         throw new Error("Mode 'Perbarui' memerlukan kolom 'id'.");
     }
     
     const allSantriMap = new Map(allSantriList.map(s => [s.id, s]));
@@ -397,52 +533,35 @@ export const parseSantriCsv = (
         
         const values = parseCsvRow(row);
         const santriData: { [key: string]: any } = {};
-        headers.forEach((header, index) => {
-            santriData[header] = values[index] || '';
+        mappedHeaders.forEach((mappedHeader, index) => {
+            if (!mappedHeader) return;
+            santriData[mappedHeader] = values[index] || '';
         });
 
         const processRow = () => {
             const processedData: { [key: string]: any } = { alamat: {}, alamatAyah: {}, alamatIbu: {}, alamatWali: {} };
-            for (const header of headers) {
+            for (const header of mappedHeaders) {
+              if (!header) continue;
               if (header === 'id' && mode === 'add') continue;
               let value = santriData[header];
               if (value === undefined || value === '') continue;
         
-              if (header.startsWith('alamat_') || header.startsWith('alamatAyah_') || header.startsWith('alamatIbu_') || header.startsWith('alamatWali_')) {
-                const parts = header.split('_');
-                const targetAlamat = parts[0];
-                let fieldKey = parts[1];
-
-                if (fieldKey === 'desa') fieldKey = 'desaKelurahan';
-                if (fieldKey === 'kabupaten') fieldKey = 'kabupatenKota';
-                if (fieldKey === 'kodepos') fieldKey = 'kodePos';
-
-                processedData[targetAlamat][fieldKey] = value;
+              if (header.startsWith('alamat_')) {
+                if (header === 'alamat_detail') processedData.alamat.detail = value;
+                if (header === 'alamat_desa') processedData.alamat.desaKelurahan = value;
+                if (header === 'alamat_kecamatan') processedData.alamat.kecamatan = value;
+                if (header === 'alamat_kabupaten') processedData.alamat.kabupatenKota = value;
+                if (header === 'alamat_provinsi') processedData.alamat.provinsi = value;
+                if (header === 'alamat_kodepos') processedData.alamat.kodePos = value;
                 continue;
               }
 
               if (['anakKe', 'tinggiBadan', 'beratBadan', 'jumlahSaudara', 'jenjangId', 'kelasId', 'rombelId'].includes(header)) {
                 value = value ? parseInt(value, 10) : undefined; if (isNaN(value as number)) value = undefined;
               }
-              if (header === 'prestasi_json') {
-                 try { processedData['prestasi'] = JSON.parse(value || '[]'); } catch { processedData['prestasi'] = []; } continue;
-              }
-              if (header === 'pelanggaran_json') {
-                 try { processedData['pelanggaran'] = JSON.parse(value || '[]'); } catch { processedData['pelanggaran'] = []; } continue;
-              }
-              if (header === 'hobi_json') {
-                 try { processedData['hobi'] = JSON.parse(value || '[]'); } catch { processedData['hobi'] = []; } continue;
-              }
-               if (header === 'riwayatStatus_json') {
-                 try { processedData['riwayatStatus'] = JSON.parse(value || '[]'); } catch { processedData['riwayatStatus'] = []; } continue;
-              }
               if (header.toLowerCase().includes('tanggal')) {
-                  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) { // Check for DD/MM/YYYY
-                    const [d, m, y] = value.split('/');
-                    value = `${y}-${m}-${d}`;
-                  } else if (value === '' || isNaN(new Date(value).getTime())) {
-                    value = undefined;
-                  }
+                  value = normalizeSantriDate(value);
+                  if (!value) continue;
               }
               processedData[header] = value;
             }

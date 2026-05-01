@@ -89,20 +89,20 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({ sirkulasiList, bukuList, o
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 animate-fade-in">
             <div className="lg:col-span-1 space-y-4">
-                <div className="bg-white p-4 rounded-lg shadow-sm border">
+                <div className="app-panel rounded-panel p-4">
                     <h3 className="font-bold text-gray-700 mb-4">Menu Sirkulasi</h3>
-                    <div className="space-y-2">
-                        <button onClick={() => setMode('pinjam')} className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${mode === 'pinjam' ? 'bg-teal-50 border-teal-500 text-teal-800' : 'bg-white hover:bg-gray-50'}`}>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                        <button onClick={() => setMode('pinjam')} className={`w-full text-left px-4 py-3 rounded-lg border transition-all min-h-[56px] ${mode === 'pinjam' ? 'bg-teal-50 border-teal-500 text-teal-800' : 'bg-white hover:bg-gray-50'}`}>
                             <div className="font-bold"><i className="bi bi-box-arrow-up-right mr-2"></i> Peminjaman Baru</div>
                             <div className="text-xs opacity-70 mt-1">Catat santri meminjam buku</div>
                         </button>
-                        <button onClick={() => setMode('kembali')} className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${mode === 'kembali' ? 'bg-blue-50 border-blue-500 text-blue-800' : 'bg-white hover:bg-gray-50'}`}>
+                        <button onClick={() => setMode('kembali')} className={`w-full text-left px-4 py-3 rounded-lg border transition-all min-h-[56px] ${mode === 'kembali' ? 'bg-blue-50 border-blue-500 text-blue-800' : 'bg-white hover:bg-gray-50'}`}>
                             <div className="font-bold"><i className="bi bi-box-arrow-in-down-left mr-2"></i> Pengembalian</div>
                             <div className="text-xs opacity-70 mt-1">Proses buku kembali & hitung denda</div>
                         </button>
-                         <button onClick={() => setMode('riwayat')} className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${mode === 'riwayat' ? 'bg-gray-100 border-gray-400 text-gray-800' : 'bg-white hover:bg-gray-50'}`}>
+                         <button onClick={() => setMode('riwayat')} className={`w-full text-left px-4 py-3 rounded-lg border transition-all min-h-[56px] ${mode === 'riwayat' ? 'bg-gray-100 border-gray-400 text-gray-800' : 'bg-white hover:bg-gray-50'}`}>
                             <div className="font-bold"><i className="bi bi-clock-history mr-2"></i> Riwayat Transaksi</div>
                         </button>
                     </div>
@@ -111,7 +111,7 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({ sirkulasiList, bukuList, o
 
             <div className="lg:col-span-2">
                 {mode === 'pinjam' && (
-                    <div className="bg-white p-6 rounded-lg shadow-md border border-teal-200">
+                    <div className="app-panel rounded-panel p-4 sm:p-6 border border-teal-200">
                         <h3 className="text-lg font-bold text-teal-800 mb-4 border-b pb-2">Input Peminjaman</h3>
                         
                         <div className="mb-6">
@@ -177,7 +177,7 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({ sirkulasiList, bukuList, o
                 )}
 
                 {mode === 'kembali' && (
-                    <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
+                    <div className="app-panel rounded-panel p-4 sm:p-6 border border-blue-200">
                          <h3 className="text-lg font-bold text-blue-800 mb-4 border-b pb-2">Proses Pengembalian</h3>
                          <div className="mb-4">
                             <input type="text" value={returnSearch} onChange={e => setReturnSearch(e.target.value)} placeholder="Cari Peminjam atau Judul Buku..." className="w-full border rounded p-2 text-sm" />
@@ -221,9 +221,9 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({ sirkulasiList, bukuList, o
                 )}
 
                 {mode === 'riwayat' && (
-                    <div className="bg-white p-6 rounded-lg shadow-md">
+                    <div className="app-panel rounded-panel p-4 sm:p-6">
                          <h3 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Riwayat Transaksi (50 Terakhir)</h3>
-                         <div className="overflow-x-auto">
+                         <div className="hidden overflow-x-auto md:block">
                              <table className="w-full text-sm text-left">
                                  <thead className="bg-gray-100 text-gray-600">
                                      <tr>
@@ -247,6 +247,20 @@ export const Sirkulasi: React.FC<SirkulasiProps> = ({ sirkulasiList, bukuList, o
                                      ))}
                                  </tbody>
                              </table>
+                         </div>
+                         <div className="space-y-3 md:hidden">
+                            {history.map(h => (
+                                <div key={h.id} className="rounded-xl border border-gray-200 bg-white p-3">
+                                    <div className="text-xs text-gray-500">{formatDate(h.tanggalDikembalikan)}</div>
+                                    <div className="mt-1 text-sm font-bold text-gray-900">{h.santriName}</div>
+                                    <div className="text-sm text-gray-700">{h.bukuJudul}</div>
+                                    <div className="mt-2">
+                                        {h.status === 'Kembali' && <span className="rounded bg-green-100 px-2 py-1 text-[11px] text-green-800">Selesai</span>}
+                                        {h.status === 'Hilang' && <span className="rounded bg-red-100 px-2 py-1 text-[11px] text-red-800">Hilang</span>}
+                                    </div>
+                                </div>
+                            ))}
+                            {history.length === 0 && <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">Belum ada riwayat.</div>}
                          </div>
                     </div>
                 )}

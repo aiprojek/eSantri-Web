@@ -5,39 +5,33 @@ import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporRecord } from '../../types';
 import { db } from '../../db';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
+import { formatAcademicYearDisplay } from '../../utils/academicYear';
 
 export const TabDataNilai: React.FC = () => {
     const { settings, showConfirmation, showToast, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
+    const {
+        filterTahun,
+        setFilterTahun,
+        filterSemester,
+        setFilterSemester,
+        availableYears,
+        defaultAcademicYear
+    } = useAcademicPeriodFilter(settings);
 
-    const [filterTahun, setFilterTahun] = useState<string>('');
-    const [filterSemester, setFilterSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [filterRombel, setFilterRombel] = useState('');
     const [archiveRecords, setArchiveRecords] = useState<RaporRecord[]>([]);
-    const [availableYears, setAvailableYears] = useState<string[]>([]);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
     useEffect(() => {
         const fetchRecords = async () => {
-            const all = await db.raporRecords.toArray();
-            
-            // Ekstrak Tahun Ajaran Unik dari Database
-            const uniqueYears: string[] = Array.from(new Set(all.map(r => r.tahunAjaran))).sort().reverse() as string[];
-            setAvailableYears(uniqueYears);
-
-            // Set default filter tahun jika kosong dan ada data
-            let currentYearFilter = filterTahun;
-            if (!currentYearFilter && uniqueYears.length > 0) {
-                currentYearFilter = uniqueYears[0];
-                setFilterTahun(uniqueYears[0]);
-            } else if (!currentYearFilter) {
-                // Fallback default jika DB kosong
-                currentYearFilter = '2024/2025'; 
-                setFilterTahun('2024/2025');
-            }
-
-            let filtered = all.filter(r => r.tahunAjaran === currentYearFilter && r.semester === filterSemester);
+            const currentYearFilter = filterTahun || availableYears[0] || defaultAcademicYear;
+            let filtered = await db.raporRecords
+                .where('[tahunAjaran+semester]')
+                .equals([currentYearFilter, filterSemester])
+                .toArray();
             
             if (filterRombel) {
                 filtered = filtered.filter(r => r.rombelId === parseInt(filterRombel));
@@ -45,7 +39,7 @@ export const TabDataNilai: React.FC = () => {
             setArchiveRecords(filtered);
         };
         fetchRecords();
-    }, [filterTahun, filterSemester, filterRombel]);
+    }, [filterTahun, filterSemester, filterRombel, defaultAcademicYear, availableYears]);
 
     const handleDeleteRecord = (id: number) => {
         showConfirmation('Hapus Data Rapor?', 'Data nilai santri ini akan dihapus dari arsip.', async () => {
@@ -53,11 +47,6 @@ export const TabDataNilai: React.FC = () => {
             
             // Refresh data lokal
             setArchiveRecords(prev => prev.filter(p => p.id !== id));
-            
-            // Cek ulang tahun ajaran jika data habis (opsional, tapi bagus untuk konsistensi)
-            const remaining = await db.raporRecords.toArray();
-            const uniqueYears: string[] = Array.from(new Set(remaining.map(r => r.tahunAjaran))).sort().reverse() as string[];
-            setAvailableYears(uniqueYears);
 
             showToast('Data rapor dihapus.', 'success');
         }, { confirmColor: 'red' });
@@ -92,7 +81,9 @@ export const TabDataNilai: React.FC = () => {
                                 {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
                         ) : (
-                            <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all" placeholder="2024/2025" />
+                            <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all font-bold">
+                                <option value={defaultAcademicYear}>{defaultAcademicYear}</option>
+                            </select>
                         )}
                     </div>
                     <div className="flex-1 min-w-[140px]">
@@ -137,7 +128,12 @@ export const TabDataNilai: React.FC = () => {
                                        {y}
                                    </button>
                                )) : (
-                                   <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-white rounded-xl p-3 text-sm font-bold shadow-sm focus:border-teal-500 outline-none" placeholder="2024/2025" />
+                                   <button
+                                       onClick={() => setFilterTahun(defaultAcademicYear)}
+                                       className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${filterTahun === defaultAcademicYear ? 'bg-teal-600 text-white border-teal-600 shadow-md' : 'bg-white text-gray-600 border-gray-200'}`}
+                                   >
+                                       {defaultAcademicYear}
+                                   </button>
                                )}
                            </div>
                         </div>
@@ -236,7 +232,7 @@ export const TabDataNilai: React.FC = () => {
                                                 <i className="bi bi-inbox text-3xl opacity-20 text-gray-400"></i>
                                             </div>
                                             <p className="text-sm font-bold tracking-tight">Belum ada data rapor</p>
-                                            <p className="text-[10px] mt-1 uppercase tracking-widest text-gray-300">Periode {filterTahun} ({filterSemester})</p>
+                                            <p className="text-[10px] mt-1 uppercase tracking-widest text-gray-300">Periode {formatAcademicYearDisplay(settings, filterTahun)} ({filterSemester})</p>
                                         </div>
                                     </td>
                                 </tr>

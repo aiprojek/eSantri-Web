@@ -327,6 +327,10 @@ const PsbFormViewer: React.FC<{ settings: PondokSettings, config: PsbConfig, ten
                     <p className="text-[10px] text-center text-gray-400 mt-6 max-w-sm mx-auto uppercase tracking-tighter">
                         Data aman terenkripsi &bullet; Langsung terkirim ke sistem {settings.namaPonpes}
                     </p>
+                    <div className="mt-6 pt-4 border-t text-center text-xs text-gray-500">
+                        <div>Tahun Ajaran {config.tahunAjaranAktif || new Date().getFullYear()}</div>
+                        <div className="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div>
+                    </div>
                 </div>
             </form>
         </div>

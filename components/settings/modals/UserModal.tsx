@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, UserPermissions, AccessLevel } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { hashString, DEFAULT_STAFF_PERMISSIONS, ADMIN_PERMISSIONS, DEFAULT_WALI_KELAS_PERMISSIONS, ROLE_TEMPLATES } from '../../../services/authService';
+import { CURRENT_PERMISSION_VERSION } from '../../../services/permissionMigrationService';
 
 interface UserModalProps {
     isOpen: boolean;
@@ -55,6 +56,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
         setPermissions(prev => ({ ...prev, syncAdmin: checked }));
     };
 
+
     const handleSave = async () => {
         if (!username.trim() || !fullName.trim()) {
             showAlert('Input Tidak Lengkap', 'Username dan Nama Lengkap wajib diisi.');
@@ -94,7 +96,9 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
             passwordHash,
             securityQuestion: securityQuestion.trim(),
             securityAnswerHash,
-            isDefaultAdmin: userData?.isDefaultAdmin
+            isDefaultAdmin: userData?.isDefaultAdmin,
+            permissionVersion: userData?.permissionVersion ?? CURRENT_PERMISSION_VERSION,
+            lastModified: Date.now(),
         };
 
         await onSave(newUser);
@@ -103,6 +107,7 @@ export const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, u
     const modules = [
         { key: 'santri', label: 'Data Santri' },
         { key: 'psb', label: 'PSB Online' },
+        { key: 'whatsapp', label: 'WhatsApp Center' },
         { key: 'bukutamu', label: 'Buku Tamu (Security)' }, // NEW
         { key: 'akademik', label: 'Akademik & Rapor' },
         { key: 'absensi', label: 'Absensi' },

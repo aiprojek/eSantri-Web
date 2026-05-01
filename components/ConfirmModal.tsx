@@ -23,35 +23,35 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   if (!isOpen) return null;
 
   const colorClasses = {
-    red: 'bg-red-600 hover:bg-red-700 focus:ring-red-300',
-    green: 'bg-teal-600 hover:bg-teal-700 focus:ring-teal-300',
-    blue: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-300',
+    red: 'app-button-danger',
+    green: 'app-button-primary',
+    blue: 'app-button-primary',
   };
   
   const iconColorClasses = {
-    red: 'bg-red-100 text-red-600',
-    green: 'bg-teal-100 text-teal-600',
-    blue: 'bg-blue-100 text-blue-600',
+    red: 'bg-red-500/12 text-app-danger border border-red-500/20',
+    green: 'bg-app-success/12 text-app-success border border-app-success/20',
+    blue: 'bg-app-primary/12 text-app-primary border border-app-primary/20',
   }
 
   const selectedColor = colorClasses[confirmColor as keyof typeof colorClasses] || colorClasses.red;
   const selectedIconColor = iconColorClasses[confirmColor as keyof typeof iconColorClasses] || iconColorClasses.red;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-[100] flex justify-center items-center p-4" aria-modal="true" role="dialog" onClick={onCancel}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+    <div className="app-overlay fixed inset-0 z-[100] flex items-center justify-center p-4" aria-modal="true" role="dialog" onClick={onCancel}>
+      <div className="app-modal w-full max-w-md rounded-panel" onClick={(e) => e.stopPropagation()}>
         <div className="p-6 text-center">
-          <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${selectedIconColor} mb-4`}>
+          <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${selectedIconColor}`}>
             <i className="bi bi-exclamation-triangle-fill text-2xl"></i>
           </div>
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <p className="text-sm text-gray-500 mt-2">{message}</p>
+          <h3 className="text-lg font-semibold text-app-text">{title}</h3>
+          <p className="mt-2 text-sm app-text-muted">{message}</p>
         </div>
-        <div className="px-6 py-4 bg-gray-50 flex justify-center space-x-4 rounded-b-lg">
-          <button onClick={onCancel} type="button" className="text-gray-600 bg-white hover:bg-gray-100 focus:ring-4 focus:outline-none focus:ring-gray-200 rounded-lg border border-gray-300 text-sm font-medium px-5 py-2.5 hover:text-gray-900 focus:z-10">
+        <div className="flex justify-center gap-4 rounded-b-panel border-t border-app-border bg-slate-50/80 px-6 py-4">
+          <button onClick={onCancel} type="button" className="app-button-secondary px-5 py-2.5">
             Batal
           </button>
-          <button onClick={onConfirm} type="button" className={`text-white ${selectedColor} focus:ring-4 focus:outline-none font-medium rounded-lg text-sm px-5 py-2.5 text-center`}>
+          <button onClick={onConfirm} type="button" className={`${selectedColor} px-5 py-2.5 text-center`}>
             {confirmText}
           </button>
         </div>

@@ -3,6 +3,7 @@ import { CloudSyncConfig, SyncFileRecord, ConflictItem } from '../types';
 import { db } from '../db';
 import { createClient, WebDAVClient } from 'webdav';
 import { db as fdb, collection, getDocs, query } from '../firebase';
+import { migrateUserPermissions } from './permissionMigrationService';
 
 const MASTER_FILENAME = 'master_data.json';
 const MASTER_CONFIG_FILENAME = 'master_config.json';
@@ -767,8 +768,9 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
 
     if (data) {
         if (data.users) {
+            const normalizedUsers = (data.users as any[]).map((user) => migrateUserPermissions(user as any).user);
             await db.users.clear();
-            await db.users.bulkPut(data.users);
+            await db.users.bulkPut(normalizedUsers);
         }
         if (data.settings && data.settings.length > 0) {
             const localSettings = await db.settings.toArray();

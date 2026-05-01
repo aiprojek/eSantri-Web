@@ -19,7 +19,7 @@ export const SarprasReportTemplate: React.FC<SarprasReportTemplateProps> = ({ se
     const kondisiRusak = assets.filter(a => a.kondisi !== 'Baik').length;
 
     return (
-        <div className="font-sans text-black p-8 bg-white flex flex-col h-full justify-between printable-content-wrapper" style={{ width: '21cm', minHeight: '29.7cm' }}>
+        <div className="font-sans text-black p-6 bg-white flex flex-col h-full justify-between printable-content-wrapper" style={{ width: '21cm' }}>
             <div>
                 <PrintHeader settings={settings} title="LAPORAN DATA ASET & INVENTARIS" />
                 
@@ -93,17 +93,17 @@ export const SarprasReportTemplate: React.FC<SarprasReportTemplateProps> = ({ se
                 </table>
 
                 {/* Tanda Tangan */}
-                <div className="flex justify-between items-end mt-12 px-4 text-sm break-inside-avoid">
+                <div className="flex justify-between items-end mt-8 px-4 text-sm break-inside-avoid">
                     <div className="text-center w-48">
                         <p>Mengetahui,</p>
                         <p>Pimpinan Pondok</p>
-                        <div className="h-20"></div>
+                        <div className="h-14"></div>
                         <p className="border-b border-black pb-1 font-bold">........................................</p>
                     </div>
                     <div className="text-center w-48">
                         <p>{settings.alamat.split(',')[1]?.trim() || 'Tempat'}, {formatDate(new Date().toISOString())}</p>
                         <p>Bagian Sarana & Prasarana</p>
-                        <div className="h-20"></div>
+                        <div className="h-14"></div>
                         <p className="font-bold underline">........................................</p>
                     </div>
                 </div>

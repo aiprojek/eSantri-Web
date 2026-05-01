@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { JadwalPelajaran, MataPelajaran, TenagaPengajar } from '../../../types';
+import { useAppContext } from '../../../AppContext';
 
 interface JadwalModalProps {
     isOpen: boolean;
@@ -15,6 +16,7 @@ interface JadwalModalProps {
 }
 
 export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSave, onDelete, slot, initialData, days, mapelList, teacherList }) => {
+    const { showConfirmation } = useAppContext();
     const [mapelId, setMapelId] = useState<string>('');
     const [guruId, setGuruId] = useState<string>('');
     const [keterangan, setKeterangan] = useState('');
@@ -169,7 +171,19 @@ export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSav
                 </div>
                 <div className="p-4 border-t flex justify-end gap-2 bg-gray-50 rounded-b-lg">
                     {initialData && (
-                        <button onClick={() => { if(confirm('Hapus jadwal ini?')) onDelete(initialData.id); }} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded text-sm font-bold mr-auto border border-red-200">Hapus</button>
+                        <button
+                            onClick={() =>
+                                showConfirmation(
+                                    'Hapus Jadwal?',
+                                    'Data jadwal ini akan dihapus permanen.',
+                                    async () => onDelete(initialData.id),
+                                    { confirmText: 'Hapus', confirmColor: 'red' }
+                                )
+                            }
+                            className="px-4 py-2 text-red-600 hover:bg-red-50 rounded text-sm font-bold mr-auto border border-red-200"
+                        >
+                            Hapus
+                        </button>
                     )}
                     <button onClick={onClose} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-200 text-sm">Batal</button>
                     <button onClick={handleSave} className="px-6 py-2 bg-teal-600 text-white rounded text-sm font-bold hover:bg-teal-700 shadow-sm">Simpan</button>

@@ -9,6 +9,8 @@ import { KesehatanRecord, Obat, ResepItem, Santri, PondokSettings } from '../typ
 import { printToPdfNative } from '../utils/pdfGenerator';
 import { PrintHeader } from './common/PrintHeader';
 import { formatDate } from '../utils/formatters';
+import { PageHeader } from './common/PageHeader';
+import { HeaderTabs } from './common/HeaderTabs';
 
 // --- PRINT TEMPLATE ---
 
@@ -193,6 +195,13 @@ const RekamMedisView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
 
     const { register, handleSubmit, reset, setValue } = useForm<KesehatanRecord>();
 
+    const getStatusBadgeClass = (status: KesehatanRecord['status']) => {
+        if (status === 'Sembuh') return 'bg-green-100 text-green-700';
+        if (status === 'Rawat Inap (Pondok)') return 'bg-yellow-100 text-yellow-700';
+        if (status === 'Rujuk RS/Klinik') return 'bg-red-100 text-red-700';
+        return 'bg-blue-50 text-blue-700';
+    };
+
     const filteredSantri = useMemo(() => {
         if (!searchSantri) return [];
         return santriList.filter(s => s.status === 'Aktif' && (s.namaLengkap.toLowerCase().includes(searchSantri.toLowerCase()) || s.nis.includes(searchSantri))).slice(0, 10);
@@ -359,8 +368,9 @@ const RekamMedisView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                 }
 
                 // 4. INTEGRASI ABSENSI OTOMATIS
-                // Jika status BUKAN 'Sembuh', catat sebagai SAKIT di Absensi
-                if (data.status !== 'Sembuh') {
+                // Catat ke absensi hanya untuk kondisi yang jelas mengganggu kehadiran kelas.
+                const shouldSyncSickAbsence = data.status === 'Rawat Inap (Pondok)' || data.status === 'Rujuk RS/Klinik';
+                if (shouldSyncSickAbsence) {
                     const santri = santriList.find(s => s.id === selectedSantriId);
                     if (santri) {
                         // Cari absensi existing di tanggal tersebut
@@ -410,16 +420,16 @@ const RekamMedisView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-            <div className="flex justify-between items-center mb-4">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-lg font-bold text-gray-800">Riwayat Kesehatan Santri</h3>
                 {canWrite && (
-                    <button onClick={handleAddRecord} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-teal-700 flex items-center gap-2">
+                    <button onClick={handleAddRecord} className="w-full sm:w-auto bg-teal-600 text-white px-4 py-2.5 rounded-lg text-sm hover:bg-teal-700 flex items-center justify-center gap-2">
                         <i className="bi bi-clipboard2-pulse"></i> Catat Pemeriksaan
                     </button>
                 )}
             </div>
 
-            <div className="overflow-x-auto border rounded-lg">
+            <div className="hidden md:block overflow-x-auto border rounded-lg">
                 <table className="w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-600 border-b">
                         <tr>
@@ -444,11 +454,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                                     </td>
                                     <td className="p-3 text-gray-700 text-xs max-w-xs">{rec.tindakan}</td>
                                     <td className="p-3">
-                                        <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                            rec.status === 'Sembuh' ? 'bg-green-100 text-green-700' :
-                                            rec.status === 'Rawat Inap (Pondok)' ? 'bg-yellow-100 text-yellow-700' :
-                                            rec.status === 'Rujuk RS/Klinik' ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-700'
-                                        }`}>
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${getStatusBadgeClass(rec.status)}`}>
                                             {rec.status}
                                         </span>
                                     </td>
@@ -469,6 +475,48 @@ const RekamMedisView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                          {records.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-gray-500 italic">Belum ada riwayat pemeriksaan.</td></tr>}
                     </tbody>
                 </table>
+            </div>
+            <div className="space-y-3 md:hidden">
+                {records.map(rec => {
+                    const santri = santriList.find(s => s.id === rec.santriId);
+                    return (
+                        <article key={rec.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+                            <div className="mb-3 flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-slate-500">{new Date(rec.tanggal).toLocaleDateString('id-ID')}</p>
+                                    <h4 className="truncate text-sm font-bold text-slate-800">{santri ? santri.namaLengkap : 'Unknown'}</h4>
+                                </div>
+                                <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${getStatusBadgeClass(rec.status)}`}>
+                                    {rec.status}
+                                </span>
+                            </div>
+                            <div className="space-y-2 text-xs">
+                                <div>
+                                    <p className="font-bold text-red-600">{rec.diagnosa || '-'}</p>
+                                    <p className="text-slate-500">{rec.keluhan || '-'}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600">
+                                    <p className="font-semibold text-slate-700">Tindakan / Obat</p>
+                                    <p className="mt-1">{rec.tindakan || '-'}</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center justify-end gap-2">
+                                <button onClick={() => handlePrintRecord(rec)} className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900" title="Cetak Surat Sakit"><i className="bi bi-printer-fill"></i></button>
+                                {canWrite && (
+                                    <>
+                                        <button onClick={() => handleEditRecord(rec)} className="h-9 w-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600 hover:text-blue-800" title="Edit"><i className="bi bi-pencil-square"></i></button>
+                                        <button onClick={() => handleDeleteRecord(rec.id)} className="h-9 w-9 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:text-red-800" title="Hapus"><i className="bi bi-trash"></i></button>
+                                    </>
+                                )}
+                            </div>
+                        </article>
+                    );
+                })}
+                {records.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm italic text-slate-500">
+                        Belum ada riwayat pemeriksaan.
+                    </div>
+                )}
             </div>
 
             {/* Modal Input/Edit */}
@@ -508,7 +556,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div><label className="block text-xs font-bold text-gray-600 mb-1">Tanggal</label><input type="date" {...register('tanggal')} className="w-full border rounded p-2 text-sm" /></div>
                                 <div><label className="block text-xs font-bold text-gray-600 mb-1">Status</label><select {...register('status')} className="w-full border rounded p-2 text-sm"><option value="Rawat Jalan">Rawat Jalan</option><option value="Rawat Inap (Pondok)">Rawat Inap (Pondok)</option><option value="Rujuk RS/Klinik">Rujuk RS/Klinik</option><option value="Sembuh">Sembuh</option></select></div>
                             </div>
@@ -552,12 +600,12 @@ const RekamMedisView: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
                             
                             <div className="bg-yellow-50 p-2 rounded text-xs text-yellow-800 border border-yellow-200 mt-2">
                                 <i className="bi bi-info-circle-fill mr-1"></i>
-                                Jika status selain "Sembuh", sistem akan otomatis mencatat Absensi "Sakit" untuk santri ini pada tanggal yang dipilih.
+                                Jika status <strong>Rawat Inap (Pondok)</strong> atau <strong>Rujuk RS/Klinik</strong>, sistem akan otomatis mencatat Absensi "Sakit" untuk tanggal tersebut.
                             </div>
                         </form>
-                         <div className="p-4 border-t flex justify-end gap-2 bg-gray-50">
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded text-sm border">Batal</button>
-                            <button type="button" onClick={handleSubmit(onSubmit)} className="px-4 py-2 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 font-bold shadow-sm">Simpan Data</button>
+                         <div className="p-4 border-t flex flex-col-reverse gap-2 bg-gray-50 sm:flex-row sm:justify-end">
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto px-4 py-2 text-gray-600 hover:bg-gray-200 rounded text-sm border">Batal</button>
+                            <button type="button" onClick={handleSubmit(onSubmit)} className="w-full sm:w-auto px-4 py-2 bg-teal-600 text-white rounded text-sm hover:bg-teal-700 font-bold shadow-sm">Simpan Data</button>
                         </div>
                     </div>
                 </div>
@@ -584,22 +632,25 @@ const Kesehatan: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-gray-800">Poskestren (Kesehatan)</h1>
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-                <nav className="flex -mb-px border-b">
-                    <button onClick={() => setActiveTab('rekam')} className={`flex-1 py-4 text-center font-medium text-sm border-b-2 transition-colors ${activeTab === 'rekam' ? 'border-teal-600 text-teal-600 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                        <i className="bi bi-clipboard2-pulse-fill mr-2"></i> Rekam Medis
-                    </button>
-                    <button onClick={() => setActiveTab('obat')} className={`flex-1 py-4 text-center font-medium text-sm border-b-2 transition-colors ${activeTab === 'obat' ? 'border-teal-600 text-teal-600 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                        <i className="bi bi-capsule mr-2"></i> Stok Obat
-                    </button>
-                </nav>
+            <PageHeader
+                eyebrow="Kesiswaan"
+                title="Poskestren"
+                description="Kelola rekam medis santri dan persediaan obat dari panel kesehatan yang lebih rapi."
+                tabs={
+                    <HeaderTabs
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        tabs={[
+                            { value: 'rekam', label: 'Rekam Medis', icon: 'bi-clipboard2-pulse-fill' },
+                            { value: 'obat', label: 'Stok Obat', icon: 'bi-capsule' },
+                        ]}
+                    />
+                }
+            />
 
-                <div className="p-6">
-                    {activeTab === 'rekam' && <RekamMedisView canWrite={canWrite} />}
-                    {activeTab === 'obat' && <StokObatView canWrite={canWrite} />}
-                </div>
+            <div>
+                {activeTab === 'rekam' && <RekamMedisView canWrite={canWrite} />}
+                {activeTab === 'obat' && <StokObatView canWrite={canWrite} />}
             </div>
         </div>
     );

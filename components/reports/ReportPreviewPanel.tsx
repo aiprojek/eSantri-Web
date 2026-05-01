@@ -1,8 +1,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { ReportType } from '../../types';
-import { printToPdfNative } from '../../utils/pdfGenerator';
-import { exportToHtml, exportToAutoTable, exportPreviewToExcelWorksheets, exportToWord } from '../../utils/exportUtils';
+import { exportToHtml, exportToAutoTable, exportPreviewToExcelWorksheets, exportToWord, printPreviewExact } from '../../utils/exportUtils';
 import { generateContactCsv } from '../../services/csvService';
 import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel, exportEmisTemplate } from '../../services/excelService';
 
@@ -15,22 +14,103 @@ interface ReportPreviewPanelProps {
     onToast: (msg: string, type: 'success' | 'error' | 'info') => void;
     filteredSantri: any[]; // for CSV export
     settings: any; // for CSV export
+    filters: {
+        jenjangId: string;
+        kelasId: string;
+        rombelId: string;
+        tahunAjaran?: string;
+    };
     excelData?: any; // Extra data passed from parent for specific exports (Kas, Tagihan, etc)
 }
 
-export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewContent, activeReport, pageCount, isLoading, paperSize, onToast, filteredSantri, settings, excelData }) => {
+const REPORT_LABELS: Record<ReportType, string> = {
+    [ReportType.DashboardSummary]: 'ringkasan-dashboard',
+    [ReportType.OperasionalHarian]: 'snapshot-operasional-harian',
+    [ReportType.EarlyWarningSantri]: 'early-warning-santri',
+    [ReportType.FinanceSummary]: 'ringkasan-keuangan',
+    [ReportType.KinerjaPengajar]: 'kinerja-pengajar',
+    [ReportType.TahfizhProgress]: 'perkembangan-tahfizh',
+    [ReportType.KelasAsramaBermasalah]: 'kelas-asrama-bermasalah',
+    [ReportType.LaporanMutasi]: 'laporan-mutasi',
+    [ReportType.CohortSantri]: 'cohort-santri',
+    [ReportType.KepatuhanAdministrasi]: 'kepatuhan-administrasi',
+    [ReportType.EfektivitasPSB]: 'efektivitas-psb',
+    [ReportType.Biodata]: 'biodata-santri',
+    [ReportType.DaftarRombel]: 'daftar-santri',
+    [ReportType.LembarAbsensi]: 'lembar-absensi',
+    [ReportType.LembarNilai]: 'lembar-nilai',
+    [ReportType.LembarPembinaan]: 'lembar-pembinaan',
+    [ReportType.RekeningKoranSantri]: 'rekening-koran-santri',
+    [ReportType.LaporanArusKas]: 'laporan-arus-kas',
+    [ReportType.KartuSantri]: 'kartu-santri',
+    [ReportType.LabelSantri]: 'label-santri',
+    [ReportType.LaporanEMIS]: 'laporan-emis',
+    [ReportType.LaporanAsrama]: 'laporan-asrama',
+    [ReportType.FormulirIzin]: 'formulir-izin',
+    [ReportType.DaftarWaliKelas]: 'daftar-wali-kelas',
+    [ReportType.LaporanKontak]: 'laporan-kontak',
+    [ReportType.LaporanKontakStaf]: 'laporan-kontak-staf',
+    [ReportType.LaporanMapel]: 'laporan-mapel',
+    [ReportType.LembarKedatangan]: 'lembar-kedatangan',
+    [ReportType.LembarRapor]: 'lembar-rapor',
+    [ReportType.RaporLengkap]: 'rapor-lengkap',
+    [ReportType.JurnalMengajar]: 'jurnal-mengajar',
+    [ReportType.RekapKesehatan]: 'rekap-kesehatan',
+    [ReportType.RekapKonseling]: 'rekap-konseling',
+};
+
+const toFileSlug = (value: string): string =>
+    value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+const getDateDDMMYYYY = (): string => {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(now.getFullYear());
+    return `${dd}${mm}${yyyy}`;
+};
+
+export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewContent, activeReport, pageCount, isLoading, paperSize, onToast, filteredSantri, settings, filters, excelData }) => {
     const previewContainerRef = useRef<HTMLDivElement>(null);
     const contentWrapperRef = useRef<HTMLDivElement>(null);
+    const hasInitializedZoomModeRef = useRef(false);
     const [manualZoom, setManualZoom] = useState(1);
     const [smartZoomScale, setSmartZoomScale] = useState(1);
+    const [fitToWidth, setFitToWidth] = useState(true);
     const [isGeneratingFile, setIsGeneratingFile] = useState(false);
     const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
     const [showDonationModal, setShowDonationModal] = useState(false);
 
+    const getBaseFileName = (): string => {
+        const reportName = REPORT_LABELS[activeReport] ?? toFileSlug(activeReport);
+        const jenjangName = filters.jenjangId ? settings.jenjang.find((j: any) => j.id === parseInt(filters.jenjangId, 10))?.nama : '';
+        const kelasName = filters.kelasId ? settings.kelas.find((k: any) => k.id === parseInt(filters.kelasId, 10))?.nama : '';
+        const rombelName = filters.rombelId ? settings.rombel.find((r: any) => r.id === parseInt(filters.rombelId, 10))?.nama : '';
+        const filterParts = [jenjangName, kelasName, rombelName].filter(Boolean).map(toFileSlug).filter(Boolean);
+        const filterSegment = filterParts.length > 0 ? `-(${filterParts.join('-')})` : '';
+        return `${reportName}${filterSegment}-${getDateDDMMYYYY()}`;
+    };
+
     // Auto-fit zoom logic
     useEffect(() => {
+        const updateViewportMode = () => {
+            const mobile = window.matchMedia('(max-width: 768px)').matches;
+            if (!hasInitializedZoomModeRef.current) {
+                setFitToWidth(!mobile);
+                hasInitializedZoomModeRef.current = true;
+            }
+        };
+
         const calculateZoom = () => {
             if (previewContainerRef.current && contentWrapperRef.current) {
+                if (!fitToWidth) {
+                    setSmartZoomScale(1);
+                    return;
+                }
                 const containerW = previewContainerRef.current.clientWidth;
                 const contentW = contentWrapperRef.current.scrollWidth;
                 if (contentW > containerW - 40) { // 40px buffer
@@ -41,28 +121,58 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
             }
         };
         
+        updateViewportMode();
+
         if (previewContent) {
             setTimeout(calculateZoom, 100); // Delay for render
+            window.addEventListener('resize', updateViewportMode);
             window.addEventListener('resize', calculateZoom);
         }
-        return () => window.removeEventListener('resize', calculateZoom);
-    }, [previewContent]);
+        return () => {
+            window.removeEventListener('resize', updateViewportMode);
+            window.removeEventListener('resize', calculateZoom);
+        };
+    }, [previewContent, fitToWidth]);
 
     // Download Handlers
-    const handlePrintNative = () => {
-        printToPdfNative('preview-area', `Laporan_${activeReport}`);
-        onToast('Membuka dialog cetak...', 'info');
-        // Setting timeout to show modal after print dialog opens
-        setTimeout(() => setShowDonationModal(true), 2000);
+    const handlePrintNative = async () => {
+        setIsGeneratingFile(true);
+        try {
+            await printPreviewExact('preview-area', `${getBaseFileName()}.pdf`);
+            onToast('Membuka dialog cetak preview...', 'info');
+            setTimeout(() => setShowDonationModal(true), 2000);
+        } catch (error) {
+            console.error(error);
+            onToast('Gagal membuka dialog cetak.', 'error');
+        } finally {
+            setIsGeneratingFile(false);
+        }
+    };
+
+    const handleDownloadVisualPdf = async () => {
+        setIsGeneratingFile(true);
+        try {
+            await printPreviewExact('preview-area', `${getBaseFileName()}.pdf`);
+            onToast('Dialog cetak dibuka. Pilih "Save as PDF" untuk hasil paling akurat.', 'info');
+            setTimeout(() => setShowDonationModal(true), 2000);
+        } catch (error) {
+            console.error(error);
+            onToast('Gagal membuat PDF visual.', 'error');
+        } finally {
+            setIsGeneratingFile(false);
+            setIsDownloadMenuOpen(false);
+        }
     };
 
     const handleDownloadCsv = () => {
         const csvContent = generateContactCsv(filteredSantri, settings);
-        const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Kontak_${new Date().toISOString().slice(0, 10)}.csv`);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `${getBaseFileName()}.csv`);
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        URL.revokeObjectURL(url);
         setIsDownloadMenuOpen(false);
         triggerSuccessDownload('CSV berhasil diunduh.');
     };
@@ -70,7 +180,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadExcel = async () => {
         setIsGeneratingFile(true);
         try {
-            const fileName = `Laporan_${activeReport}_${new Date().toISOString().slice(0,10)}`;
+            const fileName = getBaseFileName();
             
             if (activeReport === ReportType.LaporanKontak) {
                 await exportContactsToExcel(filteredSantri, settings, fileName);
@@ -82,7 +192,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                 await exportFinanceSummaryToExcel(filteredSantri, excelData.tagihanList, settings, fileName);
             }
             else if (activeReport === ReportType.LaporanEMIS) {
-                await exportEmisTemplate(filteredSantri, settings, `EMIS_Export_${new Date().toISOString().slice(0,10)}`);
+                await exportEmisTemplate(filteredSantri, settings, fileName);
             }
             else {
                 // Default: Export Santri Data (for Biodata, Rombel, etc)
@@ -106,7 +216,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadAutoTable = async () => {
         setIsGeneratingFile(true);
         try {
-            await exportToAutoTable('preview-area', `Laporan_${activeReport}`);
+            await exportToAutoTable('preview-area', getBaseFileName());
             triggerSuccessDownload('PDF AutoTable berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor AutoTable.', 'error');
@@ -119,7 +229,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadVisualExcel = async () => {
         setIsGeneratingFile(true);
         try {
-            await exportPreviewToExcelWorksheets('preview-area', `Laporan_${activeReport}`);
+            await exportPreviewToExcelWorksheets('preview-area', getBaseFileName());
             triggerSuccessDownload('Excel Visual berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor Excel Visual.', 'error');
@@ -132,7 +242,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadHtml = () => {
         setIsGeneratingFile(true);
         try {
-            exportToHtml('preview-area', `Laporan_${activeReport}`);
+            exportToHtml('preview-area', getBaseFileName());
             triggerSuccessDownload('HTML Offline berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor HTML.', 'error');
@@ -145,7 +255,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadWord = () => {
         setIsGeneratingFile(true);
         try {
-            exportToWord('preview-area', `Laporan_${activeReport}`);
+            exportToWord('preview-area', getBaseFileName());
             triggerSuccessDownload('Word Document (.doc) berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor Word Document.', 'error');
@@ -168,9 +278,17 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
 
     // List of reports eligible for AutoTable Export (Clean Data PDF)
     const canExportToAutoTable = [
+        ReportType.OperasionalHarian,
+        ReportType.EarlyWarningSantri,
         ReportType.DashboardSummary,
         ReportType.FinanceSummary,
+        ReportType.KinerjaPengajar,
+        ReportType.TahfizhProgress,
+        ReportType.KelasAsramaBermasalah,
         ReportType.LaporanMutasi,
+        ReportType.CohortSantri,
+        ReportType.KepatuhanAdministrasi,
+        ReportType.EfektivitasPSB,
         ReportType.DaftarRombel,
         ReportType.LembarAbsensi,
         ReportType.LembarNilai,
@@ -199,17 +317,25 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     return (
         <div className="bg-gray-200 rounded-xl shadow-inner border border-gray-300 h-full flex flex-col relative overflow-hidden">
             {/* Toolbar */}
-            <div className="bg-white border-b px-4 py-3 flex justify-between items-center z-20 shadow-sm shrink-0">
+            <div className="bg-white border-b px-3 sm:px-4 py-2.5 flex flex-wrap gap-2 justify-between items-center z-20 shadow-sm shrink-0">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-gray-700">Preview</span>
                     {pageCount > 0 && <span className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full border">{pageCount} Halaman</span>}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center flex-wrap justify-end gap-2">
                     {/* Zoom Controls */}
-                    <div className="hidden md:flex items-center bg-gray-100 rounded-lg p-1 mr-2">
-                        <button onClick={() => setManualZoom(z => Math.max(0.3, z - 0.1))} className="p-1 hover:bg-white rounded"><i className="bi bi-dash"></i></button>
-                        <span className="text-xs font-mono w-10 text-center">{Math.round(smartZoomScale * manualZoom * 100)}%</span>
-                        <button onClick={() => setManualZoom(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded"><i className="bi bi-plus"></i></button>
+                    <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                        <button onClick={() => setManualZoom(z => Math.max(0.3, z - 0.1))} className="h-7 w-7 hover:bg-white rounded text-gray-700"><i className="bi bi-dash"></i></button>
+                        <span className="text-[11px] font-mono w-11 text-center">{Math.round(smartZoomScale * manualZoom * 100)}%</span>
+                        <button onClick={() => setManualZoom(z => Math.min(2, z + 0.1))} className="h-7 w-7 hover:bg-white rounded text-gray-700"><i className="bi bi-plus"></i></button>
+                        <button onClick={() => setManualZoom(1)} className="ml-1 h-7 px-2 text-[11px] rounded hover:bg-white text-gray-600 border border-transparent hover:border-gray-200">100%</button>
+                        <button
+                            onClick={() => setFitToWidth(v => !v)}
+                            className={`ml-1 h-7 px-2 text-[11px] rounded border ${fitToWidth ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-gray-200 text-gray-600'}`}
+                            title={fitToWidth ? 'Mode fit ke lebar layar' : 'Mode ukuran asli (scroll)'}
+                        >
+                            {fitToWidth ? 'Fit' : 'Asli'}
+                        </button>
                     </div>
 
                     {/* Download Actions */}
@@ -219,7 +345,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                             <span className="hidden sm:inline">Unduh</span>
                         </button>
                         {isDownloadMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
+                            <div className="absolute right-0 mt-2 w-56 max-w-[calc(100vw-1.5rem)] bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
                                 {/* Excel Option (Priority) */}
                                 {canExportToExcel && (
                                     <button onClick={handleDownloadExcel} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 border-b flex items-center gap-2 bg-green-50/50">
@@ -230,9 +356,13 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                                 {activeReport === ReportType.LaporanKontak && (
                                     <button onClick={handleDownloadCsv} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 border-b flex items-center gap-2"><i className="bi bi-file-earmark-spreadsheet text-gray-500"></i> CSV (Legacy)</button>
                                 )}
+
+                                <button onClick={handleDownloadVisualPdf} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2 bg-red-50/40">
+                                    <i className="bi bi-file-earmark-pdf text-red-600"></i> PDF Visual (Akurat)
+                                </button>
                                 
                                 <button onClick={handlePrintNative} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2">
-                                    <i className="bi bi-file-earmark-pdf text-red-600"></i> Cetak / PDF (Vektor Asli)
+                                    <i className="bi bi-printer text-red-600"></i> Cetak (Sama dgn Preview)
                                 </button>
                                 
                                 <button onClick={handleDownloadWord} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 border-b flex items-center gap-2">
@@ -275,7 +405,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
             </div>
 
             {/* Scrollable Preview Area */}
-            <div id="preview-area" ref={previewContainerRef} className="flex-grow overflow-auto p-8 flex justify-center items-start bg-gray-200/50 backdrop-blur-sm">
+            <div id="preview-area" ref={previewContainerRef} className={`flex-grow overflow-auto p-3 sm:p-8 flex ${fitToWidth ? 'justify-center' : 'justify-start'} items-start bg-gray-200/50 backdrop-blur-sm`}>
                 <div 
                     ref={contentWrapperRef} 
                     className="printable-content-wrapper origin-top transition-transform duration-200"

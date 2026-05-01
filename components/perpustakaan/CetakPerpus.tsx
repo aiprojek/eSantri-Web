@@ -30,15 +30,21 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
     const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
     const [cardTheme, setCardTheme] = useState<'classic' | 'modern' | 'bold' | 'dark' | 'ceria' | 'vertical'>('classic');
     const [filterJenjang, setFilterJenjang] = useState('');
+    const [searchSantri, setSearchSantri] = useState('');
     
     // Slip & Label Buku State
     const [selectedBukuIds, setSelectedBukuIds] = useState<number[]>([]);
     const [filterKategori, setFilterKategori] = useState('');
+    const [searchBuku, setSearchBuku] = useState('');
 
     // --- LOGIC KARTU ---
     const filteredSantri = useMemo(() => {
-        return santriList.filter(s => s.status === 'Aktif' && (!filterJenjang || s.jenjangId === parseInt(filterJenjang)));
-    }, [santriList, filterJenjang]);
+        return santriList.filter(s => {
+            const matchJenjang = !filterJenjang || s.jenjangId === parseInt(filterJenjang);
+            const matchSearch = !searchSantri || s.namaLengkap.toLowerCase().includes(searchSantri.toLowerCase()) || s.nis.includes(searchSantri);
+            return s.status === 'Aktif' && matchJenjang && matchSearch;
+        });
+    }, [santriList, filterJenjang, searchSantri]);
 
     const handleSelectSantri = (id: number) => {
         setSelectedSantriIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -50,8 +56,12 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
 
     // --- LOGIC BUKU ---
     const filteredBuku = useMemo(() => {
-        return bukuList.filter(b => !filterKategori || b.kategori === filterKategori);
-    }, [bukuList, filterKategori]);
+        return bukuList.filter(b => {
+            const matchKategori = !filterKategori || b.kategori === filterKategori;
+            const matchSearch = !searchBuku || b.judul.toLowerCase().includes(searchBuku.toLowerCase()) || b.kodeBuku.toLowerCase().includes(searchBuku.toLowerCase());
+            return matchKategori && matchSearch;
+        });
+    }, [bukuList, filterKategori, searchBuku]);
 
     const handleSelectBuku = (id: number) => {
         setSelectedBukuIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -97,9 +107,9 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
     };
 
     return (
-        <div className="bg-gray-100 rounded-lg p-6 min-h-[600px] flex flex-col lg:flex-row gap-6">
+        <div className="app-panel rounded-panel p-4 sm:p-6 min-h-[600px] flex flex-col lg:flex-row gap-6">
             {/* Sidebar Controls */}
-            <div className="w-full lg:w-1/3 bg-white p-4 rounded-lg shadow-sm h-fit space-y-6">
+            <div className="w-full lg:w-1/3 app-panel p-4 rounded-panel h-fit space-y-6">
                 <div className="flex border-b mb-2 overflow-x-auto">
                     <button onClick={() => setActiveTab('kartu')} className={`flex-1 py-2 px-2 text-sm font-bold whitespace-nowrap ${activeTab === 'kartu' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>Kartu</button>
                     <button onClick={() => setActiveTab('slip')} className={`flex-1 py-2 px-2 text-sm font-bold whitespace-nowrap ${activeTab === 'slip' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>Slip Buku</button>
@@ -182,6 +192,10 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                                 {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Cari Santri</label>
+                            <input value={searchSantri} onChange={e => setSearchSantri(e.target.value)} className="w-full border rounded p-2 text-sm" placeholder="Nama / NIS..." />
+                        </div>
                         <div className="border rounded max-h-60 overflow-y-auto p-2 bg-gray-50">
                             <div className="flex justify-between mb-2 text-xs">
                                 <span className="font-bold">Pilih Santri</span>
@@ -210,6 +224,10 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                                 <option value="Referensi">Referensi</option>
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Cari Buku</label>
+                            <input value={searchBuku} onChange={e => setSearchBuku(e.target.value)} className="w-full border rounded p-2 text-sm" placeholder="Judul / Kode..." />
+                        </div>
                          <div className="border rounded max-h-60 overflow-y-auto p-2 bg-gray-50">
                             <div className="flex justify-between mb-2 text-xs">
                                 <span className="font-bold">Pilih Buku</span>
@@ -234,11 +252,15 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
             </div>
 
             {/* Preview Area */}
-            <div className="w-full lg:w-2/3 bg-gray-300 overflow-auto p-8 flex justify-center rounded-lg shadow-inner">
+            <div className="w-full lg:w-2/3 app-panel-soft rounded-panel border border-[color:var(--border-subtle)]">
+                <div className="border-b border-[color:var(--border-subtle)] px-4 py-3 sm:px-6">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-app-text-secondary">Preview Cetak</p>
+                </div>
+                <div className="app-scrollbar overflow-auto p-4 sm:p-6 lg:p-8 flex justify-center min-h-[480px]">
                 {activeTab === 'kartu' && selectedSantriIds.length > 0 && (
                     <div 
                         id="preview-kartu" 
-                        className="bg-white shadow-xl printable-content-wrapper" 
+                        className="bg-white shadow-lg printable-content-wrapper rounded-md" 
                         style={{ 
                             width: `${currentPaper.w}cm`, 
                             minHeight: `${currentPaper.h}cm`, 
@@ -261,7 +283,7 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                 {activeTab === 'slip' && selectedBukuIds.length > 0 && (
                     <div 
                         id="preview-slip" 
-                        className="bg-white shadow-xl printable-content-wrapper" 
+                        className="bg-white shadow-lg printable-content-wrapper rounded-md" 
                         style={{ 
                             width: `${currentPaper.w}cm`, 
                             minHeight: `${currentPaper.h}cm`, 
@@ -284,7 +306,7 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                 {activeTab === 'label' && selectedBukuIds.length > 0 && (
                     <div 
                         id="preview-label" 
-                        className="bg-white shadow-xl printable-content-wrapper" 
+                        className="bg-white shadow-lg printable-content-wrapper rounded-md" 
                         style={{ 
                             width: `${currentPaper.w}cm`, 
                             minHeight: `${currentPaper.h}cm`, 
@@ -307,6 +329,7 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                 {((activeTab === 'kartu' && selectedSantriIds.length === 0) || ((activeTab === 'slip' || activeTab === 'label') && selectedBukuIds.length === 0)) && (
                     <div className="text-gray-500 mt-20 font-bold opacity-50">Pilih data untuk melihat preview</div>
                 )}
+                </div>
             </div>
         </div>
     );

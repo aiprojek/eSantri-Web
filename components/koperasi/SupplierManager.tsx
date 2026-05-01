@@ -55,15 +55,15 @@ export const SupplierManager: React.FC = () => {
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
-            <div className="flex justify-between items-center mb-6">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md h-full flex flex-col">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
                 <div>
                     <h2 className="text-xl font-bold text-gray-800">Vendor Management (Pemasok)</h2>
                     <p className="text-sm text-gray-500">Kelola daftar vendor dan kategori barang yang dipasok</p>
                 </div>
                 <button 
                     onClick={() => openModal(null)}
-                    className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2"
+                    className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2 w-full sm:w-auto justify-center"
                 >
                     <i className="bi bi-person-plus-fill"></i> Tambah Vendor
                 </button>
@@ -81,7 +81,7 @@ export const SupplierManager: React.FC = () => {
             </div>
 
             <div className="flex-grow overflow-auto border rounded-lg">
-                <table className="w-full text-sm text-left">
+                <table className="hidden md:table w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-600 sticky top-0">
                         <tr>
                             <th className="p-3">Nama Vendor</th>
@@ -127,6 +127,37 @@ export const SupplierManager: React.FC = () => {
                         )}
                     </tbody>
                 </table>
+                <div className="md:hidden p-3 space-y-3">
+                    {filteredSuppliers.map(s => (
+                        <div key={s.id} className="border rounded-lg p-3 bg-white">
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <div className="font-semibold text-sm text-gray-800">{s.nama}</div>
+                                    <div className="text-[10px] text-gray-400 uppercase font-mono">{s.npwp || 'NPWP Tidak Ada'}</div>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${s.status === 'Aktif' || !s.status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                    {s.status || 'Aktif'}
+                                </span>
+                            </div>
+                            <div className="mt-2 text-xs text-gray-600">
+                                <div>Kontak: {s.kontak || '-'}</div>
+                                <div>{s.telepon || s.email || '-'}</div>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                                {Array.isArray(s.kategori) ? s.kategori.map((c, i) => (
+                                    <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px]">{c}</span>
+                                )) : <span className="text-gray-400 italic text-xs">Semua</span>}
+                            </div>
+                            <div className="mt-3 flex justify-end gap-2">
+                                <button onClick={() => openModal(s)} className="text-blue-600 hover:text-blue-800 p-2"><i className="bi bi-pencil-square"></i></button>
+                                <button onClick={() => handleDelete(s.id)} className="text-red-600 hover:text-red-800 p-2"><i className="bi bi-trash"></i></button>
+                            </div>
+                        </div>
+                    ))}
+                    {filteredSuppliers.length === 0 && (
+                        <div className="p-6 text-center text-sm text-gray-400 border rounded-lg">Belum ada data vendor.</div>
+                    )}
+                </div>
             </div>
 
             {isModalOpen && (

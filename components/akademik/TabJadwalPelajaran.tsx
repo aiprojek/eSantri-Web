@@ -6,9 +6,11 @@ import { db } from '../../db';
 import { JadwalPelajaran, JamPelajaran, ArsipJadwal, Rombel, TenagaPengajar } from '../../types';
 import { JadwalModal } from './modals/JadwalModal';
 import { PrintHeader } from '../common/PrintHeader';
-import { ReportFooter, formatDate } from '../reports/modules/Common';
+import { formatDate } from '../reports/modules/Common';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { loadJsPdf, loadJsPdfAutoTable } from '../../utils/lazyClientLibs';
+import { formatAcademicYearDisplay, getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
+import { exportPreviewToExcelWorksheets, exportToHtml, exportToWord, printPreviewExact } from '../../utils/exportUtils';
 
 // --- MODAL ARSIP ---
 interface ArchiveModalProps {
@@ -16,12 +18,20 @@ interface ArchiveModalProps {
     onClose: () => void;
     onSave: (judul: string, tahun: string, semester: 'Ganjil' | 'Genap') => void;
     jenjangName: string;
+    defaultAcademicYear: string;
+    availableAcademicYears: string[];
 }
 
-const ArchiveModal: React.FC<ArchiveModalProps> = ({ isOpen, onClose, onSave, jenjangName }) => {
+const ArchiveModal: React.FC<ArchiveModalProps> = ({ isOpen, onClose, onSave, jenjangName, defaultAcademicYear, availableAcademicYears }) => {
     const [judul, setJudul] = useState('');
-    const [tahun, setTahun] = useState('2024/2025');
+    const [tahun, setTahun] = useState(defaultAcademicYear);
     const [semester, setSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
+
+    useEffect(() => {
+        if (isOpen) {
+            setTahun(defaultAcademicYear);
+        }
+    }, [isOpen, defaultAcademicYear]);
 
     if(!isOpen) return null;
 
@@ -40,7 +50,11 @@ const ArchiveModal: React.FC<ArchiveModalProps> = ({ isOpen, onClose, onSave, je
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block mb-1 text-sm font-medium">Tahun Ajaran</label>
-                            <input type="text" value={tahun} onChange={e => setTahun(e.target.value)} className="w-full border rounded p-2 text-sm" />
+                            <select value={tahun} onChange={e => setTahun(e.target.value)} className="w-full border rounded p-2 text-sm">
+                                {availableAcademicYears.map((year) => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
                         </div>
                          <div>
                             <label className="block mb-1 text-sm font-medium">Semester</label>
@@ -188,6 +202,8 @@ const TeacherLoadModal: React.FC<TeacherLoadModalProps> = ({ isOpen, onClose, te
 export const TabJadwalPelajaran: React.FC = () => {
     const { settings, onSaveSettings, showToast, showConfirmation, currentUser } = useAppContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
+    const defaultAcademicYear = useMemo(() => getDefaultAcademicYear(settings), [settings]);
+    const availableAcademicYears = useMemo(() => getAcademicYearOptions(settings), [settings]);
 
     // Tabs
     const [activeTab, setActiveTab] = useState<'active' | 'archive'>('active');
@@ -219,6 +235,7 @@ export const TabJadwalPelajaran: React.FC = () => {
     const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
     const [isTeacherLoadModalOpen, setIsTeacherLoadModalOpen] = useState(false);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+    const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     
     const [selectedSlot, setSelectedSlot] = useState<{ hari: number, jamKe: number } | null>(null);
     const [editingJadwal, setEditingJadwal] = useState<JadwalPelajaran | null>(null);
@@ -253,6 +270,11 @@ export const TabJadwalPelajaran: React.FC = () => {
         return [];
     }, [filterJenjangId, filterKelasId, filterRombelId, settings.rombel, settings.kelas]);
 
+    const exportTitleSuffix = filterRombelId
+        ? (settings.rombel.find(r => r.id === filterRombelId)?.nama || 'Rombel')
+        : `GABUNGAN_${targetRombels.length}_Kelas`;
+    const exportFileName = `Jadwal_${exportTitleSuffix}`;
+
     // Use localJamConfig for display and editing
     const jamConfig = localJamConfig;
 
@@ -274,9 +296,33 @@ export const TabJadwalPelajaran: React.FC = () => {
             
             if (conflict) {
                 const conflictRombel = settings.rombel.find(r => r.id === conflict.rombelId)?.nama;
-                if (!confirm(`PERINGATAN: Guru ini sudah mengajar di kelas ${conflictRombel} pada waktu yang sama. Tetap simpan?`)) {
-                    return;
-                }
+                showConfirmation(
+                    'Konflik Jadwal Guru',
+                    `Guru ini sudah mengajar di kelas ${conflictRombel} pada waktu yang sama. Tetap simpan?`,
+                    async () => {
+                        const payload = {
+                            ...data,
+                            rombelId: filterRombelId,
+                            lastModified: Date.now()
+                        } as JadwalPelajaran;
+
+                        if (editingJadwal) {
+                            await db.jadwalPelajaran.put({ ...payload, id: editingJadwal.id });
+                            showToast('Jadwal diperbarui', 'success');
+                        } else {
+                            const existing = jadwalList.find(j => j.rombelId === filterRombelId && j.hari === data.hari && j.jamKe === data.jamKe);
+                            if (existing) {
+                                await db.jadwalPelajaran.put({ ...payload, id: existing.id });
+                            } else {
+                                await db.jadwalPelajaran.add(payload);
+                            }
+                            showToast('Jadwal ditambahkan', 'success');
+                        }
+                        setIsJadwalModalOpen(false);
+                    },
+                    { confirmText: 'Tetap Simpan', confirmColor: 'yellow' }
+                );
+                return;
             }
         }
 
@@ -477,6 +523,10 @@ export const TabJadwalPelajaran: React.FC = () => {
     };
 
     const handlePrint = async () => {
+        if (targetRombels.length === 0) {
+            showToast('Pilih setidaknya satu kelas untuk dicetak.', 'error');
+            return;
+        }
         const [{ jsPDF }, autoTableModule] = await Promise.all([
             loadJsPdf(),
             loadJsPdfAutoTable()
@@ -503,8 +553,6 @@ export const TabJadwalPelajaran: React.FC = () => {
             doc.setFontSize(10);
             doc.text(`${settings.alamat || ''}`, 148.5, 27, { align: 'center' });
 
-            const usedTeachers = new Set<number>();
-
             // Table Data
             const head = [['Jam', ...days]];
             const body = jamConfig.map(jam => {
@@ -523,7 +571,6 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 if (item.guruId === -1) guruStr = 'NIHIL / KOSONG';
                                 else if (item.guruId === -2) guruStr = 'MUSYRIF / TAHFIZH';
                                 else {
-                                    usedTeachers.add(item.guruId);
                                     const teacher = settings.tenagaPengajar.find(t => t.id === item.guruId);
                                     guruStr = teacher ? (teacher.kodeGuru || teacher.nama) : '-';
                                 }
@@ -564,52 +611,57 @@ export const TabJadwalPelajaran: React.FC = () => {
                 }
             });
 
-            let finalY = (doc as any).lastAutoTable.finalY || 180;
-
-            // Legend
-            if (usedTeachers.size > 0) {
-                doc.setFontSize(9);
-                doc.setFont('helvetica', 'bold');
-                doc.text('Keterangan Kode Guru:', 14, finalY + 8);
-                
-                const legendArray = Array.from(usedTeachers).map(id => {
-                    const t = settings.tenagaPengajar.find(x => x.id === id);
-                    return t ? `${t.kodeGuru || t.nama} = ${t.nama}` : '';
-                }).filter(Boolean);
-                
-                const legendBody = [];
-                for (let i = 0; i < legendArray.length; i += 4) {
-                    legendBody.push([
-                        legendArray[i] || '',
-                        legendArray[i+1] || '',
-                        legendArray[i+2] || '',
-                        legendArray[i+3] || ''
-                    ]);
-                }
-
-                autoTable(doc, {
-                    body: legendBody,
-                    startY: finalY + 10,
-                    theme: 'plain',
-                    styles: { fontSize: 8, cellPadding: 1, cellWidth: 65 },
-                    margin: { left: 14 }
-                });
-                
-                finalY = (doc as any).lastAutoTable.finalY;
-            }
-
             // Footer
+            const pageHeight = doc.internal.pageSize.getHeight();
             doc.setFontSize(8);
             doc.setFont('helvetica', 'italic');
-            doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, finalY + 10);
-            doc.text(`eSantri Digital System`, 283, finalY + 10, { align: 'right' });
+            doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, pageHeight - 6);
+            doc.text(`dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id`, 283, pageHeight - 6, { align: 'right' });
         });
 
-        const titleSuffix = filterRombelId 
-            ? settings.rombel.find(r=>r.id===filterRombelId)?.nama 
-            : `GABUNGAN_${targetRombels.length}_Kelas`;
-        doc.save(`Jadwal_${titleSuffix}.pdf`);
+        doc.save(`${exportFileName}.pdf`);
         showToast('PDF Berhasil dibuat', 'success');
+    };
+
+    const runExportAction = async (mode: 'pdfVisual' | 'print' | 'pdfAutoTable' | 'excel' | 'word' | 'html') => {
+        if (targetRombels.length === 0) {
+            showToast('Pilih setidaknya satu kelas untuk dicetak.', 'error');
+            return;
+        }
+
+        setIsExportMenuOpen(false);
+
+        try {
+            if (mode === 'pdfVisual') {
+                await printPreviewExact('jadwal-print-area', exportFileName);
+                showToast('Dialog cetak dibuka. Pilih "Save as PDF" untuk hasil visual paling akurat.', 'info');
+                return;
+            }
+            if (mode === 'print') {
+                await printPreviewExact('jadwal-print-area', exportFileName);
+                return;
+            }
+            if (mode === 'pdfAutoTable') {
+                await handlePrint();
+                return;
+            }
+            if (mode === 'excel') {
+                await exportPreviewToExcelWorksheets('jadwal-print-area', exportFileName);
+                showToast('Excel berhasil diunduh.', 'success');
+                return;
+            }
+            if (mode === 'word') {
+                exportToWord('jadwal-print-area', exportFileName);
+                showToast('Word berhasil diunduh.', 'success');
+                return;
+            }
+            if (mode === 'html') {
+                exportToHtml('jadwal-print-area', exportFileName);
+                showToast('HTML berhasil diunduh.', 'success');
+            }
+        } catch {
+            showToast('Proses export gagal. Coba lagi.', 'error');
+        }
     };
     
     const getGuruLabel = (guruId?: number) => {
@@ -697,7 +749,7 @@ export const TabJadwalPelajaran: React.FC = () => {
             {activeTab === 'active' && (
                 <>
                     {/* Filter & Actions Bar */}
-                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-end">
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
                         {/* Mobile Actions Overlay */}
                         <div className="flex md:hidden items-center gap-2 mb-2">
                             <button 
@@ -707,27 +759,39 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 <i className="bi bi-funnel-fill"></i>
                                 <span>Filter</span>
                             </button>
-                            <button onClick={handlePrint} disabled={targetRombels.length === 0} className="shrink-0 w-[44px] h-[44px] flex items-center justify-center bg-gray-900 text-white rounded-xl disabled:opacity-50 shadow-lg">
-                                <i className="bi bi-printer text-xl"></i>
-                            </button>
+                            <div className="relative shrink-0">
+                                <button onClick={() => setIsExportMenuOpen(v => !v)} disabled={targetRombels.length === 0} className="w-[44px] h-[44px] flex items-center justify-center bg-gray-900 text-white rounded-xl disabled:opacity-50 shadow-lg">
+                                    <i className="bi bi-printer text-xl"></i>
+                                </button>
+                                {isExportMenuOpen && (
+                                    <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+                                        <button onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b">PDF Visual</button>
+                                        <button onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b">Cetak</button>
+                                        <button onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b">PDF AutoTable</button>
+                                        <button onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b">Excel</button>
+                                        <button onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b">Word</button>
+                                        <button onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50">HTML</button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Desktop Filter View */}
-                        <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 flex-grow">
-                            <div className="md:col-span-1">
+                        <div className="hidden md:grid md:grid-cols-3 gap-4">
+                            <div>
                                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest">Jenjang Pendidikan</label>
                                 <select value={filterJenjangId} onChange={e => { setFilterJenjangId(Number(e.target.value)); setFilterKelasId(0); setFilterRombelId(0); }} className="w-full border rounded-lg p-2.5 text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-bold transition-all">
                                     {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                                 </select>
                             </div>
-                            <div className="md:col-span-1">
+                            <div>
                                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest">Angkatan / Kelas</label>
                                 <select value={filterKelasId} onChange={e => { setFilterKelasId(Number(e.target.value)); setFilterRombelId(0); }} className="w-full border rounded-lg p-2.5 text-sm bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 focus:bg-white focus:ring-2 focus:ring-teal-500 font-bold transition-all" disabled={!filterJenjangId}>
                                     <option value={0}>Semua Kelas</option>
                                     {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
                                 </select>
                             </div>
-                            <div className="lg:col-span-1">
+                            <div>
                                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest">Rombongan Belajar</label>
                                 <select value={filterRombelId} onChange={e => setFilterRombelId(Number(e.target.value))} className="w-full border rounded-lg p-2.5 text-sm bg-teal-50/50 border-teal-100 disabled:bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-bold transition-all" disabled={!filterJenjangId}>
                                     <option value={0}>Semua Rombel</option>
@@ -736,27 +800,40 @@ export const TabJadwalPelajaran: React.FC = () => {
                             </div>
                         </div>
                         
-                        <div className="flex flex-wrap items-center gap-2.5 border-t md:border-none pt-4 md:pt-0">
-                             <button onClick={() => setIsTeacherLoadModalOpen(true)} className="flex-1 md:flex-none justify-center bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-100 transition-colors">
+                        <div className="hidden md:grid md:grid-cols-4 gap-2.5 border-t border-gray-100 pt-4">
+                             <button onClick={() => setIsTeacherLoadModalOpen(true)} className="w-full justify-center bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-100 transition-colors">
                                 <i className="bi bi-bar-chart-fill"></i> 
                                 <span className="md:inline">Rekap Jam</span>
                             </button>
                             {canWrite && (
-                                <div className="hidden md:flex gap-2.5">
-                                    <button onClick={handleAutoGenerate} className="flex-1 md:flex-none justify-center bg-teal-600 text-white px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-teal-700 shadow-md transition-all active:scale-95">
-                                        <i className="bi bi-magic"></i> 
+                                <>
+                                    <button onClick={handleAutoGenerate} className="w-full justify-center bg-teal-600 text-white px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-teal-700 shadow-md transition-all active:scale-95">
+                                        <i className="bi bi-magic"></i>
                                         <span>Auto</span>
                                     </button>
-                                    <button onClick={() => setIsArchiveModalOpen(true)} className="flex-1 md:flex-none justify-center bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-blue-700 shadow-md transition-all active:scale-95">
-                                        <i className="bi bi-archive-fill"></i> 
+                                    <button onClick={() => setIsArchiveModalOpen(true)} className="w-full justify-center bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-blue-700 shadow-md transition-all active:scale-95">
+                                        <i className="bi bi-archive-fill"></i>
                                         <span>Arsip</span>
                                     </button>
-                                </div>
+                                </>
                             )}
-                            <button onClick={handlePrint} disabled={targetRombels.length === 0} className="hidden md:flex flex-1 md:flex-none justify-center bg-gray-900 text-white px-4 py-2.5 rounded-xl text-sm font-black items-center gap-2 hover:bg-black disabled:opacity-50 transition-all">
-                                <i className="bi bi-printer"></i> 
-                                <span>Cetak PDF</span>
-                            </button>
+                            <div className={`relative ${canWrite ? '' : 'md:col-span-3'}`}>
+                                <button onClick={() => setIsExportMenuOpen(v => !v)} disabled={targetRombels.length === 0} className="w-full justify-center bg-gray-900 text-white px-4 py-2.5 rounded-xl text-sm font-black items-center gap-2 hover:bg-black disabled:opacity-50 transition-all flex">
+                                    <i className="bi bi-printer"></i>
+                                    <span>Aksi Cetak Mapel</span>
+                                    <i className={`bi ${isExportMenuOpen ? 'bi-chevron-up' : 'bi-chevron-down'} text-xs`}></i>
+                                </button>
+                                {isExportMenuOpen && (
+                                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+                                        <button onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b">PDF Visual</button>
+                                        <button onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b">Cetak</button>
+                                        <button onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b">PDF AutoTable</button>
+                                        <button onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b">Excel</button>
+                                        <button onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b">Word</button>
+                                        <button onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50">HTML</button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -1008,6 +1085,8 @@ export const TabJadwalPelajaran: React.FC = () => {
                         onClose={() => setIsArchiveModalOpen(false)}
                         onSave={handleArchive}
                         jenjangName={activeJenjang?.nama || 'Unknown'}
+                        defaultAcademicYear={defaultAcademicYear}
+                        availableAcademicYears={availableAcademicYears}
                     />
 
                     {isCopyModalOpen && (
@@ -1034,19 +1113,22 @@ export const TabJadwalPelajaran: React.FC = () => {
                     <div className="hidden print:block">
                         <div id="jadwal-print-area">
                             {targetRombels.map((rombel, idx) => (
-                                <div key={rombel.id} className="printable-content-wrapper p-8 bg-white page-break-after" style={{ width: '29.7cm', minHeight: '21cm', marginBottom: idx < targetRombels.length-1 ? '2cm' : '0' }}> 
-                                    <PrintHeader settings={settings} title={`JADWAL PELAJARAN KELAS ${rombel.nama.toUpperCase()}`} />
-                                    <table className="w-full border-collapse border border-black text-center text-xs mt-6">
+                                <div key={rombel.id} className="printable-content-wrapper jadwal-sheet bg-white page-break-after relative" style={{ width: '29.7cm', minHeight: '21cm', marginBottom: idx < targetRombels.length-1 ? '2cm' : '0' }}> 
+                                    <div className="jadwal-header-block">
+                                        <PrintHeader settings={settings} compact title={`JADWAL PELAJARAN KELAS ${rombel.nama.toUpperCase()}`} />
+                                    </div>
+                                    <div className="jadwal-table-block">
+                                    <table className="w-full border-collapse border border-black text-center text-[10px] mt-1">
                                         <thead className="bg-gray-200 uppercase font-bold">
                                             <tr>
-                                                <th className="p-2 border border-black w-16">Jam</th>
-                                                {days.map(d => <th key={d} className="p-2 border border-black">{d}</th>)}
+                                                <th className="p-1 border border-black w-14">Jam</th>
+                                                {days.map(d => <th key={d} className="p-1 border border-black">{d}</th>)}
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {jamConfig.map(jam => (
                                                 <tr key={jam.id}>
-                                                    <td className="p-2 border border-black bg-gray-100 font-bold">
+                                                    <td className="p-1 border border-black bg-gray-100 font-bold leading-tight">
                                                         {jam.urutan}<br/><span className="font-normal text-[10px]">{jam.jamMulai}-{jam.jamSelesai}</span>
                                                     </td>
                                                     {days.map((day, dayIdx) => {
@@ -1055,14 +1137,14 @@ export const TabJadwalPelajaran: React.FC = () => {
                                                         const guru = getGuruLabel(item?.guruId);
 
                                                         return (
-                                                            <td key={dayIdx} className="p-2 border border-black align-top h-16">
+                                                            <td key={dayIdx} className="p-1 border border-black align-top h-12 leading-tight">
                                                                 {item ? (
                                                                     item.keterangan ? (
                                                                         <div className="font-bold italic">{item.keterangan}</div>
                                                                     ) : (
                                                                         <>
-                                                                            <div className="font-bold">{mapel}</div>
-                                                                            <div className="text-[10px]">{guru}</div>
+                                                                            <div className="font-bold text-[10px]">{mapel}</div>
+                                                                            <div className="text-[9px]">{guru}</div>
                                                                         </>
                                                                     )
                                                                 ) : ''}
@@ -1073,7 +1155,14 @@ export const TabJadwalPelajaran: React.FC = () => {
                                             ))}
                                         </tbody>
                                     </table>
-                                    <ReportFooter />
+                                    </div>
+                                    <div
+                                        className="report-signature-footer print-meta border-t border-gray-400 text-[8pt] text-gray-500 italic w-full flex items-center justify-between px-8"
+                                        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: '0.25cm', paddingBottom: '0.1cm', background: 'white' }}
+                                    >
+                                        <span>Dicetak pada: {new Date().toLocaleString('id-ID')}</span>
+                                        <span>dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -1096,7 +1185,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                                             <span className={`text-xs px-2 py-1 rounded border ${a.semester === 'Ganjil' ? 'bg-yellow-100 border-yellow-300 text-yellow-800' : 'bg-green-100 border-green-300 text-green-800'}`}>{a.semester}</span>
                                         </div>
                                         <p className="text-sm font-medium text-gray-700">{jenjangName}</p>
-                                        <p className="text-xs text-gray-500 mb-4">TA: {a.tahunAjaran} • Diarsipkan: {formatDate(a.tanggalArsip)}</p>
+                                        <p className="text-xs text-gray-500 mb-4">TA: {formatAcademicYearDisplay(settings, a.tahunAjaran)} • Diarsipkan: {formatDate(a.tanggalArsip)}</p>
                                         
                                         <div className="flex gap-2">
                                             {canWrite && (

@@ -7,7 +7,7 @@ import { TahfizhDetailModal } from './TahfizhDetailModal';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const TahfizhHistory: React.FC = () => {
-    const { settings } = useAppContext();
+    const { settings, showToast } = useAppContext();
     const { santriList, tahfizhList } = useSantriContext();
     
     // Filters
@@ -47,6 +47,12 @@ export const TahfizhHistory: React.FC = () => {
         }).sort((a,b) => a.namaLengkap.localeCompare(b.namaLengkap));
     }, [santriList, search, jenjangId, kelasId, rombelId]);
 
+    const filteredSantriIds = useMemo(() => new Set(filteredSantri.map(s => s.id)), [filteredSantri]);
+    const filteredRecords = useMemo(
+        () => tahfizhList.filter(record => filteredSantriIds.has(record.santriId)),
+        [tahfizhList, filteredSantriIds]
+    );
+
     const getLatestRecord = (santriId: number) => {
         const records = santriRecordsMap.get(santriId);
         if (!records || records.length === 0) return null;
@@ -56,6 +62,72 @@ export const TahfizhHistory: React.FC = () => {
             const currentDate = new Date(current.tanggal).getTime();
             return currentDate > latestDate ? current : latest;
         });
+    };
+
+    const triggerCsvDownload = (filename: string, rows: string[][]) => {
+        const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleExportByRombel = () => {
+        if (filteredRecords.length === 0) {
+            showToast('Tidak ada data untuk diekspor.', 'info');
+            return;
+        }
+        const rows = new Map<number, { rombel: string; total: number; ziyadah: number; murojaah: number; tasmi: number }>();
+        filteredRecords.forEach(record => {
+            const santri = santriList.find(s => s.id === record.santriId);
+            const rombelIdFromSantri = santri?.rombelId || 0;
+            const rombelName = settings.rombel.find(r => r.id === rombelIdFromSantri)?.nama || 'Tanpa Rombel';
+            if (!rows.has(rombelIdFromSantri)) {
+                rows.set(rombelIdFromSantri, { rombel: rombelName, total: 0, ziyadah: 0, murojaah: 0, tasmi: 0 });
+            }
+            const entry = rows.get(rombelIdFromSantri)!;
+            entry.total += 1;
+            if (record.tipe === 'Ziyadah') entry.ziyadah += 1;
+            if (record.tipe === 'Murojaah') entry.murojaah += 1;
+            if (record.tipe === "Tasmi'") entry.tasmi += 1;
+        });
+
+        const csvRows: string[][] = [['Rombel', 'Total Setoran', 'Ziyadah', 'Murojaah', "Tasmi'"]];
+        Array.from(rows.values())
+            .sort((a, b) => a.rombel.localeCompare(b.rombel))
+            .forEach(item => csvRows.push([item.rombel, item.total, item.ziyadah, item.murojaah, item.tasmi].map(String)));
+        triggerCsvDownload(`rekap-tahfizh-per-rombel-${new Date().toISOString().slice(0, 10)}.csv`, csvRows);
+        showToast('Rekap tahfizh per rombel berhasil diekspor.', 'success');
+    };
+
+    const handleExportByMuhaffizh = () => {
+        if (filteredRecords.length === 0) {
+            showToast('Tidak ada data untuk diekspor.', 'info');
+            return;
+        }
+        const rows = new Map<number, { nama: string; total: number; ziyadah: number; murojaah: number; tasmi: number }>();
+        filteredRecords.forEach(record => {
+            const muhaffizhId = record.muhaffizhId || 0;
+            const muhaffizhName = settings.tenagaPengajar.find(t => t.id === muhaffizhId)?.nama || 'Tidak Diisi';
+            if (!rows.has(muhaffizhId)) {
+                rows.set(muhaffizhId, { nama: muhaffizhName, total: 0, ziyadah: 0, murojaah: 0, tasmi: 0 });
+            }
+            const entry = rows.get(muhaffizhId)!;
+            entry.total += 1;
+            if (record.tipe === 'Ziyadah') entry.ziyadah += 1;
+            if (record.tipe === 'Murojaah') entry.murojaah += 1;
+            if (record.tipe === "Tasmi'") entry.tasmi += 1;
+        });
+
+        const csvRows: string[][] = [['Muhaffizh', 'Total Setoran', 'Ziyadah', 'Murojaah', "Tasmi'"]];
+        Array.from(rows.values())
+            .sort((a, b) => a.nama.localeCompare(b.nama))
+            .forEach(item => csvRows.push([item.nama, item.total, item.ziyadah, item.murojaah, item.tasmi].map(String)));
+        triggerCsvDownload(`rekap-tahfizh-per-muhaffizh-${new Date().toISOString().slice(0, 10)}.csv`, csvRows);
+        showToast('Rekap tahfizh per muhaffizh berhasil diekspor.', 'success');
     };
 
     return (
@@ -113,6 +185,20 @@ export const TahfizhHistory: React.FC = () => {
                             {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
                         </select>
                     </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                        onClick={handleExportByRombel}
+                        className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                    >
+                        <i className="bi bi-filetype-csv"></i> Ekspor Rekap Rombel
+                    </button>
+                    <button
+                        onClick={handleExportByMuhaffizh}
+                        className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                    >
+                        <i className="bi bi-filetype-csv"></i> Ekspor Rekap Muhaffizh
+                    </button>
                 </div>
             </div>
 

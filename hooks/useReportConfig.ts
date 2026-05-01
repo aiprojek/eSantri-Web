@@ -1,6 +1,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { ReportType, Santri } from '../types';
+import { deriveAcademicYearLabel } from '../utils/academicYear';
 
 const defaultIzinKetentuan = "1. Formulir ini wajib dibawa dan disimpan oleh santri selama masa izin.\n" +
     "2. Santri wajib kembali ke pondok tepat pada waktu yang telah ditentukan.\n" +
@@ -14,7 +15,11 @@ const predefinedCardThemes = {
     'Abu-abu': '#374151',
 };
 
-export const useReportConfig = (filteredSantri: Santri[], santriList: Santri[]) => {
+export const useReportConfig = (
+    filteredSantri: Santri[],
+    santriList: Santri[],
+    defaultAcademicYear: string = deriveAcademicYearLabel()
+) => {
     const [activeReport, setActiveReport] = useState<ReportType | null>(null);
     const [paperSize, setPaperSize] = useState('A4');
     const [margin, setMargin] = useState('normal');
@@ -70,7 +75,7 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
     const [cardRules, setCardRules] = useState<string>(defaultCardRules);
     const [agendaKedatangan, setAgendaKedatangan] = useState<string>('');
     const [semester, setSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
-    const [tahunAjaran, setTahunAjaran] = useState<string>('2024/2025'); // UPDATED DEFAULT
+    const [tahunAjaran, setTahunAjaran] = useState<string>(defaultAcademicYear);
     const [izinTujuan, setIzinTujuan] = useState<string>('');
     const [izinKeperluan, setIzinKeperluan] = useState<string>('');
     const [izinTanggalBerangkat, setIzinTanggalBerangkat] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -124,7 +129,7 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
         setManualHijriDate('');
         setAgendaKedatangan('');
         setSemester('Ganjil');
-        setTahunAjaran('2024/2025');
+        setTahunAjaran(defaultAcademicYear);
         setIzinPrintMode('all');
         setSelectedIzinSantriIds([]);
         setIzinTujuan('');
@@ -145,12 +150,29 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
         setLabelWidth(6.4);
         setLabelHeight(3.2);
         setLabelFontSize(10);
-    }, []);
+    }, [defaultAcademicYear]);
 
     const canGenerate = useMemo(() => {
         if (!activeReport) return false;
-        if (activeReport !== ReportType.LaporanMutasi && activeReport !== ReportType.LaporanAsrama && !isFinancialReport && filteredSantri.length === 0) return false;
-        if ((activeReport === ReportType.LaporanMutasi || activeReport === ReportType.LaporanAsrama || activeReport === ReportType.LaporanArusKas) && santriList.length === 0) return false;
+        
+        const reportsWithoutSantriRequirement = [
+            ReportType.OperasionalHarian,
+            ReportType.KinerjaPengajar,
+            ReportType.EfektivitasPSB,
+            ReportType.LaporanArusKas,
+            ReportType.DaftarWaliKelas,
+            ReportType.LaporanMapel,
+            ReportType.LaporanKontakStaf,
+        ];
+
+        const needsFilteredSantri = ![
+            ReportType.LaporanMutasi,
+            ReportType.LaporanAsrama,
+            ...reportsWithoutSantriRequirement
+        ].includes(activeReport) && !isFinancialReport;
+
+        if (needsFilteredSantri && filteredSantri.length === 0) return false;
+        if ((activeReport === ReportType.LaporanMutasi || activeReport === ReportType.LaporanAsrama) && santriList.length === 0) return false;
 
         switch(activeReport) {
             case ReportType.Biodata:

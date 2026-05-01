@@ -42,21 +42,26 @@ Aplikasi ini dibangun menggunakan teknologi modern untuk menjamin performa tingg
 -   **Compression**: Native Browser `CompressionStream` (GZIP)
 -   **PDF Engine**: `jspdf` & `html2canvas`
 
-## ⚠️ Konfigurasi Mode: Hybrid vs Produksi
+## ⚙️ Konfigurasi Mode Build
 
-Secara default, kode sumber ini dikonfigurasi dalam **Mode Hybrid** agar dapat berjalan langsung di lingkungan preview (seperti Google AI Studio atau StackBlitz).
+Proyek ini sekarang memakai mode build formal:
 
-### 1. Mode Hybrid (Default)
-Menggunakan **CDN** untuk memuat Tailwind CSS dan Icon.
-*   **Kelebihan:** Bisa langsung dijalankan (`npm run dev`) tanpa build step yang rumit.
-*   **Kekurangan:** Membutuhkan internet saat pertama kali dibuka (untuk memuat CDN).
+- `hybrid-preview`: untuk simulasi pengembangan/preview.
+- `web-production`: build web produksi.
+- `tauri-production`: build desktop (Tauri) produksi.
 
-### 2. Mode Produksi (Siap Deploy / 100% Offline)
-Jika ingin digunakan di pesantren yang minim internet, lakukan langkah ini sebelum build:
+Perintah:
 
-1.  **Edit `index.html`**: Hapus atau komentari blok script CDN.
-2.  **Edit `index.tsx`**: Uncomment (aktifkan) baris import CSS lokal.
-3.  **Jalankan Build**: `npm run build`.
+- `npm run dev` (default: `hybrid-preview`)
+- `npm run dev:web-production`
+- `npm run dev:tauri-production`
+- `npm run build:web-production`
+- `npm run build:tauri-production`
+
+Catatan:
+
+- Runtime utama sudah memakai aset lokal, bukan CDN inti.
+- Untuk verifikasi rilis, gunakan checklist: [docs/release-smoke-checklist.md](/home/abdullah-home/Documents/GitHub/eSantri-Web/docs/release-smoke-checklist.md)
 
 ## 📦 Cara Instalasi
 
@@ -69,10 +74,13 @@ npm install
 # 2. Menjalankan Mode Pengembangan
 npm run dev
 
-# 3. Build Aplikasi (Menjadi File Statis)
-npm run build
+# 3. Build Aplikasi Web Produksi
+npm run build:web-production
 
-# 4. Preview Hasil Build
+# 4. Build Aplikasi Desktop Produksi (Tauri)
+npm run build:tauri-production
+
+# 5. Preview Hasil Build
 npx serve dist
 ```
 

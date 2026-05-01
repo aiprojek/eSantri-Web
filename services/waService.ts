@@ -5,7 +5,9 @@ export const WA_TEMPLATES = {
     TAGIHAN: "Assalamualaikum Bapak/Ibu [ortu], menginfokan tagihan [nama_santri] bulan [bulan] sebesar Rp [nominal] belum terlunasi. Mohon segera diselesaikan. Syukron.",
     KWITANSI: "Alhamdulillah, pembayaran [nama_santri] sebesar Rp [nominal] untuk [item] telah kami terima pada [tanggal]. Jazakumullah Khairan.",
     TAHFIZH: "Laporan Tahfizh [nama_santri]: Hari ini telah menyetorkan [tipe] Juz [juz] Surah [surah]. Predikat: [predikat]. Terus semangat!",
-    PENGUMUMAN: "PENGUMUMAN PONDOK: [pesan]. Mohon menjadi periksa. Syukron."
+    PENGUMUMAN: "PENGUMUMAN PONDOK: [pesan]. Mohon menjadi periksa. Syukron.",
+    SIARAN_UMUM: "Assalamualaikum. [pesan]\n\nInfo: [agenda]\nTanggal: [tanggal]\n\nTerima kasih.",
+    SIARAN_GRUP: "Assalamualaikum Ayah/Bunda. [pesan]\n\nPengumuman Grup: [agenda]\nTanggal: [tanggal]\n\nMohon disimak bersama."
 };
 
 export const formatWAMessage = (template: string, data: any) => {
@@ -35,6 +37,12 @@ export const sendManualWA = (phone: string | undefined, message: string) => {
         return;
     }
     window.open(getWAUrl(phone, message), '_blank');
+};
+
+export const getWAComposerUrl = (message: string) => `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+export const openWAComposer = (message: string) => {
+    window.open(getWAComposerUrl(message), '_blank');
 };
 
 /**

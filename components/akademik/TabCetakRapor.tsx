@@ -2,12 +2,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
-import { db } from '../../db';
 import { RaporLengkapTemplate } from '../reports/modules/AcademicReports';
 import { printToPdfNative } from '../../utils/pdfGenerator';
 import { Santri, RaporTemplate, RaporRecord } from '../../types';
 import { PrintHeader } from '../common/PrintHeader';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
+import { getRaporRecordsByPeriod } from '../../services/academicQueries';
 
 // --- HELPER COMPONENT: DYNAMIC RENDERER ---
 const DynamicRaporPreview: React.FC<{ template: RaporTemplate, santri: Santri, record: RaporRecord | null, settings: any }> = ({ template, santri, record, settings }) => {
@@ -78,19 +79,25 @@ const DynamicRaporPreview: React.FC<{ template: RaporTemplate, santri: Santri, r
 export const TabCetakRapor: React.FC = () => {
     const { settings } = useAppContext();
     const { santriList } = useSantriContext();
-    const [filterTahun, setFilterTahun] = useState('2024/2025');
-    const [filterSemester, setFilterSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
+    const {
+        filterTahun,
+        setFilterTahun,
+        filterSemester,
+        setFilterSemester,
+        availableYears,
+        defaultAcademicYear
+    } = useAcademicPeriodFilter(settings);
     const [filterJenjang, setFilterJenjang] = useState('');
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [printRombel, setPrintRombel] = useState('');
     const [selectedTemplateId, setSelectedTemplateId] = useState(''); // Empty = Standard K13
-    const [availableYears, setAvailableYears] = useState<string[]>([]);
     
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isBatchPrinting, setIsBatchPrinting] = useState(false);
     const [previewSantri, setPreviewSantri] = useState<Santri | null>(null);
     const [previewRecord, setPreviewRecord] = useState<RaporRecord | null>(null);
     const [batchData, setBatchData] = useState<{ santri: Santri, record: RaporRecord | null }[]>([]);
+    const [periodRecordsMap, setPeriodRecordsMap] = useState<Map<number, RaporRecord>>(new Map());
 
     const filteredTemplates = useMemo(() => {
         const allTemplates = settings.raporTemplates || [];
@@ -133,42 +140,44 @@ export const TabCetakRapor: React.FC = () => {
         }
     }, [filterJenjang, filteredTemplates, selectedTemplateId]);
 
-    // Fetch available years from DB on mount
     useEffect(() => {
-        const fetchYears = async () => {
-            const all = await db.raporRecords.toArray();
-            const uniqueYears: string[] = Array.from(new Set(all.map(r => r.tahunAjaran))).sort().reverse() as string[];
-            setAvailableYears(uniqueYears);
-            
-            // Auto-select latest year if available
-            if (uniqueYears.length > 0 && !uniqueYears.includes(filterTahun)) {
-                setFilterTahun(uniqueYears[0]);
+        if (availableYears.length === 0 && !filterTahun.trim()) {
+            setFilterTahun(defaultAcademicYear);
+        }
+    }, [availableYears, defaultAcademicYear, filterTahun, setFilterTahun]);
+
+    useEffect(() => {
+        const loadPeriodRecords = async () => {
+            if (!filterTahun || !filterSemester) {
+                setPeriodRecordsMap(new Map());
+                return;
             }
+
+            const records = await getRaporRecordsByPeriod(filterTahun, filterSemester);
+            const map = new Map<number, RaporRecord>();
+            records.forEach((record) => {
+                map.set(record.santriId, record);
+            });
+            setPeriodRecordsMap(map);
         };
-        fetchYears();
-    }, []);
+
+        loadPeriodRecords();
+    }, [filterTahun, filterSemester]);
 
     const handlePrintPreview = async (santriId: number) => {
         const santri = santriList.find(s => s.id === santriId);
         if (santri) {
-            const record = await db.raporRecords
-                .where({ santriId: santri.id, tahunAjaran: filterTahun, semester: filterSemester })
-                .first();
-            
             setPreviewSantri(santri);
-            setPreviewRecord(record || null);
+            setPreviewRecord(periodRecordsMap.get(santri.id) || null);
             setIsPreviewOpen(true);
         }
     };
 
     const handlePrintAll = async () => {
-        const data = [];
-        for (const santri of filteredSantriList) {
-            const record = await db.raporRecords
-                .where({ santriId: santri.id, tahunAjaran: filterTahun, semester: filterSemester })
-                .first();
-            data.push({ santri, record: record || null });
-        }
+        const data = filteredSantriList.map((santri) => ({
+            santri,
+            record: periodRecordsMap.get(santri.id) || null
+        }));
         setBatchData(data);
         setIsBatchPrinting(true);
     };
@@ -247,7 +256,9 @@ export const TabCetakRapor: React.FC = () => {
                                 {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
                         ) : (
-                             <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:ring-2 focus:ring-teal-500 transition-all" placeholder="2024/2025" />
+                            <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border rounded-lg p-2.5 text-sm font-bold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all">
+                                <option value={defaultAcademicYear}>{defaultAcademicYear}</option>
+                            </select>
                         )}
                     </div>
                     <div className="flex flex-col">
@@ -289,7 +300,11 @@ export const TabCetakRapor: React.FC = () => {
                         <div className="grid grid-cols-2 gap-3">
                             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                                 <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest pl-1">Tahun Ajaran</label>
-                                <input type="text" value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-white rounded-xl p-3 text-sm font-bold shadow-sm focus:border-teal-500 outline-none" />
+                                <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)} className="w-full border-2 border-white rounded-xl p-3 text-sm font-bold shadow-sm focus:border-teal-500 outline-none bg-white">
+                                    {(availableYears.length > 0 ? availableYears : [defaultAcademicYear]).map((y) => (
+                                        <option key={y} value={y}>{y}</option>
+                                    ))}
+                                </select>
                             </div>
                             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                                 <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest pl-1">Semester</label>

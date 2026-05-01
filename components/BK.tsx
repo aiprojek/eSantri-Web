@@ -6,6 +6,9 @@ import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { BkSession, Santri } from '../types';
+import { PageHeader } from './common/PageHeader';
+import { SectionCard } from './common/SectionCard';
+import { EmptyState } from './common/EmptyState';
 
 interface BkModalProps {
     isOpen: boolean;
@@ -27,7 +30,11 @@ const BkModal: React.FC<BkModalProps> = ({ isOpen, onClose, onSave, onUpdate, in
     const filteredSantri = useMemo(() => {
         if (!searchSantri) return [];
         return santriList
-            .filter(s => s.status === 'Aktif' && s.namaLengkap.toLowerCase().includes(searchSantri.toLowerCase()))
+            .filter(
+                (s) =>
+                    s.status === 'Aktif' &&
+                    (s.namaLengkap.toLowerCase().includes(searchSantri.toLowerCase()) || s.nis.includes(searchSantri))
+            )
             .slice(0, 5);
     }, [santriList, searchSantri]);
 
@@ -114,7 +121,7 @@ const BkModal: React.FC<BkModalProps> = ({ isOpen, onClose, onSave, onUpdate, in
                         )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Tanggal</label>
                             <input type="date" {...register('tanggal')} className="w-full border rounded-lg p-2 text-sm" />
@@ -148,7 +155,7 @@ const BkModal: React.FC<BkModalProps> = ({ isOpen, onClose, onSave, onUpdate, in
                         <input type="text" {...register('hasil')} className="w-full border rounded-lg p-2.5 text-sm" placeholder="Hasil sementara atau rencana selanjutnya..." />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-2 border-t mt-2">
+                    <div className="grid grid-cols-1 gap-4 pt-2 mt-2 border-t sm:grid-cols-2">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Status Kasus</label>
                             <select {...register('status')} className="w-full border rounded-lg p-2 text-sm bg-gray-50">
@@ -173,9 +180,9 @@ const BkModal: React.FC<BkModalProps> = ({ isOpen, onClose, onSave, onUpdate, in
                     </div>
                 </form>
 
-                <div className="p-4 border-t bg-gray-50 flex justify-end gap-2 rounded-b-lg">
-                    <button onClick={onClose} className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-200 text-sm">Batal</button>
-                    <button onClick={handleSubmit(onSubmit)} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-sm">Simpan Catatan</button>
+                <div className="p-4 border-t bg-gray-50 flex flex-col-reverse gap-2 rounded-b-lg sm:flex-row sm:justify-end">
+                    <button onClick={onClose} className="w-full sm:w-auto px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-200 text-sm">Batal</button>
+                    <button onClick={handleSubmit(onSubmit)} className="w-full sm:w-auto px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-sm">Simpan Catatan</button>
                 </div>
             </div>
         </div>
@@ -197,6 +204,13 @@ const BK: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSession, setEditingSession] = useState<BkSession | null>(null);
     const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+    const getStatusBadgeClass = (status: BkSession['status']) => {
+        if (status === 'Selesai') return 'bg-green-100 text-green-700';
+        if (status === 'Pemantauan') return 'bg-blue-100 text-blue-700';
+        if (status === 'Proses') return 'bg-yellow-100 text-yellow-800';
+        return 'bg-red-100 text-red-700';
+    };
 
     const filteredSessions = useMemo(() => {
         return sessions.filter(s => {
@@ -241,19 +255,16 @@ const BK: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-end mb-2">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
-                        <i className="bi bi-person-heart text-indigo-600"></i> Bimbingan & Konseling
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">Catatan pembinaan mental dan konseling santri (Rahasia).</p>
-                </div>
-                {canWrite && (
-                    <button onClick={() => { setEditingSession(null); setIsModalOpen(true); }} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-2">
+            <PageHeader
+                eyebrow="Kesiswaan"
+                title="Bimbingan & Konseling"
+                description="Kelola catatan pembinaan mental, konseling, dan tindak lanjut santri dalam panel rahasia yang lebih tertata."
+                actions={canWrite ? (
+                    <button onClick={() => { setEditingSession(null); setIsModalOpen(true); }} className="app-button-primary px-4 py-2.5 text-sm">
                         <i className="bi bi-plus-lg"></i> Catat Sesi Baru
                     </button>
-                )}
-            </div>
+                ) : undefined}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-indigo-100 flex items-center justify-between">
@@ -279,16 +290,16 @@ const BK: React.FC = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
-                <div className="p-4 border-b bg-gray-50 flex flex-col sm:flex-row gap-4">
+            <SectionCard title="Daftar Sesi Konseling" description="Telusuri, filter, dan buka detail sesi BK yang sudah tercatat." contentClassName="overflow-hidden">
+                <div className="app-toolbar border-b border-app-border p-4 flex-col sm:flex-row">
                     <input 
                         type="text" 
                         placeholder="Cari nama santri..." 
                         value={searchTerm} 
                         onChange={e => setSearchTerm(e.target.value)} 
-                        className="flex-grow border rounded-lg p-2 text-sm focus:ring-indigo-500" 
+                        className="app-input w-full flex-grow p-2.5 text-sm" 
                     />
-                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="border rounded-lg p-2 text-sm w-48">
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="app-select w-full sm:w-52 p-2.5 text-sm">
                         <option value="">Semua Status</option>
                         <option value="Baru">Baru</option>
                         <option value="Proses">Proses</option>
@@ -297,9 +308,9 @@ const BK: React.FC = () => {
                     </select>
                 </div>
                 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-100 text-gray-600 border-b">
+                <div className="hidden md:block app-table-shell overflow-x-auto">
+                    <table className="app-table text-sm text-left">
+                        <thead className="border-b border-app-border">
                             <tr>
                                 <th className="p-3 w-10"></th>
                                 <th className="p-3">Tanggal</th>
@@ -329,12 +340,7 @@ const BK: React.FC = () => {
                                                 <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs">{s.kategori}</span>
                                             </td>
                                             <td className="p-3">
-                                                <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                                    s.status === 'Selesai' ? 'bg-green-100 text-green-700' :
-                                                    s.status === 'Pemantauan' ? 'bg-blue-100 text-blue-700' :
-                                                    s.status === 'Proses' ? 'bg-yellow-100 text-yellow-800' :
-                                                    'bg-red-100 text-red-700'
-                                                }`}>
+                                                <span className={`px-2 py-1 rounded text-xs font-bold ${getStatusBadgeClass(s.status)}`}>
                                                     {s.status}
                                                 </span>
                                             </td>
@@ -376,13 +382,55 @@ const BK: React.FC = () => {
                             })}
                             {filteredSessions.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="p-8 text-center text-gray-500">Tidak ada data sesi BK yang ditemukan.</td>
+                                    <td colSpan={7} className="p-4"><EmptyState icon="bi-person-heart" title="Sesi BK belum ditemukan" description="Belum ada data yang cocok dengan filter konseling saat ini." /></td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
-            </div>
+                <div className="space-y-3 p-4 md:hidden">
+                    {filteredSessions.map((s) => {
+                        const santri = santriList.find((sa) => sa.id === s.santriId);
+                        return (
+                            <article key={s.id} className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 shadow-sm">
+                                <div className="mb-2 flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-semibold text-indigo-500">{new Date(s.tanggal).toLocaleDateString('id-ID')}</p>
+                                        <h4 className="truncate text-sm font-bold text-gray-800">{santri ? santri.namaLengkap : 'Unknown'}</h4>
+                                    </div>
+                                    <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${getStatusBadgeClass(s.status)}`}>{s.status}</span>
+                                </div>
+                                <div className="space-y-2 text-xs text-gray-600">
+                                    <p><span className="font-bold text-gray-700">Kategori:</span> {s.kategori}</p>
+                                    <p><span className="font-bold text-gray-700">Konselor:</span> {s.konselor}</p>
+                                    <div className="rounded-lg border border-indigo-100 bg-white p-2">
+                                        <p className="font-bold text-gray-700">Keluhan</p>
+                                        <p className="mt-1 whitespace-pre-wrap">{s.keluhan || '-'}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-indigo-100 bg-white p-2">
+                                        <p className="font-bold text-gray-700">Penanganan</p>
+                                        <p className="mt-1 whitespace-pre-wrap">{s.penanganan || '-'}</p>
+                                    </div>
+                                    <p><span className="font-bold text-gray-700">Hasil:</span> {s.hasil || '-'}</p>
+                                    <p className="flex items-center gap-1 text-gray-500">
+                                        {s.privasi === 'Sangat Rahasia' ? <i className="bi bi-shield-lock-fill text-red-500"></i> : <i className="bi bi-lock text-gray-400"></i>}
+                                        Privasi: <strong>{s.privasi}</strong>
+                                    </p>
+                                </div>
+                                {canWrite && (
+                                    <div className="mt-3 flex justify-end gap-2">
+                                        <button onClick={() => { setEditingSession(s); setIsModalOpen(true); }} className="h-9 w-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-600"><i className="bi bi-pencil-square"></i></button>
+                                        <button onClick={() => handleDelete(s.id)} className="h-9 w-9 rounded-lg border border-red-200 bg-red-50 text-red-600"><i className="bi bi-trash"></i></button>
+                                    </div>
+                                )}
+                            </article>
+                        );
+                    })}
+                    {filteredSessions.length === 0 && (
+                        <EmptyState icon="bi-person-heart" title="Sesi BK belum ditemukan" description="Belum ada data yang cocok dengan filter konseling saat ini." />
+                    )}
+                </div>
+            </SectionCard>
             
             <BkModal 
                 isOpen={isModalOpen} 

@@ -1,15 +1,18 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
 import { useForm } from 'react-hook-form';
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { CalendarEvent, PondokSettings, PiketSchedule, Santri } from '../types';
-import { printToPdfNative, generatePdf } from '../utils/pdfGenerator';
+import { generatePdf, printVisualPreview } from '../utils/pdfGenerator';
 import { CalendarPrintTemplate } from './kalender/CalendarPrintTemplate';
 import { BulkEventModal } from './kalender/modals/BulkEventModal';
 import { formatDate, getHijriDate, findStartOfHijriMonth } from '../utils/formatters';
+import { getAcademicYearsFromSettings } from '../utils/academicYear';
 import { useSantriContext } from '../contexts/SantriContext';
+import { PageHeader } from './common/PageHeader';
+import { HeaderTabs } from './common/HeaderTabs';
 
 // --- EVENT MODAL ---
 interface EventModalProps {
@@ -135,20 +138,18 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onUpda
 interface PrintModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onPrint: (theme: any, layout: any, primarySystem: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => void;
-    onExportPdf: (theme: any, layout: any, primarySystem: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => void;
     onExportPdfTable: (options: any, mode?: 'print' | 'pdf') => void;
     settings: PondokSettings;
     events: CalendarEvent[];
     year: number;
 }
 
-const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExportPdf, onExportPdfTable, settings, events, year }) => {
+const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTable, settings, events, year }) => {
     const [theme, setTheme] = useState<'classic' | 'modern' | 'bold' | 'dark' | 'ceria'>('classic');
     const [layout, setLayout] = useState<'1_sheet' | '3_sheets' | '4_sheets'>('1_sheet');
     const [primarySystem, setPrimarySystem] = useState<'Masehi' | 'Hijriah'>('Masehi');
     const [showKop, setShowKop] = useState(true);
-    const [activeTab, setActiveTab] = useState<'settings' | 'theme' | 'images' | 'range'>('settings');
+    const [activeTab, setActiveTab] = useState<'settings' | 'theme' | 'images'>('settings');
     const [zoomScale, setZoomScale] = useState(0.4);
 
     // Range State
@@ -156,9 +157,148 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
     const [startYear, setStartYear] = useState(year);
     const [endMonth, setEndMonth] = useState(11);
     const [endYear, setEndYear] = useState(year);
+    const normalizedAcademicYears = useMemo(() => getAcademicYearsFromSettings(settings), [settings]);
+    const activeAcademicYear = useMemo(() => {
+        const byFlag = normalizedAcademicYears.find((y) => y.isActive);
+        if (byFlag) return byFlag;
 
-    // Sync years when system changes
+        const byPsbLabel = settings.psbConfig?.tahunAjaranAktif
+            ? normalizedAcademicYears.find((y) => y.labelMasehi === settings.psbConfig?.tahunAjaranAktif)
+            : undefined;
+        if (byPsbLabel) return byPsbLabel;
+
+        return normalizedAcademicYears[0];
+    }, [normalizedAcademicYears, settings.psbConfig?.tahunAjaranAktif]);
+
+    // Image State
+    const [customImage, setCustomImage] = useState<string>('');
+    const [imagePosition, setImagePosition] = useState<'banner' | 'watermark' | 'none'>('none');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const previewRef = useRef<HTMLDivElement>(null);
+
+    const applyActiveAcademicYear = useCallback(() => {
+        if (!activeAcademicYear) return;
+        const toNumber = (value: unknown): number | undefined => {
+            if (typeof value === 'number' && Number.isFinite(value)) return value;
+            if (typeof value === 'string') {
+                const parsed = Number(value);
+                if (Number.isFinite(parsed)) return parsed;
+            }
+            return undefined;
+        };
+        const HIJRI_MONTH_ALIASES: Record<string, number> = {
+            muharram: 1,
+            safar: 2,
+            rabiulawal: 3,
+            rabiulawwal: 3,
+            "rabi'ulawwal": 3,
+            rabiulakhir: 4,
+            "rabi'ulakhir": 4,
+            jumadilawal: 5,
+            jumadilula: 5,
+            jumadilakhir: 6,
+            jumadilakhira: 6,
+            rajab: 7,
+            syaban: 8,
+            syaaban: 8,
+            "sya'ban": 8,
+            ramadhan: 9,
+            ramadan: 9,
+            syawal: 10,
+            syawwal: 10,
+            dzulqadah: 11,
+            "dzulqa'dah": 11,
+            dzulhijjah: 12,
+        };
+        const normalizeText = (value: unknown) =>
+            String(value || '')
+                .toLowerCase()
+                .replace(/\s+/g, '')
+                .replace(/[^a-z0-9']/g, '');
+        const toHijriMonthNumber = (value: unknown): number | undefined => {
+            const numeric = toNumber(value);
+            if (numeric !== undefined) return numeric;
+            const normalized = normalizeText(value);
+            return HIJRI_MONTH_ALIASES[normalized];
+        };
+        const parseYearsFromHijriLabel = (label?: string): { start?: number; end?: number } => {
+            if (!label) return {};
+            const matches = label.match(/\d{4}/g);
+            if (!matches || matches.length === 0) return {};
+            const start = Number(matches[0]);
+            const end = Number(matches[matches.length - 1] || matches[0]);
+            return {
+                start: Number.isFinite(start) ? start : undefined,
+                end: Number.isFinite(end) ? end : undefined,
+            };
+        };
+        const normalizeMonthIndex = (value?: number, fallback = 0) => {
+            if (typeof value !== 'number' || Number.isNaN(value)) return fallback;
+            if (value >= 1 && value <= 12) return value - 1; // Data Master format
+            if (value >= 0 && value <= 11) return value; // Legacy/index format
+            return fallback;
+        };
+        const labelYears = parseYearsFromHijriLabel((activeAcademicYear as any).labelHijriah);
+        const hijriStartMonthRaw =
+            toHijriMonthNumber((activeAcademicYear as any).hijriStartMonth) ??
+            toHijriMonthNumber((activeAcademicYear as any).startHijriMonth) ??
+            toHijriMonthNumber((activeAcademicYear as any).hijrahStartMonth);
+        const hijriStartYearRaw =
+            toNumber((activeAcademicYear as any).hijriStartYear) ??
+            toNumber((activeAcademicYear as any).startHijriYear) ??
+            labelYears.start;
+        const hijriEndMonthRaw =
+            toHijriMonthNumber((activeAcademicYear as any).hijriEndMonth) ??
+            toHijriMonthNumber((activeAcademicYear as any).endHijriMonth) ??
+            toHijriMonthNumber((activeAcademicYear as any).hijrahEndMonth);
+        const hijriEndYearRaw =
+            toNumber((activeAcademicYear as any).hijriEndYear) ??
+            toNumber((activeAcademicYear as any).endHijriYear) ??
+            labelYears.end;
+        const hasHijriRange =
+            hijriStartMonthRaw !== undefined &&
+            hijriStartYearRaw !== undefined &&
+            hijriEndMonthRaw !== undefined &&
+            hijriEndYearRaw !== undefined;
+
+        if (primarySystem === 'Hijriah' && hasHijriRange) {
+            const hijriStartMonth = hijriStartMonthRaw as number;
+            const hijriStartYear = hijriStartYearRaw as number;
+            const hijriEndMonth = hijriEndMonthRaw as number;
+            const hijriEndYear = hijriEndYearRaw as number;
+            setStartMonth(normalizeMonthIndex(hijriStartMonth, 0));
+            setStartYear(hijriStartYear);
+            setEndMonth(normalizeMonthIndex(hijriEndMonth, 11));
+            setEndYear(hijriEndYear);
+            return;
+        }
+
+        if (primarySystem === 'Hijriah') {
+            // Jangan pernah fallback ke rentang Masehi saat mode Hijriah aktif.
+            const h = getHijriDate(new Date(), settings.hijriAdjustment || 0);
+            const currentHijriYear = parseInt(h.year) || 1447;
+            setStartMonth(0);
+            setEndMonth(11);
+            setStartYear(currentHijriYear);
+            setEndYear(currentHijriYear);
+            return;
+        }
+
+        setStartMonth(normalizeMonthIndex(toNumber((activeAcademicYear as any).masehiStartMonth), 0));
+        setStartYear(toNumber((activeAcademicYear as any).masehiStartYear) || new Date().getFullYear());
+        setEndMonth(normalizeMonthIndex(toNumber((activeAcademicYear as any).masehiEndMonth), 11));
+        setEndYear(toNumber((activeAcademicYear as any).masehiEndYear) || new Date().getFullYear());
+    }, [activeAcademicYear, primarySystem, settings.hijriAdjustment]);
+
+    // Sync rentang saat sistem berubah:
+    // 1) prioritas rentang Tahun Ajaran Aktif jika ada,
+    // 2) fallback ke tahun berjalan sesuai sistem.
     useEffect(() => {
+        if (activeAcademicYear) {
+            applyActiveAcademicYear();
+            return;
+        }
         if (primarySystem === 'Hijriah') {
             const h = getHijriDate(new Date(), settings.hijriAdjustment || 0);
             const hYear = parseInt(h.year);
@@ -169,16 +309,7 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
             setStartYear(mYear);
             setEndYear(mYear);
         }
-    }, [primarySystem, settings.hijriAdjustment]);
-
-    // Image State
-    const [customImage, setCustomImage] = useState<string>('');
-    const [imagePosition, setImagePosition] = useState<'banner' | 'watermark' | 'none'>('none');
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const previewRef = useRef<HTMLDivElement>(null);
-
-    if (!isOpen) return null;
+    }, [primarySystem, settings.hijriAdjustment, activeAcademicYear, applyActiveAcademicYear]);
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -195,11 +326,13 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
     const TabButton = ({ id, label, icon }: { id: string, label: string, icon: string }) => (
         <button
             onClick={() => setActiveTab(id as any)}
-            className={`flex-shrink-0 px-6 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 transition-colors ${activeTab === id ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
+            className={`w-full px-3 py-3 text-sm font-medium border-b-2 flex items-center justify-center gap-2 transition-colors ${activeTab === id ? 'border-teal-600 text-teal-700 bg-teal-50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
         >
             <i className={`bi ${icon}`}></i> {label}
         </button>
     );
+
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 z-[80] flex justify-center items-center p-4">
@@ -215,11 +348,25 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
                 <div className="flex flex-col lg:flex-row h-full overflow-hidden">
                     {/* Left: Configuration Panel */}
                     <div className="w-full lg:w-1/3 border-r flex flex-col bg-white">
-                        <div className="flex border-b overflow-x-auto no-scrollbar">
-                            <TabButton id="settings" label="Pengaturan" icon="bi-sliders" />
-                            <TabButton id="theme" label="Tampilan" icon="bi-palette" />
-                            <TabButton id="images" label="Gambar" icon="bi-image" />
-                            <TabButton id="range" label="Rentang PDF" icon="bi-calendar-range" />
+                        <div className="border-b">
+                            <div className="p-3 lg:hidden">
+                                <label className="sr-only" htmlFor="calendar-print-tab-select">Tab Pengaturan</label>
+                                <select
+                                    id="calendar-print-tab-select"
+                                    value={activeTab}
+                                    onChange={(e) => setActiveTab(e.target.value as 'settings' | 'theme' | 'images')}
+                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700"
+                                >
+                                    <option value="settings">Pengaturan</option>
+                                    <option value="theme">Tampilan</option>
+                                    <option value="images">Gambar</option>
+                                </select>
+                            </div>
+                            <div className="hidden lg:grid lg:grid-cols-3">
+                                <TabButton id="settings" label="Pengaturan" icon="bi-sliders" />
+                                <TabButton id="theme" label="Tampilan" icon="bi-palette" />
+                                <TabButton id="images" label="Gambar" icon="bi-image" />
+                            </div>
                         </div>
                         
                         <div className="p-6 overflow-y-auto flex-grow space-y-6">
@@ -260,6 +407,77 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
                                                 <div className="text-xs text-gray-500">Logo, Nama Pondok, dan Alamat di bagian atas.</div>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
+                                        <h4 className="text-sm font-bold text-blue-800">Rentang Cetak / PDF</h4>
+                                        <p className="text-xs text-blue-700">Atur rentang bulan di sini. Sistem kalender mengikuti pilihan Penanggalan Utama di atas.</p>
+                                        {activeAcademicYear && (
+                                            <button
+                                                onClick={applyActiveAcademicYear}
+                                                className="w-full py-2 px-3 rounded-lg border border-blue-300 bg-white text-blue-700 text-sm font-bold hover:bg-blue-100 transition-colors"
+                                            >
+                                                Gunakan Tahun Ajaran Aktif ({primarySystem === 'Hijriah' && activeAcademicYear.labelHijriah ? activeAcademicYear.labelHijriah : activeAcademicYear.labelMasehi})
+                                            </button>
+                                        )}
+
+                                        {primarySystem === 'Masehi' ? (
+                                            <>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Mulai</label>
+                                                        <select value={startMonth} onChange={e => setStartMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                            {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Mulai</label>
+                                                        <input type="number" value={startYear} onChange={e => setStartYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Selesai</label>
+                                                        <select value={endMonth} onChange={e => setEndMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                            {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Selesai</label>
+                                                        <input type="number" value={endYear} onChange={e => setEndYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Hijriah Mulai</label>
+                                                        <select value={startMonth} onChange={e => setStartMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                            {["Muharram", "Safar", "Rabi'ul Awwal", "Rabi'ul Akhir", "Jumadil Ula", "Jumadil Akhira", "Rajab", "Sya'ban", "Ramadhan", "Syawwal", "Dzulqa'dah", "Dzulhijjah"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Hijriah Mulai</label>
+                                                        <input type="number" value={startYear} onChange={e => setStartYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Hijriah Selesai</label>
+                                                        <select value={endMonth} onChange={e => setEndMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                            {["Muharram", "Safar", "Rabi'ul Awwal", "Rabi'ul Akhir", "Jumadil Ula", "Jumadil Akhira", "Rajab", "Sya'ban", "Ramadhan", "Syawwal", "Dzulqa'dah", "Dzulhijjah"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Hijriah Selesai</label>
+                                                        <input type="number" value={endYear} onChange={e => setEndYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -331,112 +549,21 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onPrint, onExp
                                 </div>
                             )}
 
-                            {activeTab === 'range' && (
-                                <div className="space-y-5 animate-fade-in">
-                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <h4 className="text-sm font-bold text-blue-800 mb-2">Cetak Rentang Custom (Vector Mode)</h4>
-                                        <p className="text-xs text-blue-700 mb-4">Gunakan fitur ini untuk mencetak kalender dengan rentang bulan tertentu secara akurat dan tajam (Vector).</p>
-                                        
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-2">Sistem Acuan Rentang</label>
-                                                <div className="flex bg-white p-1 rounded-lg border">
-                                                    <button onClick={() => setPrimarySystem('Masehi')} className={`flex-1 py-1.5 text-xs font-bold rounded ${primarySystem === 'Masehi' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Masehi</button>
-                                                    <button onClick={() => setPrimarySystem('Hijriah')} className={`flex-1 py-1.5 text-xs font-bold rounded ${primarySystem === 'Hijriah' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Hijriah</button>
-                                                </div>
-                                            </div>
-
-                                            {primarySystem === 'Masehi' ? (
-                                                <>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div>
-                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Mulai</label>
-                                                            <select value={startMonth} onChange={e => setStartMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
-                                                                {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Mulai</label>
-                                                            <input type="number" value={startYear} onChange={e => setStartYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div>
-                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Selesai</label>
-                                                            <select value={endMonth} onChange={e => setEndMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
-                                                                {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Selesai</label>
-                                                            <input type="number" value={endYear} onChange={e => setEndYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div>
-                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Hijriah Mulai</label>
-                                                            <select value={startMonth} onChange={e => setStartMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
-                                                                {["Muharram", "Safar", "Rabi'ul Awwal", "Rabi'ul Akhir", "Jumadil Ula", "Jumadil Akhira", "Rajab", "Sya'ban", "Ramadhan", "Syawwal", "Dzulqa'dah", "Dzulhijjah"].map((m, i) => <option key={i} value={i}>{m}</option>)}
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Hijriah Mulai</label>
-                                                            <input type="number" value={startYear} onChange={e => setStartYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <div>
-                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Hijriah Selesai</label>
-                                                            <select value={endMonth} onChange={e => setEndMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
-                                                                {["Muharram", "Safar", "Rabi'ul Awwal", "Rabi'ul Akhir", "Jumadil Ula", "Jumadil Akhira", "Rajab", "Sya'ban", "Ramadhan", "Syawwal", "Dzulqa'dah", "Dzulhijjah"].map((m, i) => <option key={i} value={i}>{m}</option>)}
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Hijriah Selesai</label>
-                                                            <input type="number" value={endYear} onChange={e => setEndYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
-
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <button 
-                                                    onClick={() => onExportPdfTable({
-                                                        startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
-                                                    }, 'print')}
-                                                    className="py-3 bg-blue-600 text-white rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-                                                >
-                                                    <i className="bi bi-printer-fill"></i> Cetak
-                                                </button>
-                                                <button 
-                                                    onClick={() => onExportPdfTable({
-                                                        startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
-                                                    }, 'pdf')}
-                                                    className="py-3 bg-red-600 text-white rounded-lg font-bold shadow-md hover:bg-red-700 transition-all flex items-center justify-center gap-2"
-                                                >
-                                                    <i className="bi bi-file-earmark-pdf-fill"></i> PDF
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         <div className="p-4 border-t bg-gray-50 flex flex-col gap-2">
                             <button 
-                                onClick={() => onPrint(theme, layout, primarySystem, showKop, customImage, imagePosition)} 
+                                onClick={() => onExportPdfTable({
+                                    startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
+                                }, 'print')}
                                 className="w-full py-3 bg-teal-600 text-white rounded-lg font-bold shadow-lg hover:bg-teal-700 transition-all flex items-center justify-center gap-2"
                             >
                                 <i className="bi bi-printer-fill"></i> Cetak Kalender
                             </button>
                             <button 
-                                onClick={() => onExportPdf(theme, layout, primarySystem, showKop, customImage, imagePosition)} 
+                                onClick={() => onExportPdfTable({
+                                    startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
+                                }, 'pdf')}
                                 className="w-full py-3 bg-red-600 text-white rounded-lg font-bold shadow-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2"
                             >
                                 <i className="bi bi-file-earmark-pdf-fill"></i> Export PDF
@@ -952,9 +1079,9 @@ const Kalender: React.FC = () => {
     const handlePrintRequest = (theme: any, layout: any, system: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => {
         setPrintConfig({ theme, layout, primarySystem: system, showKop, customImage, imagePosition });
         setIsPrintModalOpen(false);
-        // Longer timeout to ensure React has finished rendering the print area
+        // Gunakan visual print agar hasil jendela cetak konsisten dengan preview kalender.
         setTimeout(() => {
-            printToPdfNative('calendar-print-area', `Kalender_Akademik_${anchorDate.getFullYear()}`);
+            printVisualPreview('calendar-print-area', 'A4');
         }, 1000);
     };
 
@@ -990,7 +1117,7 @@ const Kalender: React.FC = () => {
                     paperSize: 'A4'
                 });
             } else {
-                printToPdfNative('calendar-print-area', `Kalender_Akademik_Custom`);
+                printVisualPreview('calendar-print-area', 'A4');
             }
         }, 1500);
     };
@@ -1071,31 +1198,22 @@ const Kalender: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen pb-20">
-            <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800">Kalender & Jadwal</h1>
-                    <p className="text-gray-500 text-sm">Akademik, Ibadah, dan Kegiatan Pesantren.</p>
-                </div>
-            </div>
-
-            {/* TAB NAVIGATION */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6 sticky top-0 z-40">
-                <nav className="flex -mb-px">
-                    <button 
-                        onClick={() => setActiveView('kalender')} 
-                        className={`flex-1 py-4 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeView === 'kalender' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                    >
-                        <i className="bi bi-calendar-range text-lg"></i> Kalender Akademik
-                    </button>
-                    <button 
-                        onClick={() => setActiveView('piket')} 
-                        className={`flex-1 py-4 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeView === 'piket' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                    >
-                        <i className="bi bi-clock-history text-lg"></i> Jadwal Piket Ibadah
-                    </button>
-                </nav>
-            </div>
+        <div className="min-h-screen space-y-6 pb-20">
+            <PageHeader
+                eyebrow="Pendidikan"
+                title="Kalender & Jadwal"
+                description="Kelola agenda akademik, kegiatan pesantren, dan jadwal piket ibadah dari panel kalender yang lebih rapi."
+                tabs={
+                    <HeaderTabs
+                        value={activeView}
+                        onChange={setActiveView}
+                        tabs={[
+                            { value: 'kalender', label: 'Kalender Akademik', icon: 'bi-calendar-range' },
+                            { value: 'piket', label: 'Jadwal Piket Ibadah', icon: 'bi-clock-history' },
+                        ]}
+                    />
+                }
+            />
 
             {activeView === 'kalender' && (
                 <div className="animate-fade-in">
@@ -1223,8 +1341,6 @@ const Kalender: React.FC = () => {
             <PrintModal 
                 isOpen={isPrintModalOpen} 
                 onClose={() => setIsPrintModalOpen(false)} 
-                onPrint={handlePrintRequest}
-                onExportPdf={handleExportPdfRequest}
                 onExportPdfTable={handleExportPdfTableRequest}
                 settings={settings}
                 events={events}

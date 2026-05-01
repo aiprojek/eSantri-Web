@@ -3,6 +3,16 @@ import React, { useState } from 'react';
 import { useAppContext } from '../../AppContext';
 import { fetchRaporFromCloud, parseRaporDataV2 } from '../../services/academicService';
 
+const encodeUtf8ToBase64 = (value: string): string => {
+    const bytes = new TextEncoder().encode(value);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+};
+
 export const TabImportNilai: React.FC = () => {
     const { settings, showToast, showAlert, currentUser } = useAppContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
@@ -29,7 +39,7 @@ export const TabImportNilai: React.FC = () => {
                 if (importSource === 'cloud') {
                      const cloudData = await fetchRaporFromCloud(cloudScriptUrl);
                      const jsonString = JSON.stringify(cloudData);
-                     const b64 = btoa(unescape(encodeURIComponent(jsonString)));
+                     const b64 = encodeUtf8ToBase64(jsonString);
                      dataStrings.push(b64);
                 }
             }

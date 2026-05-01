@@ -4,6 +4,7 @@ import { Santri, PondokSettings, RaporRecord } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
 import { ReportFooter, chunkArray, formatDate, formatAlamat } from './Common';
 import { db } from '../../../db';
+import { formatAcademicYearDisplay } from '../../../utils/academicYear';
 
 // --- COMMON HEADER FOR ACADEMIC ---
 const AcademicHeader: React.FC<{ settings: PondokSettings, title: string, meta: any }> = ({ settings, title, meta }) => (
@@ -11,7 +12,9 @@ const AcademicHeader: React.FC<{ settings: PondokSettings, title: string, meta: 
         <PrintHeader settings={settings} title={title} />
         <div className="print-meta text-sm font-semibold mb-4 grid grid-cols-2 gap-y-1 bg-gray-50 p-3 rounded-lg border border-gray-200">
             <span>Jenjang: <span className="font-normal">{meta.jenjang || '-'}</span></span>
-            <span className="text-right">Tahun Ajaran: <span className="font-normal">{meta.tahunAjaran || '-'}</span></span>
+            <span className="text-right">
+                <span className="font-normal">{meta.tahunAjaran ? formatAcademicYearDisplay(settings, meta.tahunAjaran) : '-'}</span>
+            </span>
             <span>Kelas / Rombel: <span className="font-normal">{meta.kelas || '-'} / {meta.rombel || '-'}</span></span>
             <span className="text-right">Semester: <span className="font-normal">{meta.semester || '-'}</span></span>
             {meta.waliKelas && <span>Wali Kelas: <span className="font-normal">{meta.waliKelas}</span></span>}
@@ -55,7 +58,7 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
         <div className="font-sans text-black p-8 text-center border-2 border-dashed border-gray-300">
             <h3 className="font-bold text-lg mb-2">Data Rapor Belum Tersedia</h3>
             <p>Belum ada data nilai yang diimpor untuk <strong>{santri.namaLengkap}</strong></p>
-            <p className="text-xs mt-1">Periode: {options.tahunAjaran} ({options.semester})</p>
+            <p className="text-xs mt-1">Periode: {formatAcademicYearDisplay(settings, options.tahunAjaran)} ({options.semester})</p>
             <p className="text-sm mt-2 text-gray-500">Silakan upload Leger Nilai di menu <strong>Akademik</strong> terlebih dahulu. Pastikan Tahun Ajaran dan Semester di menu upload sama dengan di sini.</p>
         </div>
     );
@@ -67,7 +70,7 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                 
                 <table className="print-meta w-full text-sm mb-4 font-medium">
                     <tbody>
-                        <tr><td className="w-24">Nama</td><td>: {santri.namaLengkap}</td><td className="w-24 text-right">Tahun Ajaran</td><td className="w-32 text-right">: {options.tahunAjaran}</td></tr>
+                        <tr><td className="w-24">Nama</td><td>: {santri.namaLengkap}</td><td className="w-24 text-right">Tahun Ajaran</td><td className="w-32 text-right">: {formatAcademicYearDisplay(settings, options.tahunAjaran)}</td></tr>
                         <tr><td>NIS</td><td>: {santri.nis}</td><td className="text-right">Semester</td><td className="text-right">: {options.semester}</td></tr>
                         <tr><td>Kelas/Rombel</td><td>: {kelas?.nama} / {rombel?.nama}</td><td></td><td></td></tr>
                     </tbody>

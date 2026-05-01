@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { generateRaporFormHtml } from '../../services/academicService';
+import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 
 const GOOGLE_SCRIPT_TEMPLATE = `
 /* GOOGLE APPS SCRIPT FOR RAPOR (eSantri Web) */
@@ -219,13 +220,15 @@ export const TabGeneratorFormulir: React.FC = () => {
     const { settings, showToast, showAlert } = useAppContext();
     const { santriList } = useSantriContext();
     const templates = settings.raporTemplates || [];
+    const defaultAcademicYear = useMemo(() => getDefaultAcademicYear(settings), [settings]);
+    const availableAcademicYears = useMemo(() => getAcademicYearOptions(settings), [settings]);
 
     const [genTemplateId, setGenTemplateId] = useState('');
     const [genJenjangId, setGenJenjangId] = useState(0);
     const [genKelasId, setGenKelasId] = useState(0);
     const [genRombelId, setGenRombelId] = useState(0);
     const [genSemester, setGenSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
-    const [genTahunAjaran, setGenTahunAjaran] = useState('2024/2025');
+    const [genTahunAjaran, setGenTahunAjaran] = useState(defaultAcademicYear);
     
     const filteredTemplates = useMemo(() => {
         const rombel = genRombelId ? settings.rombel.find(r => r.id === genRombelId) : null;
@@ -265,6 +268,12 @@ export const TabGeneratorFormulir: React.FC = () => {
             }
         }
     }, [genJenjangId, filteredTemplates, genTemplateId]);
+
+    React.useEffect(() => {
+        if (!genTahunAjaran.trim()) {
+            setGenTahunAjaran(defaultAcademicYear);
+        }
+    }, [genTahunAjaran, defaultAcademicYear]);
 
     const [submissionMethod, setSubmissionMethod] = useState<'whatsapp' | 'google_sheet' | 'hybrid'>('whatsapp');
     const [googleScriptUrl, setGoogleScriptUrl] = useState('');
@@ -387,7 +396,11 @@ export const TabGeneratorFormulir: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4 mt-4">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Tahun Ajaran</label>
-                            <input type="text" value={genTahunAjaran} onChange={e => setGenTahunAjaran(e.target.value)} className="w-full border rounded-lg p-2 text-sm" />
+                            <select value={genTahunAjaran} onChange={e => setGenTahunAjaran(e.target.value)} className="w-full border rounded-lg p-2 text-sm">
+                                {availableAcademicYears.map((year) => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1">Semester</label>
@@ -443,11 +456,11 @@ export const TabGeneratorFormulir: React.FC = () => {
                                         onClick={async () => {
                                             if (!googleScriptUrl) return showToast('Masukkan URL terlebih dahulu', 'error');
                                             try {
-                                                // mode: no-cors will at least check if the domain is reachable
-                                                await fetch(googleScriptUrl, { mode: 'no-cors' });
-                                                showToast('Koneksi Terdeteksi! Pastikan script sudah di-deploy sebagai "Anyone".', 'success');
+                                                const res = await fetch(googleScriptUrl, { method: 'GET' });
+                                                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                                                showToast('URL terdeteksi. Lanjut uji kirim dengan 1 data kecil dari formulir.', 'success');
                                             } catch (e) {
-                                                showToast('Gagal terhubung. Cek URL atau koneksi internet.', 'error');
+                                                showToast('URL tidak bisa diakses. Cek deploy Apps Script: Web App + Access Anyone.', 'error');
                                             }
                                         }}
                                         className="bg-blue-600 text-white px-3 rounded text-xs hover:bg-blue-700"

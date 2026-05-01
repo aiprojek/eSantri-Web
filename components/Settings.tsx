@@ -3,6 +3,8 @@ import React, { Suspense, useState, useEffect, useMemo } from 'react';
 import { PondokSettings, NisJenjangConfig } from '../types';
 import { useAppContext } from '../AppContext';
 import { LoadingFallback } from './common/LoadingFallback';
+import { HeaderTabs, HeaderTabItem } from './common/HeaderTabs';
+import { PageHeader } from './common/PageHeader';
 
 const TabUmum = React.lazy(() => import('./settings/tabs/TabUmum').then((module) => ({ default: module.TabUmum })));
 const TabAkun = React.lazy(() => import('./settings/tabs/TabAkun').then((module) => ({ default: module.TabAkun })));
@@ -12,11 +14,23 @@ const TabBackup = React.lazy(() => import('./settings/tabs/TabBackup').then((mod
 const TabPortal = React.lazy(() => import('./settings/tabs/TabPortal').then((module) => ({ default: module.TabPortal })));
 const TabDiagnostik = React.lazy(() => import('./settings/tabs/TabDiagnostik').then((module) => ({ default: module.TabDiagnostik })));
 
+type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup' | 'diagnostik';
+
+const SETTINGS_TABS: HeaderTabItem<SettingsTab>[] = [
+    { value: 'umum', label: 'Umum', icon: 'bi-info-circle' },
+    { value: 'akun', label: 'User & Keamanan', icon: 'bi-shield-lock' },
+    { value: 'nis', label: 'Generator NIS', icon: 'bi-123' },
+    { value: 'portal', label: 'Portal Wali', icon: 'bi-globe2' },
+    { value: 'cloud', label: 'Sync Cloud', icon: 'bi-cloud-arrow-up' },
+    { value: 'backup', label: 'Backup & Restore', icon: 'bi-hdd-fill' },
+    { value: 'diagnostik', label: 'Diagnosa', icon: 'bi-heart-pulse-fill' },
+];
+
 const Settings: React.FC = () => {
     const { settings, onSaveSettings, showConfirmation, showToast } = useAppContext();
     const [localSettings, setLocalSettings] = useState<PondokSettings>(settings);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup' | 'diagnostik'>('umum');
+    const [activeTab, setActiveTab] = useState<SettingsTab>('umum');
 
     useEffect(() => {
         // When settings from context change, update local state
@@ -81,7 +95,7 @@ const Settings: React.FC = () => {
         localSettings.tenagaPengajar.filter(t => !t.riwayatJabatan.some(r => r.tanggalSelesai)),
         [localSettings.tenagaPengajar]
     );
-    
+
     const handleInputChange = <K extends keyof PondokSettings>(key: K, value: PondokSettings[K]) => {
         setLocalSettings(prev => ({ ...prev, [key]: value }));
     };
@@ -132,35 +146,14 @@ const Settings: React.FC = () => {
         );
     };
 
-    const TabButton: React.FC<{
-        tabId: 'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup' | 'diagnostik';
-        label: string;
-        icon: string;
-    }> = ({ tabId, label, icon }) => (
-        <button
-            onClick={() => setActiveTab(tabId)}
-            className={`flex items-center gap-2 py-3 px-4 text-center font-medium text-sm whitespace-nowrap border-b-2 transition-colors duration-200 ${activeTab === tabId ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-        >
-            <i className={`bi ${icon}`}></i>
-            <span>{label}</span>
-        </button>
-    );
-    
     return (
-        <div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Pengaturan Sistem</h1>
-            
-            <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200">
-                <nav className="flex -mb-px overflow-x-auto">
-                    <TabButton tabId="umum" label="Umum" icon="bi-info-circle" />
-                    <TabButton tabId="akun" label="User & Keamanan" icon="bi-shield-lock" />
-                    <TabButton tabId="nis" label="Generator NIS" icon="bi-123" />
-                    <TabButton tabId="portal" label="Portal Wali" icon="bi-globe2" />
-                    <TabButton tabId="cloud" label="Sync Cloud" icon="bi-cloud-arrow-up" />
-                    <TabButton tabId="backup" label="Backup & Restore" icon="bi-hdd-fill" />
-                    <TabButton tabId="diagnostik" label="Diagnosa" icon="bi-heart-pulse-fill" />
-                </nav>
-            </div>
+        <div className="space-y-6">
+            <PageHeader
+                eyebrow="Sistem"
+                title="Pengaturan Sistem"
+                description="Kelola konfigurasi pondok, akun, generator NIS, portal, cloud sync, backup, dan diagnostik dari panel terpusat."
+                tabs={<HeaderTabs tabs={SETTINGS_TABS} value={activeTab} onChange={setActiveTab} />}
+            />
 
             <div className="space-y-6">
                 <Suspense fallback={<LoadingFallback />}>
@@ -174,8 +167,8 @@ const Settings: React.FC = () => {
                 </Suspense>
             </div>
             
-             <div className="mt-6 flex justify-end sticky bottom-4 z-10">
-                <button onClick={handleSaveSettingsHandler} disabled={isSaving} className="text-white bg-teal-700 hover:bg-teal-800 focus:ring-4 focus:ring-teal-300 font-medium rounded-lg text-sm px-8 py-3 flex items-center justify-center min-w-[190px] disabled:bg-teal-400 disabled:cursor-not-allowed shadow-lg transition-transform hover:-translate-y-1">
+             <div className="sticky bottom-4 z-10 mt-6 flex justify-end">
+                <button onClick={handleSaveSettingsHandler} disabled={isSaving} className="app-button-primary min-w-[190px] px-8 py-3 disabled:cursor-not-allowed disabled:opacity-60">
                     {isSaving ? <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Menyimpan...</span></> : <><i className="bi bi-save-fill mr-2"></i> Simpan Perubahan</>}
                 </button>
             </div>

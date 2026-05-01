@@ -3,18 +3,330 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom Scrollbar for better UI */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg-app: #f4fbfa;
+    --bg-app-accent: #e7f6f3;
+    --bg-sidebar: #0f766e;
+    --bg-sidebar-elevated: #115e59;
+    --bg-surface: rgba(255, 255, 255, 0.94);
+    --bg-surface-elevated: rgba(255, 255, 255, 0.98);
+    --bg-panel: #f8fffe;
+    --bg-panel-soft: #eef9f7;
+    --border-subtle: rgba(15, 118, 110, 0.12);
+    --border-strong: rgba(15, 118, 110, 0.22);
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+    --text-faint: #7b8798;
+    --accent-primary: #0c5cab;
+    --accent-primary-hover: #0f6dcb;
+    --accent-secondary: #0f766e;
+    --accent-success: #10b981;
+    --accent-warning: #f59e0b;
+    --accent-danger: #ef4444;
+    --focus-ring: rgba(15, 118, 110, 0.22);
+    --shadow-soft: 0 12px 30px rgba(15, 23, 42, 0.08);
+    --shadow-panel: 0 18px 40px rgba(15, 23, 42, 0.1);
+    --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    --radius-panel: 24px;
+    --radius-control: 16px;
+    --radius-pill: 999px;
+  }
+
+  * {
+    border-color: var(--border-subtle);
+  }
+
+  html {
+    min-height: 100%;
+    background:
+      radial-gradient(circle at top, rgba(20, 184, 166, 0.18), transparent 30%),
+      linear-gradient(180deg, #f8fffe 0%, #f4fbfa 50%, #eef8f5 100%);
+    background-color: var(--bg-app);
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  ::selection {
+    background: rgba(15, 118, 110, 0.18);
+    color: var(--text-primary);
+  }
 }
-::-webkit-scrollbar-track {
-  background: #f1f1f1; 
-}
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1; 
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8; 
+
+@layer components {
+  .app-shell {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top, rgba(20, 184, 166, 0.16), transparent 30%),
+      linear-gradient(180deg, #f8fffe 0%, #f4fbfa 50%, #eef8f5 100%);
+    color: var(--text-primary);
+  }
+
+  .app-canvas {
+    background: linear-gradient(180deg, rgba(248, 255, 254, 0.88) 0%, rgba(241, 250, 247, 0.96) 100%);
+  }
+
+  .app-sidebar {
+    background:
+      linear-gradient(180deg, #0f766e 0%, #115e59 100%);
+    border-right: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .app-topbar {
+    background: rgba(255, 255, 255, 0.84);
+    border-bottom: 1px solid var(--border-subtle);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  }
+
+  .app-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-soft), var(--shadow-inset);
+  }
+
+  .app-panel-elevated {
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-panel), var(--shadow-inset);
+  }
+
+  .app-panel-soft {
+    background: var(--bg-panel-soft);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-inset);
+  }
+
+  .app-header-tabs-divider {
+    position: relative;
+    padding-top: 0.125rem;
+  }
+
+  .app-header-tabs-divider::before {
+    content: "";
+    position: absolute;
+    left: 0.75rem;
+    right: 0.75rem;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(15, 118, 110, 0), rgba(15, 118, 110, 0.24), rgba(15, 118, 110, 0));
+    pointer-events: none;
+  }
+
+  .app-text-muted {
+    color: var(--text-muted);
+  }
+
+  .app-text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .app-label {
+    color: var(--text-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    font-weight: 700;
+  }
+
+  .app-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-subtle);
+    background: rgba(15, 118, 110, 0.08);
+    color: #0f766e;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .app-button-primary,
+  .app-button-secondary,
+  .app-button-ghost,
+  .app-button-danger {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-control);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  }
+
+  .app-button-primary {
+    border: 1px solid rgba(15, 118, 110, 0.18);
+    background: #0f766e;
+    color: #ffffff;
+    box-shadow: none;
+  }
+
+  .app-button-primary:hover {
+    background: #0d6b64;
+  }
+
+  .app-button-secondary {
+    border: 1px solid var(--border-strong);
+    background: #ffffff;
+    color: var(--text-secondary);
+  }
+
+  .app-button-secondary:hover,
+  .app-button-ghost:hover {
+    background: #f0fdfa;
+    color: var(--text-primary);
+  }
+
+  .app-button-ghost {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+  }
+
+  .app-button-danger {
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: #fff1f2;
+    color: #be123c;
+  }
+
+  .app-button-danger:hover {
+    background: #ffe4e6;
+  }
+
+  .app-input,
+  .app-select {
+    min-height: 44px;
+    width: 100%;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border-subtle);
+    background: #ffffff;
+    color: var(--text-primary);
+    padding: 0.75rem 0.875rem;
+    box-shadow: var(--shadow-inset);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+
+  .app-input::placeholder {
+    color: var(--text-faint);
+  }
+
+  .app-input:focus,
+  .app-select:focus,
+  .app-button-primary:focus-visible,
+  .app-button-secondary:focus-visible,
+  .app-button-ghost:focus-visible,
+  .app-button-danger:focus-visible {
+    outline: none;
+    border-color: rgba(15, 118, 110, 0.5);
+    box-shadow: 0 0 0 4px var(--focus-ring);
+  }
+
+  .app-overlay {
+    background: rgba(15, 23, 42, 0.58);
+    backdrop-filter: blur(12px);
+  }
+
+  .app-modal {
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .app-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(15, 118, 110, 0.28) transparent;
+  }
+
+  .app-table-shell {
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.86);
+  }
+
+  .app-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .app-table thead {
+    background: #f8fafc;
+  }
+
+  .app-table thead th {
+    color: #64748b;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .app-table tbody tr {
+    transition: background-color 160ms ease;
+  }
+
+  .app-table tbody tr:hover {
+    background: rgba(20, 184, 166, 0.05);
+  }
+
+  .app-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid rgba(20, 184, 166, 0.18);
+    border-radius: 1rem;
+    background: linear-gradient(180deg, rgba(240, 253, 250, 0.95), rgba(236, 253, 245, 0.85));
+  }
+
+  @media (min-width: 768px) {
+    .app-toolbar {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+  }
+
+  .app-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(15, 118, 110, 0.24);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(15, 118, 110, 0.38);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
 }

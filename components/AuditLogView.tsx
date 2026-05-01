@@ -4,6 +4,9 @@ import { AuditLog } from '../types';
 import { useAppContext } from '../AppContext';
 import { db } from '../db';
 import { Pagination } from './common/Pagination';
+import { PageHeader } from './common/PageHeader';
+import { SectionCard } from './common/SectionCard';
+import { EmptyState } from './common/EmptyState';
 
 export const AuditLogView: React.FC = () => {
     const { settings } = useAppContext();
@@ -119,50 +122,63 @@ export const AuditLogView: React.FC = () => {
     }
 
     return (
-        <div>
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold text-gray-800">Log Aktivitas Sistem</h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    {settings.cloudSyncConfig?.provider === 'firebase' ? (
-                        <span className="text-teal-600 font-semibold flex items-center gap-1">
-                            <i className="bi bi-cloud-check-fill"></i> Mode Firebase Realtime (Sinkronisasi Otomatis)
+        <div className="space-y-6">
+            <PageHeader
+                eyebrow="Sistem"
+                title="Log Aktivitas Sistem"
+                description="Telusuri jejak perubahan data dan aktivitas sistem untuk audit internal pesantren."
+                actions={
+                    settings.cloudSyncConfig?.provider === 'firebase' ? (
+                        <span className="app-chip">
+                            <i className="bi bi-cloud-check-fill"></i>
+                            Mode Firebase Realtime
                         </span>
                     ) : (
-                        <span className="text-blue-600 font-semibold flex items-center gap-1">
-                            <i className="bi bi-hdd-fill"></i> Mode Lokal (Offline / File-Sync)
+                        <span className="app-chip">
+                            <i className="bi bi-hdd-fill"></i>
+                            Mode Lokal / File-Sync
                         </span>
-                    )}
-                </p>
-            </div>
+                    )
+                }
+            />
             
-            <div className="bg-white p-6 rounded-lg shadow-md">
-                <div className="flex flex-wrap gap-4 mb-6">
-                    <input 
-                        type="text" 
-                        placeholder="Filter Nama Tabel..." 
+            <SectionCard title="Riwayat Perubahan Data" description="Filter log berdasarkan tabel dan jenis operasi untuk menelusuri perubahan sistem." contentClassName="p-6">
+                <div className="mb-6 grid grid-cols-1 gap-2 md:grid-cols-[1.4fr_1fr_auto_auto] md:items-center">
+                    <input
+                        type="text"
+                        placeholder="Filter Nama Tabel..."
                         value={filterTable}
                         onChange={e => setFilterTable(e.target.value)}
-                        className="bg-gray-50 border border-gray-300 text-sm rounded-lg p-2.5"
+                        className="app-input p-2.5 text-sm"
                     />
-                    <select 
-                        value={filterOp} 
-                        onChange={e => setFilterOp(e.target.value)} 
-                        className="bg-gray-50 border border-gray-300 text-sm rounded-lg p-2.5"
+                    <select
+                        value={filterOp}
+                        onChange={e => setFilterOp(e.target.value)}
+                        className="app-select p-2.5 text-sm"
                     >
                         <option value="">Semua Operasi</option>
                         <option value="INSERT">INSERT (Tambah)</option>
                         <option value="UPDATE">UPDATE (Ubah)</option>
                         <option value="DELETE">DELETE (Hapus)</option>
                     </select>
-                    <div className="ml-auto flex items-center gap-2">
+                    <button
+                        onClick={() => {
+                            setFilterTable('');
+                            setFilterOp('');
+                        }}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                    >
+                        Reset
+                    </button>
+                    <div className="flex items-center justify-between gap-2 md:justify-end">
                         {isLoading && <span className="flex items-center text-sm text-gray-500"><i className="bi bi-arrow-repeat animate-spin mr-2"></i> Memuat...</span>}
                         <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Total: {totalItems} Log</span>
                     </div>
                 </div>
 
-                <div className="overflow-x-auto border rounded-lg">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead className="bg-gray-50 text-gray-500 uppercase font-medium">
+                <div className="hidden md:block app-table-shell overflow-x-auto">
+                    <table className="min-w-full divide-y divide-app-border text-sm">
+                        <thead className="uppercase font-medium">
                             <tr>
                                 <th className="px-4 py-3 text-left">Waktu</th>
                                 <th className="px-4 py-3 text-left">Admin</th>
@@ -198,11 +214,38 @@ export const AuditLogView: React.FC = () => {
                             ))}
                             {logs.length === 0 && !isLoading && (
                                 <tr>
-                                    <td colSpan={5} className="text-center py-8 text-gray-500">Belum ada log aktivitas yang tercatat.</td>
+                                    <td colSpan={5} className="p-4"><EmptyState icon="bi-activity" title="Belum ada log aktivitas" description="Log perubahan sistem akan tampil di sini setelah aktivitas mulai tercatat." /></td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
+                </div>
+                <div className="md:hidden space-y-3">
+                    {logs.map(log => (
+                        <article key={log.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <div className="text-xs text-gray-500">{new Date(log.created_at).toLocaleString('id-ID')}</div>
+                                    <div className="text-sm font-semibold text-gray-800">{log.table_name} <span className="text-[11px] text-gray-500">#{log.record_id}</span></div>
+                                </div>
+                                <span className={`px-2 py-1 rounded text-[11px] font-bold ${getOpColor(log.operation)}`}>
+                                    {log.operation}
+                                </span>
+                            </div>
+                            <div className="mt-2 text-xs text-gray-600">Admin: <span className="font-medium text-gray-700">{log.username || log.changed_by?.substring(0, 8) || 'System'}</span></div>
+                            <div className="mt-2 text-xs text-gray-600 font-mono break-all">
+                                {log.operation === 'UPDATE'
+                                    ? formatDiff(log.old_data, log.new_data)
+                                    : (log.operation === 'INSERT' ? 'Data baru ditambahkan' : 'Data dihapus')
+                                }
+                            </div>
+                        </article>
+                    ))}
+                    {logs.length === 0 && !isLoading && (
+                        <div className="p-4">
+                            <EmptyState icon="bi-activity" title="Belum ada log aktivitas" description="Log perubahan sistem akan tampil di sini setelah aktivitas mulai tercatat." />
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-4">
@@ -212,7 +255,7 @@ export const AuditLogView: React.FC = () => {
                         onPageChange={setCurrentPage} 
                     />
                 </div>
-            </div>
+            </SectionCard>
         </div>
     );
 };

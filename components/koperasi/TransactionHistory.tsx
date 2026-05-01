@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../../db';
 import { useAppContext } from '../../AppContext';
 import { TransaksiKoperasi } from '../../types';
@@ -23,31 +23,24 @@ export const TransactionHistory: React.FC = () => {
     const [totalItems, setTotalItems] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
     const itemsPerPage = 20;
+    const fetchRunIdRef = useRef(0);
 
     // Derived Stats State (Separate from pagination)
     const [summaryStats, setSummaryStats] = useState({ omset: 0, count: 0, totalItemsSold: 0 });
 
     const fetchTransactions = useCallback(async () => {
+        const runId = ++fetchRunIdRef.current;
         setIsLoading(true);
         try {
             const endDateTime = endDate + 'T23:59:59.999';
-            const collection = db.transaksiKoperasi.where('tanggal').between(startDate, endDateTime, true, true).reverse();
+            const allForStats = await db.transaksiKoperasi.where('tanggal').between(startDate, endDateTime, true, true).reverse().toArray();
+            if (runId !== fetchRunIdRef.current) return;
 
-            // 1. Get Count
-            const count = await collection.count();
+            const count = allForStats.length;
             setTotalItems(count);
 
-            // 2. Get Page Data
             const offset = (currentPage - 1) * itemsPerPage;
-            const data = await collection.offset(offset).limit(itemsPerPage).toArray();
-            setTransactions(data);
-
-            // 3. Calculate Summary Stats (Separate Query for Totals - Optimized)
-            // Note: For huge datasets, doing .toArray() for stats might still be heavy. 
-            // Ideally we should cache stats or use aggregation queries. 
-            // For now, let's just count total records for stats, or fetch all just for the reduction (since reduction is fast in JS if keys are limited)
-            // Optimization: Only fetch needed fields for stats if Dexie supports it, but Dexie returns objects.
-            const allForStats = await db.transaksiKoperasi.where('tanggal').between(startDate, endDateTime, true, true).toArray();
+            setTransactions(allForStats.slice(offset, offset + itemsPerPage));
             
             const omset = allForStats.reduce((sum, t) => sum + (Number(t.totalBelanja) || 0), 0);
             const totalItemsSold = allForStats.reduce((sum, t) => sum + t.items.reduce((iSum, i) => iSum + i.qty, 0), 0);
@@ -57,7 +50,9 @@ export const TransactionHistory: React.FC = () => {
         } catch (e) {
             console.error("Failed to fetch transactions", e);
         } finally {
-            setIsLoading(false);
+            if (runId === fetchRunIdRef.current) {
+                setIsLoading(false);
+            }
         }
     }, [startDate, endDate, currentPage]);
 
@@ -70,6 +65,26 @@ export const TransactionHistory: React.FC = () => {
     }, [fetchTransactions]);
 
     const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+    const applyPresetRange = (preset: 'today' | '7d' | 'month') => {
+        const now = new Date();
+        const end = now.toISOString().split('T')[0];
+        if (preset === 'today') {
+            setStartDate(end);
+            setEndDate(end);
+            return;
+        }
+        if (preset === '7d') {
+            const start = new Date(now);
+            start.setDate(now.getDate() - 6);
+            setStartDate(start.toISOString().split('T')[0]);
+            setEndDate(end);
+            return;
+        }
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        setStartDate(monthStart);
+        setEndDate(end);
+    };
 
     const handlePrintStruk = (trx: TransaksiKoperasi) => {
         setLastPrintedTrx(trx);
@@ -127,14 +142,38 @@ export const TransactionHistory: React.FC = () => {
                             />
                         </div>
                     </div>
-                    <button onClick={handleExport} className="bg-green-600 text-white px-3 py-2 sm:py-1.5 rounded text-[10px] xs:text-xs font-bold hover:bg-green-700 flex items-center gap-2 justify-center">
-                        <i className="bi bi-file-earmark-spreadsheet text-xs"></i> Export Excel
-                    </button>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button onClick={() => applyPresetRange('today')} className="bg-white border border-gray-300 text-gray-700 px-2.5 py-2 sm:py-1.5 rounded text-[10px] xs:text-xs font-bold hover:bg-gray-50">Hari Ini</button>
+                        <button onClick={() => applyPresetRange('7d')} className="bg-white border border-gray-300 text-gray-700 px-2.5 py-2 sm:py-1.5 rounded text-[10px] xs:text-xs font-bold hover:bg-gray-50">7 Hari</button>
+                        <button onClick={() => applyPresetRange('month')} className="bg-white border border-gray-300 text-gray-700 px-2.5 py-2 sm:py-1.5 rounded text-[10px] xs:text-xs font-bold hover:bg-gray-50">Bulan Ini</button>
+                        <button onClick={handleExport} className="bg-green-600 text-white px-3 py-2 sm:py-1.5 rounded text-[10px] xs:text-xs font-bold hover:bg-green-700 flex items-center gap-2 justify-center">
+                            <i className="bi bi-file-earmark-spreadsheet text-xs"></i> Export
+                        </button>
+                    </div>
                 </div>
                 
                 <div className="flex-grow overflow-auto border rounded-lg relative">
                     {isLoading && <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center"><span className="animate-spin h-6 w-6 border-2 border-teal-500 rounded-full border-t-transparent"></span></div>}
-                    <table className="w-full text-sm text-left">
+                    <div className="space-y-3 p-3 md:hidden">
+                        {transactions.map(t => (
+                            <div key={t.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                                <div className="mb-2 flex items-start justify-between gap-2">
+                                    <div>
+                                        <p className="text-xs text-slate-500">{new Date(t.tanggal).toLocaleString('id-ID')}</p>
+                                        <p className="text-sm font-semibold text-slate-800">{t.namaPembeli} <span className="text-xs font-normal text-slate-500">({t.tipePembeli})</span></p>
+                                    </div>
+                                    <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${t.metodePembayaran === 'Tabungan' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>{t.metodePembayaran}</span>
+                                </div>
+                                <p className="text-xs text-slate-600">{t.items.map(i => `${i.nama} x${i.qty}`).join(', ')}</p>
+                                <div className="mt-3 flex items-center justify-between">
+                                    <p className="text-sm font-bold text-slate-800">{formatRupiah(t.totalBelanja)}</p>
+                                    <button onClick={() => handlePrintStruk(t)} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" title="Cetak Struk">Cetak</button>
+                                </div>
+                            </div>
+                        ))}
+                        {transactions.length === 0 && !isLoading && <div className="p-6 text-center text-gray-400">Tidak ada transaksi pada periode ini.</div>}
+                    </div>
+                    <table className="hidden w-full text-sm text-left md:table">
                         <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
                             <tr>
                                 <th className="p-3">Waktu</th>

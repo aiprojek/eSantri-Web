@@ -100,6 +100,33 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
 
     const currentTheme = themes[theme];
 
+    const findHijriMonthStartDate = (targetYear: number, targetMonthIndex: number): Date => {
+        const estimatedMasehiYear = Math.floor(targetYear * 0.97023 + 621.57);
+        const anchor = new Date(estimatedMasehiYear, 5, 15);
+        const maxSearchDays = 1200;
+
+        for (let offset = 0; offset <= maxSearchDays; offset++) {
+            const forward = new Date(anchor);
+            forward.setDate(anchor.getDate() + offset);
+            const hForward = getHijriDate(forward, hijriAdjustment);
+            if (parseInt(hForward.year) === targetYear && hForward.monthIndex === targetMonthIndex && hForward.day === '1') {
+                return forward;
+            }
+
+            if (offset > 0) {
+                const backward = new Date(anchor);
+                backward.setDate(anchor.getDate() - offset);
+                const hBackward = getHijriDate(backward, hijriAdjustment);
+                if (parseInt(hBackward.year) === targetYear && hBackward.monthIndex === targetMonthIndex && hBackward.day === '1') {
+                    return backward;
+                }
+            }
+        }
+
+        // Fallback aman agar proses tetap jalan meski tidak ketemu presisi
+        return new Date(estimatedMasehiYear, 0, 1);
+    };
+
     // Data Generator Logic
     const monthsData: MonthData[] = useMemo(() => {
         const results: MonthData[] = [];
@@ -166,40 +193,9 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
             // For now, if no custom range, use the existing 1 full Hijri year logic
             if (startYear !== undefined && startMonth !== undefined && endYear !== undefined && endMonth !== undefined) {
                 // Custom Hijri Range
-                // We need to find the Masehi start date for the first Hijri month
                 let currHM = startMonth;
                 let currHY = startYear;
-                
-                // Find Masehi start for first month
-                // Hijri year 1 is approx 622 AD. Hijri year H is approx H * 0.97 + 622 AD.
-                let estimatedYear = Math.floor(currHY * 0.97 + 621);
-                let cursorDate = new Date(estimatedYear, 0, 1);
-                
-                // Refine cursor to find the exact start of the Hijri month
-                let found = false;
-                for(let k=0; k<1000; k++) {
-                    const h = getHijriDate(cursorDate, hijriAdjustment);
-                    if (parseInt(h.year) === currHY && h.monthIndex === currHM && h.day === '1') {
-                        found = true;
-                        break;
-                    }
-                    cursorDate.setDate(cursorDate.getDate() + 1);
-                }
-
-                // If not found, try searching backwards a bit
-                if (!found) {
-                    cursorDate = new Date(estimatedYear, 0, 1);
-                    for(let k=0; k<1000; k++) {
-                        cursorDate.setDate(cursorDate.getDate() - 1);
-                        const h = getHijriDate(cursorDate, hijriAdjustment);
-                        if (parseInt(h.year) === currHY && h.monthIndex === currHM && h.day === '1') {
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-
-                const mStartYear = cursorDate.getFullYear();
+                let cursorDate = findHijriMonthStartDate(currHY, currHM);
 
                 let idx = 0;
                 const tempResults: MonthData[] = [];
@@ -375,7 +371,11 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
     return (
         <>
             {chunks.map((chunk, pageIndex) => (
-                <div key={pageIndex} className={`printable-content-wrapper ${currentTheme.bg} ${currentTheme.text} flex flex-col p-8 relative overflow-hidden`} style={{ width: '21cm', minHeight: '29.7cm', pageBreakAfter: 'always' }}>
+                <div
+                    key={pageIndex}
+                    className={`printable-content-wrapper calendar-sheet calendar-layout-${layout} ${currentTheme.bg} ${currentTheme.text} flex flex-col p-8 relative overflow-hidden`}
+                    style={{ width: '21cm', minHeight: '29.7cm', pageBreakAfter: pageIndex === chunks.length - 1 ? 'auto' : 'always' }}
+                >
                     
                     {/* Watermark Image Layer */}
                     {customImage && imagePosition === 'watermark' && (
@@ -395,7 +395,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
 
                     {/* Header */}
                     {showKop && (
-                        <div className="flex justify-between items-center mb-6 border-b-2 pb-4 relative z-10" style={{ borderColor: currentTheme.border.replace('border-', '#') }}> 
+                        <div className="calendar-sheet-header flex justify-between items-center mb-6 border-b-2 pb-4 relative z-10" style={{ borderColor: currentTheme.border.replace('border-', '#') }}> 
                             <div className="flex items-center gap-4">
                                 {settings.logoPonpesUrl && <img src={settings.logoPonpesUrl} className="h-16 w-16 object-contain" alt="Logo" />}
                                 <div>
@@ -411,13 +411,13 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                         </div>
                     )}
                     {!showKop && (
-                        <div className="mb-4 text-center relative z-10">
+                        <div className="calendar-sheet-header mb-4 text-center relative z-10">
                             <h2 className={`text-3xl font-bold ${currentTheme.header}`}>KALENDER {displayYear}</h2>
                         </div>
                     )}
 
                     {/* Content */}
-                    <div className={`flex-grow ${getLayoutSpecificClass()} relative z-10`}>
+                    <div className={`calendar-sheet-content flex-grow ${getLayoutSpecificClass()} relative z-10`}>
                         {chunk.map(monthData => {
                             // Filter Events for this specific grid duration
                             const monthEvents = events.filter(e => {
@@ -445,7 +445,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                                     <div className={`grid grid-cols-7 text-center py-2 font-bold ${currentTheme.dayHeader} items-center border-b ${currentTheme.border}`}>
                                         {dayNames.map(d => <div key={d} className="flex items-center justify-center h-full leading-none">{d}</div>)}
                                     </div>
-                                    <div className="grid grid-cols-7 text-center flex-grow border-l border-t" style={{ borderColor: currentTheme.border.replace('border-', '#') }}>
+                                    <div className="grid grid-cols-7 text-center border-l border-t" style={{ borderColor: currentTheme.border.replace('border-', '#') }}>
                                         {monthData.days.map((date, idx) => {
                                             if (!date) {
                                                 return <div key={idx} className="p-1 border-r border-b bg-gray-50/30" style={{ borderColor: currentTheme.border.replace('border-', '#') }}></div>;
@@ -500,35 +500,35 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                                             );
                                         })}
                                     </div>
+                                    <div className={`border-t ${currentTheme.border} px-2 py-1.5 bg-white/70`}>
+                                        {monthEvents.length > 0 ? (
+                                            <div className="space-y-1">
+                                                {monthEvents
+                                                    .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+                                                    .slice(0, layout === '1_sheet' ? 3 : 5)
+                                                    .map(ev => (
+                                                        <div key={ev.id} className="flex items-start gap-1.5 text-[9px] leading-tight">
+                                                            <div
+                                                                className={`w-2 h-2 rounded-full shrink-0 mt-0.5 border border-black/10 ${ev.color.startsWith('#') ? '' : ev.color}`}
+                                                                style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}
+                                                            ></div>
+                                                            <span className="truncate">
+                                                                <span className="font-semibold">{formatDate(ev.startDate).split(' ')[0]}</span> {ev.title}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[9px] italic opacity-60">Belum ada agenda.</p>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
 
-                    {/* Footer / Legend */}
-                    <div className={`mt-auto pt-4 border-t text-xs relative z-10 bg-white/80 backdrop-blur-sm rounded-lg p-3 ${layout === '1_sheet' ? 'max-h-[150px]' : ''}`}>
-                        <h4 className="font-bold mb-2 text-sm border-b pb-1">Agenda Penting Periode Ini:</h4>
-                        <div className={`grid ${layout === '1_sheet' ? 'grid-cols-3' : 'grid-cols-2'} gap-x-6 gap-y-2`}>
-                             {events.filter(e => {
-                                 const start = new Date(e.startDate);
-                                 return start >= chunk[0].start && start <= chunk[chunk.length-1].end;
-                             }).slice(0, layout === '1_sheet' ? 18 : 12).map(e => ( 
-                                 <div key={e.id} className="flex items-start gap-2 text-[10px] leading-tight">
-                                     <div 
-                                        className={`w-2.5 h-2.5 rounded-full shrink-0 mt-0.5 border border-black/10 ${e.color.startsWith('#') ? '' : e.color}`} 
-                                        style={e.color.startsWith('#') ? { backgroundColor: e.color } : {}}
-                                     ></div>
-                                     <div className="flex flex-col overflow-hidden">
-                                        <span className="font-mono text-[9px] font-bold text-gray-500 leading-none mb-0.5">{formatDate(e.startDate).split(' ')[0]}</span>
-                                        <span className="truncate font-semibold text-gray-900 leading-tight">{e.title}</span>
-                                     </div>
-                                 </div>
-                             ))}
-                        </div>
-                    </div>
-                    
                     {/* App Footer */}
-                    <div className="mt-auto pt-4 text-center text-[10px] text-gray-500 relative z-10">
+                    <div className="calendar-sheet-footer pt-4 text-center text-[10px] text-gray-500 relative z-10">
                         dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
                     </div>
                 </div>

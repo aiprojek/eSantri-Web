@@ -1,5 +1,6 @@
 import { db } from '../db';
 import { PondokSettings } from '../types';
+import { migrateUserPermissions } from './permissionMigrationService';
 import {
   db as fdb,
   collection,
@@ -25,6 +26,24 @@ const TABLES_TO_SYNC = [
 
 let unsubscribers: (() => void)[] = [];
 let isSyncingFromCloud = false;
+let cloudSyncDepth = 0;
+type HookRegistryItem = {
+    tableName: string;
+    creating: (primKey: any, obj: any) => void;
+    updating: (mods: any, primKey: any, obj: any) => void;
+    deleting: (primKey: any) => void;
+};
+let registeredHooks: HookRegistryItem[] = [];
+
+const beginCloudSync = () => {
+    cloudSyncDepth += 1;
+    isSyncingFromCloud = cloudSyncDepth > 0;
+};
+
+const endCloudSync = () => {
+    cloudSyncDepth = Math.max(0, cloudSyncDepth - 1);
+    isSyncingFromCloud = cloudSyncDepth > 0;
+};
 
 const buildPublicPortalPayload = (settings: PondokSettings) => ({
     namaPonpes: settings.namaPonpes,
@@ -64,65 +83,66 @@ export const startFirebaseSync = (tenantId: string) => {
             const target = isSettings ? doc(fdb, path, 'main') : query(collection(fdb, path));
 
             const unsub = onSnapshot(target as never, async (snap: any) => {
-                isSyncingFromCloud = true;
+                beginCloudSync();
+                try {
+                    const processDoc = async (docData: any, docId: string) => {
+                        if (tableName === 'users' && docData.isDefaultAdmin) return null;
 
-                const processDoc = async (docData: any, docId: string) => {
-                    if (tableName === 'users' && docData.isDefaultAdmin) return null;
+                        const localItem = await (db as any)[tableName].get(
+                            isSettings ? (await (db as any)[tableName].toArray())[0]?.id : (docData.id || docData.santriId || docId)
+                        );
+                        const cloudTime = getTime(docData.lastModified);
+                        const localTime = localItem ? getTime(localItem.lastModified) : 0;
 
-                    const localItem = await (db as any)[tableName].get(
-                        isSettings ? (await (db as any)[tableName].toArray())[0]?.id : (docData.id || docData.santriId || docId)
-                    );
-                    const cloudTime = getTime(docData.lastModified);
-                    const localTime = localItem ? getTime(localItem.lastModified) : 0;
-
-                    if (!localItem || cloudTime > localTime) {
-                        return docData;
-                    }
-
-                    if (cloudTime === localTime) {
-                        const { lastModified: _cloudTime, ...cloudData } = docData;
-                        const { lastModified: _localTime, ...localData } = localItem;
-                        if (JSON.stringify(cloudData) !== JSON.stringify(localData)) {
+                        if (!localItem || cloudTime > localTime) {
                             return docData;
                         }
-                    }
 
-                    return null;
-                };
-
-                if (isSettings) {
-                    if (snap.exists()) {
-                        const data = snap.data();
-                        const result = await processDoc(data, 'main');
-                        if (result) {
-                            const local = await db.settings.toArray();
-                            if (local.length > 0) {
-                                const { id, ...rest } = result;
-                                await db.settings.update(local[0].id!, rest);
-                            } else {
-                                await db.settings.add(result);
+                        if (cloudTime === localTime) {
+                            const { lastModified: _cloudTime, ...cloudData } = docData;
+                            const { lastModified: _localTime, ...localData } = localItem;
+                            if (JSON.stringify(cloudData) !== JSON.stringify(localData)) {
+                                return docData;
                             }
                         }
-                    }
-                } else {
-                    const batch: any[] = [];
-                    const idsToDelete: any[] = [];
 
-                    for (const change of snap.docChanges()) {
-                        const data = change.doc.data();
-                        if (change.type === 'added' || change.type === 'modified') {
-                            const result = await processDoc(data, change.doc.id);
-                            if (result) batch.push(result);
-                        } else if (change.type === 'removed') {
-                            idsToDelete.push(data.id || data.santriId || change.doc.id);
+                        return null;
+                    };
+
+                    if (isSettings) {
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            const result = await processDoc(data, 'main');
+                            if (result) {
+                                const local = await db.settings.toArray();
+                                if (local.length > 0) {
+                                    const { id, ...rest } = result;
+                                    await db.settings.update(local[0].id!, rest);
+                                } else {
+                                    await db.settings.add(result);
+                                }
+                            }
                         }
+                    } else {
+                        const batch: any[] = [];
+                        const idsToDelete: any[] = [];
+
+                        for (const change of snap.docChanges()) {
+                            const data = change.doc.data();
+                            if (change.type === 'added' || change.type === 'modified') {
+                                const result = await processDoc(data, change.doc.id);
+                                if (result) batch.push(result);
+                            } else if (change.type === 'removed') {
+                                idsToDelete.push(data.id || data.santriId || change.doc.id);
+                            }
+                        }
+
+                        if (batch.length > 0) await (db as any)[tableName].bulkPut(batch);
+                        if (idsToDelete.length > 0) await (db as any)[tableName].bulkDelete(idsToDelete);
                     }
-
-                    if (batch.length > 0) await (db as any)[tableName].bulkPut(batch);
-                    if (idsToDelete.length > 0) await (db as any)[tableName].bulkDelete(idsToDelete);
+                } finally {
+                    endCloudSync();
                 }
-
-                isSyncingFromCloud = false;
             }, (error: unknown) => {
                 handleFirestoreError(error, OperationType.LIST, path);
             });
@@ -133,21 +153,29 @@ export const startFirebaseSync = (tenantId: string) => {
         TABLES_TO_SYNC.forEach((tableName) => {
             const table = (db as any)[tableName];
 
-            const hook = (_primKey: any, obj: any) => {
+            const creatingHook = (_primKey: any, obj: any) => {
                 if (isSyncingFromCloud) return;
                 void syncLocalToFirebase(actualId, tableName, obj);
             };
-
-            table.hook('creating', hook);
-            table.hook('updating', (mods: any, _primKey: any, obj: any) => {
+            const updatingHook = (mods: any, _primKey: any, obj: any) => {
                 if (isSyncingFromCloud) return;
                 void syncLocalToFirebase(actualId, tableName, { ...obj, ...mods });
-            });
-
-            table.hook('deleting', (primKey: any) => {
+            };
+            const deletingHook = (primKey: any) => {
                 if (isSyncingFromCloud) return;
                 const docId = tableName === 'settings' ? 'main' : primKey.toString();
                 void deleteFromFirebase(actualId, tableName, docId);
+            };
+
+            table.hook('creating', creatingHook);
+            table.hook('updating', updatingHook);
+            table.hook('deleting', deletingHook);
+
+            registeredHooks.push({
+                tableName,
+                creating: creatingHook,
+                updating: updatingHook,
+                deleting: deletingHook,
             });
         });
     });
@@ -168,7 +196,8 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
             if (tableName === 'users') {
                 const localUsers = await db.users.toArray();
                 const filteredItems = items.filter((user) => !user.isDefaultAdmin || !localUsers.some((localUser) => localUser.isDefaultAdmin));
-                await db.users.bulkPut(filteredItems);
+                const normalizedUsers = filteredItems.map((user) => migrateUserPermissions(user as any).user);
+                await db.users.bulkPut(normalizedUsers);
             } else if (tableName === 'settings') {
                 const localSettings = await db.settings.toArray();
                 if (localSettings.length > 0) {
@@ -191,6 +220,15 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
 export const stopFirebaseSync = () => {
     unsubscribers.forEach((unsub) => unsub());
     unsubscribers = [];
+    registeredHooks.forEach((item) => {
+        const table = (db as any)[item.tableName];
+        table.hook('creating').unsubscribe(item.creating);
+        table.hook('updating').unsubscribe(item.updating);
+        table.hook('deleting').unsubscribe(item.deleting);
+    });
+    registeredHooks = [];
+    cloudSyncDepth = 0;
+    isSyncingFromCloud = false;
 };
 
 export const syncLocalToFirebase = async (tenantId: string, tableName: string, data: any) => {

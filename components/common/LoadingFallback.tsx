@@ -3,12 +3,12 @@ import React from 'react';
 
 export const LoadingFallback: React.FC = () => {
     return (
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] w-full animate-fade-in">
+        <div className="app-panel flex h-[calc(100vh-240px)] w-full flex-col items-center justify-center rounded-panel px-6 py-16 text-center animate-fade-in">
             <div className="relative">
-                <div className="w-12 h-12 rounded-full border-4 border-gray-200"></div>
-                <div className="absolute top-0 left-0 w-12 h-12 rounded-full border-4 border-teal-600 border-t-transparent animate-spin"></div>
+                <div className="h-12 w-12 rounded-full border-4 border-app-border"></div>
+                <div className="absolute left-0 top-0 h-12 w-12 animate-spin rounded-full border-4 border-app-primary border-t-transparent"></div>
             </div>
-            <p className="mt-4 text-gray-500 text-sm font-medium">Memuat Halaman...</p>
+            <p className="mt-4 text-sm font-medium app-text-secondary">Memuat Halaman...</p>
         </div>
     );
 };

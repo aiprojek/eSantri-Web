@@ -8,6 +8,7 @@ import { formatBytes } from '../../../utils/formatters';
 import { loadSyncService } from '../../../utils/lazyCloudServices';
 import { loadFirebaseRealtimeRuntime } from '../../../utils/lazyFirebaseRuntimes';
 import { LoadingFallback } from '../../common/LoadingFallback';
+import { SectionCard } from '../../common/SectionCard';
 
 const FirebaseCloudPanel = React.lazy(() => import('../cloud/FirebaseCloudPanel').then((module) => ({ default: module.FirebaseCloudPanel })));
 const DropboxCloudPanel = React.lazy(() => import('../cloud/DropboxCloudPanel').then((module) => ({ default: module.DropboxCloudPanel })));
@@ -17,7 +18,7 @@ const PortalBridgePanel = React.lazy(() => import('../cloud/PortalBridgePanel').
 const CloudPairingModals = React.lazy(() => import('../cloud/CloudPairingModals').then((module) => ({ default: module.CloudPairingModals })));
 
 const StorageIndicator: React.FC<{ stats: StorageStats | null, isLoading: boolean, provider: SyncProvider }> = ({ stats, isLoading, provider }) => {
-    if (isLoading) return <div className="text-xs text-gray-500 mt-2 animate-pulse">Memuat data penyimpanan cloud...</div>;
+    if (isLoading) return <div className="mt-2 animate-pulse text-xs text-slate-500">Memuat data penyimpanan cloud...</div>;
     if (!stats) return null;
 
     const percent = stats.percent || 0;
@@ -31,44 +32,44 @@ const StorageIndicator: React.FC<{ stats: StorageStats | null, isLoading: boolea
     const estimatedFiles = stats.total ? Math.floor(remainingSpace / avgFileSize) : '∞';
 
     return (
-        <div className="mt-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <div className="mt-3 rounded-xl border border-app-border bg-app-subtle p-4">
             <div className="flex justify-between items-center mb-3">
-                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700">
                     <i className="bi bi-cloud-check text-blue-500"></i> Kesehatan Cloud ({provider})
                 </h4>
-                <span className="text-[10px] text-gray-500">🕒 Cek: {new Date().toLocaleTimeString()}</span>
+                <span className="text-[10px] text-slate-500">Cek: {new Date().toLocaleTimeString()}</span>
             </div>
 
             <div className="space-y-3">
                 <div>
                     <div className="flex justify-between mb-1">
-                        <span className="text-xs font-medium text-gray-700">Kapasitas Cloud</span>
-                        <span className="text-xs font-medium text-gray-700">{formatBytes(stats.used)} / {stats.total ? formatBytes(stats.total) : 'Unlimited'}</span>
+                        <span className="text-xs font-medium text-slate-700">Kapasitas Cloud</span>
+                        <span className="text-xs font-medium text-slate-700">{formatBytes(stats.used)} / {stats.total ? formatBytes(stats.total) : 'Unlimited'}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="h-2 w-full rounded-full bg-slate-200">
                         <div className={`${colorClass} h-2 rounded-full transition-all duration-500`} style={{ width: `${Math.min(percent, 100)}%` }}></div>
                     </div>
                     <div className="flex justify-between mt-1">
-                        <span className="text-[10px] text-gray-500">{percent.toFixed(1)}% Terpakai</span>
-                        <span className="text-[10px] text-gray-500">Sisa: {stats.total ? formatBytes(remainingSpace) : 'Unlimited'}</span>
+                        <span className="text-[10px] text-slate-500">{percent.toFixed(1)}% Terpakai</span>
+                        <span className="text-[10px] text-slate-500">Sisa: {stats.total ? formatBytes(remainingSpace) : 'Unlimited'}</span>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200">
-                    <div className="bg-white p-2 rounded border border-gray-100">
-                        <p className="text-[9px] text-gray-500 uppercase font-bold">Estimasi Sisa File</p>
-                        <p className="text-sm font-bold text-gray-800">± {estimatedFiles} Backup</p>
+                <div className="grid grid-cols-2 gap-2 border-t border-app-border pt-2">
+                    <div className="rounded-lg border border-slate-100 bg-white p-2">
+                        <p className="text-[9px] font-bold uppercase text-slate-500">Estimasi Sisa File</p>
+                        <p className="text-sm font-bold text-slate-800">± {estimatedFiles} Backup</p>
                     </div>
-                    <div className="bg-white p-2 rounded border border-gray-100">
-                        <p className="text-[9px] text-gray-500 uppercase font-bold">Status Koneksi</p>
-                        <p className="text-sm font-bold text-green-600 flex items-center gap-1">
+                    <div className="rounded-lg border border-slate-100 bg-white p-2">
+                        <p className="text-[9px] font-bold uppercase text-slate-500">Status Koneksi</p>
+                        <p className="flex items-center gap-1 text-sm font-bold text-green-600">
                             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Aktif
                         </p>
                     </div>
                 </div>
 
                 {provider === 'dropbox' && (
-                    <p className="text-[10px] text-gray-500 italic">
+                    <p className="text-[10px] italic text-slate-500">
                         *Batasan Dropbox: Maksimal 3 perangkat terhubung untuk akun gratis.
                     </p>
                 )}
@@ -84,7 +85,7 @@ interface TabCloudProps {
 }
 
 export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSettings, onSaveSettings }) => {
-    const { settings, showToast, showConfirmation, onUpdateSettings, currentUser } = useAppContext();
+    const { settings, showToast, showConfirmation, currentUser } = useAppContext();
     const { fbUser, login, logout, isFbLoading, initializeAuthState, joinTenant, createTenantInvite } = useFirebase();
     const [isConnectingDropbox, setIsConnectingDropbox] = useState(false);
     const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
@@ -260,6 +261,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     const handleGeneratePairingCode = async () => {
         // Use localSettings so it reflects current entries and most recent saves
         const config = localSettings.cloudSyncConfig;
+        setGeneratedCodeMode('session');
         
         // Merge with context settings for sensitive values that might be empty in UI
         const effectiveAppKey = config.dropboxAppKey || settings.cloudSyncConfig.dropboxAppKey;
@@ -472,19 +474,19 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-            <h2 className="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Konfigurasi Sinkronisasi Cloud</h2>
-            <p className="text-sm text-gray-600 mb-4">
-                Pilih layanan penyimpanan untuk backup data dan sinkronisasi antar perangkat.
-            </p>
+        <SectionCard
+            title="Konfigurasi Sinkronisasi Cloud"
+            description="Pilih layanan penyimpanan untuk backup data, pairing, dan sinkronisasi antar perangkat."
+            contentClassName="space-y-6 p-6"
+        >
             
-            <div className="flex flex-col md:flex-row md:items-start gap-4 md:gap-8 mb-6">
+            <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:gap-8">
                 <div className="flex-1 w-full">
-                    <label className="block mb-2 text-sm font-medium text-gray-700">Penyedia Layanan</label>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">Penyedia Layanan</label>
                     <select 
                         value={localSettings.cloudSyncConfig?.provider || 'none'} 
                         onChange={(e) => handleSyncProviderChange(e.target.value as SyncProvider)}
-                        className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                        className="app-select block w-full p-2.5 text-sm"
                     >
                         <option value="none">Tidak Aktif</option>
                         <option value="firebase">Firebase Realtime (Rekomendasi - Multi User)</option>
@@ -495,8 +497,8 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                 </div>
 
                 {localSettings.cloudSyncConfig?.provider !== 'none' && (
-                    <div className="flex-1 w-full md:pt-7">
-                        <div className="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100 h-full">
+                    <div className="w-full flex-1 md:pt-7">
+                        <div className="flex h-full items-center rounded-xl border border-app-border bg-app-subtle p-3">
                             <label className="inline-flex items-center cursor-pointer w-full">
                                 <input 
                                     type="checkbox" 
@@ -505,7 +507,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                                     className="sr-only peer"
                                 />
                                 <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                                <span className="ms-3 text-sm font-medium text-gray-900">
+                                <span className="ms-3 text-sm font-medium text-slate-900">
                                     Auto Sync (Tiap 5 Menit)
                                 </span>
                             </label>
@@ -595,6 +597,6 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                     />
                 )}
             </Suspense>
-        </div>
+        </SectionCard>
     );
 };

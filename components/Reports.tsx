@@ -1,11 +1,13 @@
 
-import React, { Suspense, lazy, useState, useMemo, useRef } from 'react';
+import React, { Suspense, lazy, useState, useMemo, useRef, useEffect } from 'react';
 import { ReportType, Santri } from '../types';
 import { useAppContext } from '../AppContext';
 import { useSantriContext } from '../contexts/SantriContext';
 import { useFinanceContext } from '../contexts/FinanceContext';
 import { useReportGenerator } from '../hooks/useReportGenerator';
 import { useReportConfig } from '../hooks/useReportConfig';
+import { PageHeader } from './common/PageHeader';
+import { formatAcademicYearDisplay, getAcademicYearOptions, getDefaultAcademicYear } from '../utils/academicYear';
 const ReportSelectionHome = lazy(() =>
   import('./reports/ReportSelectionHome').then((module) => ({ default: module.ReportSelectionHome }))
 );
@@ -24,7 +26,7 @@ const ReportsPanelFallback = () => (
 
 const Reports: React.FC = () => {
   const { settings, showToast } = useAppContext();
-  const { santriList, jurnalMengajarList, kesehatanRecords, bkSessions } = useSantriContext();
+  const { santriList, pendaftarList, absensiList, jurnalMengajarList, tahfizhList, kesehatanRecords, bkSessions } = useSantriContext();
   const { tagihanList, pembayaranList, transaksiSaldoList, transaksiKasList } = useFinanceContext();
   
   // -- Nav & UI State --
@@ -37,6 +39,7 @@ const Reports: React.FC = () => {
       jenjangId: '',
       kelasId: '',
       rombelId: '',
+      tahunAjaran: '',
       status: '',
       gender: '',
       gedungId: '',
@@ -62,7 +65,7 @@ const Reports: React.FC = () => {
     // Determine if the current report type naturally shows all statuses
     // For DashboardSummary, we need all to calculate statistics (Lulus, Keluar, etc.)
     // For LaporanMutasi, we specifically need to see mutated students.
-    const showAllStatusesReports = [ReportType.DashboardSummary, ReportType.LaporanMutasi];
+    const showAllStatusesReports = [ReportType.DashboardSummary, ReportType.LaporanMutasi, ReportType.CohortSantri, ReportType.KepatuhanAdministrasi];
     const isShowingAllStatusReport = activeReportType && showAllStatusesReports.includes(activeReportType);
 
     const result = santriList.filter(s => {
@@ -97,9 +100,25 @@ const Reports: React.FC = () => {
     return settings.gedungAsrama.filter(g => g.id === parseInt(filters.gedungId));
   }, [settings.gedungAsrama, filters.gedungId]);
 
+  const defaultAcademicYear = useMemo(() => getDefaultAcademicYear(settings), [settings]);
+  const availableAcademicYears = useMemo(() => getAcademicYearOptions(settings), [settings]);
+
   // -- Hooks for Logic --
-  const reportConfig = useReportConfig(filteredSantri, santriList);
+  const reportConfig = useReportConfig(filteredSantri, santriList, defaultAcademicYear);
   const { generateReport, paperDimensions, marginValues, resetGuidanceFlag } = useReportGenerator(settings);
+
+  useEffect(() => {
+      setFilters((prev) => ({
+          ...prev,
+          tahunAjaran: prev.tahunAjaran || defaultAcademicYear,
+      }));
+  }, [defaultAcademicYear]);
+
+  useEffect(() => {
+      if (filters.tahunAjaran && reportConfig.options.tahunAjaran !== filters.tahunAjaran) {
+          reportConfig.options.setTahunAjaran(filters.tahunAjaran);
+      }
+  }, [filters.tahunAjaran, reportConfig.options]);
 
   // -- Preview State --
   const [previewContent, setPreviewContent] = useState<React.ReactNode | null>(null);
@@ -120,6 +139,7 @@ const Reports: React.FC = () => {
       setCurrentView('detail');
       // Also reset internal report options
       reportConfig.resetReportSpecificState();
+      reportConfig.options.setTahunAjaran(filters.tahunAjaran || defaultAcademicYear);
   };
 
   const handleBackToHome = () => {
@@ -168,14 +188,17 @@ const Reports: React.FC = () => {
               margin: reportConfig.margin,
               filteredGedung,
               // Inject heavy data only when needed
-              tagihanList: activeReportType === ReportType.FinanceSummary || activeReportType === ReportType.RekeningKoranSantri ? tagihanList : [],
+              tagihanList: [ReportType.FinanceSummary, ReportType.RekeningKoranSantri, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? tagihanList : [],
               pembayaranList: activeReportType === ReportType.FinanceSummary || activeReportType === ReportType.RekeningKoranSantri ? pembayaranList : [],
               transaksiSaldoList: activeReportType === ReportType.RekeningKoranSantri ? transaksiSaldoList : [],
               filteredKas: filteredKasData,
-              allKas: activeReportType === ReportType.LaporanArusKas ? transaksiKasList : [],
-              jurnalMengajarList: activeReportType === ReportType.JurnalMengajar ? jurnalMengajarList : [],
-              kesehatanRecords: activeReportType === ReportType.RekapKesehatan ? kesehatanRecords : [],
-              bkSessions: activeReportType === ReportType.RekapKonseling ? bkSessions : []
+              allKas: [ReportType.LaporanArusKas, ReportType.OperasionalHarian].includes(activeReportType) ? transaksiKasList : [],
+              jurnalMengajarList: [ReportType.JurnalMengajar, ReportType.KinerjaPengajar, ReportType.OperasionalHarian].includes(activeReportType) ? jurnalMengajarList : [],
+              absensiList: [ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? absensiList : [],
+              tahfizhList: activeReportType === ReportType.TahfizhProgress ? tahfizhList : [],
+              pendaftarList: [ReportType.OperasionalHarian, ReportType.EfektivitasPSB].includes(activeReportType) ? pendaftarList : [],
+              kesehatanRecords: [ReportType.RekapKesehatan, ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? kesehatanRecords : [],
+              bkSessions: [ReportType.RekapKonseling, ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? bkSessions : []
           };
 
           // Logic for generating preview content (same as before but cleaner call)
@@ -231,7 +254,7 @@ const Reports: React.FC = () => {
                               width: p.isFullPage ? 'auto' : `${p.orientation === 'landscape' ? currentPaper.height : currentPaper.width}cm`,
                               minHeight: p.isFullPage ? '0' : `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`
                           }}>
-                          <div style={{ padding: p.isFullPage ? '0' : `${currentMarginCm}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+                          <div style={{ padding: p.isFullPage ? '0' : `${currentMarginCm}cm ${currentMarginCm}cm ${Math.max(currentMarginCm, 1)}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%', position: 'relative' }}>
                               {p.content}
                           </div>
                       </div>
@@ -249,29 +272,27 @@ const Reports: React.FC = () => {
   };
 
   return (
-    <div className="h-[calc(100vh-100px)] flex flex-col">
-      {/* Header */}
-      <div className="mb-4 flex justify-between items-center shrink-0">
-          <div>
-              <h1 className="text-2xl font-bold text-gray-800">Laporan & Cetak Dokumen</h1>
-              <p className="text-sm text-gray-500">Pusat pencetakan dokumen resmi pesantren.</p>
-          </div>
-          <div className="flex gap-2">
+    <div className="flex h-[calc(100vh-100px)] flex-col space-y-4">
+      <PageHeader
+          eyebrow="Administrasi"
+          title="Laporan & Cetak Dokumen"
+          description={`Pusat pencetakan dokumen resmi pesantren dengan preview, filter, dan kontrol laporan yang lebih seragam.\nPeriode aktif: ${formatAcademicYearDisplay(settings, filters.tahunAjaran || defaultAcademicYear)}`}
+          actions={<div className="flex gap-2">
               {currentView === 'detail' && (
                   <>
                       <button 
                           onClick={() => setIsFilterDrawerOpen(true)} 
-                          className="bg-teal-50 text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-100 transition-colors font-medium flex items-center gap-2 border border-teal-200"
+                          className="app-button-secondary px-4 py-2.5 text-sm"
                       >
                           <i className="bi bi-funnel-fill"></i> <span className="hidden sm:inline">Filter & Opsi</span>
                       </button>
-                      <button onClick={handleBackToHome} className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center gap-2">
+                      <button onClick={handleBackToHome} className="app-button-secondary px-4 py-2.5 text-sm">
                           <i className="bi bi-arrow-left"></i> <span className="hidden sm:inline">Kembali</span>
                       </button>
                   </>
               )}
-          </div>
-      </div>
+          </div>}
+      />
 
       {/* Content Area */}
       <div className="flex-grow relative overflow-hidden">
@@ -323,6 +344,7 @@ const Reports: React.FC = () => {
                                   filteredSantri={filteredSantri}
                                   availableKelas={availableKelas}
                                   availableRombel={availableRombel}
+                                  availableAcademicYears={availableAcademicYears}
                                   onGenerate={() => { handleGenerate(); setIsFilterDrawerOpen(false); }}
                                   isGenerating={isGenerating}
                                   canGenerate={reportConfig.canGenerate}
@@ -343,6 +365,12 @@ const Reports: React.FC = () => {
                               onToast={showToast}
                               filteredSantri={filteredSantri}
                               settings={settings}
+                              filters={{
+                                  jenjangId: filters.jenjangId,
+                                  kelasId: filters.kelasId,
+                                  rombelId: filters.rombelId,
+                                  tahunAjaran: filters.tahunAjaran
+                              }}
                               excelData={exportData} // Pass the specific data needed for export
                           />
                       </Suspense>

@@ -219,15 +219,15 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-            <div className="flex justify-between items-center mb-4 border-b pb-2">
-                <h2 className="text-xl font-bold text-gray-700">Tenaga Pendidik & Kependidikan</h2>
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md mb-6">
+            <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-4 border-b pb-3">
+                <h2 className="text-lg md:text-xl font-bold text-gray-700">Tenaga Pendidik & Kependidikan</h2>
                 {selectedIds.length > 0 && (
-                    <div className="flex items-center gap-3 animate-fade-in">
+                    <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3 animate-fade-in">
                         <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-100">{selectedIds.length} dipilih</span>
-                        <button onClick={() => setSelectedIds([])} className="text-xs text-gray-400 hover:text-gray-600 underline">Batal</button>
-                        <button onClick={handleBulkEdit} className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 font-bold"><i className="bi bi-pencil-square mr-1"></i> Edit Massal</button>
-                        <button onClick={handleBulkDelete} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded border border-red-200 font-bold"><i className="bi bi-trash mr-1"></i> Hapus Massal</button>
+                        <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-gray-700 underline text-left md:text-center">Batal</button>
+                        <button onClick={handleBulkEdit} className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 font-bold text-left md:text-center"><i className="bi bi-pencil-square mr-1"></i> Edit Massal</button>
+                        <button onClick={handleBulkDelete} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded border border-red-200 font-bold text-left md:text-center"><i className="bi bi-trash mr-1"></i> Hapus Massal</button>
                     </div>
                 )}
             </div>

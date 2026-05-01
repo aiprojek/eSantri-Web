@@ -6,8 +6,14 @@ import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { Inventaris } from '../types';
 import { formatRupiah, formatDateTime } from '../utils/formatters';
-import { printToPdfNative } from '../utils/pdfGenerator';
+import { generatePdf } from '../utils/pdfGenerator';
+import { loadXLSX } from '../utils/lazyClientLibs';
+import { exportToHtml, exportToWord, printPreviewExact } from '../utils/exportUtils';
 import { SarprasReportTemplate } from './sarpras/SarprasReportTemplate';
+import { PageHeader } from './common/PageHeader';
+import { SectionCard } from './common/SectionCard';
+import { EmptyState } from './common/EmptyState';
+import { HeaderTabs } from './common/HeaderTabs';
 
 // --- SUB-COMPONENTS ---
 
@@ -225,6 +231,7 @@ const Sarpras: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'dashboard' | 'bergerak' | 'tetap'>('dashboard');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterKondisi, setFilterKondisi] = useState('');
+    const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -275,52 +282,133 @@ const Sarpras: React.FC = () => {
         }, { confirmColor: 'red' });
     };
 
-    const handlePrint = () => {
-        showToast('Menyiapkan dokumen cetak...', 'info');
-        printToPdfNative('sarpras-print-area', `Laporan_Sarpras_${new Date().toISOString().slice(0, 10)}`);
+    const buildSarprasFileName = () => {
+        const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const scope = activeTab === 'dashboard' ? 'semua' : activeTab === 'bergerak' ? 'bergerak' : 'tetap';
+        return `Laporan_Sarpras_${scope}_${datePart}`;
+    };
+
+    const handleExportAction = async (type: 'pdfVisual' | 'print' | 'word' | 'excel' | 'html') => {
+        const fileName = buildSarprasFileName();
+        setIsExportMenuOpen(false);
+        try {
+            if (type === 'pdfVisual') {
+                await generatePdf('sarpras-print-area', { paperSize: 'A4', fileName: `${fileName}.pdf` });
+                return;
+            }
+            if (type === 'print') {
+                await printPreviewExact('sarpras-print-area', fileName);
+                return;
+            }
+            if (type === 'word') {
+                exportToWord('sarpras-print-area', fileName);
+                return;
+            }
+            if (type === 'html') {
+                exportToHtml('sarpras-print-area', fileName);
+                return;
+            }
+            if (type === 'excel') {
+                const XLSX = await loadXLSX();
+                const rows = (activeTab === 'dashboard' ? assets : filteredAssets).map((item, idx) => ({
+                    No: idx + 1,
+                    Kode: item.kode,
+                    Nama: item.nama,
+                    Jenis: item.jenis,
+                    Kategori: item.kategori || '-',
+                    Lokasi: item.lokasi || '-',
+                    Kondisi: item.kondisi,
+                    Jumlah: item.jenis === 'Bergerak' ? item.jumlah : '',
+                    Satuan: item.jenis === 'Bergerak' ? (item.satuan || '-') : '',
+                    Luas_m2: item.jenis === 'Tidak Bergerak' ? (item.luas || '') : '',
+                    Legalitas: item.jenis === 'Tidak Bergerak' ? (item.legalitas || '-') : '',
+                    Sumber: item.sumber || '-',
+                    Tanggal_Perolehan: item.tanggalPerolehan || '-',
+                    Nilai_Aset: Number(item.hargaPerolehan) || 0,
+                }));
+                const ws = XLSX.utils.json_to_sheet(rows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Sarpras');
+                XLSX.writeFile(wb, `${fileName}.xlsx`);
+                return;
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Gagal mengekspor laporan sarpras.', 'error');
+        }
     };
 
     return (
-        <div className="min-h-screen flex flex-col pb-20">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Manajemen Aset & Inventaris (Sarpras)</h1>
-
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6 sticky top-0 z-40">
-                <nav className="flex -mb-px">
-                    <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-4 text-center border-b-2 font-medium text-sm ${activeTab === 'dashboard' ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
-                    <button onClick={() => setActiveTab('bergerak')} className={`flex-1 py-4 text-center border-b-2 font-medium text-sm ${activeTab === 'bergerak' ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Aset Bergerak</button>
-                    <button onClick={() => setActiveTab('tetap')} className={`flex-1 py-4 text-center border-b-2 font-medium text-sm ${activeTab === 'tetap' ? 'border-purple-500 text-purple-600 bg-purple-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Tanah & Bangunan</button>
-                </nav>
-            </div>
+        <div className="flex h-full min-h-0 flex-col space-y-6 pb-20">
+            <PageHeader
+                eyebrow="Keuangan & Aset"
+                title="Manajemen Aset & Inventaris"
+                description="Pantau dashboard aset, inventaris bergerak, serta tanah dan bangunan dari panel sarpras yang lebih konsisten."
+                tabs={
+                    <HeaderTabs
+                        value={activeTab}
+                        onChange={(v) => setActiveTab(v as 'dashboard' | 'bergerak' | 'tetap')}
+                        tabs={[
+                            { value: 'dashboard', label: 'Dashboard', icon: 'bi-speedometer2' },
+                            { value: 'bergerak', label: 'Aset Bergerak', icon: 'bi-box-seam' },
+                            { value: 'tetap', label: 'Tanah & Bangunan', icon: 'bi-building' },
+                        ]}
+                    />
+                }
+            />
 
             {activeTab === 'dashboard' && <SarprasDashboard assets={assets} />}
 
             {(activeTab === 'bergerak' || activeTab === 'tetap') && (
-                <div className="bg-white p-6 rounded-lg shadow-md animate-fade-in">
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                        <div className="flex gap-4 w-full md:w-auto">
-                            <input type="text" placeholder="Cari nama, kode, lokasi..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="border rounded-lg p-2 text-sm flex-grow md:w-64" />
-                            <select value={filterKondisi} onChange={e => setFilterKondisi(e.target.value)} className="border rounded-lg p-2 text-sm">
-                                <option value="">Semua Kondisi</option>
-                                <option value="Baik">Baik</option>
-                                <option value="Rusak Ringan">Rusak Ringan</option>
-                                <option value="Rusak Berat">Rusak Berat</option>
-                            </select>
+                <SectionCard className="animate-fade-in" contentClassName="p-4 md:p-6">
+                    <div className="mb-6 grid grid-cols-1 gap-2 lg:grid-cols-[2fr_1fr_auto_auto] lg:items-center">
+                        <div className="w-full min-w-0">
+                            <input type="text" placeholder="Cari nama, kode, lokasi..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="border rounded-lg p-2 text-sm w-full" />
                         </div>
-                        <div className="flex gap-2">
-                             <button onClick={handlePrint} className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center gap-2">
-                                <i className="bi bi-printer-fill"></i> Cetak Laporan
+                        <select value={filterKondisi} onChange={e => setFilterKondisi(e.target.value)} className="border rounded-lg p-2 text-sm">
+                            <option value="">Semua Kondisi</option>
+                            <option value="Baik">Baik</option>
+                            <option value="Rusak Ringan">Rusak Ringan</option>
+                            <option value="Rusak Berat">Rusak Berat</option>
+                        </select>
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsExportMenuOpen(prev => !prev)}
+                                className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center justify-center gap-2 w-full lg:w-auto"
+                            >
+                                <i className="bi bi-printer-fill"></i> Aksi Laporan
                             </button>
-                            {canWrite && (
-                                <button onClick={() => { setEditingAsset(null); setIsModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2">
-                                    <i className="bi bi-plus-lg"></i> Tambah Aset
-                                </button>
+                            {isExportMenuOpen && (
+                                <div className="absolute right-0 z-20 mt-2 w-44 rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden">
+                                    <button onClick={() => handleExportAction('pdfVisual')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">PDF Visual</button>
+                                    <button onClick={() => handleExportAction('print')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">Cetak</button>
+                                    <button onClick={() => handleExportAction('word')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">Word</button>
+                                    <button onClick={() => handleExportAction('excel')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">Excel</button>
+                                    <button onClick={() => handleExportAction('html')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">HTML</button>
+                                </div>
                             )}
+                        </div>
+                        {canWrite && (
+                            <button onClick={() => { setEditingAsset(null); setIsModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center justify-center gap-2">
+                                <i className="bi bi-plus-lg"></i> Tambah Aset
+                            </button>
+                        )}
+                        <div className="lg:hidden">
+                            <button
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setFilterKondisi('');
+                                }}
+                                className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-50"
+                            >
+                                Reset Filter
+                            </button>
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto border rounded-lg">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50 text-gray-600 uppercase border-b">
+                    <div className="hidden md:block app-table-shell overflow-x-auto">
+                        <table className="app-table text-sm text-left">
+                            <thead className="uppercase border-b border-app-border">
                                 <tr>
                                     <th className="px-4 py-3">Kode</th>
                                     <th className="px-4 py-3">Nama Barang</th>
@@ -370,11 +458,54 @@ const Sarpras: React.FC = () => {
                                         </td>
                                     </tr>
                                 ))}
-                                {filteredAssets.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-gray-400 italic">Tidak ada data aset.</td></tr>}
+                                {filteredAssets.length === 0 && <tr><td colSpan={8} className="p-4"><EmptyState icon="bi-box-seam" title="Data aset kosong" description="Belum ada data aset yang cocok dengan filter sarpras saat ini." /></td></tr>}
                             </tbody>
                         </table>
                     </div>
-                </div>
+
+                    <div className="md:hidden space-y-3">
+                        {filteredAssets.map(item => (
+                            <article key={item.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <div className="font-semibold text-sm text-gray-900">{item.nama}</div>
+                                        <div className="font-mono text-[10px] text-gray-500">{item.kode}</div>
+                                    </div>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        item.kondisi === 'Baik' ? 'bg-green-100 text-green-700' :
+                                        item.kondisi === 'Rusak Ringan' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-red-100 text-red-700'
+                                    }`}>
+                                        {item.kondisi}
+                                    </span>
+                                </div>
+                                <div className="mt-2 text-xs text-gray-600">
+                                    <div>{item.kategori} • {item.lokasi || '-'}</div>
+                                    <div>{item.sumber} • {item.tanggalPerolehan}</div>
+                                    {activeTab === 'bergerak' ? (
+                                        <div className="font-semibold mt-1">Jumlah: {item.jumlah} {item.satuan}</div>
+                                    ) : (
+                                        <div className="font-semibold mt-1">Luas: {item.luas || 0} m² • {item.legalitas || '-'}</div>
+                                    )}
+                                </div>
+                                <div className="mt-2 flex items-center justify-between">
+                                    <div className="text-sm font-bold text-gray-800">{formatRupiah(item.hargaPerolehan)}</div>
+                                    {canWrite && (
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setEditingAsset(item); setIsModalOpen(true); }} className="text-blue-600 hover:text-blue-800 p-1"><i className="bi bi-pencil-square"></i></button>
+                                            <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800 p-1"><i className="bi bi-trash"></i></button>
+                                        </div>
+                                    )}
+                                </div>
+                            </article>
+                        ))}
+                        {filteredAssets.length === 0 && (
+                            <div className="p-4">
+                                <EmptyState icon="bi-box-seam" title="Data aset kosong" description="Belum ada data aset yang cocok dengan filter sarpras saat ini." />
+                            </div>
+                        )}
+                    </div>
+                </SectionCard>
             )}
 
             <InventarisModal 

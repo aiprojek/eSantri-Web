@@ -117,6 +117,14 @@ export const ProductManager: React.FC = () => {
                 newTotalStock += stockQty;
                 newWarehouseStocks[whId] = (newWarehouseStocks[whId] || 0) + stockQty;
             } else {
+                if (selectedStockProduct.stok < stockQty) {
+                    showToast('Stok total tidak cukup untuk dikurangi.', 'error');
+                    return;
+                }
+                if ((newWarehouseStocks[whId] || 0) < stockQty) {
+                    showToast('Stok gudang terpilih tidak cukup untuk dikurangi.', 'error');
+                    return;
+                }
                 newTotalStock -= stockQty; 
                 newWarehouseStocks[whId] = (newWarehouseStocks[whId] || 0) - stockQty;
             }
@@ -149,7 +157,33 @@ export const ProductManager: React.FC = () => {
 
     const onSubmitProduct = async (data: ProdukKoperasi) => {
         try {
+            if (!data.nama?.trim()) {
+                showToast('Nama produk wajib diisi.', 'error');
+                return;
+            }
+            if (!data.kategori?.trim()) {
+                showToast('Kategori wajib diisi.', 'error');
+                return;
+            }
+
+            const hargaBeli = Math.max(0, Number(data.hargaBeli) || 0);
+            const hargaJual = Math.max(0, Number(data.hargaJual) || 0);
+            const minStok = Math.max(0, Number(data.minStok) || 5);
+
             const hasVarian = tempVarian.length > 0;
+            const sanitizedVarian = tempVarian.map(v => ({
+                ...v,
+                nama: (v.nama || '').trim(),
+                harga: Math.max(0, Number(v.harga) || 0),
+                stok: Math.max(0, Number(v.stok) || 0)
+            })).filter(v => v.nama);
+            const sanitizedGrosir = tempGrosir
+                .map(g => ({
+                    minQty: Math.max(1, Number(g.minQty) || 1),
+                    harga: Math.max(0, Number(g.harga) || 0)
+                }))
+                .filter(g => g.harga > 0)
+                .sort((a, b) => a.minQty - b.minQty);
             
             // Calculate total stock from warehouses if available
             const totalWhStock = data.warehouseStocks 
@@ -158,16 +192,20 @@ export const ProductManager: React.FC = () => {
 
             // Priority: Varian > Warehouse Stocks > Manual Input
             const totalStok = hasVarian 
-                ? tempVarian.reduce((sum, v) => sum + (Number(v.stok) || 0), 0) 
-                : (totalWhStock || Number(data.stok));
+                ? sanitizedVarian.reduce((sum, v) => sum + (Number(v.stok) || 0), 0) 
+                : Math.max(0, (totalWhStock || Number(data.stok) || 0));
 
             const finalData = { 
                 ...data, 
+                nama: data.nama.trim(),
+                kategori: data.kategori.trim(),
+                hargaBeli,
+                hargaJual,
                 stok: totalStok,
-                minStok: Number(data.minStok) || 5,
+                minStok,
                 hasVarian,
-                varian: tempVarian,
-                grosir: tempGrosir
+                varian: sanitizedVarian,
+                grosir: sanitizedGrosir
             };
 
             if (editingProduct) {
@@ -308,32 +346,32 @@ export const ProductManager: React.FC = () => {
     const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => { /* ... existing ... */ };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md h-full flex flex-col">
             {/* ... Existing Tab Navigation & Search Bar ... */}
              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 shrink-0 gap-3 border-b pb-4">
-                <div className="flex gap-4">
+                <div className="flex gap-2 md:gap-4 w-full md:w-auto overflow-x-auto">
                     <button 
                         onClick={() => setActiveTab('manage')} 
-                        className={`text-sm font-bold pb-2 border-b-2 px-2 transition-colors ${activeTab === 'manage' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        className={`text-xs md:text-sm font-bold pb-2 border-b-2 px-2 transition-colors whitespace-nowrap ${activeTab === 'manage' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                     >
                         Manajemen Produk
                     </button>
                     <button 
                         onClick={() => setActiveTab('log')} 
-                        className={`text-sm font-bold pb-2 border-b-2 px-2 transition-colors ${activeTab === 'log' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        className={`text-xs md:text-sm font-bold pb-2 border-b-2 px-2 transition-colors whitespace-nowrap ${activeTab === 'log' ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                     >
                         Log Riwayat Stok
                     </button>
                 </div>
                 {activeTab === 'manage' && (
-                    <div className="flex flex-wrap gap-2">
-                         <button onClick={() => { setOpnameData({}); setIsOpnameModalOpen(true); }} className="bg-purple-50 text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-purple-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
+                         <button onClick={() => { setOpnameData({}); setIsOpnameModalOpen(true); }} className="bg-purple-50 text-purple-600 border border-purple-200 px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-purple-100">
                             <i className="bi bi-clipboard-check"></i> Stok Opname
                         </button>
-                        <button onClick={() => handleOpenStockModal('Koreksi')} className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-red-100">
+                        <button onClick={() => handleOpenStockModal('Koreksi')} className="bg-red-50 text-red-600 border border-red-200 px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-red-100">
                             <i className="bi bi-trash"></i> Barang Rusak
                         </button>
-                        <button onClick={() => handleOpenStockModal('Masuk')} className="bg-green-50 text-green-600 border border-green-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-green-100">
+                        <button onClick={() => handleOpenStockModal('Masuk')} className="bg-green-50 text-green-600 border border-green-200 px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-green-100">
                             <i className="bi bi-box-arrow-in-down"></i> Stok Masuk
                         </button>
                     </div>
@@ -342,25 +380,42 @@ export const ProductManager: React.FC = () => {
 
             {activeTab === 'manage' ? (
                 <>
-                     <div className="flex flex-col md:flex-row gap-4 mb-4">
-                        <div className="relative flex-grow flex gap-2">
+                     <div className="flex flex-col gap-3 mb-4">
+                        <div className="flex flex-wrap gap-2">
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                                Total Produk: {products.length}
+                            </span>
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                                Stok Menipis: {products.filter(p => p.stok <= (p.minStok || 5)).length}
+                            </span>
+                        </div>
+                        <div className="relative w-full">
                              <input type="text" placeholder="Cari Produk..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 p-2 border rounded-lg text-sm" />
                              <i className="bi bi-search absolute left-3 top-2.5 text-gray-400"></i>
-                             <button onClick={() => setFilterLowStock(!filterLowStock)} className={`px-3 py-2 rounded-lg border text-xs font-bold flex items-center gap-2 whitespace-nowrap ${filterLowStock ? 'bg-red-100 border-red-300 text-red-700' : 'bg-white text-gray-600'}`}>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                             <button onClick={() => setFilterLowStock(!filterLowStock)} className={`px-3 py-2 rounded-lg border text-xs font-bold flex items-center justify-center gap-2 whitespace-nowrap ${filterLowStock ? 'bg-red-100 border-red-300 text-red-700' : 'bg-white text-gray-600'}`}>
                                 <i className="bi bi-exclamation-triangle"></i> Stok Menipis
                              </button>
-                        </div>
-                        <div className="flex flex-wrap gap-2 shrink-0">
-                            <button onClick={() => setIsBulkEditorOpen(true)} className="bg-teal-50 text-teal-700 border border-teal-200 px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-100 flex items-center gap-2">
+                            <button onClick={() => setIsBulkEditorOpen(true)} className="bg-teal-50 text-teal-700 border border-teal-200 px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-100 flex items-center justify-center gap-2">
                                 <i className="bi bi-table"></i> Tambah Massal
                             </button>
-                            <button onClick={() => openProductModal(null)} className="bg-teal-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 flex items-center gap-2">
+                            <button onClick={() => openProductModal(null)} className="bg-teal-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 flex items-center justify-center gap-2">
                                 <i className="bi bi-plus-lg"></i> Tambah Baru
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setFilterLowStock(false);
+                                }}
+                                className="bg-white text-gray-700 border border-gray-300 px-3 py-2 rounded-lg text-xs font-bold hover:bg-gray-50 flex items-center justify-center gap-2"
+                            >
+                                <i className="bi bi-arrow-counterclockwise"></i> Reset Filter
                             </button>
                         </div>
                     </div>
 
-                    <div className="flex-grow overflow-auto border rounded-lg">
+                    <div className="hidden md:block flex-grow overflow-auto border rounded-lg">
                         <table className="w-full text-sm text-left relative">
                             <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
                                 <tr>
@@ -404,9 +459,52 @@ export const ProductManager: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
+
+                    <div className="md:hidden flex-grow overflow-auto space-y-3">
+                        {filteredProducts.map(p => {
+                            const isLow = p.stok <= (p.minStok || 5);
+                            return (
+                                <div key={p.id} className={`border rounded-lg p-3 ${isLow ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <div className="font-semibold text-sm text-gray-800">{p.nama}</div>
+                                            <div className="text-[11px] text-gray-500">{p.kategori}</div>
+                                        </div>
+                                        <div className="flex gap-2 shrink-0">
+                                            <button onClick={() => openProductModal(p)} className="text-blue-600 hover:text-blue-800"><i className="bi bi-pencil-square"></i></button>
+                                            <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-800"><i className="bi bi-trash"></i></button>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                        {p.hasVarian && <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold">Varian</span>}
+                                        {p.grosir && p.grosir.length > 0 && <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold">Grosir</span>}
+                                        {isLow && <span className="px-1.5 py-0.5 rounded bg-red-200 text-red-700 text-[10px] font-bold">Stok Rendah</span>}
+                                    </div>
+                                    <div className="mt-2 text-[11px] text-gray-500 font-mono">{p.barcode ? `UPC: ${p.barcode}` : 'Tanpa barcode'}</div>
+                                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                        <div className="rounded-md bg-gray-50 border border-gray-200 p-2">
+                                            <div className="text-gray-500">Harga Beli</div>
+                                            <div className="font-medium text-gray-700">{formatRupiah(p.hargaBeli)}</div>
+                                        </div>
+                                        <div className="rounded-md bg-green-50 border border-green-200 p-2">
+                                            <div className="text-green-700">Harga Jual</div>
+                                            <div className="font-bold text-green-800">{formatRupiah(p.hargaJual)}</div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 text-xs">
+                                        <span className={`font-bold ${isLow ? 'text-red-600' : 'text-gray-700'}`}>Stok: {p.stok} {p.satuan}</span>
+                                        <span className="text-gray-500"> · Min: {p.minStok || 5}</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {filteredProducts.length === 0 && (
+                            <div className="border rounded-lg p-6 text-center text-sm text-gray-400">Tidak ada produk ditemukan.</div>
+                        )}
+                    </div>
                 </>
             ) : (
-                <div className="flex-grow overflow-auto border rounded-lg">
+                <div className="hidden md:block flex-grow overflow-auto border rounded-lg">
                     {/* Log Table - Same as before */}
                     <table className="w-full text-sm text-left">
                          <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
@@ -446,6 +544,38 @@ export const ProductManager: React.FC = () => {
                             {history.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-gray-400">Belum ada riwayat stok.</td></tr>}
                         </tbody>
                     </table>
+                </div>
+            )}
+
+            {activeTab === 'log' && (
+                <div className="md:hidden flex-grow overflow-auto space-y-3">
+                    {history.map(h => (
+                        <div key={h.id} className="border rounded-lg p-3 bg-white">
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <div className="font-semibold text-sm text-gray-800">{productMap.get(h.produkId) || 'Produk Terhapus'}</div>
+                                    <div className="text-[11px] text-gray-500">{formatDateTime(h.tanggal)}</div>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded text-[10px] border ${
+                                    h.tipe === 'Masuk' ? 'bg-green-50 text-green-700 border-green-200' :
+                                    h.tipe === 'Penjualan' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                    h.tipe === 'Koreksi' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                    'bg-gray-100'
+                                }`}>
+                                    {h.tipe}
+                                </span>
+                            </div>
+                            <div className="mt-2 text-xs text-gray-700">
+                                <div>Jumlah: <span className="font-bold">{h.tipe === 'Masuk' ? '+' : '-'}{h.jumlah}</span></div>
+                                <div>Stok Akhir: <span className="font-medium">{h.stokAkhir}</span></div>
+                                <div className="truncate">Catatan: {h.keterangan || '-'}</div>
+                                <div>Oleh: {h.operator}</div>
+                            </div>
+                        </div>
+                    ))}
+                    {history.length === 0 && (
+                        <div className="border rounded-lg p-6 text-center text-sm text-gray-400">Belum ada riwayat stok.</div>
+                    )}
                 </div>
             )}
 

@@ -1,8 +1,9 @@
 
 import React from 'react';
-import { Santri, PondokSettings, RiwayatStatus, GedungAsrama } from '../../../types';
+import { Santri, PondokSettings, RiwayatStatus, GedungAsrama, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, KesehatanRecord, BkSession, Tagihan, TransaksiKas, Pendaftar } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
 import { ReportFooter, formatDate, formatRupiah, formatAlamat } from './Common';
+import { getDefaultAcademicYear } from '../../../utils/academicYear';
 
 // --- DASHBOARD SUMMARY ---
 export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings: PondokSettings }> = ({ santriList, settings }) => {
@@ -106,8 +107,549 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
     );
 };
 
+// --- OPERASIONAL HARIAN ---
+export const OperasionalHarianTemplate: React.FC<{
+    settings: PondokSettings;
+    absensiList: AbsensiRecord[];
+    jurnalMengajarList: JurnalMengajarRecord[];
+    kesehatanRecords: KesehatanRecord[];
+    bkSessions: BkSession[];
+    transaksiKasList: TransaksiKas[];
+    pendaftarList: Pendaftar[];
+}> = ({ settings, absensiList, jurnalMengajarList, kesehatanRecords, bkSessions, transaksiKasList, pendaftarList }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const absenToday = absensiList.filter(a => a.tanggal === today);
+    const h = absenToday.filter(a => a.status === 'H').length;
+    const s = absenToday.filter(a => a.status === 'S').length;
+    const i = absenToday.filter(a => a.status === 'I').length;
+    const a = absenToday.filter(a => a.status === 'A').length;
+    const kesehatanToday = kesehatanRecords.filter(k => k.tanggal === today);
+    const bkToday = bkSessions.filter(b => b.tanggal === today);
+    const jurnalToday = jurnalMengajarList.filter(j => j.tanggal === today);
+    const kasToday = transaksiKasList.filter(k => (k.tanggal || '').slice(0, 10) === today);
+    const kasMasuk = kasToday.filter(k => k.jenis === 'Pemasukan').reduce((sum, k) => sum + (Number(k.jumlah) || 0), 0);
+    const kasKeluar = kasToday.filter(k => k.jenis === 'Pengeluaran').reduce((sum, k) => sum + (Number(k.jumlah) || 0), 0);
+    const daftarToday = pendaftarList.filter(p => (p.tanggalDaftar || '').slice(0, 10) === today);
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="SNAPSHOT OPERASIONAL HARIAN" />
+                <p className="print-meta text-center text-sm mb-4">Tanggal Operasional: {formatDate(today)}</p>
+
+                <div className="grid grid-cols-4 gap-3 mb-5">
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Hadir</div><div className="text-xl font-bold">{h}</div></div>
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Sakit/Izin</div><div className="text-xl font-bold">{s + i}</div></div>
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Alpha</div><div className="text-xl font-bold">{a}</div></div>
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Jurnal Mengajar</div><div className="text-xl font-bold">{jurnalToday.length}</div></div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-5">
+                    <div style={{ breakInside: 'avoid' }}>
+                        <h4 className="font-bold mb-2 border-b border-black pb-1">Layanan Harian</h4>
+                        <table className="w-full text-sm border-collapse border border-black">
+                            <tbody>
+                                <tr><td className="p-2 border border-black">Pemeriksaan Kesehatan</td><td className="p-2 border border-black text-right font-semibold">{kesehatanToday.length} kasus</td></tr>
+                                <tr><td className="p-2 border border-black">Sesi BK</td><td className="p-2 border border-black text-right font-semibold">{bkToday.length} sesi</td></tr>
+                                <tr><td className="p-2 border border-black">Pendaftar PSB Baru</td><td className="p-2 border border-black text-right font-semibold">{daftarToday.length} orang</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style={{ breakInside: 'avoid' }}>
+                        <h4 className="font-bold mb-2 border-b border-black pb-1">Keuangan Harian</h4>
+                        <table className="w-full text-sm border-collapse border border-black">
+                            <tbody>
+                                <tr><td className="p-2 border border-black">Pemasukan Kas</td><td className="p-2 border border-black text-right font-semibold text-green-700">{formatRupiah(kasMasuk)}</td></tr>
+                                <tr><td className="p-2 border border-black">Pengeluaran Kas</td><td className="p-2 border border-black text-right font-semibold text-red-700">{formatRupiah(kasKeluar)}</td></tr>
+                                <tr><td className="p-2 border border-black">Selisih Harian</td><td className="p-2 border border-black text-right font-bold">{formatRupiah(kasMasuk - kasKeluar)}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- EARLY WARNING SANTRI ---
+export const EarlyWarningSantriTemplate: React.FC<{
+    settings: PondokSettings;
+    santriList: Santri[];
+    absensiList: AbsensiRecord[];
+    kesehatanRecords: KesehatanRecord[];
+    bkSessions: BkSession[];
+    tagihanList: Tagihan[];
+}> = ({ settings, santriList, absensiList, kesehatanRecords, bkSessions, tagihanList }) => {
+    const cutoff30 = new Date();
+    cutoff30.setDate(cutoff30.getDate() - 30);
+    const cutoff60 = new Date();
+    cutoff60.setDate(cutoff60.getDate() - 60);
+
+    const rows = santriList.map((s) => {
+        const absensi = absensiList.filter(a => a.santriId === s.id && new Date(a.tanggal) >= cutoff30);
+        const alpha = absensi.filter(a => a.status === 'A').length;
+        const sakitIzin = absensi.filter(a => a.status === 'S' || a.status === 'I').length;
+        const bkAktif = bkSessions.filter(b => b.santriId === s.id && (b.status === 'Proses' || b.status === 'Pemantauan')).length;
+        const kesehatanRisiko = kesehatanRecords.filter(k => k.santriId === s.id && new Date(k.tanggal) >= cutoff60 && (k.status === 'Rawat Inap (Pondok)' || k.status === 'Rujuk RS/Klinik')).length;
+        const tunggakan = tagihanList
+            .filter(t => t.santriId === s.id && t.status === 'Belum Lunas')
+            .reduce((sum, t) => sum + (Number(t.nominal) || 0), 0);
+
+        const score = (alpha * 5) + (sakitIzin * 2) + (bkAktif * 4) + (kesehatanRisiko * 4) + (tunggakan > 0 ? Math.min(10, Math.ceil(tunggakan / 500000)) : 0);
+        const level = score >= 15 ? 'Tinggi' : score >= 8 ? 'Sedang' : 'Rendah';
+        return { santri: s, alpha, sakitIzin, bkAktif, kesehatanRisiko, tunggakan, score, level };
+    }).filter(r => r.score > 0).sort((a, b) => b.score - a.score);
+
+    const topRows = rows.slice(0, 50);
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="EARLY WARNING SANTRI BERISIKO" />
+                <p className="print-meta text-center text-sm mb-4">Perhitungan berbasis 30-60 hari terakhir: absensi, BK, kesehatan, dan tunggakan.</p>
+                <table className="w-full text-left border-collapse border border-black text-xs">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="p-2 border border-black w-8 text-center">No</th>
+                            <th className="p-2 border border-black">Nama Santri</th>
+                            <th className="p-2 border border-black text-center">Rombel</th>
+                            <th className="p-2 border border-black text-center">Alpha</th>
+                            <th className="p-2 border border-black text-center">S/I</th>
+                            <th className="p-2 border border-black text-center">BK Aktif</th>
+                            <th className="p-2 border border-black text-center">Rawat/Rujuk</th>
+                            <th className="p-2 border border-black text-right">Tunggakan</th>
+                            <th className="p-2 border border-black text-center">Skor</th>
+                            <th className="p-2 border border-black text-center">Level</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {topRows.map((row, idx) => (
+                            <tr key={row.santri.id}>
+                                <td className="p-2 border border-black text-center">{idx + 1}</td>
+                                <td className="p-2 border border-black font-semibold">{row.santri.namaLengkap}</td>
+                                <td className="p-2 border border-black text-center">{settings.rombel.find(r => r.id === row.santri.rombelId)?.nama || '-'}</td>
+                                <td className="p-2 border border-black text-center">{row.alpha}</td>
+                                <td className="p-2 border border-black text-center">{row.sakitIzin}</td>
+                                <td className="p-2 border border-black text-center">{row.bkAktif}</td>
+                                <td className="p-2 border border-black text-center">{row.kesehatanRisiko}</td>
+                                <td className="p-2 border border-black text-right">{formatRupiah(row.tunggakan)}</td>
+                                <td className="p-2 border border-black text-center font-bold">{row.score}</td>
+                                <td className="p-2 border border-black text-center">{row.level}</td>
+                            </tr>
+                        ))}
+                        {topRows.length === 0 && (
+                            <tr>
+                                <td colSpan={10} className="p-4 border border-black text-center italic text-gray-500">Belum ada indikator risiko pada rentang data saat ini.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- KINERJA PENGAJAR ---
+export const KinerjaPengajarTemplate: React.FC<{ settings: PondokSettings; jurnalMengajarList: JurnalMengajarRecord[] }> = ({ settings, jurnalMengajarList }) => {
+    const rows = settings.tenagaPengajar.map((guru) => {
+        const jurnal = jurnalMengajarList.filter(j => j.guruId === guru.id);
+        const rombelCount = new Set(jurnal.map(j => j.rombelId)).size;
+        const mapelCount = new Set(jurnal.map(j => j.mataPelajaranId)).size;
+        const lastDate = jurnal.length > 0 ? jurnal.map(j => j.tanggal).sort().at(-1) : '';
+        return {
+            guru,
+            totalJurnal: jurnal.length,
+            rombelCount,
+            mapelCount,
+            lastDate: lastDate || '-'
+        };
+    }).sort((a, b) => b.totalJurnal - a.totalJurnal);
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="LAPORAN KINERJA PENGAJAR" />
+                <p className="print-meta text-center text-sm mb-4">Indikator berbasis aktivitas jurnal mengajar yang tercatat.</p>
+                <table className="w-full text-left border-collapse border border-black text-sm">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="p-2 border border-black w-8 text-center">No</th>
+                            <th className="p-2 border border-black">Nama Pengajar</th>
+                            <th className="p-2 border border-black text-center">Total Jurnal</th>
+                            <th className="p-2 border border-black text-center">Rombel</th>
+                            <th className="p-2 border border-black text-center">Mapel</th>
+                            <th className="p-2 border border-black text-center">Jurnal Terakhir</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row, idx) => (
+                            <tr key={row.guru.id}>
+                                <td className="p-2 border border-black text-center">{idx + 1}</td>
+                                <td className="p-2 border border-black font-semibold">{row.guru.nama}</td>
+                                <td className="p-2 border border-black text-center">{row.totalJurnal}</td>
+                                <td className="p-2 border border-black text-center">{row.rombelCount}</td>
+                                <td className="p-2 border border-black text-center">{row.mapelCount}</td>
+                                <td className="p-2 border border-black text-center">{row.lastDate === '-' ? '-' : formatDate(row.lastDate)}</td>
+                            </tr>
+                        ))}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="p-4 border border-black text-center italic text-gray-500">Belum ada data pengajar/jurnal yang tercatat.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- TAHFIZH PROGRESS ---
+export const TahfizhProgressTemplate: React.FC<{ settings: PondokSettings; santriList: Santri[]; tahfizhList: TahfizhRecord[] }> = ({ settings, santriList, tahfizhList }) => {
+    const rows = santriList.map(s => {
+        const rec = tahfizhList.filter(t => t.santriId === s.id);
+        const ziyadah = rec.filter(t => t.tipe === 'Ziyadah').length;
+        const murojaah = rec.filter(t => t.tipe === 'Murojaah').length;
+        const tasmi = rec.filter(t => t.tipe === "Tasmi'").length;
+        const lancar = rec.filter(t => t.predikat === 'Sangat Lancar' || t.predikat === 'Lancar').length;
+        const persen = rec.length > 0 ? Math.round((lancar / rec.length) * 100) : 0;
+        return { santri: s, total: rec.length, ziyadah, murojaah, tasmi, persen };
+    }).sort((a, b) => b.total - a.total);
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="LAPORAN PERKEMBANGAN TAHFIZH" />
+                <p className="print-meta text-center text-sm mb-4">Ringkasan capaian setoran dan kelancaran bacaan.</p>
+                <table className="w-full text-left border-collapse border border-black text-xs">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="p-2 border border-black w-8 text-center">No</th>
+                            <th className="p-2 border border-black">Nama Santri</th>
+                            <th className="p-2 border border-black text-center">Rombel</th>
+                            <th className="p-2 border border-black text-center">Total Setoran</th>
+                            <th className="p-2 border border-black text-center">Ziyadah</th>
+                            <th className="p-2 border border-black text-center">Murojaah</th>
+                            <th className="p-2 border border-black text-center">Tasmi'</th>
+                            <th className="p-2 border border-black text-center">% Lancar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.slice(0, 60).map((row, idx) => (
+                            <tr key={row.santri.id}>
+                                <td className="p-2 border border-black text-center">{idx + 1}</td>
+                                <td className="p-2 border border-black font-semibold">{row.santri.namaLengkap}</td>
+                                <td className="p-2 border border-black text-center">{settings.rombel.find(r => r.id === row.santri.rombelId)?.nama || '-'}</td>
+                                <td className="p-2 border border-black text-center">{row.total}</td>
+                                <td className="p-2 border border-black text-center">{row.ziyadah}</td>
+                                <td className="p-2 border border-black text-center">{row.murojaah}</td>
+                                <td className="p-2 border border-black text-center">{row.tasmi}</td>
+                                <td className="p-2 border border-black text-center font-semibold">{row.persen}%</td>
+                            </tr>
+                        ))}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colSpan={8} className="p-4 border border-black text-center italic text-gray-500">Belum ada data tahfizh pada filter ini.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- KELAS/ASRAMA BERMASALAH ---
+export const KelasAsramaBermasalahTemplate: React.FC<{
+    settings: PondokSettings;
+    santriList: Santri[];
+    absensiList: AbsensiRecord[];
+    kesehatanRecords: KesehatanRecord[];
+    bkSessions: BkSession[];
+    tagihanList: Tagihan[];
+}> = ({ settings, santriList, absensiList, kesehatanRecords, bkSessions, tagihanList }) => {
+    const rombelRows = settings.rombel.map((rombel) => {
+        const santriIds = santriList.filter(s => s.rombelId === rombel.id).map(s => s.id);
+        const alpha = absensiList.filter(a => santriIds.includes(a.santriId) && a.status === 'A').length;
+        const sakit = absensiList.filter(a => santriIds.includes(a.santriId) && a.status === 'S').length;
+        const bk = bkSessions.filter(b => santriIds.includes(b.santriId)).length;
+        const rawat = kesehatanRecords.filter(k => santriIds.includes(k.santriId) && (k.status === 'Rawat Inap (Pondok)' || k.status === 'Rujuk RS/Klinik')).length;
+        const tunggakan = tagihanList.filter(t => santriIds.includes(t.santriId) && t.status === 'Belum Lunas').reduce((sum, t) => sum + (Number(t.nominal) || 0), 0);
+        const score = (alpha * 3) + (sakit * 1) + (bk * 2) + (rawat * 2) + (tunggakan > 0 ? Math.min(10, Math.ceil(tunggakan / 1000000)) : 0);
+        return { rombel, score, alpha, sakit, bk, rawat, tunggakan };
+    }).sort((a, b) => b.score - a.score).slice(0, 10);
+
+    const gedungRows = settings.gedungAsrama.map((gedung) => {
+        const kamarIds = settings.kamar.filter(k => k.gedungId === gedung.id).map(k => k.id);
+        const santriIds = santriList.filter(s => s.kamarId && kamarIds.includes(s.kamarId)).map(s => s.id);
+        const bk = bkSessions.filter(b => santriIds.includes(b.santriId)).length;
+        const rawat = kesehatanRecords.filter(k => santriIds.includes(k.santriId)).length;
+        const tunggakan = tagihanList.filter(t => santriIds.includes(t.santriId) && t.status === 'Belum Lunas').reduce((sum, t) => sum + (Number(t.nominal) || 0), 0);
+        const score = (bk * 2) + (rawat * 2) + (tunggakan > 0 ? Math.min(10, Math.ceil(tunggakan / 1000000)) : 0);
+        return { gedung, score, bk, rawat, tunggakan };
+    }).sort((a, b) => b.score - a.score).slice(0, 10);
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="KELAS & ASRAMA DENGAN RISIKO TERTINGGI" />
+                <div className="grid grid-cols-2 gap-4">
+                    <div style={{ breakInside: 'avoid' }}>
+                        <h4 className="font-bold mb-2 border-b border-black pb-1">Top Rombel</h4>
+                        <table className="w-full text-xs border-collapse border border-black">
+                            <thead className="bg-gray-100">
+                                <tr><th className="p-2 border border-black text-center">Rombel</th><th className="p-2 border border-black text-center">Alpha</th><th className="p-2 border border-black text-center">BK</th><th className="p-2 border border-black text-center">Rawat</th><th className="p-2 border border-black text-center">Skor</th></tr>
+                            </thead>
+                            <tbody>
+                                {rombelRows.map(row => (
+                                    <tr key={row.rombel.id}>
+                                        <td className="p-2 border border-black font-semibold">{row.rombel.nama}</td>
+                                        <td className="p-2 border border-black text-center">{row.alpha}</td>
+                                        <td className="p-2 border border-black text-center">{row.bk}</td>
+                                        <td className="p-2 border border-black text-center">{row.rawat}</td>
+                                        <td className="p-2 border border-black text-center font-bold">{row.score}</td>
+                                    </tr>
+                                ))}
+                                {rombelRows.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="p-4 border border-black text-center italic text-gray-500">Belum ada data rombel untuk dianalisis.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style={{ breakInside: 'avoid' }}>
+                        <h4 className="font-bold mb-2 border-b border-black pb-1">Top Gedung Asrama</h4>
+                        <table className="w-full text-xs border-collapse border border-black">
+                            <thead className="bg-gray-100">
+                                <tr><th className="p-2 border border-black text-center">Gedung</th><th className="p-2 border border-black text-center">BK</th><th className="p-2 border border-black text-center">Kesehatan</th><th className="p-2 border border-black text-center">Skor</th></tr>
+                            </thead>
+                            <tbody>
+                                {gedungRows.map(row => (
+                                    <tr key={row.gedung.id}>
+                                        <td className="p-2 border border-black font-semibold">{row.gedung.nama}</td>
+                                        <td className="p-2 border border-black text-center">{row.bk}</td>
+                                        <td className="p-2 border border-black text-center">{row.rawat}</td>
+                                        <td className="p-2 border border-black text-center font-bold">{row.score}</td>
+                                    </tr>
+                                ))}
+                                {gedungRows.length === 0 && (
+                                    <tr>
+                                        <td colSpan={4} className="p-4 border border-black text-center italic text-gray-500">Belum ada data asrama untuk dianalisis.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- COHORT SANTRI ---
+export const CohortSantriTemplate: React.FC<{ settings: PondokSettings; santriList: Santri[] }> = ({ settings, santriList }) => {
+    const byYear = santriList.reduce<Record<string, Santri[]>>((acc, s) => {
+        const year = s.tanggalMasuk ? new Date(s.tanggalMasuk).getFullYear().toString() : 'Tidak Diketahui';
+        if (!acc[year]) acc[year] = [];
+        acc[year].push(s);
+        return acc;
+    }, {});
+
+    const rows = Object.entries(byYear)
+        .map(([year, list]) => {
+            const total = list.length;
+            const aktif = list.filter(s => s.status === 'Aktif').length;
+            const lulus = list.filter(s => s.status === 'Lulus').length;
+            const keluar = list.filter(s => s.status === 'Keluar/Pindah').length;
+            const hiatus = list.filter(s => s.status === 'Hiatus').length;
+            const retention = total > 0 ? Math.round((aktif / total) * 100) : 0;
+            return { year, total, aktif, lulus, keluar, hiatus, retention };
+        })
+        .sort((a, b) => parseInt(b.year, 10) - parseInt(a.year, 10));
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="LAPORAN COHORT SANTRI" />
+                <p className="print-meta text-center text-sm mb-4">Retensi dan outcome santri berdasarkan tahun masuk.</p>
+                <table className="w-full text-left border-collapse border border-black text-sm">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="p-2 border border-black text-center">Tahun Masuk</th>
+                            <th className="p-2 border border-black text-center">Total</th>
+                            <th className="p-2 border border-black text-center">Aktif</th>
+                            <th className="p-2 border border-black text-center">Lulus</th>
+                            <th className="p-2 border border-black text-center">Keluar</th>
+                            <th className="p-2 border border-black text-center">Hiatus</th>
+                            <th className="p-2 border border-black text-center">Retensi Aktif</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map(row => (
+                            <tr key={row.year}>
+                                <td className="p-2 border border-black font-semibold text-center">{row.year}</td>
+                                <td className="p-2 border border-black text-center">{row.total}</td>
+                                <td className="p-2 border border-black text-center">{row.aktif}</td>
+                                <td className="p-2 border border-black text-center">{row.lulus}</td>
+                                <td className="p-2 border border-black text-center">{row.keluar}</td>
+                                <td className="p-2 border border-black text-center">{row.hiatus}</td>
+                                <td className="p-2 border border-black text-center font-bold">{row.retention}%</td>
+                            </tr>
+                        ))}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="p-4 border border-black text-center italic text-gray-500">Belum ada data cohort yang dapat ditampilkan.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- KEPATUHAN ADMINISTRASI ---
+export const KepatuhanAdministrasiTemplate: React.FC<{ settings: PondokSettings; santriList: Santri[] }> = ({ settings, santriList }) => {
+    const rows = santriList.map((s) => {
+        const missing: string[] = [];
+        if (!s.nik) missing.push('NIK');
+        if (!s.nisn) missing.push('NISN');
+        if (!s.namaIbu) missing.push('Nama Ibu');
+        if (!s.namaAyah) missing.push('Nama Ayah');
+        if (!(s.teleponWali || s.teleponAyah || s.teleponIbu || (s as any).nomorHpWali)) missing.push('Kontak Wali');
+        if (!s.alamat?.kabupatenKota || !s.alamat?.provinsi) missing.push('Alamat Pokok');
+        if (!s.tanggalLahir || !s.tempatLahir) missing.push('TTL');
+        return { santri: s, missing };
+    }).filter(r => r.missing.length > 0).sort((a, b) => b.missing.length - a.missing.length);
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="LAPORAN KEPATUHAN ADMINISTRASI SANTRI" />
+                <p className="print-meta text-center text-sm mb-4">Daftar santri dengan data inti yang belum lengkap.</p>
+                <table className="w-full text-left border-collapse border border-black text-xs">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="p-2 border border-black w-8 text-center">No</th>
+                            <th className="p-2 border border-black">Nama Santri</th>
+                            <th className="p-2 border border-black text-center">Rombel</th>
+                            <th className="p-2 border border-black text-center">Jumlah Kurang</th>
+                            <th className="p-2 border border-black">Field Belum Lengkap</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row, idx) => (
+                            <tr key={row.santri.id}>
+                                <td className="p-2 border border-black text-center">{idx + 1}</td>
+                                <td className="p-2 border border-black font-semibold">{row.santri.namaLengkap}</td>
+                                <td className="p-2 border border-black text-center">{settings.rombel.find(r => r.id === row.santri.rombelId)?.nama || '-'}</td>
+                                <td className="p-2 border border-black text-center font-bold">{row.missing.length}</td>
+                                <td className="p-2 border border-black">{row.missing.join(', ')}</td>
+                            </tr>
+                        ))}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="p-4 border border-black text-center italic text-gray-500">Seluruh data inti santri sudah lengkap.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- EFEKTIVITAS PSB ---
+export const EfektivitasPSBTemplate: React.FC<{ settings: PondokSettings; pendaftarList: Pendaftar[] }> = ({ settings, pendaftarList }) => {
+    const total = pendaftarList.length;
+    const baru = pendaftarList.filter(p => p.status === 'Baru').length;
+    const diterima = pendaftarList.filter(p => p.status === 'Diterima').length;
+    const cadangan = pendaftarList.filter(p => p.status === 'Cadangan').length;
+    const ditolak = pendaftarList.filter(p => p.status === 'Ditolak').length;
+    const conversion = total > 0 ? Math.round((diterima / total) * 100) : 0;
+
+    const byJalur = pendaftarList.reduce<Record<string, number>>((acc, p) => {
+        const key = p.jalurPendaftaran || 'Tanpa Jalur';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {});
+    const byGelombang = pendaftarList.reduce<Record<string, number>>((acc, p) => {
+        const key = p.gelombang ? `Gelombang ${p.gelombang}` : 'Tanpa Gelombang';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {});
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+            <div>
+                <PrintHeader settings={settings} title="LAPORAN EFEKTIVITAS PSB" />
+                <div className="grid grid-cols-5 gap-3 mb-5">
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Total</div><div className="text-xl font-bold">{total}</div></div>
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Baru</div><div className="text-xl font-bold">{baru}</div></div>
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Diterima</div><div className="text-xl font-bold">{diterima}</div></div>
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Cadangan</div><div className="text-xl font-bold">{cadangan}</div></div>
+                    <div className="p-2 border rounded border-black text-center"><div className="text-xs text-gray-600">Ditolak</div><div className="text-xl font-bold">{ditolak}</div></div>
+                </div>
+
+                <div className="mb-4 p-3 border border-black rounded">
+                    <div className="text-sm">Konversi Diterima: <span className="font-bold">{conversion}%</span></div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div style={{ breakInside: 'avoid' }}>
+                        <h4 className="font-bold mb-2 border-b border-black pb-1">Distribusi Jalur Pendaftaran</h4>
+                        <table className="w-full text-sm border-collapse border border-black">
+                            <tbody>
+                                {Object.entries(byJalur).map(([jalur, count]) => (
+                                    <tr key={jalur}>
+                                        <td className="p-2 border border-black">{jalur}</td>
+                                        <td className="p-2 border border-black text-right font-semibold">{count}</td>
+                                    </tr>
+                                ))}
+                                {Object.entries(byJalur).length === 0 && (
+                                    <tr>
+                                        <td colSpan={2} className="p-4 border border-black text-center italic text-gray-500">Belum ada data jalur pendaftaran.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style={{ breakInside: 'avoid' }}>
+                        <h4 className="font-bold mb-2 border-b border-black pb-1">Distribusi Gelombang</h4>
+                        <table className="w-full text-sm border-collapse border border-black">
+                            <tbody>
+                                {Object.entries(byGelombang).map(([gelombang, count]) => (
+                                    <tr key={gelombang}>
+                                        <td className="p-2 border border-black">{gelombang}</td>
+                                        <td className="p-2 border border-black text-right font-semibold">{count}</td>
+                                    </tr>
+                                ))}
+                                {Object.entries(byGelombang).length === 0 && (
+                                    <tr>
+                                        <td colSpan={2} className="p-4 border border-black text-center italic text-gray-500">Belum ada data gelombang pendaftaran.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
 // --- WALI KELAS ---
 export const DaftarWaliKelasTemplate: React.FC<{ settings: PondokSettings }> = ({ settings }) => {
+    const activeAcademicYear = getDefaultAcademicYear(settings);
     const dataByJenjang = settings.jenjang.map(jenjang => {
         const kelasInJenjang = settings.kelas.filter(k => k.jenjangId === jenjang.id);
         const rombelData = [];
@@ -130,7 +672,7 @@ export const DaftarWaliKelasTemplate: React.FC<{ settings: PondokSettings }> = (
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
             <div>
                 <PrintHeader settings={settings} title="DAFTAR WALI KELAS PER ROMBEL" />
-                <p className="print-meta text-center text-sm mb-6">Tahun Ajaran: {new Date().getFullYear()}/{new Date().getFullYear()+1}</p>
+                <p className="print-meta text-center text-sm mb-6">Tahun Ajaran: {activeAcademicYear}</p>
                 <div className="space-y-6">
                     {dataByJenjang.map((group, idx) => (
                         <div key={idx} style={{ breakInside: 'avoid' }}>
@@ -259,11 +801,17 @@ export const LaporanMapelTemplate: React.FC<{ settings: PondokSettings }> = ({ s
                                                 <td className="p-2 border border-black text-center">{mIdx + 1}</td>
                                                 <td className="p-2 border border-black font-semibold">{row.nama}</td>
                                                 <td className="p-2 border border-black text-center">{row.kkm || '-'}</td>
-                                                <td className="p-2 border border-black">{row.modul || '-'}</td>
+                                                <td className="p-2 border border-black">
+                                                    {(row.modulList && row.modulList.length > 0) ? row.modulList.join(', ') : (row.modul || '-')}
+                                                </td>
                                                 <td className="p-2 border border-black text-[9px] text-gray-600 truncate max-w-[150px]">
-                                                    {row.linkUnduh && <div className="truncate"><i className="bi bi-download mr-1"></i>{row.linkUnduh}</div>}
-                                                    {row.linkPembelian && <div className="truncate"><i className="bi bi-cart mr-1"></i>{row.linkPembelian}</div>}
-                                                    {!row.linkUnduh && !row.linkPembelian && '-'}
+                                                    {(row.linkUnduhList && row.linkUnduhList.length > 0)
+                                                        ? row.linkUnduhList.map((item: string, idx: number) => <div key={`u-${idx}`} className="truncate"><i className="bi bi-download mr-1"></i>{item}</div>)
+                                                        : (row.linkUnduh && <div className="truncate"><i className="bi bi-download mr-1"></i>{row.linkUnduh}</div>)}
+                                                    {(row.linkPembelianList && row.linkPembelianList.length > 0)
+                                                        ? row.linkPembelianList.map((item: string, idx: number) => <div key={`b-${idx}`} className="truncate"><i className="bi bi-cart mr-1"></i>{item}</div>)
+                                                        : (row.linkPembelian && <div className="truncate"><i className="bi bi-cart mr-1"></i>{row.linkPembelian}</div>)}
+                                                    {!row.linkUnduh && !row.linkPembelian && (!row.linkUnduhList || row.linkUnduhList.length === 0) && (!row.linkPembelianList || row.linkPembelianList.length === 0) && '-'}
                                                 </td>
                                             </tr>
                                         ))}

@@ -94,7 +94,7 @@ export const WarehouseManager: React.FC = () => {
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col">
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md h-full flex flex-col">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <div>
                     <h2 className="text-xl font-bold text-gray-800">Multi-Warehouse (Manajemen Gudang)</h2>
@@ -125,7 +125,7 @@ export const WarehouseManager: React.FC = () => {
 
             {activeView === 'list' ? (
                 <div className="flex-grow overflow-auto border rounded-lg">
-                    <table className="w-full text-sm text-left">
+                    <table className="hidden md:table w-full text-sm text-left">
                         <thead className="bg-gray-50 text-gray-600 sticky top-0">
                             <tr>
                                 <th className="p-3">Kode</th>
@@ -159,10 +159,34 @@ export const WarehouseManager: React.FC = () => {
                             )}
                         </tbody>
                     </table>
+                    <div className="md:hidden p-3 space-y-3">
+                        {warehouses.map(w => (
+                            <div key={w.id} className="border rounded-lg p-3 bg-white">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <div className="font-mono text-xs text-teal-700 font-bold">{w.kode}</div>
+                                        <div className="font-semibold text-sm text-gray-800">{w.nama}</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {w.isDefault && <span className="text-green-600 text-xs"><i className="bi bi-check-circle-fill"></i> Default</span>}
+                                        <button onClick={() => { setEditingWarehouse(w); reset(w); setIsModalOpen(true); }} className="text-blue-600 hover:text-blue-800"><i className="bi bi-pencil-square"></i></button>
+                                        {!w.isDefault && <button onClick={() => handleDelete(w.id)} className="text-red-600 hover:text-red-800"><i className="bi bi-trash"></i></button>}
+                                    </div>
+                                </div>
+                                <div className="mt-2 text-xs text-gray-600">
+                                    <div>Lokasi: {w.lokasi || '-'}</div>
+                                    <div>PJ: {w.penanggungJawab || '-'}</div>
+                                </div>
+                            </div>
+                        ))}
+                        {warehouses.length === 0 && (
+                            <div className="p-6 text-center text-sm text-gray-400 border rounded-lg">Belum ada data gudang.</div>
+                        )}
+                    </div>
                 </div>
             ) : (
                 <div className="flex-grow overflow-auto border rounded-lg">
-                    <table className="w-full text-sm text-left">
+                    <table className="hidden md:table w-full text-sm text-left">
                         <thead className="bg-gray-50 text-gray-600 sticky top-0">
                             <tr>
                                 <th className="p-3">Tanggal</th>
@@ -186,6 +210,23 @@ export const WarehouseManager: React.FC = () => {
                             ))}
                         </tbody>
                     </table>
+                    <div className="md:hidden p-3 space-y-3">
+                        {transfers.map(t => (
+                            <div key={t.id} className="border rounded-lg p-3 bg-white">
+                                <div className="text-xs text-gray-500">{new Date(t.tanggal).toLocaleString()}</div>
+                                <div className="mt-1 font-semibold text-sm text-gray-800">{products.find(p => p.id === t.produkId)?.nama || 'Produk Dihapus'}</div>
+                                <div className="mt-2 text-xs">
+                                    <div><span className="text-red-600 font-medium">Dari:</span> {warehouses.find(w => w.id === t.dariWarehouseId)?.nama || 'N/A'}</div>
+                                    <div><span className="text-green-600 font-medium">Ke:</span> {warehouses.find(w => w.id === t.keWarehouseId)?.nama || 'N/A'}</div>
+                                    <div>Qty: <span className="font-mono font-bold">{t.qty}</span></div>
+                                </div>
+                                <div className="mt-2 text-xs text-gray-500 italic">{t.keterangan || '-'}</div>
+                            </div>
+                        ))}
+                        {transfers.length === 0 && (
+                            <div className="p-6 text-center text-sm text-gray-400 border rounded-lg">Belum ada riwayat transfer.</div>
+                        )}
+                    </div>
                 </div>
             )}
 

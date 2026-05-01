@@ -1,23 +1,101 @@
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from "./lazyClientLibs";
 
-/**
- * HTML Export with Offline Support
- * Embeds styles and cleans up the document for offline usage.
- */
-export const exportToHtml = (elementId: string, fileName: string) => {
-    const element = document.getElementById(elementId);
-    if (!element) return;
+const getUnifiedPreviewPrintStyles = () => `
+    .printable-content-wrapper {
+        background-color: white;
+        margin: 0 auto;
+    }
+    .page-break-after {
+        page-break-after: always;
+        break-after: page;
+    }
+    .report-signature-footer {
+        position: absolute !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        background: #fff !important;
+    }
+    #jadwal-print-area .printable-content-wrapper,
+    #jadwal-print-area .page-break-after {
+        width: 29.7cm !important;
+        min-height: 21cm !important;
+        box-sizing: border-box !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+        overflow: visible !important;
+        display: block !important;
+    }
+    #jadwal-print-area .printable-content-wrapper {
+        padding: 1.1cm 1.1cm 0.9cm 1.1cm !important;
+        position: relative !important;
+    }
+    #jadwal-print-area .jadwal-sheet {
+        display: flex !important;
+        flex-direction: column !important;
+        height: 21cm !important;
+    }
+    #jadwal-print-area .jadwal-header-block {
+        flex: 0 0 auto !important;
+    }
+    #jadwal-print-area .jadwal-table-block {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+    }
+    #jadwal-print-area table {
+        margin-top: 0.35cm !important;
+        page-break-before: avoid !important;
+        break-before: avoid-page !important;
+    }
+    @media print {
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        @page {
+            margin: 0;
+            size: auto;
+        }
+        @page :first {
+            margin: 0;
+        }
+        .no-print { display: none !important; }
+        .printable-content-wrapper {
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            transform: none !important;
+        }
+        .page-break-after {
+            margin: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+        }
+        #jadwal-print-area .printable-content-wrapper,
+        #jadwal-print-area .page-break-after {
+            width: 29.7cm !important;
+            min-height: 21cm !important;
+        }
+    }
+`;
 
-    // Get all styles
+const collectDocumentStyles = () => {
     let styles = '';
     document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => {
         styles += node.outerHTML;
     });
+    return styles;
+};
 
-    const content = element.innerHTML;
-    
-    // Add some offline-friendly tweaks
-    const finalHtml = `
+const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: { showToolbar?: boolean; isJadwalPrint?: boolean }) => {
+    const styles = collectDocumentStyles();
+    const showToolbar = options?.showToolbar ?? false;
+    const isJadwalPrint = options?.isJadwalPrint ?? false;
+
+    return `
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -27,31 +105,40 @@ export const exportToHtml = (elementId: string, fileName: string) => {
     ${styles}
     <style>
         body { background-color: #f3f4f6; padding: 2rem; }
-        .printable-content-wrapper { 
-            background-color: white; 
-            margin: 0 auto; 
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
-            border-radius: 0.5rem;
-            padding: 0;
-            overflow: hidden;
-        }
+        ${getUnifiedPreviewPrintStyles()}
         @media print {
-            body { background: white; padding: 0; }
-            .printable-content-wrapper { box-shadow: none; border-radius: 0; }
+            @page {
+                margin: 0;
+                size: ${isJadwalPrint ? 'A4 landscape' : 'auto'};
+            }
         }
     </style>
 </head>
 <body>
-    <div class="no-print" style="max-width: 21cm; margin: 0 auto 1rem; display: flex; justify-content: space-between; align-items: center; background: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    ${showToolbar ? `
+    <div class="no-print" style="max-width: 29.7cm; margin: 0 auto 1rem; display: flex; justify-content: space-between; align-items: center; background: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
         <div>
             <h1 style="margin:0; font-size: 1.25rem; font-weight: bold; color: #1f2937;">${fileName}</h1>
             <p style="margin:0; font-size: 0.875rem; color: #6b7280;">Laporan eSantri - Offline Viewer</p>
         </div>
         <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-weight: 500;">Cetak / Simpan PDF</button>
     </div>
+    ` : ''}
     ${content}
 </body>
 </html>`;
+};
+
+/**
+ * HTML Export with Offline Support
+ * Embeds styles and cleans up the document for offline usage.
+ */
+export const exportToHtml = (elementId: string, fileName: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    const isJadwalPrint = elementId === 'jadwal-print-area';
+    const content = element.innerHTML;
+    const finalHtml = buildUnifiedHtmlDocument(content, fileName, { showToolbar: true, isJadwalPrint });
 
     const blob = new Blob([finalHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -64,62 +151,75 @@ export const exportToHtml = (elementId: string, fileName: string) => {
     URL.revokeObjectURL(url);
 };
 
+export const printPreviewExact = async (elementId: string, fileName: string): Promise<void> => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    const isJadwalPrint = elementId === 'jadwal-print-area';
+    const content = element.innerHTML;
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(
+        `${buildUnifiedHtmlDocument(content, fileName, { showToolbar: false, isJadwalPrint })}
+         <script>
+            window.onload = () => {
+                setTimeout(() => {
+                    window.focus();
+                    window.print();
+                }, 700);
+            };
+         </script>`
+    );
+    doc.close();
+
+    setTimeout(() => {
+        if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+        }
+    }, 60000);
+};
+
 export const exportToWord = (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
-
+    const isJadwalPrint = elementId === 'jadwal-print-area';
     const content = element.innerHTML;
-    
-    // Microsoft Word specific CSS overrides to make it look closer to preview
+    const styles = collectDocumentStyles();
     const finalHtml = `
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
-    <meta charset="utf-8">
-    <title>${fileName}</title>
-    <style>
-        /* Word-specific styles */
-        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #333333; }
-        h1, h2, h3, h4, h5, h6 { color: #111111; margin-bottom: 8pt; }
-        p { margin-bottom: 8pt; }
-        
-        /* Table rendering for Word */
-        table { border-collapse: collapse; width: 100%; margin-bottom: 12pt; border: 1pt solid #dddddd; }
-        th, td { border: 1pt solid #dddddd; padding: 5pt; text-align: left; }
-        th { background-color: #f3f4f6; font-weight: bold; }
-        
-        /* Utility classes translation */
-        .text-center { text-align: center; }
-        .text-right { text-align: right; }
-        .font-bold, .font-semibold { font-weight: bold; }
-        .text-sm { font-size: 10pt; }
-        .text-xs { font-size: 8pt; }
-        .mb-2 { margin-bottom: 5pt; }
-        .mb-4 { margin-bottom: 10pt; }
-        .mt-4 { margin-top: 10pt; }
-        .p-4 { padding: 10pt; }
-        .bg-gray-50 { background-color: #f9fafb; }
-        .bg-white { background-color: #ffffff; }
-        
-        /* Grid and Flex fallbacks (Word doesn't support them well, fallback to inline-block or block) */
-        .grid, .flex { display: block; width: 100%; }
-        .grid > *, .flex > * { display: inline-block; vertical-align: top; margin-right: 10pt; margin-bottom: 10pt; }
-        
-        /* Page break support for Word */
-        .page-break-after { page-break-after: always; clear: both; }
-        @page { margin: 2cm; }
-    </style>
+<meta charset="utf-8">
+<title>${fileName}</title>
+${styles}
+<style>
+    @page Section1 {
+        size: ${isJadwalPrint ? '841.9pt 595.3pt' : '595.3pt 841.9pt'};
+        mso-page-orientation: ${isJadwalPrint ? 'landscape' : 'portrait'};
+        margin: 0pt;
+    }
+    div.Section1 { page: Section1; }
+    body { margin: 0; padding: 0; background: #fff; }
+    ${getUnifiedPreviewPrintStyles()}
+</style>
 </head>
 <body>
-    <div style="width: 100%; max-width: 21cm; margin: 0 auto;">
-        ${content}
-    </div>
+<div class="Section1">
+${content}
+</div>
 </body>
 </html>`;
 
-    // Process the HTML to handle some specific Tailwind properties Word ignores
-    let processedHtml = finalHtml.replace(/class="([^"]*?text-center[^"]*?)"/g, 'class="$1" align="center"');
-
-    const blob = new Blob(['\ufeff', processedHtml], {
+    const blob = new Blob(['\ufeff', finalHtml], {
         type: 'application/msword'
     });
     const url = URL.createObjectURL(blob);

@@ -5,6 +5,8 @@ import { useSantriContext } from '../../contexts/SantriContext';
 import { useFinanceContext } from '../../contexts/FinanceContext';
 import { Pembayaran, Santri } from '../../types';
 import { formatRupiah } from '../../utils/formatters';
+import { SectionCard } from '../common/SectionCard';
+import { EmptyState } from '../common/EmptyState';
 
 interface SetoranKasViewProps {
     canWrite: boolean;
@@ -16,6 +18,7 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
     const { pembayaranList, onSetorKeKas } = useFinanceContext();
     
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const btnPrimary = "rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60";
     const [filterMetode, setFilterMetode] = useState<'Semua' | 'Tunai' | 'Transfer'>('Tunai'); // Default Tunai karena prioritas kasir
     const [filterTanggal, setFilterTanggal] = useState(new Date().toISOString().split('T')[0]);
 
@@ -79,12 +82,12 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
     const getSantriName = (id: number) => santriList.find(s => s.id === id)?.namaLengkap || 'Hamba Allah';
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md space-y-6">
+        <SectionCard
+            title="Setoran Kas (Closing Harian)"
+            description="Pindahkan pembayaran yang diterima ke Buku Kas Umum berdasarkan tanggal dan metode pembayaran."
+            contentClassName="space-y-4 p-5 sm:p-6"
+        >
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h2 className="text-xl font-bold text-gray-700">Setoran Kas (Closing Harian)</h2>
-                    <p className="text-sm text-gray-500">Pindahkan uang pembayaran santri yang diterima ke Buku Kas Umum.</p>
-                </div>
                 {canWrite && (
                     <div className="bg-green-50 px-4 py-2 rounded-lg border border-green-200 text-right">
                         <p className="text-xs text-green-600 font-bold uppercase">Total Dipilih</p>
@@ -94,24 +97,24 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
             </div>
 
             {/* Filter Bar */}
-            <div className="flex flex-wrap items-end gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="app-toolbar">
                 <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Tanggal Transaksi</label>
+                    <label className="app-label mb-1.5 block pl-1">Tanggal Transaksi</label>
                     <input 
                         type="date" 
                         value={filterTanggal} 
                         onChange={e => { setFilterTanggal(e.target.value); setSelectedIds([]); }} 
-                        className="bg-white border border-gray-300 rounded-md text-sm p-2"
+                        className="app-input h-10 rounded-md px-3 text-sm"
                     />
                 </div>
                 <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Metode Pembayaran</label>
-                    <div className="flex bg-white rounded-md border border-gray-300 overflow-hidden">
+                    <label className="app-label mb-1.5 block pl-1">Metode Pembayaran</label>
+                    <div className="overflow-hidden rounded-md border border-app-border bg-white">
                         {(['Tunai', 'Transfer', 'Semua'] as const).map(m => (
                             <button
                                 key={m}
                                 onClick={() => { setFilterMetode(m); setSelectedIds([]); }}
-                                className={`px-4 py-2 text-sm font-medium transition-colors ${filterMetode === m ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                                className={`h-10 px-4 text-sm font-medium transition-colors ${filterMetode === m ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
                             >
                                 {m}
                             </button>
@@ -123,18 +126,56 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
                         <button 
                             onClick={handleProcessSetoran} 
                             disabled={selectedIds.length === 0}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-sm disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                            className={btnPrimary}
                         >
-                            <i className="bi bi-box-arrow-in-down"></i> Setor ke Buku Kas
+                            Setor ke Buku Kas
                         </button>
                     </div>
                 )}
             </div>
 
             {/* Table */}
-            <div className="border rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-100">
+            <div className="app-table-shell">
+            <div className="space-y-3 p-3 md:hidden">
+                {pendingPayments.map(p => (
+                    <div key={p.id} className={`rounded-2xl border p-3 ${selectedIds.includes(p.id) ? 'border-teal-300 bg-teal-50/60' : 'border-slate-200 bg-white'}`}>
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800">{getSantriName(p.santriId)}</p>
+                                <p className="text-xs text-slate-500">{new Date(p.tanggal).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={selectedIds.includes(p.id)}
+                                onChange={() => handleSelectOne(p.id)}
+                                disabled={!canWrite}
+                                className="h-4 w-4 text-teal-600"
+                            />
+                        </div>
+                        {p.catatan && <p className="mb-2 text-xs italic text-slate-500">{p.catatan}</p>}
+                        <div className="flex items-center justify-between text-xs">
+                            <span className={`rounded-full border px-2 py-1 ${p.metode === 'Tunai' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>{p.metode}</span>
+                            <span className="font-mono font-semibold text-slate-800">{formatRupiah(p.jumlah)}</span>
+                        </div>
+                    </div>
+                ))}
+                {pendingPayments.length === 0 && (
+                    <EmptyState
+                        icon="bi-check-circle"
+                        title="Semua setoran sudah bersih"
+                        description="Tidak ada pembayaran pada tanggal dan metode ini yang belum dipindahkan ke Buku Kas."
+                        compact
+                    />
+                )}
+                {pendingPayments.length > 0 && (
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-800">
+                        Total Potensi Setoran: {formatRupiah(totalNominal)}
+                    </div>
+                )}
+            </div>
+            <div className="app-scrollbar hidden overflow-hidden md:block">
+                <table className="app-table min-w-full divide-y divide-slate-200 text-sm">
+                    <thead>
                         <tr>
                             <th className="px-4 py-3 w-10 text-center">
                                 <input 
@@ -145,15 +186,15 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
                                     className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
                                 />
                             </th>
-                            <th className="px-4 py-3 text-left font-medium text-gray-600">Waktu</th>
-                            <th className="px-4 py-3 text-left font-medium text-gray-600">Nama Santri</th>
-                            <th className="px-4 py-3 text-left font-medium text-gray-600">Metode</th>
-                            <th className="px-4 py-3 text-right font-medium text-gray-600">Jumlah</th>
+                            <th className="px-4 py-3 text-left font-medium text-slate-600">Waktu</th>
+                            <th className="px-4 py-3 text-left font-medium text-slate-600">Nama Santri</th>
+                            <th className="px-4 py-3 text-left font-medium text-slate-600">Metode</th>
+                            <th className="px-4 py-3 text-right font-medium text-slate-600">Jumlah</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200 bg-white">
+                    <tbody className="divide-y divide-slate-200 bg-white">
                         {pendingPayments.map(p => (
-                            <tr key={p.id} className={selectedIds.includes(p.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                            <tr key={p.id} className={selectedIds.includes(p.id) ? 'bg-blue-50' : 'hover:bg-teal-50/40'}>
                                 <td className="px-4 py-3 text-center">
                                     <input 
                                         type="checkbox" 
@@ -163,45 +204,47 @@ export const SetoranKasView: React.FC<SetoranKasViewProps> = ({ canWrite }) => {
                                         className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
                                     />
                                 </td>
-                                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                                <td className="whitespace-nowrap px-4 py-3 text-slate-500">
                                     {new Date(p.tanggal).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
                                 </td>
-                                <td className="px-4 py-3 font-medium text-gray-800">
+                                <td className="px-4 py-3 font-medium text-slate-800">
                                     {getSantriName(p.santriId)}
-                                    {p.catatan && <div className="text-xs text-gray-500 font-normal italic">{p.catatan}</div>}
+                                    {p.catatan && <div className="text-xs font-normal italic text-slate-500">{p.catatan}</div>}
                                 </td>
                                 <td className="px-4 py-3">
                                     <span className={`px-2 py-1 text-xs rounded-full border ${p.metode === 'Tunai' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
                                         {p.metode}
                                     </span>
                                 </td>
-                                <td className="px-4 py-3 text-right font-mono font-medium text-gray-800">
+                                <td className="px-4 py-3 text-right font-mono font-medium text-slate-800">
                                     {formatRupiah(p.jumlah)}
                                 </td>
                             </tr>
                         ))}
                         {pendingPayments.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                                    <div className="flex flex-col items-center">
-                                        <i className="bi bi-check-circle-fill text-4xl text-green-300 mb-2"></i>
-                                        <p className="font-medium">Semua Bersih!</p>
-                                        <p className="text-xs mt-1">Tidak ada pembayaran tanggal ini yang belum disetor ke kas.</p>
-                                    </div>
+                                <td colSpan={5} className="p-0">
+                                    <EmptyState
+                                        icon="bi-check-circle"
+                                        title="Semua setoran sudah bersih"
+                                        description="Tidak ada pembayaran pada tanggal dan metode ini yang belum dipindahkan ke Buku Kas."
+                                        compact
+                                    />
                                 </td>
                             </tr>
                         )}
                     </tbody>
                     {pendingPayments.length > 0 && (
-                        <tfoot className="bg-gray-50">
+                        <tfoot className="bg-slate-50">
                             <tr>
-                                <td colSpan={4} className="px-4 py-3 text-right font-bold text-gray-700">Total Potensi Setoran:</td>
-                                <td className="px-4 py-3 text-right font-bold text-gray-900">{formatRupiah(totalNominal)}</td>
+                                <td colSpan={4} className="px-4 py-3 text-right font-bold text-slate-700">Total Potensi Setoran:</td>
+                                <td className="px-4 py-3 text-right font-bold text-slate-900">{formatRupiah(totalNominal)}</td>
                             </tr>
                         </tfoot>
                     )}
                 </table>
             </div>
-        </div>
+            </div>
+        </SectionCard>
     );
 };

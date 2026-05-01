@@ -1,28 +1,37 @@
 import React, { useMemo } from 'react';
 import { Santri, Tagihan, Pembayaran, PondokSettings } from '../../types';
 import { formatRupiah } from '../../utils/formatters';
+import { SectionCard } from '../common/SectionCard';
+import { EmptyState } from '../common/EmptyState';
 
 const StatCard: React.FC<{ icon: string; title: string; value: string | number; color: string; }> = ({ icon, title, value, color }) => (
-    <div className="bg-white p-5 rounded-xl shadow-md flex items-start">
-        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${color} mr-4 flex-shrink-0`}>
-            <i className={`${icon} text-2xl text-white`}></i>
+    <div className="app-panel flex items-start rounded-panel p-5">
+        <div className={`mr-4 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[18px] ${color} shadow-soft`}>
+            <i className={`${icon} text-xl text-white`}></i>
         </div>
         <div>
-            <p className="text-gray-500 text-sm font-medium">{title}</p>
-            <p className="text-2xl font-bold text-gray-800">{value}</p>
+            <p className="text-sm font-medium app-text-muted">{title}</p>
+            <p className="mt-1 text-2xl font-bold text-app-text">{value}</p>
         </div>
     </div>
 );
 
 const FinancialProjectionChart: React.FC<{ data: { month: string; actual: number | null; projected: number | null }[] }> = ({ data }) => {
     if (data.length === 0) {
-        return <p className="text-center text-gray-500 py-10">Data pembayaran tidak cukup untuk menampilkan grafik.</p>;
+        return (
+            <EmptyState
+                icon="bi-graph-up-arrow"
+                title="Grafik belum tersedia"
+                description="Data pembayaran belum cukup untuk membangun proyeksi penerimaan."
+                compact
+            />
+        );
     }
     const maxVal = Math.max(...data.map(d => Math.max(d.actual ?? 0, d.projected ?? 0)), 1);
 
     return (
         <div>
-            <div className="flex justify-end gap-4 text-xs mb-2">
+            <div className="mb-2 flex justify-end gap-4 text-xs text-slate-600">
                 <div className="flex items-center"><span className="w-3 h-3 bg-teal-400 mr-2 rounded-sm"></span>Penerimaan Aktual</div>
                 <div className="flex items-center"><span className="w-3 h-3 bg-sky-300 mr-2 rounded-sm"></span>Proyeksi Penerimaan</div>
             </div>
@@ -46,7 +55,7 @@ const FinancialProjectionChart: React.FC<{ data: { month: string; actual: number
                                     />
                                 )}
                             </div>
-                            <span className="mt-2 text-[10px] font-medium text-gray-500">{month}</span>
+                            <span className="mt-2 text-[10px] font-medium text-slate-500">{month}</span>
                         </div>
                     ))}
                 </div>
@@ -192,7 +201,12 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
 
     return (
         <div className="space-y-6">
-            <h2 className="text-xl font-bold text-gray-700">Dashboard Keuangan</h2>
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-700">Dashboard Keuangan</h2>
+                    <p className="mt-1 text-sm app-text-muted">Ringkasan penerimaan, tunggakan aktif, dan fokus tindak lanjut keuangan.</p>
+                </div>
+            </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                  <StatCard 
@@ -222,49 +236,51 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className="xl:col-span-2 bg-white p-6 rounded-xl shadow-md">
-                    <h3 className="text-xl font-bold text-gray-700 mb-4">Penerimaan Aktual & Proyeksi Pendapatan</h3>
+                <SectionCard title="Penerimaan Aktual & Proyeksi Pendapatan" contentClassName="p-6" className="xl:col-span-2">
                     <FinancialProjectionChart data={projectionData} />
-                </div>
+                </SectionCard>
                 
-                <div className="bg-white p-6 rounded-xl shadow-md">
-                    <h3 className="text-xl font-bold text-gray-700 mb-4">Santri dengan Tunggakan Teratas</h3>
+                <SectionCard title="Santri dengan Tunggakan Teratas" contentClassName="p-6">
                     <ul className="space-y-4">
                         {topArrears.map(({ santri, total }) => (
                             <li key={santri!.id} className="flex items-center gap-4">
                                 <img 
                                     src={santri!.fotoUrl || 'https://placehold.co/150x200/e2e8f0/334155?text=Foto'}
                                     alt={santri!.namaLengkap}
-                                    className="w-10 h-10 rounded-full object-cover bg-gray-200 flex-shrink-0"
+                                    className="h-10 w-10 flex-shrink-0 rounded-full bg-slate-200 object-cover"
                                 />
                                 <div className="flex-grow">
-                                    <p className="font-semibold text-sm text-gray-800">{santri!.namaLengkap}</p>
-                                    <p className="text-xs text-gray-500">{settings.rombel.find(r => r.id === santri!.rombelId)?.nama || 'N/A'}</p>
+                                    <p className="text-sm font-semibold text-slate-800">{santri!.namaLengkap}</p>
+                                    <p className="text-xs text-slate-500">{settings.rombel.find(r => r.id === santri!.rombelId)?.nama || 'N/A'}</p>
                                 </div>
                                 <span className="font-bold text-sm text-red-600">{formatRupiah(total)}</span>
                             </li>
                         ))}
                         {topArrears.length === 0 && (
-                            <p className="text-center text-gray-500 py-4">Tidak ada data tunggakan.</p>
+                            <EmptyState
+                                icon="bi-check2-circle"
+                                title="Tidak ada tunggakan teratas"
+                                description="Belum ada data tunggakan aktif yang perlu diprioritaskan saat ini."
+                                compact
+                            />
                         )}
                     </ul>
-                </div>
+                </SectionCard>
             </div>
 
             <div className="grid grid-cols-1 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-md">
-                    <h3 className="text-xl font-bold text-gray-700 mb-4">Rekap Tunggakan per Jenjang</h3>
+                <SectionCard title="Rekap Tunggakan per Jenjang" contentClassName="space-y-4 p-6">
                     <div className="space-y-4">
                         {arrearsByJenjang.map(item => (
                             <div key={item.nama}>
                                 <div className="flex justify-between items-center mb-1 text-sm">
-                                    <span className="font-medium text-gray-700">{item.nama}</span>
-                                    <div className="font-semibold text-gray-800">
+                                    <span className="font-medium text-slate-700">{item.nama}</span>
+                                    <div className="font-semibold text-slate-800">
                                         {formatRupiah(item.totalTunggakan)} 
-                                        <span className="text-xs text-gray-500 font-normal"> / {formatRupiah(item.totalTagihan)}</span>
+                                        <span className="text-xs font-normal text-slate-500"> / {formatRupiah(item.totalTagihan)}</span>
                                     </div>
                                 </div>
-                                <div className="w-full bg-gray-200 rounded-full h-4">
+                                <div className="h-4 w-full rounded-full bg-slate-200">
                                     <div 
                                         className="bg-red-500 h-4 rounded-full" 
                                         style={{ width: `${item.totalTagihan > 0 ? (item.totalTunggakan / item.totalTagihan) * 100 : 0}%` }}
@@ -273,9 +289,16 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
                                 </div>
                             </div>
                         ))}
-                        {arrearsByJenjang.length === 0 && <p className="text-center text-gray-500 py-4">Tidak ada data tunggakan untuk ditampilkan.</p>}
+                        {arrearsByJenjang.length === 0 && (
+                            <EmptyState
+                                icon="bi-bar-chart-steps"
+                                title="Belum ada rekap per jenjang"
+                                description="Tidak ada tagihan yang cukup untuk menampilkan distribusi tunggakan per jenjang."
+                                compact
+                            />
+                        )}
                     </div>
-                </div>
+                </SectionCard>
             </div>
         </div>
     );

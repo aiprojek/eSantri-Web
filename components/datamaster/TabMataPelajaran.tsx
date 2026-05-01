@@ -13,6 +13,11 @@ interface TabMataPelajaranProps {
 
 export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSettings, handleInputChange, canWrite }) => {
     const { showConfirmation, showToast } = useAppContext();
+    const parseMultiValue = (value?: string) =>
+        (value || '')
+            .split(/\n|;/)
+            .map(v => v.trim())
+            .filter(Boolean);
     const [mapelModalData, setMapelModalData] = useState<{
         mode: 'add' | 'edit';
         jenjangId: number;
@@ -88,7 +93,10 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
                 kkm: item.kkm ? parseInt(item.kkm) : undefined,
                 modul: item.modul,
                 linkUnduh: item.linkUnduh,
-                linkPembelian: item.linkPembelian
+                linkPembelian: item.linkPembelian,
+                modulList: item.modulList?.length ? item.modulList : parseMultiValue(item.modul),
+                linkUnduhList: item.linkUnduhList?.length ? item.linkUnduhList : parseMultiValue(item.linkUnduh),
+                linkPembelianList: item.linkPembelianList?.length ? item.linkPembelianList : parseMultiValue(item.linkPembelian),
             };
 
             if (isEdit) {
@@ -107,20 +115,20 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-            <div className="flex justify-between items-center mb-4 border-b pb-2">
-                <div className="flex items-center gap-4">
-                    <h2 className="text-xl font-bold text-gray-700">Mata Pelajaran per Jenjang</h2>
+        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md mb-6">
+            <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-4 border-b pb-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                    <h2 className="text-lg md:text-xl font-bold text-gray-700">Mata Pelajaran per Jenjang</h2>
                     {selectedIds.length > 0 && (
-                        <div className="flex items-center gap-3 animate-fade-in pl-4 border-l">
+                        <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3 animate-fade-in md:pl-4 md:border-l">
                             <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-100">{selectedIds.length} dipilih</span>
-                            <button onClick={() => setSelectedIds([])} className="text-xs text-gray-400 hover:text-gray-600 underline">Batal</button>
-                            <button onClick={handleBulkEditMapel} className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 font-bold"><i className="bi bi-pencil-square mr-1"></i> Edit Massal</button>
-                            <button onClick={handleBulkDelete} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded border border-red-200 font-bold"><i className="bi bi-trash mr-1"></i> Hapus Massal</button>
+                            <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-gray-700 underline text-left md:text-center">Batal</button>
+                            <button onClick={handleBulkEditMapel} className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 font-bold text-left md:text-center"><i className="bi bi-pencil-square mr-1"></i> Edit Massal</button>
+                            <button onClick={handleBulkDelete} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded border border-red-200 font-bold text-left md:text-center"><i className="bi bi-trash mr-1"></i> Hapus Massal</button>
                         </div>
                     )}
                 </div>
-                {canWrite && <button onClick={() => { setBulkInitialData(undefined); setIsBulkOpen(true); }} className="text-sm bg-teal-600 text-white hover:bg-teal-700 px-3 py-1.5 rounded flex items-center gap-2"><i className="bi bi-table"></i> Tambah Massal (Semua Jenjang)</button>}
+                {canWrite && <button onClick={() => { setBulkInitialData(undefined); setIsBulkOpen(true); }} className="text-sm bg-teal-600 text-white hover:bg-teal-700 px-3 py-2 rounded flex items-center justify-center gap-2 w-full md:w-auto"><i className="bi bi-table"></i> Tambah Massal (Semua Jenjang)</button>}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -156,7 +164,13 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
                                                     <p className="text-sm font-semibold text-gray-800">{mapel.nama}</p>
                                                     <div className="flex gap-3 mt-1">
                                                         {mapel.kkm && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-medium">KKM: {mapel.kkm}</span>}
-                                                        {mapel.modul && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 font-medium"><i className="bi bi-book mr-1"></i>{mapel.modul}</span>}
+                                                        {((mapel.modulList && mapel.modulList.length > 0) || mapel.modul) && (
+                                                            <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 font-medium">
+                                                                <i className="bi bi-book mr-1"></i>
+                                                                {(mapel.modulList && mapel.modulList.length > 0) ? mapel.modulList[0] : mapel.modul}
+                                                                {(mapel.modulList && mapel.modulList.length > 1) ? ` +${mapel.modulList.length - 1}` : ''}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>

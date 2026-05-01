@@ -11,7 +11,7 @@ interface JurnalMengajarModalProps {
 }
 
 export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen, onClose, rombelId, tanggal }) => {
-    const { settings, showToast, currentUser } = useAppContext();
+    const { settings, showToast, currentUser, showConfirmation } = useAppContext();
     const { jurnalMengajarList, onSaveJurnalMengajar, onDeleteJurnalMengajar } = useSantriContext();
     
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
@@ -84,13 +84,20 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
     };
 
     const handleDelete = async (id: number) => {
-        if(!canWrite || !window.confirm('Hapus entri jurnal ini?')) return;
-        try {
-            await onDeleteJurnalMengajar(id);
-            showToast('Entri dihapus', 'info');
-        } catch(e) {
-            showToast('Gagal menghapus entri', 'error');
-        }
+        if(!canWrite) return;
+        showConfirmation(
+            'Hapus Entri Jurnal?',
+            'Entri jurnal ini akan dihapus permanen.',
+            async () => {
+                try {
+                    await onDeleteJurnalMengajar(id);
+                    showToast('Entri dihapus', 'info');
+                } catch(e) {
+                    showToast('Gagal menghapus entri', 'error');
+                }
+            },
+            { confirmText: 'Hapus', confirmColor: 'red' }
+        );
     };
 
     return (

@@ -7,6 +7,9 @@ import { PrintHeader } from './common/PrintHeader';
 import { ReportFooter } from './reports/modules/Common';
 import { JurnalMengajarModal } from './akademik/modals/JurnalMengajarModal';
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from '../utils/lazyClientLibs';
+import { PageHeader } from './common/PageHeader';
+import { HeaderTabs } from './common/HeaderTabs';
+import { MobileFilterDrawer } from './common/MobileFilterDrawer';
 
 // --- SUB-COMPONENT: INPUT ABSENSI ---
 const AbsensiInput: React.FC = () => {
@@ -19,6 +22,7 @@ const AbsensiInput: React.FC = () => {
     const [selectedRombelId, setSelectedRombelId] = useState<number>(0);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [view, setView] = useState<'selector' | 'input'>('selector');
+    const [isSelectorDrawerOpen, setIsSelectorDrawerOpen] = useState(false);
     
     // State Data
     const [attendanceMap, setAttendanceMap] = useState<Record<number, AbsensiRecord['status']>>({});
@@ -53,9 +57,30 @@ const AbsensiInput: React.FC = () => {
         return absensiList.filter(a => a.rombelId === selectedRombelId && a.tanggal === selectedDate);
     }, [absensiList, selectedRombelId, selectedDate]);
 
+    const invalidNoteCount = useMemo(() => {
+        return targetSantri.filter((santri) => {
+            const status = attendanceMap[santri.id] ?? 'H';
+            const note = notesMap[santri.id]?.trim() || '';
+            return status !== 'H' && !note;
+        }).length;
+    }, [attendanceMap, notesMap, targetSantri]);
+
+    const statusSummary = useMemo(() => {
+        const summary = { H: 0, S: 0, I: 0, A: 0 };
+        targetSantri.forEach((santri) => {
+            const status = attendanceMap[santri.id] ?? 'H';
+            summary[status] += 1;
+        });
+        return summary;
+    }, [attendanceMap, targetSantri]);
+
     const handleStartInput = () => {
         if (!selectedRombelId) {
             showToast('Pilih rombel terlebih dahulu.', 'error');
+            return;
+        }
+        if (!targetSantri.length) {
+            showToast('Tidak ada santri aktif di rombel ini.', 'error');
             return;
         }
         const initialMap: Record<number, AbsensiRecord['status']> = {};
@@ -70,6 +95,7 @@ const AbsensiInput: React.FC = () => {
         setAttendanceMap(initialMap);
         setNotesMap(initialNotes);
         setView('input');
+        setIsSelectorDrawerOpen(false);
     };
 
     const handleMarkAllPresent = () => {
@@ -89,8 +115,12 @@ const AbsensiInput: React.FC = () => {
         setNotesMap(prev => ({ ...prev, [santriId]: note }));
     };
 
-    const handleSave = async () => {
+    const saveAttendanceRecords = async () => {
         if (!canWrite) return;
+        if (invalidNoteCount > 0) {
+            showToast(`${invalidNoteCount} santri belum punya keterangan wajib (S/I/A).`, 'error');
+            return false;
+        }
         setIsSaving(true);
         try {
             const recordsToSave: AbsensiRecord[] = targetSantri.map(s => {
@@ -106,13 +136,33 @@ const AbsensiInput: React.FC = () => {
                 };
             });
             await onSaveAbsensi(recordsToSave);
-            showToast('Data absensi berhasil disimpan.', 'success');
-            setView('selector');
+            return true;
         } catch (error) {
             showToast('Gagal menyimpan absensi.', 'error');
+            return false;
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const formatDateInput = (date: Date) => date.toISOString().split('T')[0];
+
+    const handleSave = async () => {
+        const isSaved = await saveAttendanceRecords();
+        if (!isSaved) return;
+        showToast('Data absensi berhasil disimpan.', 'success');
+        setView('selector');
+    };
+
+    const handleSaveAndNextDate = async () => {
+        const isSaved = await saveAttendanceRecords();
+        if (!isSaved) return;
+
+        const nextDate = new Date(`${selectedDate}T00:00:00`);
+        nextDate.setDate(nextDate.getDate() + 1);
+        setSelectedDate(formatDateInput(nextDate));
+        setView('selector');
+        showToast('Data absensi tersimpan. Lanjut ke tanggal berikutnya.', 'success');
     };
 
     const getStatusColor = (status: string) => {
@@ -134,14 +184,28 @@ const AbsensiInput: React.FC = () => {
                             <h2 className="text-xl font-bold flex items-center gap-2"><i className="bi bi-pencil-square"></i> Catat Kehadiran</h2>
                             <p className="opacity-90 text-sm mt-1">Pilih kelas dan tanggal untuk mulai mengabsen.</p>
                         </div>
-                        <div className="bg-teal-700 px-4 py-2 rounded-lg border border-teal-500 shadow-sm">
+                        <div className="hidden md:block bg-teal-700 px-4 py-2 rounded-lg border border-teal-500 shadow-sm">
                             <label className="block text-xs font-bold text-teal-200 uppercase mb-1">Tanggal Absen</label>
                             <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="bg-transparent text-white font-bold outline-none text-sm w-full cursor-pointer focus:ring-0" />
                         </div>
                     </div>
                     
                     <div className="p-8">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <button
+                            onClick={() => setIsSelectorDrawerOpen(true)}
+                            className="md:hidden mb-6 w-full rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-left text-sm font-semibold text-teal-700"
+                        >
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="truncate">
+                                    {selectedRombelId
+                                        ? `${settings.rombel.find((r) => r.id === selectedRombelId)?.nama || 'Rombel'} • ${new Date(selectedDate).toLocaleDateString('id-ID')}`
+                                        : 'Pilih kelas, rombel, dan tanggal'}
+                                </span>
+                                <i className="bi bi-sliders"></i>
+                            </div>
+                        </button>
+
+                        <div className="hidden md:grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">1. Jenjang</label>
                                 <select value={selectedJenjangId} onChange={e => { setSelectedJenjangId(Number(e.target.value)); setSelectedKelasId(0); setSelectedRombelId(0); }} className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all">
@@ -166,8 +230,8 @@ const AbsensiInput: React.FC = () => {
                         </div>
 
                         {selectedRombelId !== 0 && (
-                            <div className={`p-4 rounded-lg border flex items-center justify-between gap-4 animate-fade-in ${existingRecords.length > 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
-                                <div className="flex items-center gap-3">
+                            <div className={`p-4 rounded-lg border flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between animate-fade-in ${existingRecords.length > 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
+                                <div className="flex items-start gap-3 sm:items-center">
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${existingRecords.length > 0 ? 'bg-green-100' : 'bg-yellow-100'}`}>
                                         <i className={`bi ${existingRecords.length > 0 ? 'bi-check-circle-fill text-green-600' : 'bi-exclamation-circle-fill text-yellow-600'}`}></i>
                                     </div>
@@ -176,9 +240,15 @@ const AbsensiInput: React.FC = () => {
                                         <p className="text-xs opacity-80">{existingRecords.length > 0 ? `Terakhir oleh: ${existingRecords[0].recordedBy || '...'}` : 'Klik Lanjut untuk mulai mengisi.'}</p>
                                     </div>
                                 </div>
-                                <button onClick={handleStartInput} className="px-6 py-2.5 bg-teal-600 text-white font-bold rounded-lg shadow hover:bg-teal-700 transition-transform active:scale-95 flex items-center gap-2">
-                                    Lanjut <i className="bi bi-arrow-right"></i>
-                                </button>
+                                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                                    <button onClick={() => setIsJurnalModalOpen(true)} className="w-full sm:w-auto px-4 py-2.5 bg-white/80 text-gray-700 font-bold rounded-lg border border-current/20 hover:bg-white transition-colors flex items-center justify-center gap-2">
+                                        <i className="bi bi-journal-text"></i>
+                                        Isi Jurnal Saja
+                                    </button>
+                                    <button onClick={handleStartInput} className="w-full sm:w-auto px-6 py-2.5 bg-teal-600 text-white font-bold rounded-lg shadow hover:bg-teal-700 transition-transform active:scale-95 flex items-center justify-center gap-2">
+                                        Lanjut <i className="bi bi-arrow-right"></i>
+                                    </button>
+                                </div>
                             </div>
                         )}
                         {!selectedRombelId && (
@@ -189,6 +259,83 @@ const AbsensiInput: React.FC = () => {
                         )}
                     </div>
                 </div>
+                <MobileFilterDrawer
+                    isOpen={isSelectorDrawerOpen}
+                    onClose={() => setIsSelectorDrawerOpen(false)}
+                    title="Atur Sesi Absensi"
+                    onApply={() => setIsSelectorDrawerOpen(false)}
+                    onReset={() => {
+                        setSelectedJenjangId(0);
+                        setSelectedKelasId(0);
+                        setSelectedRombelId(0);
+                    }}
+                >
+                    <div className="space-y-4">
+                        <div>
+                            <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-app-textMuted">Tanggal Absen</label>
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                className="h-11 w-full rounded-lg border border-app-border bg-white px-3 text-sm text-app-text outline-none ring-0 focus:border-teal-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-app-textMuted">Jenjang</label>
+                            <select
+                                value={selectedJenjangId}
+                                onChange={(e) => {
+                                    setSelectedJenjangId(Number(e.target.value));
+                                    setSelectedKelasId(0);
+                                    setSelectedRombelId(0);
+                                }}
+                                className="h-11 w-full rounded-lg border border-app-border bg-white px-3 text-sm text-app-text outline-none ring-0 focus:border-teal-500"
+                            >
+                                <option value={0}>-- Pilih Jenjang --</option>
+                                {settings.jenjang.map((j) => (
+                                    <option key={j.id} value={j.id}>{j.nama}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-app-textMuted">Kelas</label>
+                            <select
+                                value={selectedKelasId}
+                                onChange={(e) => {
+                                    setSelectedKelasId(Number(e.target.value));
+                                    setSelectedRombelId(0);
+                                }}
+                                disabled={!selectedJenjangId}
+                                className="h-11 w-full rounded-lg border border-app-border bg-white px-3 text-sm text-app-text outline-none ring-0 focus:border-teal-500 disabled:bg-slate-100"
+                            >
+                                <option value={0}>-- Pilih Kelas --</option>
+                                {availableKelas.map((k) => (
+                                    <option key={k.id} value={k.id}>{k.nama}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-app-textMuted">Rombel (Wajib)</label>
+                            <select
+                                value={selectedRombelId}
+                                onChange={(e) => setSelectedRombelId(Number(e.target.value))}
+                                disabled={!selectedKelasId}
+                                className="h-11 w-full rounded-lg border border-app-border bg-white px-3 text-sm text-app-text outline-none ring-0 focus:border-teal-500 disabled:bg-slate-100"
+                            >
+                                <option value={0}>-- Pilih Rombel --</option>
+                                {availableRombel.map((r) => (
+                                    <option key={r.id} value={r.id}>{r.nama}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                </MobileFilterDrawer>
+                <JurnalMengajarModal 
+                    isOpen={isJurnalModalOpen}
+                    onClose={() => setIsJurnalModalOpen(false)}
+                    rombelId={selectedRombelId}
+                    tanggal={selectedDate}
+                />
             </div>
         );
     }
@@ -211,6 +358,19 @@ const AbsensiInput: React.FC = () => {
                     <button onClick={handleMarkAllPresent} className="bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all">
                         <i className="bi bi-check-all text-lg"></i> <span className="hidden sm:inline">Semua Hadir</span>
                     </button>
+                </div>
+            </div>
+            <div className="bg-white border-b px-4 py-2">
+                <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center gap-2 text-xs font-semibold">
+                    <span className="rounded-full bg-green-50 px-3 py-1 text-green-700">Hadir: {statusSummary.H}</span>
+                    <span className="rounded-full bg-yellow-50 px-3 py-1 text-yellow-700">Sakit: {statusSummary.S}</span>
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">Izin: {statusSummary.I}</span>
+                    <span className="rounded-full bg-red-50 px-3 py-1 text-red-700">Alpha: {statusSummary.A}</span>
+                    {invalidNoteCount > 0 && (
+                        <span className="rounded-full bg-red-100 px-3 py-1 text-red-700">
+                            Wajib isi keterangan: {invalidNoteCount}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -287,7 +447,11 @@ const AbsensiInput: React.FC = () => {
                         <button onClick={() => setIsJurnalModalOpen(true)} className="w-full sm:w-auto bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-transform hover:-translate-y-1 active:translate-y-0">
                             <i className="bi bi-journal-text"></i> Isi Jurnal / Agenda
                         </button>
-                        <button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-teal-200 flex items-center justify-center gap-2 transition-transform hover:-translate-y-1 active:translate-y-0 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none">
+                        <button onClick={handleSaveAndNextDate} disabled={isSaving} className="w-full sm:w-auto bg-white text-teal-700 border border-teal-200 hover:bg-teal-50 px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed">
+                            <i className="bi bi-calendar-plus"></i>
+                            Simpan & Tanggal Berikutnya
+                        </button>
+                        <button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 text-white px-8 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed">
                             {isSaving ? <span className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-cloud-upload-fill"></i>} 
                             Simpan Data Absensi
                         </button>
@@ -677,29 +841,26 @@ const AbsensiRekap: React.FC = () => {
 
 const Absensi: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'input' | 'rekap'>('input');
-    
-    return (
-        <div className="flex flex-col h-[calc(100vh-80px)]">
-            <h1 className="text-3xl font-bold text-gray-800 mb-4 shrink-0">Manajemen Absensi</h1>
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 sticky top-0 z-40 shrink-0">
-                <nav className="flex -mb-px">
-                    <button 
-                        onClick={() => setActiveTab('input')} 
-                        className={`flex-1 py-3 px-1 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeTab === 'input' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                    >
-                        <i className="bi bi-pencil-square text-lg"></i> Input Harian
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('rekap')} 
-                        className={`flex-1 py-3 px-1 text-center border-b-2 font-medium text-sm flex items-center justify-center gap-2 ${activeTab === 'rekap' ? 'border-teal-500 text-teal-600 bg-teal-50/50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                    >
-                        <i className="bi bi-table text-lg"></i> Rekap & Laporan
-                    </button>
-                </nav>
-            </div>
 
-            <div className="flex-grow min-h-0">
+    return (
+        <div className="flex min-h-0 flex-col space-y-6">
+            <PageHeader
+                eyebrow="Kesiswaan"
+                title="Manajemen Absensi"
+                description="Catat kehadiran harian dan buka rekap absensi dari workspace yang lebih konsisten."
+                tabs={
+                    <HeaderTabs
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        tabs={[
+                            { value: 'input', label: 'Input Harian', icon: 'bi-pencil-square' },
+                            { value: 'rekap', label: 'Rekap & Laporan', icon: 'bi-table' },
+                        ]}
+                    />
+                }
+            />
+
+            <div className="min-h-0 flex-grow">
                 {activeTab === 'input' ? <AbsensiInput /> : <AbsensiRekap />}
             </div>
         </div>

@@ -1,12 +1,16 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAppContext } from '../AppContext';
 import { useFinanceContext } from '../contexts/FinanceContext';
 import { TransaksiKas } from '../types';
 import { formatRupiah } from '../utils/formatters';
 import { db } from '../db';
+import { loadXLSX } from '../utils/lazyClientLibs';
 import { Pagination } from './common/Pagination';
+import { PageHeader } from './common/PageHeader';
+import { SectionCard } from './common/SectionCard';
+import { EmptyState } from './common/EmptyState';
 
 const StatCard: React.FC<{ icon: string; title: string; value: string | number; color: string; textColor: string }> = ({ icon, title, value, color, textColor }) => (
     <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-4 transition-transform hover:-translate-y-1">
@@ -79,40 +83,67 @@ const BukuKas: React.FC = () => {
     // Stats State (Calculated separately for full view)
     const [stats, setStats] = useState({ totalPemasukan: 0, totalPengeluaran: 0, saldoAkhir: 0 });
     const [existingKategori, setExistingKategori] = useState<string[]>([]);
+    const [filteredRows, setFilteredRows] = useState<TransaksiKas[]>([]);
+    const fetchRunIdRef = useRef(0);
+
+    const applyDatePreset = (days: 0 | 7 | 30) => {
+        const end = new Date();
+        const start = new Date();
+        if (days > 0) {
+            start.setDate(end.getDate() - (days - 1));
+        }
+        const toInputDate = (d: Date) => d.toISOString().split('T')[0];
+        setFilters(f => ({
+            ...f,
+            startDate: toInputDate(start),
+            endDate: toInputDate(end),
+        }));
+    };
+
+    const resetFilters = () => {
+        setFilters({ startDate: '', endDate: '', jenis: '', kategori: '' });
+    };
 
     const fetchTransactions = useCallback(async () => {
+        const runId = ++fetchRunIdRef.current;
         setIsLoading(true);
         try {
-            let collection = db.transaksiKas.orderBy('tanggal').reverse();
+            const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`).getTime() : null;
+            const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`).getTime() : null;
+            const kategoriQuery = filters.kategori.trim().toLowerCase();
 
-            // Note: Complex filtering on non-indexed fields is manual after fetch or needs compound indices.
-            // For now, simple date filtering is efficient. Text filtering is done in memory for the *page* or limited set.
-            // But to be robust for >10k items, we should filter at query level.
-            // Dexie filtering:
-            const filteredCollection = collection.filter(t => {
-                 const tDate = new Date(t.tanggal);
-                 const startMatch = !filters.startDate || tDate >= new Date(filters.startDate);
-                 const endMatch = !filters.endDate || tDate <= new Date(filters.endDate + 'T23:59:59');
-                 const jenisMatch = !filters.jenis || t.jenis === filters.jenis;
-                 const kategoriMatch = !filters.kategori || t.kategori.toLowerCase().includes(filters.kategori.toLowerCase());
-                 return startMatch && endMatch && jenisMatch && kategoriMatch;
-            });
+            // Use indexed range by tanggal first, then apply remaining predicates in one pass.
+            let baseCollection = db.transaksiKas.orderBy('tanggal').reverse();
+            if (startDate !== null && endDate !== null) {
+                baseCollection = db.transaksiKas.where('tanggal').between(
+                    new Date(startDate).toISOString(),
+                    new Date(endDate).toISOString(),
+                    true,
+                    true
+                ).reverse();
+            } else if (startDate !== null) {
+                baseCollection = db.transaksiKas.where('tanggal').aboveOrEqual(new Date(startDate).toISOString()).reverse();
+            } else if (endDate !== null) {
+                baseCollection = db.transaksiKas.where('tanggal').belowOrEqual(new Date(endDate).toISOString()).reverse();
+            }
 
-            // 1. Count
-            const count = await filteredCollection.count();
+            const allMatching = await baseCollection
+                .filter(t => {
+                    const jenisMatch = !filters.jenis || t.jenis === filters.jenis;
+                    const kategoriMatch = !kategoriQuery || t.kategori.toLowerCase().includes(kategoriQuery);
+                    return jenisMatch && kategoriMatch;
+                })
+                .toArray();
+
+            if (runId !== fetchRunIdRef.current) return;
+
+            const count = allMatching.length;
             setTotalItems(count);
+            setFilteredRows(allMatching);
 
-            // 2. Pagination
             const offset = (currentPage - 1) * itemsPerPage;
-            const pageData = await filteredCollection.offset(offset).limit(itemsPerPage).toArray();
-            setTransactions(pageData);
+            setTransactions(allMatching.slice(offset, offset + itemsPerPage));
 
-            // 3. Stats (Must calculate from ALL data matching filters, not just page)
-            // Warning: This can be slow if thousands of records match the filter. 
-            // Optimization: If no filter, use cached stats or optimized aggregation.
-            // For now, we fetch all matching *ID* and minimal data or iterate.
-            const allMatching = await filteredCollection.toArray(); // Needed for totals
-            
             let totalPemasukan = 0; let totalPengeluaran = 0;
             const uniqueCats = new Set<string>();
             
@@ -121,17 +152,19 @@ const BukuKas: React.FC = () => {
                 uniqueCats.add(t.kategori);
             });
             
-            // Get Absolute Latest Transaction for Real Balance (Not just filtered)
             const absoluteLastTx = await db.transaksiKas.orderBy('tanggal').last();
             const saldoAkhir = absoluteLastTx?.saldoSetelah || 0;
 
+            if (runId !== fetchRunIdRef.current) return;
             setStats({ totalPemasukan, totalPengeluaran, saldoAkhir });
             setExistingKategori(Array.from(uniqueCats));
 
         } catch (e) {
             console.error("Failed to fetch Buku Kas", e);
         } finally {
-            setIsLoading(false);
+            if (runId === fetchRunIdRef.current) {
+                setIsLoading(false);
+            }
         }
     }, [currentPage, filters]);
 
@@ -154,12 +187,82 @@ const BukuKas: React.FC = () => {
         }
     };
 
+    const buildExportRows = () => {
+        return filteredRows.map((t) => ({
+            Tanggal: new Date(t.tanggal).toLocaleString('id-ID', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+            Jenis: t.jenis,
+            Kategori: t.kategori,
+            Deskripsi: t.deskripsi,
+            PenanggungJawab: t.penanggungJawab || '',
+            Pemasukan: t.jenis === 'Pemasukan' ? t.jumlah : 0,
+            Pengeluaran: t.jenis === 'Pengeluaran' ? t.jumlah : 0,
+            SaldoSetelah: t.saldoSetelah,
+        }));
+    };
+
+    const buildFileName = (ext: 'csv' | 'xlsx') => {
+        const d = new Date();
+        const stamp = `${String(d.getDate()).padStart(2, '0')}${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
+        const suffix = [
+            filters.startDate ? `from-${filters.startDate}` : '',
+            filters.endDate ? `to-${filters.endDate}` : '',
+            filters.jenis || 'semua-jenis',
+            filters.kategori ? `kat-${filters.kategori.replace(/\s+/g, '-')}` : '',
+        ].filter(Boolean).join('_');
+        return `buku-kas_${suffix || 'semua-data'}_${stamp}.${ext}`;
+    };
+
+    const handleExportCsv = () => {
+        if (filteredRows.length === 0) {
+            showToast('Tidak ada data untuk diekspor.', 'info');
+            return;
+        }
+        const rows = buildExportRows();
+        const headers = Object.keys(rows[0]);
+        const csv = [
+            headers.join(','),
+            ...rows.map(r => headers.map(h => {
+                const v = String((r as any)[h] ?? '');
+                return `"${v.replace(/"/g, '""')}"`;
+            }).join(',')),
+        ].join('\n');
+
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = buildFileName('csv');
+        link.click();
+        URL.revokeObjectURL(url);
+        showToast('Ekspor CSV berhasil.', 'success');
+    };
+
+    const handleExportExcel = async () => {
+        if (filteredRows.length === 0) {
+            showToast('Tidak ada data untuk diekspor.', 'info');
+            return;
+        }
+        try {
+            const XLSX = await loadXLSX();
+            const rows = buildExportRows();
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'BukuKas');
+            XLSX.writeFile(wb, buildFileName('xlsx'));
+            showToast('Ekspor Excel berhasil.', 'success');
+        } catch (e) {
+            showAlert('Ekspor Gagal', 'Terjadi kendala saat membuat file Excel.');
+        }
+    };
+
     return (
-        <div className="w-full">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <div><h1 className="text-2xl font-bold text-gray-900 tracking-tight">Buku Kas Umum</h1><p className="text-gray-500 text-sm mt-1">Catat dan pantau arus kas masuk dan keluar secara rinci.</p></div>
-                {canWrite && (<button onClick={() => setIsModalOpen(true)} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 shadow-sm transition-colors focus:ring-4 focus:ring-teal-300"><i className="bi bi-plus-lg"></i> Tambah Transaksi</button>)}
-            </div>
+        <div className="w-full space-y-6">
+            <PageHeader
+                eyebrow="Keuangan & Aset"
+                title="Buku Kas Umum"
+                description="Catat dan pantau arus kas masuk serta keluar dengan filter, statistik, dan riwayat transaksi yang lebih rapi."
+                actions={canWrite ? (<button onClick={() => setIsModalOpen(true)} className="app-button-primary px-4 py-2.5 text-sm"><i className="bi bi-plus-lg"></i> Tambah Transaksi</button>) : undefined}
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <StatCard title="Total Pemasukan (Filter)" value={formatRupiah(stats.totalPemasukan)} icon="bi-arrow-down-circle-fill" color="bg-green-100 text-green-600" textColor="text-green-600" />
@@ -167,15 +270,75 @@ const BukuKas: React.FC = () => {
                 <StatCard title="Saldo Akhir (Aktual)" value={formatRupiah(stats.saldoAkhir)} icon="bi-wallet2" color="bg-blue-100 text-blue-600" textColor="text-blue-600" />
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-gray-200 bg-gray-50/50 flex flex-col xl:flex-row gap-4 items-center justify-between">
-                    <div className="flex flex-wrap gap-2 w-full xl:w-auto"><input type="date" value={filters.startDate} onChange={e => setFilters(f => ({...f, startDate: e.target.value}))} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg p-2"/><span className="text-gray-400 self-center">-</span><input type="date" value={filters.endDate} onChange={e => setFilters(f => ({...f, endDate: e.target.value}))} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg p-2"/></div>
-                    <div className="flex flex-wrap gap-2 w-full xl:w-auto"><select value={filters.jenis} onChange={e => setFilters(f => ({...f, jenis: e.target.value}))} className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg p-2 min-w-[140px]"><option value="">Semua Jenis</option><option value="Pemasukan">Pemasukan</option><option value="Pengeluaran">Pengeluaran</option></select><input type="text" value={filters.kategori} onChange={e => setFilters(f => ({...f, kategori: e.target.value}))} placeholder="Cari kategori..." className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg p-2 min-w-[180px]"/></div>
+            <SectionCard title="Transaksi Kas" description="Gunakan filter untuk menelusuri transaksi dan memantau posisi saldo." contentClassName="overflow-hidden">
+                <div className="app-toolbar border-b border-app-border p-4">
+                    <div className="mb-3 flex flex-wrap items-center gap-2 lg:mb-2">
+                        <button type="button" onClick={() => applyDatePreset(0)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">Hari Ini</button>
+                        <button type="button" onClick={() => applyDatePreset(7)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">7 Hari</button>
+                        <button type="button" onClick={() => applyDatePreset(30)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">30 Hari</button>
+                        <button type="button" onClick={resetFilters} className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100">Reset Filter</button>
+                        <button type="button" onClick={handleExportCsv} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"><i className="bi bi-filetype-csv mr-1"></i>CSV</button>
+                        <button type="button" onClick={handleExportExcel} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"><i className="bi bi-file-earmark-spreadsheet mr-1"></i>Excel</button>
+                    </div>
+                    <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-4">
+                        <div>
+                            <label className="app-label mb-1.5 block pl-1">Tanggal Mulai</label>
+                            <input type="date" value={filters.startDate} onChange={e => setFilters(f => ({...f, startDate: e.target.value}))} className="app-input h-10 w-full rounded-md px-3 text-sm"/>
+                        </div>
+                        <div>
+                            <label className="app-label mb-1.5 block pl-1">Tanggal Akhir</label>
+                            <input type="date" value={filters.endDate} onChange={e => setFilters(f => ({...f, endDate: e.target.value}))} className="app-input h-10 w-full rounded-md px-3 text-sm"/>
+                        </div>
+                        <div>
+                            <label className="app-label mb-1.5 block pl-1">Jenis Transaksi</label>
+                            <select value={filters.jenis} onChange={e => setFilters(f => ({...f, jenis: e.target.value}))} className="app-select h-10 w-full min-w-[140px] px-3 text-sm">
+                                <option value="">Semua Jenis</option>
+                                <option value="Pemasukan">Pemasukan</option>
+                                <option value="Pengeluaran">Pengeluaran</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="app-label mb-1.5 block pl-1">Kategori</label>
+                            <input type="text" value={filters.kategori} onChange={e => setFilters(f => ({...f, kategori: e.target.value}))} placeholder="Cari kategori..." className="app-input h-10 w-full min-w-[180px] rounded-md px-3 text-sm"/>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="overflow-x-auto min-h-[300px]">
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                <div className="app-table-shell min-h-[300px]">
+                    <div className="space-y-3 p-3 md:hidden">
+                        {transactions.map(t => (
+                            <div key={t.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                                <div className="mb-2 flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="text-xs text-slate-500">{new Date(t.tanggal).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
+                                        <p className="mt-1 text-sm font-semibold text-slate-800">{t.kategori}</p>
+                                    </div>
+                                    <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${t.jenis === 'Pemasukan' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                        {t.jenis}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-700">{t.deskripsi}</p>
+                                {t.penanggungJawab && <p className="mt-1 text-xs text-slate-500">Oleh: {t.penanggungJawab}</p>}
+                                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                    <div className="rounded-lg bg-slate-50 p-2">
+                                        <p className="text-slate-500">Nominal</p>
+                                        <p className={`font-semibold ${t.jenis === 'Pemasukan' ? 'text-green-700' : 'text-red-700'}`}>{formatRupiah(t.jumlah)}</p>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-50 p-2">
+                                        <p className="text-slate-500">Saldo Setelah</p>
+                                        <p className="font-semibold text-slate-800">{formatRupiah(t.saldoSetelah)}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {transactions.length === 0 && !isLoading && (
+                            <EmptyState icon="bi-inbox" title="Tidak ada transaksi" description="Tidak ada transaksi yang cocok dengan filter buku kas saat ini." />
+                        )}
+                    </div>
+
+                    <div className="hidden overflow-x-auto md:block">
+                    <table className="app-table text-left">
+                        <thead className="sticky top-0 z-10 border-b border-app-border">
                             <tr>
                                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
                                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Kategori</th>
@@ -196,15 +359,16 @@ const BukuKas: React.FC = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-gray-800">{formatRupiah(t.saldoSetelah)}</td>
                                 </tr>
                             ))}
-                             {transactions.length === 0 && !isLoading && <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500"><div className="flex flex-col items-center justify-center"><i className="bi bi-inbox text-4xl mb-2 text-gray-300"></i><p>Tidak ada transaksi yang cocok dengan filter.</p></div></td></tr>}
+                             {transactions.length === 0 && !isLoading && <tr><td colSpan={6} className="p-4"><EmptyState icon="bi-inbox" title="Tidak ada transaksi" description="Tidak ada transaksi yang cocok dengan filter buku kas saat ini." /></td></tr>}
                         </tbody>
                     </table>
+                    </div>
                 </div>
 
                 <div className="bg-gray-50 border-t border-gray-200 p-4">
                      <Pagination currentPage={currentPage} totalPages={Math.ceil(totalItems / itemsPerPage)} onPageChange={setCurrentPage} />
                 </div>
-            </div>
+            </SectionCard>
             {isModalOpen && <TransaksiModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSave} existingKategori={existingKategori} />}
         </div>
     );

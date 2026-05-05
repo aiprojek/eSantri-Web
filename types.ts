@@ -508,8 +508,20 @@ export interface PortalContact {
     icon: string;
 }
 
+export interface PortalAnnouncementPost {
+    id: string;
+    title: string;
+    content: string;
+    publishedAt: string;
+    isPublished: boolean;
+}
+
 export interface PortalConfig {
     enabled: boolean;
+    provider?: 'gas';
+    portalId?: string;
+    gasEndpoint?: string;
+    gasApiKey?: string;
     theme: 'teal' | 'blue' | 'indigo' | 'slate' | 'rose' | 'emerald' | 'cyan';
     showFinance: boolean;
     showAcademic: boolean;
@@ -519,6 +531,7 @@ export interface PortalConfig {
     showLibrary: boolean;
     welcomeMessage: string;
     announcement: string;
+    announcementPosts?: PortalAnnouncementPost[];
     contacts: PortalContact[];
     customLinks: { label: string; url: string }[];
     baseUrl?: string;

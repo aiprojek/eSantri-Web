@@ -6,9 +6,9 @@ import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { Inventaris } from '../types';
 import { formatRupiah, formatDateTime } from '../utils/formatters';
-import { generatePdf } from '../utils/pdfGenerator';
+import { generatePdf, printVisualPreview } from '../utils/pdfGenerator';
 import { loadXLSX } from '../utils/lazyClientLibs';
-import { exportToHtml, exportToWord, printPreviewExact } from '../utils/exportUtils';
+import { exportToHtml, exportToWord } from '../utils/exportUtils';
 import { SarprasReportTemplate } from './sarpras/SarprasReportTemplate';
 import { PageHeader } from './common/PageHeader';
 import { SectionCard } from './common/SectionCard';
@@ -297,7 +297,7 @@ const Sarpras: React.FC = () => {
                 return;
             }
             if (type === 'print') {
-                await printPreviewExact('sarpras-print-area', fileName);
+                await printVisualPreview('sarpras-print-area', 'A4');
                 return;
             }
             if (type === 'word') {
@@ -516,8 +516,11 @@ const Sarpras: React.FC = () => {
                 initialData={editingAsset}
             />
 
-            {/* Hidden Print Area */}
-            <div className="hidden print:block">
+            {/* Offscreen Print Area (must stay rendered for html2canvas/PDF visual) */}
+            <div
+                className="fixed -left-[10000px] top-0 z-[-1] opacity-0 pointer-events-none print:static print:left-auto print:top-auto print:z-auto print:opacity-100 print:pointer-events-auto"
+                aria-hidden="true"
+            >
                 <div id="sarpras-print-area">
                     <SarprasReportTemplate 
                         settings={settings} 

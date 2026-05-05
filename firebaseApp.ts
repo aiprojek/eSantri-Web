@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import firebaseConfig from './firebase-applet-config.json';
 
+const isPlaceholder = (value?: string) => !value || value.startsWith('VITE_') || value.includes('YOUR_');
+
 const getFirebaseConfig = () => {
   const envConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -32,4 +34,10 @@ const getFirebaseConfig = () => {
 };
 
 export const activeFirebaseConfig = getFirebaseConfig();
+export const isFirebaseClientConfigReady = Boolean(
+  activeFirebaseConfig?.projectId &&
+  activeFirebaseConfig?.authDomain &&
+  activeFirebaseConfig?.appId &&
+  !isPlaceholder(activeFirebaseConfig?.apiKey)
+);
 export const firebaseApp = initializeApp(activeFirebaseConfig);

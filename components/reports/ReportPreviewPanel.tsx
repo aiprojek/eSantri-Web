@@ -4,7 +4,7 @@ import { ReportType } from '../../types';
 import { exportToHtml, exportToAutoTable, exportPreviewToExcelWorksheets, exportToWord, printPreviewExact } from '../../utils/exportUtils';
 import { generateContactCsv } from '../../services/csvService';
 import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel, exportEmisTemplate } from '../../services/excelService';
-import { generatePdf, printVisualPreview } from '../../utils/pdfGenerator';
+import { generatePdf } from '../../utils/pdfGenerator';
 
 interface ReportPreviewPanelProps {
     previewContent: React.ReactNode | null;
@@ -139,8 +139,8 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handlePrintNative = async () => {
         setIsGeneratingFile(true);
         try {
-            await printVisualPreview('preview-area', paperSize || 'A4');
-            onToast('Membuka dialog cetak visual (sama dengan preview)...', 'info');
+            await printPreviewExact('preview-area', `${getBaseFileName()}.pdf`);
+            onToast('Membuka dialog cetak...', 'info');
             setTimeout(() => setShowDonationModal(true), 2000);
         } catch (error) {
             console.error(error);

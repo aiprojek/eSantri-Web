@@ -36,6 +36,7 @@ Aplikasi ini awalnya dibuat menggunakan **Google AI Studio**, lalu pengembangann
 - **Pagination Database**: Menangani puluhan ribu data transaksi dan log tanpa membuat aplikasi berat (_lag_).
 - **PWA & Offline Mode**: Instal aplikasi ke Desktop/HP. Fitur "Unduh Aset" memungkinkan aplikasi berjalan 100% tanpa koneksi internet.
 - **PSB Online**: Formulir pendaftaran digital dengan integrasi WhatsApp dan Google Sheet.
+- **Portal Wali (GAS Bridge)**: Portal wali berbasis Google Sheets + Google Apps Script, tanpa wajib Firebase setup.
 
 ## 🛠️ Tumpukan Teknologi (Tech Stack)
 

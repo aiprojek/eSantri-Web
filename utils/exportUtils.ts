@@ -14,32 +14,14 @@ const getUnifiedPreviewPrintStyles = () => `
         break-after: auto !important;
     }
     .report-signature-footer {
-        display: none !important;
-    }
-    .print-portrait,
-    .print-landscape {
         position: relative !important;
-        overflow: hidden !important;
-    }
-    .print-portrait::after,
-    .print-landscape::after {
-        content: "dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id";
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        color: #000 !important;
-        opacity: 0.25 !important;
-        font-size: 16pt;
-        font-weight: 700;
-        white-space: nowrap;
-        pointer-events: none;
-        z-index: 0;
-    }
-    .print-portrait > *,
-    .print-landscape > * {
-        position: relative;
-        z-index: 1;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        margin-top: 0.35cm !important;
+        background: #fff !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
     }
     #jadwal-print-area .printable-content-wrapper,
     #jadwal-print-area .page-break-after {
@@ -82,16 +64,43 @@ const getUnifiedPreviewPrintStyles = () => `
                 print-color-adjust: exact;
             }
             .no-print { display: none !important; }
+        .print-portrait {
+            page: portrait;
+            width: auto !important;
+            min-height: 0 !important;
+            margin: 0 auto !important;
+            box-sizing: border-box !important;
+            page-break-after: auto !important;
+            break-after: auto !important;
+            overflow: visible !important;
+        }
+        .print-landscape {
+            page: landscape;
+            width: auto !important;
+            min-height: 0 !important;
+            margin: 0 auto !important;
+            box-sizing: border-box !important;
+            page-break-after: auto !important;
+            break-after: auto !important;
+            overflow: visible !important;
+        }
         .printable-content-wrapper {
             box-shadow: none !important;
             border-radius: 0 !important;
             transform: none !important;
+            overflow: visible !important;
         }
         .page-break-after {
             margin: 0 !important;
             box-shadow: none !important;
             border: none !important;
+            page-break-after: always !important;
+            break-after: page !important;
         }
+        table { page-break-inside: auto !important; break-inside: auto !important; }
+        thead { display: table-header-group !important; }
+        tfoot { display: table-footer-group !important; }
+        tr, td, th { page-break-inside: avoid !important; break-inside: avoid !important; }
         #jadwal-print-area .printable-content-wrapper,
         #jadwal-print-area .page-break-after {
             width: 29.7cm !important;
@@ -138,15 +147,10 @@ const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: {
         body { background-color: #f3f4f6; padding: 2rem; }
         ${getUnifiedPreviewPrintStyles()}
         @media print {
-            @page portrait { size: A4 portrait; margin: 0; }
-            @page landscape { size: A4 landscape; margin: 0; }
+            @page portrait { size: A4 portrait; margin: 10mm; }
+            @page landscape { size: A4 landscape; margin: 10mm; }
             .print-portrait { page: portrait; }
             .print-landscape { page: landscape; }
-            .print-portrait,
-            .print-landscape {
-                break-inside: avoid-page;
-                page-break-inside: avoid;
-            }
             ${isJadwalPrint ? '@page { margin: 0; size: A4 landscape; }' : ''}
             body { padding: 0 !important; background: #fff !important; }
             .printable-content-wrapper {

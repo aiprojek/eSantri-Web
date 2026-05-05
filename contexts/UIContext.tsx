@@ -47,7 +47,14 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const showConfirmation = useCallback((title: string, message: string, onConfirm: () => void | Promise<void>, options: { confirmText?: string; confirmColor?: string } = {}) => {
         setConfirmation({
             isOpen: true, title, message,
-            onConfirm: async () => { await onConfirm(); setConfirmation(prev => ({ ...prev, isOpen: false })); },
+            onConfirm: async () => {
+                setConfirmation(prev => ({ ...prev, isOpen: false }));
+                try {
+                    await onConfirm();
+                } finally {
+                    setConfirmation(prev => ({ ...prev, isOpen: false }));
+                }
+            },
             confirmText: options.confirmText, confirmColor: options.confirmColor
         });
     }, []);

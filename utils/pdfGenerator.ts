@@ -18,6 +18,11 @@ const getPageDimensions = (paperSize: string): [number, number] => {
 };
 
 const getRenderablePages = (element: HTMLElement): HTMLElement[] => {
+    const explicitReportPages = element.querySelectorAll('.print-portrait, .print-landscape');
+    if (explicitReportPages.length > 0) {
+        return Array.from(explicitReportPages) as HTMLElement[];
+    }
+
     const wrappers = element.querySelectorAll('.printable-content-wrapper');
 
     if (wrappers.length > 1) {
@@ -65,109 +70,183 @@ export const generatePdf = async (elementId: string, options: PdfGeneratorOption
     const element = document.getElementById(elementId);
     if (!element) return;
     const [{ jsPDF }] = await Promise.all([loadJsPdf()]);
+    const previewWrapper = elementId === 'preview-area'
+        ? (element.querySelector('.printable-content-wrapper') as HTMLElement | null)
+        : null;
+    const previousTransform = previewWrapper?.style.transform;
+    const previousTransition = previewWrapper?.style.transition;
 
-    const pages = getRenderablePages(element as HTMLElement);
+    if (previewWrapper) {
+        previewWrapper.style.transform = 'none';
+        previewWrapper.style.transition = 'none';
+    }
 
-    if (pages.length === 0) return;
+    try {
+        const pages = getRenderablePages(element as HTMLElement);
 
-    let format: [number, number] = getPageDimensions(options.paperSize);
-    
-    const isFirstPageLandscape = pages[0].classList.contains('print-landscape');
-    const orientation = isFirstPageLandscape ? 'l' : 'p';
+        if (pages.length === 0) return;
 
-    const doc = new jsPDF({
-        orientation: orientation,
-        unit: 'mm',
-        format: format,
-        compress: true
-    });
+        let format: [number, number] = getPageDimensions(options.paperSize);
+        
+        const isFirstPageLandscape = pages[0].classList.contains('print-landscape');
+        const orientation = isFirstPageLandscape ? 'l' : 'p';
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+        const doc = new jsPDF({
+            orientation: orientation,
+            unit: 'mm',
+            format: format,
+            compress: true
+        });
 
-    for (let i = 0; i < pages.length; i++) {
-        const page = pages[i];
-        if (page.style.display === 'none') continue;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
 
-        if (i > 0) {
+        for (let i = 0; i < pages.length; i++) {
+            const page = pages[i];
+            if (page.style.display === 'none') continue;
+
             const isLandscape = page.classList.contains('print-landscape');
-            doc.addPage(format, isLandscape ? 'l' : 'p');
-        }
 
-        const canvas = await renderPageCanvas(page);
+            const canvas = await renderPageCanvas(page);
 
-        if (canvas.width > 0) {
-            let pdfImgWidth = pageWidth;
-            let pdfImgHeight = (canvas.height * pageWidth) / canvas.width;
-            
-            // If image is taller than page, scale it down to fit height
-            if (pdfImgHeight > pageHeight) {
-                pdfImgHeight = pageHeight;
-                pdfImgWidth = (canvas.width * pageHeight) / canvas.height;
-            }
-            
-            const xOffset = (pageWidth - pdfImgWidth) / 2;
-            
-            const imgData = canvas.toDataURL('image/png');
-            
-            try {
-                doc.addImage(imgData, 'PNG', xOffset, 0, pdfImgWidth, pdfImgHeight, undefined, 'FAST');
-            } catch (e) {
-                console.error("PDF addImage error:", e);
-                try {
-                    doc.addImage(imgData, xOffset, 0, pdfImgWidth, pdfImgHeight);
-                } catch (e2) {
-                    console.error("PDF addImage fallback error:", e2);
+            if (canvas.width > 0) {
+                const pageCanvasHeightPx = Math.floor((canvas.width * pageHeight) / pageWidth);
+                const totalSlices = Math.max(1, Math.ceil(canvas.height / pageCanvasHeightPx));
+
+                for (let sliceIndex = 0; sliceIndex < totalSlices; sliceIndex++) {
+                    const sourceY = sliceIndex * pageCanvasHeightPx;
+                    const sliceHeightPx = Math.min(pageCanvasHeightPx, canvas.height - sourceY);
+                    if (sliceHeightPx <= 0) continue;
+
+                    const sliceCanvas = document.createElement('canvas');
+                    sliceCanvas.width = canvas.width;
+                    sliceCanvas.height = sliceHeightPx;
+                    const sliceCtx = sliceCanvas.getContext('2d');
+                    if (!sliceCtx) continue;
+                    sliceCtx.drawImage(
+                        canvas,
+                        0,
+                        sourceY,
+                        canvas.width,
+                        sliceHeightPx,
+                        0,
+                        0,
+                        canvas.width,
+                        sliceHeightPx
+                    );
+
+                    const isVeryFirstOutputPage = i === 0 && sliceIndex === 0;
+                    if (!isVeryFirstOutputPage) {
+                        doc.addPage(format, isLandscape ? 'l' : 'p');
+                    }
+
+                    const pdfImgWidth = pageWidth;
+                    const pdfImgHeight = (sliceHeightPx * pageWidth) / canvas.width;
+                    const imgData = sliceCanvas.toDataURL('image/png');
+
+                    try {
+                        doc.addImage(imgData, 'PNG', 0, 0, pdfImgWidth, pdfImgHeight, undefined, 'FAST');
+                    } catch (e) {
+                        console.error("PDF addImage error:", e);
+                        try {
+                            doc.addImage(imgData, 0, 0, pdfImgWidth, pdfImgHeight);
+                        } catch (e2) {
+                            console.error("PDF addImage fallback error:", e2);
+                        }
+                    }
                 }
             }
         }
-    }
 
-    doc.save(options.fileName);
+        doc.save(options.fileName);
+    } finally {
+        if (previewWrapper) {
+            previewWrapper.style.transform = previousTransform || '';
+            previewWrapper.style.transition = previousTransition || '';
+        }
+    }
 };
 
 export const printVisualPreview = async (elementId: string, paperSize: string): Promise<void> => {
     const element = document.getElementById(elementId);
     if (!element) return;
+    const previewWrapper = elementId === 'preview-area'
+        ? (element.querySelector('.printable-content-wrapper') as HTMLElement | null)
+        : null;
+    const previousTransform = previewWrapper?.style.transform;
+    const previousTransition = previewWrapper?.style.transition;
 
-    const pages = getRenderablePages(element as HTMLElement).filter((page) => page.style.display !== 'none');
-    if (pages.length === 0) return;
+    if (previewWrapper) {
+        previewWrapper.style.transform = 'none';
+        previewWrapper.style.transition = 'none';
+    }
 
-    const [pageWidthMm, pageHeightMm] = getPageDimensions(paperSize);
-    const renderedPages = await Promise.all(
-        pages.map(async (page) => {
+    try {
+        const pages = getRenderablePages(element as HTMLElement).filter((page) => page.style.display !== 'none');
+        if (pages.length === 0) return;
+
+        const [pageWidthMm, pageHeightMm] = getPageDimensions(paperSize);
+        const renderedPages: Array<{ src: string; widthMm: number; heightMm: number }> = [];
+
+        for (const page of pages) {
             const canvas = await renderPageCanvas(page);
             const isLandscape = page.classList.contains('print-landscape');
             const widthMm = isLandscape ? pageHeightMm : pageWidthMm;
             const heightMm = isLandscape ? pageWidthMm : pageHeightMm;
-            return {
-                src: canvas.toDataURL('image/png'),
-                widthMm,
-                heightMm
-            };
-        })
-    );
 
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
+            const pageCanvasHeightPx = Math.floor((canvas.width * heightMm) / widthMm);
+            const totalSlices = Math.max(1, Math.ceil(canvas.height / pageCanvasHeightPx));
 
-    const doc = iframe.contentWindow?.document;
-    if (!doc) return;
+            for (let sliceIndex = 0; sliceIndex < totalSlices; sliceIndex++) {
+                const sourceY = sliceIndex * pageCanvasHeightPx;
+                const sliceHeightPx = Math.min(pageCanvasHeightPx, canvas.height - sourceY);
+                if (sliceHeightPx <= 0) continue;
 
-    const pagesHtml = renderedPages.map((page, index) => `
+                const sliceCanvas = document.createElement('canvas');
+                sliceCanvas.width = canvas.width;
+                sliceCanvas.height = sliceHeightPx;
+                const sliceCtx = sliceCanvas.getContext('2d');
+                if (!sliceCtx) continue;
+                sliceCtx.drawImage(
+                    canvas,
+                    0,
+                    sourceY,
+                    canvas.width,
+                    sliceHeightPx,
+                    0,
+                    0,
+                    canvas.width,
+                    sliceHeightPx
+                );
+
+                renderedPages.push({
+                    src: sliceCanvas.toDataURL('image/png'),
+                    widthMm,
+                    heightMm
+                });
+            }
+        }
+
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+
+        const doc = iframe.contentWindow?.document;
+        if (!doc) return;
+
+        const pagesHtml = renderedPages.map((page, index) => `
         <div class="print-page ${index < renderedPages.length - 1 ? 'page-break-after' : ''}" style="width:${page.widthMm}mm;height:${page.heightMm}mm;">
             <img src="${page.src}" alt="Preview halaman ${index + 1}" />
         </div>
     `).join('');
 
-    doc.open();
-    doc.write(`
+        doc.open();
+        doc.write(`
         <!DOCTYPE html>
         <html>
         <head>
@@ -210,13 +289,19 @@ export const printVisualPreview = async (elementId: string, paperSize: string): 
         </body>
         </html>
     `);
-    doc.close();
+        doc.close();
 
-    setTimeout(() => {
-        if (document.body.contains(iframe)) {
-            document.body.removeChild(iframe);
+        setTimeout(() => {
+            if (document.body.contains(iframe)) {
+                document.body.removeChild(iframe);
+            }
+        }, 60000);
+    } finally {
+        if (previewWrapper) {
+            previewWrapper.style.transform = previousTransform || '';
+            previewWrapper.style.transition = previousTransition || '';
         }
-    }, 60000);
+    }
 };
 
 // Method 2: Native Browser Print (Vector PDF)

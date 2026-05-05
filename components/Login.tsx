@@ -6,6 +6,7 @@ import { hashString } from '../services/authService';
 import { User } from '../types';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { loadSyncService } from '../utils/lazyCloudServices';
+import { isFirebaseClientConfigReady } from '../firebaseApp';
 
 export const LoginScreen: React.FC = () => {
     const { login, showToast, settings } = useAppContext();
@@ -211,7 +212,7 @@ export const LoginScreen: React.FC = () => {
                             </button>
                         </form>
 
-                        {settings.cloudSyncConfig?.provider === 'firebase' && (
+                        {settings.cloudSyncConfig?.provider === 'firebase' && isFirebaseClientConfigReady && (
                             <div className="mt-4">
                                 <div className="relative flex items-center justify-center mb-4">
                                     <div className="flex-grow border-t border-gray-300"></div>
@@ -226,6 +227,11 @@ export const LoginScreen: React.FC = () => {
                                     <i className="bi bi-google text-red-500"></i>
                                     {isFbLoading ? 'Menyiapkan Google Login...' : 'Masuk dengan Google'}
                                 </button>
+                            </div>
+                        )}
+                        {settings.cloudSyncConfig?.provider === 'firebase' && !isFirebaseClientConfigReady && (
+                            <div className="mt-4 p-3 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800">
+                                Google Login belum aktif karena konfigurasi Firebase belum lengkap. Lengkapi di Pengaturan Cloud terlebih dahulu.
                             </div>
                         )}
 

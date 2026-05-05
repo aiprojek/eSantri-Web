@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { useSettingsContext } from './SettingsContext';
 import { loadFirebasePairingRuntime, loadFirebaseRealtimeRuntime } from '../utils/lazyFirebaseRuntimes';
+import { isFirebaseClientConfigReady } from '../firebaseApp';
 
 const FIREBASE_AUTH_HINT_KEY = 'esantri_firebase_auth_hint';
 
@@ -26,6 +27,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const initializeAuthState = React.useCallback(async () => {
         if (settings.cloudSyncConfig?.provider !== 'firebase') {
+            setFbUser(null);
+            setIsFbLoading(false);
+            return;
+        }
+
+        if (!isFirebaseClientConfigReady) {
             setFbUser(null);
             setIsFbLoading(false);
             return;
@@ -106,6 +113,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const login = async () => {
         try {
+            if (!isFirebaseClientConfigReady) {
+                throw new Error('Konfigurasi Firebase belum valid. Isi API Key, Project ID, Auth Domain, dan App ID terlebih dahulu.');
+            }
             await initializeAuthState();
             const { loginWithGoogle } = await import('../firebaseAuth');
             const result = await loginWithGoogle();

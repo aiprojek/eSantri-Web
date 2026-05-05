@@ -7,6 +7,7 @@ import { useFirebase } from '../../../contexts/FirebaseContext';
 import { formatBytes } from '../../../utils/formatters';
 import { loadSyncService } from '../../../utils/lazyCloudServices';
 import { loadFirebaseRealtimeRuntime } from '../../../utils/lazyFirebaseRuntimes';
+import { syncPortalBridgeToGas } from '../../../services/portalGasService';
 import { LoadingFallback } from '../../common/LoadingFallback';
 import { SectionCard } from '../../common/SectionCard';
 
@@ -136,10 +137,10 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     }, [settings.cloudSyncConfig]);
 
     useEffect(() => {
-        if (localSettings.cloudSyncConfig?.provider === 'firebase' || isPortalEnabled) {
+        if (localSettings.cloudSyncConfig?.provider === 'firebase') {
             void initializeAuthState();
         }
-    }, [initializeAuthState, isPortalEnabled, localSettings.cloudSyncConfig?.provider]);
+    }, [initializeAuthState, localSettings.cloudSyncConfig?.provider]);
 
     const handleSyncProviderChange = (provider: SyncProvider) => {
         setLocalSettings(prev => ({
@@ -168,12 +169,10 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     const handleSyncToPortal = async () => {
         setIsSyncingPortal(true);
         try {
-            // In a real implementation, this would filter data and push to Firebase
-            // For now, we simulate the process
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await syncPortalBridgeToGas(localSettings);
             showToast('Data berhasil disinkronkan ke Portal Wali.', 'success');
         } catch (error) {
-            showToast('Gagal sinkronisasi data ke portal.', 'error');
+            showToast(`Gagal sinkronisasi data ke portal: ${(error as Error).message}`, 'error');
         } finally {
             setIsSyncingPortal(false);
         }
@@ -571,14 +570,10 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
 
                     {localSettings.cloudSyncConfig?.provider !== 'none' && (
                         <PortalBridgePanel
-                            provider={localSettings.cloudSyncConfig?.provider}
-                            fbUser={fbUser ? { uid: fbUser.uid } : null}
                             isPortalEnabled={isPortalEnabled}
-                            isFbLoading={isFbLoading}
                             isSyncingPortal={isSyncingPortal}
                             onPortalToggle={handlePortalToggle}
                             onOpenPortalSettings={() => window.dispatchEvent(new CustomEvent('change-settings-tab', { detail: 'portal' }))}
-                            onPortalBridgeLogin={handleFirebaseLogin}
                             onSyncToPortal={handleSyncToPortal}
                         />
                     )}

@@ -1,26 +1,18 @@
 import React from 'react';
 
 interface PortalBridgePanelProps {
-    provider: string | undefined;
-    fbUser: { uid: string } | null;
     isPortalEnabled: boolean;
-    isFbLoading: boolean;
     isSyncingPortal: boolean;
     onPortalToggle: (checked: boolean) => void;
     onOpenPortalSettings: () => void;
-    onPortalBridgeLogin: () => Promise<void>;
     onSyncToPortal: () => Promise<void>;
 }
 
 export const PortalBridgePanel: React.FC<PortalBridgePanelProps> = ({
-    provider,
-    fbUser,
     isPortalEnabled,
-    isFbLoading,
     isSyncingPortal,
     onPortalToggle,
     onOpenPortalSettings,
-    onPortalBridgeLogin,
     onSyncToPortal,
 }) => (
     <div className="mt-8 border-t pt-6">
@@ -42,8 +34,7 @@ export const PortalBridgePanel: React.FC<PortalBridgePanelProps> = ({
                     </div>
                     <p className="text-xs text-blue-700 mt-1 max-w-2xl">
                         Aktifkan fitur ini untuk membuat portal khusus wali santri.
-                        {provider !== 'firebase' &&
-                            ' Karena Anda menggunakan Dropbox/WebDAV, data ringkas akan dijembatani secara aman ke Firebase agar wali bisa mengaksesnya tanpa melihat data internal pondok.'}
+                        {' Portal ini memakai jembatan Google Sheets + Google Apps Script agar mudah dioperasikan user non-teknis.'}
                     </p>
                 </div>
                 <label className="inline-flex cursor-pointer items-center">
@@ -59,50 +50,34 @@ export const PortalBridgePanel: React.FC<PortalBridgePanelProps> = ({
 
             {isPortalEnabled && (
                 <div className="mt-4 p-4 bg-white rounded border border-blue-200">
-                    {provider !== 'firebase' && !fbUser ? (
-                        <div className="text-center py-4">
-                            <p className="text-sm text-gray-600 mb-4">
-                                Untuk mengaktifkan Portal Wali, Anda perlu login dengan Google (Firebase) sebagai jembatan data.
-                            </p>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="flex w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
+                                <span className="text-sm font-medium text-green-700">Jembatan Portal GAS Aktif</span>
+                            </div>
                             <button
-                                onClick={() => { void onPortalBridgeLogin(); }}
-                                disabled={isFbLoading}
-                                className="app-button-secondary mx-auto px-4 py-2 text-sm"
+                                onClick={() => { void onSyncToPortal(); }}
+                                disabled={isSyncingPortal}
+                                className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-medium hover:bg-blue-200 transition-colors disabled:opacity-50 flex items-center gap-1"
                             >
-                                <i className="bi bi-google text-red-500"></i>
-                                Login Google (Untuk Portal)
+                                {isSyncingPortal ? (
+                                    <><span className="animate-spin h-3 w-3 border-2 border-blue-700 rounded-full border-t-transparent"></span> Menyinkronkan...</>
+                                ) : (
+                                    <><i className="bi bi-cloud-arrow-up"></i> Update Data Portal</>
+                                )}
                             </button>
                         </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <span className="flex w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
-                                    <span className="text-sm font-medium text-green-700">Jembatan Portal Aktif</span>
-                                </div>
-                                <button
-                                    onClick={() => { void onSyncToPortal(); }}
-                                    disabled={isSyncingPortal}
-                                    className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-medium hover:bg-blue-200 transition-colors disabled:opacity-50 flex items-center gap-1"
-                                >
-                                    {isSyncingPortal ? (
-                                        <><span className="animate-spin h-3 w-3 border-2 border-blue-700 rounded-full border-t-transparent"></span> Menyinkronkan...</>
-                                    ) : (
-                                        <><i className="bi bi-cloud-arrow-up"></i> Update Data Portal</>
-                                    )}
-                                </button>
-                            </div>
-                            <div className="rounded-[18px] border bg-gray-50 p-3 text-xs text-gray-600">
-                                <p className="font-semibold mb-1">Data yang disinkronkan ke portal:</p>
-                                <ul className="list-disc pl-4 space-y-0.5">
-                                    <li>Profil Ringkas Santri (Nama, NIS, Kelas)</li>
-                                    <li>Rekap Kehadiran Terakhir</li>
-                                    <li>Sisa Saldo Tabungan</li>
-                                    <li>Status Tagihan Bulan Ini</li>
-                                </ul>
-                            </div>
+                        <div className="rounded-[18px] border bg-gray-50 p-3 text-xs text-gray-600">
+                            <p className="font-semibold mb-1">Data yang disinkronkan ke portal:</p>
+                            <ul className="list-disc pl-4 space-y-0.5">
+                                <li>Profil Ringkas Santri (Nama, NIS, Kelas)</li>
+                                <li>Rekap Kehadiran Terakhir</li>
+                                <li>Sisa Saldo Tabungan</li>
+                                <li>Status Tagihan Bulan Ini</li>
+                            </ul>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
         </div>

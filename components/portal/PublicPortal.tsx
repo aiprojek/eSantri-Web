@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { PondokSettings, PsbConfig } from '../../types';
+import { PondokSettings, PortalAnnouncementPost, PsbConfig } from '../../types';
 import { LoadingFallback } from '../common/LoadingFallback';
-import { loadFirebasePortalRuntime } from '../../utils/lazyFirebaseRuntimes';
+import { fetchPortalSettingsFromGas, submitPortalPsbToGas } from '../../services/portalGasService';
 
 const fieldGroups = [
     {
@@ -86,16 +86,21 @@ export const PublicPortal: React.FC = () => {
                 return;
             }
             try {
-                const { fetchPublicPortalSettings } = await loadFirebasePortalRuntime();
-                const portalSettings = await fetchPublicPortalSettings(tenantId);
+                const url = new URL(window.location.href);
+                const gasEndpoint = url.searchParams.get('gas') || localStorage.getItem('esantri_portal_gas_url') || '';
+                const gasApiKey = url.searchParams.get('token') || localStorage.getItem('esantri_portal_gas_token') || '';
+                if (!gasEndpoint) {
+                    throw new Error('Portal GAS URL belum disiapkan. Tambahkan parameter ?gas=... pada URL portal.');
+                }
+                const portalSettings = await fetchPortalSettingsFromGas(gasEndpoint, tenantId, gasApiKey);
                 if (portalSettings) {
                     setTenantSettings(portalSettings);
                 } else {
-                    setError('Data pesantren tidak ditemukan di sistem cloud.');
+                    setError('Data pesantren tidak ditemukan di Portal GAS.');
                 }
             } catch (err) {
                 console.error("Portal error:", err);
-                setError('Gagal memuat portal. Pastikan koneksi internet stabil.');
+                setError((err as Error)?.message || 'Gagal memuat portal. Pastikan koneksi internet stabil.');
             } finally {
                 setLoading(false);
             }
@@ -118,6 +123,21 @@ export const PublicPortal: React.FC = () => {
     }
 
     if (!tenantSettings) return null;
+    const portalConfig = tenantSettings.portalConfig;
+    const announcementPosts: PortalAnnouncementPost[] = (() => {
+        const posts = (portalConfig?.announcementPosts || []).filter(post => post && post.isPublished && (post.title || post.content));
+        if (posts.length > 0) return posts;
+        if (portalConfig?.announcement?.trim()) {
+            return [{
+                id: 'legacy-announcement',
+                title: 'Pengumuman',
+                content: portalConfig.announcement.trim(),
+                publishedAt: new Date().toISOString(),
+                isPublished: true
+            }];
+        }
+        return [];
+    })();
 
     if (portalType === 'psb') {
         return <PsbPublicForm settings={tenantSettings} templateId={templateId} tenantId={tenantId} />;
@@ -129,6 +149,19 @@ export const PublicPortal: React.FC = () => {
                 <h1 className="text-3xl font-bold text-teal-900 mb-2">{tenantSettings.namaPonpes}</h1>
                 <div className="text-amber-600 font-bold uppercase tracking-widest text-sm mb-6 pb-4 border-b">Portal Wali Santri</div>
                 <p className="text-gray-600 mb-8 italic">"Segera Hadir: Fitur pemantauan nilai, absensi, dan keuangan santri via portal online."</p>
+                {announcementPosts.length > 0 && (
+                    <div className="mb-6 rounded-xl border border-teal-100 bg-teal-50 p-4 text-left">
+                        <h3 className="mb-2 text-sm font-bold text-teal-800">Pengumuman</h3>
+                        <div className="space-y-2">
+                            {announcementPosts.slice(0, 3).map(post => (
+                                <div key={post.id} className="rounded-lg border border-teal-100 bg-white px-3 py-2">
+                                    <p className="text-xs font-semibold text-teal-900">{post.title || 'Tanpa Judul'}</p>
+                                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{post.content}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 <div className="flex justify-center gap-4">
                     <div className="text-teal-700 bg-teal-50 px-4 py-2 rounded-full text-xs font-bold border border-teal-100">Cek Tagihan</div>
                     <div className="text-teal-700 bg-teal-50 px-4 py-2 rounded-full text-xs font-bold border border-teal-100">Buku Saku</div>
@@ -187,12 +220,22 @@ const PsbFormViewer: React.FC<{ settings: PondokSettings, config: PsbConfig, ten
         e.preventDefault();
         setSubmitting(true);
         try {
-            const { submitPortalPsbRegistration } = await loadFirebasePortalRuntime();
-            await submitPortalPsbRegistration({ tenantId, config, fields });
+            const url = new URL(window.location.href);
+            const gasEndpoint = url.searchParams.get('gas') || localStorage.getItem('esantri_portal_gas_url') || '';
+            const gasApiKey = url.searchParams.get('token') || localStorage.getItem('esantri_portal_gas_token') || '';
+            if (!gasEndpoint) {
+                throw new Error('Portal GAS URL belum tersedia.');
+            }
+            await submitPortalPsbToGas(gasEndpoint, tenantId, {
+                ...fields,
+                tahunAjaranAktif: config.tahunAjaranAktif,
+                targetJenjangId: config.targetJenjangId,
+                submissionSource: 'portal-psb'
+            }, gasApiKey);
             setSubmitted(true);
         } catch (err) {
             console.error("Submission Error:", err);
-            alert("Terjadi kesalahan saat menyimpan data. Pastikan koneksi internet aktif.");
+            alert((err as Error)?.message || "Terjadi kesalahan saat menyimpan data. Pastikan koneksi internet aktif.");
         } finally {
             setSubmitting(false);
         }

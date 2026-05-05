@@ -517,21 +517,51 @@ export const panduanData: PanduanSectionData[] = [
         title: 'Pengaturan Portal Wali Santri',
         steps: [
             {
-                title: 'Aktivasi & Jembatan Data (Hybrid Bridge)',
+                title: 'Aktivasi & Jembatan Data (Google Sheets + GAS)',
                 content: (
                     <div className="space-y-3">
-                        <p className="text-sm">Portal Wali Santri memungkinkan orang tua memantau perkembangan anak secara online. Karena keamanan data adalah prioritas, kami menggunakan sistem <strong>Hybrid Bridge</strong>:</p>
+                        <p className="text-sm">Portal Wali Santri memungkinkan orang tua memantau perkembangan anak secara online. Jembatan data portal memakai <strong>Google Sheets + Google Apps Script (GAS)</strong>:</p>
                         <div className="bg-blue-50 p-3 rounded border border-blue-200 text-xs text-blue-900">
                             <ul className="list-disc pl-4 space-y-1">
                                 <li><strong>Data Utama:</strong> Tetap aman di laptop Anda atau Cloud Storage pribadi (Dropbox/WebDAV).</li>
-                                <li><strong>Data Portal:</strong> Hanya data ringkas (profil, absen, saldo, tagihan) yang dikirim ke Firebase untuk diakses wali.</li>
+                                <li><strong>Data Portal:</strong> Hanya data ringkas (profil, absen, saldo, tagihan) yang dikirim ke Google Sheet melalui GAS.</li>
                             </ul>
                         </div>
                         <ol className="list-decimal pl-5 space-y-1 text-sm">
                             <li>Buka menu <strong>Pengaturan &gt; Portal Wali</strong>.</li>
                             <li>Pastikan status portal <strong>Aktif</strong>.</li>
-                            <li>Jika belum terhubung ke Firebase, sistem akan meminta Anda login Google di tab <em>Sync Cloud</em> sebagai jembatan data.</li>
+                            <li>Isi <strong>Portal ID</strong>, <strong>URL Web App GAS</strong>, dan token opsional.</li>
+                            <li>Klik <strong>Update Data Portal</strong> di tab Sync Cloud untuk mengirim data ringkas pertama kali.</li>
                         </ol>
+                    </div>
+                )
+            },
+            {
+                title: 'Langkah Deploy Google Apps Script',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p>Ikuti urutan ini dari awal sampai akhir agar Portal Wali bisa aktif tanpa error:</p>
+                        <ol className="list-decimal pl-5 space-y-1">
+                            <li>Buka <strong>Pengaturan &gt; Portal Wali</strong>.</li>
+                            <li>Isi <strong>Portal ID</strong> (contoh: <code>ponpes-al-ikhlas</code>).</li>
+                            <li>Klik <strong>Lihat Kode Google Apps Script</strong>, lalu klik <strong>Salin Kode</strong>.</li>
+                            <li>Buat <strong>Google Sheet baru</strong> di akun Google Anda.</li>
+                            <li>Di Google Sheet: klik <strong>Extensions &gt; Apps Script</strong>.</li>
+                            <li>Hapus kode bawaan, paste kode dari eSantri, lalu klik <strong>Save</strong>.</li>
+                            <li>Klik <strong>Deploy &gt; New Deployment</strong>.</li>
+                            <li>Pilih type <strong>Web App</strong>.</li>
+                            <li>Set <strong>Execute as: Me</strong>.</li>
+                            <li>Set <strong>Who has access: Anyone</strong>.</li>
+                            <li>Klik <strong>Deploy</strong>, lalu <strong>Authorize</strong> jika diminta Google.</li>
+                            <li>Salin URL Web App yang berakhiran <code>/exec</code>.</li>
+                            <li>Kembali ke eSantri, tempel URL itu ke kolom <strong>URL Web App GAS</strong>.</li>
+                            <li>Jika ingin pakai token keamanan, isi <strong>API_TOKEN</strong> di script dan isi nilai yang sama di kolom <strong>Token API</strong> eSantri.</li>
+                            <li>Simpan pengaturan portal, lalu buka <strong>Pengaturan &gt; Sync Cloud</strong> dan klik <strong>Update Data Portal</strong>.</li>
+                            <li>Buka URL Portal Wali yang muncul, lalu uji dari HP/laptop lain.</li>
+                        </ol>
+                        <div className="rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+                            Jika terjadi gagal akses, cek lagi 3 hal ini: URL harus <code>/exec</code>, akses Web App harus <strong>Anyone</strong>, dan Portal ID di aplikasi harus sama dengan yang dipakai di data portal.
+                        </div>
                     </div>
                 )
             },
@@ -540,11 +570,11 @@ export const panduanData: PanduanSectionData[] = [
                 color: 'blue',
                 content: (
                     <div className="space-y-2">
-                        <p className="text-sm">Setelah portal aktif dan terhubung ke Firebase, Anda akan melihat panel <strong>URL Portal Wali Santri</strong> di bagian atas halaman pengaturan portal.</p>
+                        <p className="text-sm">Setelah Portal ID dan URL GAS diisi, Anda akan melihat panel <strong>URL Portal Wali Santri</strong> di bagian atas halaman pengaturan portal.</p>
                         <div className="bg-gray-50 p-3 rounded border text-xs">
                             <p className="font-bold mb-1">Format URL:</p>
                             <ul className="list-disc pl-4 space-y-1">
-                                <li><strong>Versi Online:</strong> <code>https://domain-anda.com/portal/ID_UNIK</code></li>
+                                <li><strong>Versi Online:</strong> <code>https://domain-anda.com/portal/ID_UNIK?gas=URL_GAS</code></li>
                                 <li><strong>Versi Desktop (Tauri) / Android:</strong> Anda harus memasukkan <em>Domain Kustom</em> di pengaturan portal agar link yang dihasilkan valid untuk wali santri.</li>
                             </ul>
                         </div>
@@ -642,14 +672,10 @@ export const panduanData: PanduanSectionData[] = [
                             <p className="font-bold text-gray-700 mb-1"><i className="bi bi-gear-fill"></i> Untuk Tim IT / Pengembang (Lanjutan):</p>
                             <p className="text-[11px] mb-2">Jika pondok ingin menggunakan domain sendiri (misal: <code>portal.pondokanda.com</code>), Anda bisa menghosting sendiri versi web aplikasi ini:</p>
                             <ul className="list-disc pl-4 text-[10px] space-y-1">
-                                <li><strong>Firebase Hosting:</strong> Opsi terbaik jika menggunakan Firebase Sync.</li>
+                                <li><strong>Cloudflare Pages / Vercel / Netlify:</strong> Opsi praktis untuk hosting file statis.</li>
                                 <li><strong>GitHub Pages / Vercel:</strong> Gratis untuk hosting file statis (folder <code>dist</code>).</li>
                             </ul>
-                            <div className="mt-2 p-2 bg-white border rounded text-[9px] font-mono">
-                                # Langkah Deploy:<br/>
-                                npm run build<br/>
-                                firebase deploy
-                            </div>
+                            <p className="mt-2 text-[10px] text-gray-600">Script Google Apps Script tersedia langsung di menu <strong>Pengaturan &gt; Portal Wali</strong> melalui tombol <strong>Lihat Kode Google Apps Script</strong>.</p>
                         </div>
                     </div>
                 )

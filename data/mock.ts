@@ -150,6 +150,10 @@ export const initialSettings: PondokSettings = {
     ],
     portalConfig: {
         enabled: false,
+        provider: 'gas',
+        portalId: 'default-portal',
+        gasEndpoint: '',
+        gasApiKey: '',
         theme: 'teal',
         showFinance: true,
         showAcademic: true,
@@ -159,6 +163,7 @@ export const initialSettings: PondokSettings = {
         showLibrary: true,
         welcomeMessage: 'Selamat Datang di Portal Wali Santri',
         announcement: '',
+        announcementPosts: [],
         contacts: [],
         customLinks: []
     },

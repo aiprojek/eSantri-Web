@@ -172,6 +172,67 @@ const AccessDenied: React.FC = () => (
     </div>
 );
 
+type QuickHelpSlide = {
+  icon: string;
+  title: string;
+  body: string;
+  points: string[];
+};
+
+const QUICK_HELP_SLIDES: QuickHelpSlide[] = [
+  {
+    icon: 'bi-compass',
+    title: 'Pondasi eSantri Web',
+    body: 'eSantri Web dibangun sebagai aplikasi operasional pondok berbasis client-first: cepat dipakai, fleksibel, dan tetap produktif di kondisi koneksi beragam.',
+    points: [
+      'Fokus utama: kebutuhan nyata operasional harian pondok.',
+      'Struktur fitur dibuat modular agar mudah ditingkatkan bertahap.',
+      'Pengalaman desktop dan mobile diupayakan konsisten.'
+    ]
+  },
+  {
+    icon: 'bi-database-check',
+    title: 'Penyimpanan Data',
+    body: 'Data inti berjalan dari perangkat pengguna (lokal) lalu dapat dicadangkan ke cloud sesuai konfigurasi pondok.',
+    points: [
+      'Mode lokal memberikan performa cepat untuk penggunaan rutin.',
+      'Backup/restore dipakai untuk ketahanan data.',
+      'Portal publik dapat memakai jalur terpisah (mis. Sheets + GAS).'
+    ]
+  },
+  {
+    icon: 'bi-cloud-arrow-up',
+    title: 'Sinkronisasi Cloud',
+    body: 'eSantri tetap berpondasi client-first, lalu berevolusi mendukung multi-user melalui cloud sync. Setiap pondok bisa memilih model paling cocok dengan kesiapan tim.',
+    points: [
+      'Pondasi utama tetap lokal, sinkronisasi adalah lapisan kolaborasi.',
+      'Dropbox/WebDAV: model hub-spoke (publish/ambil master).',
+      'Firebase: sinkron real-time otomatis.',
+      'Pantau status sinkron lewat ikon/loading di header.'
+    ]
+  },
+  {
+    icon: 'bi-printer',
+    title: 'Catatan Cetak & Export',
+    body: 'Perilaku jendela cetak bisa berbeda karena ukuran layar, zoom, browser, dan OS. Ini normal untuk web rendering lintas perangkat.',
+    points: [
+      'Gunakan preview aplikasi sebagai acuan utama.',
+      'Data panjang bisa memecah halaman berbeda di print dialog.',
+      'Atur orientation/scale/margin sesuai jenis laporan.'
+    ]
+  },
+  {
+    icon: 'bi-people',
+    title: 'FOSS & Gotong Royong',
+    body: 'eSantri Web adalah proyek FOSS: tumbuh dari kolaborasi, umpan balik, dan semangat gotong royong pengguna.',
+    points: [
+      'Gunakan aplikasi dengan sadar: laporkan bug dan konteksnya.',
+      'Berbagi praktik baik operasional agar pengguna lain terbantu.',
+      'FOSS berarti kita sama-sama menjaga, memperbaiki, dan mengembangkan.'
+    ]
+  }
+];
+
 const AppContent: React.FC = () => {
     const { 
         isLoading, 
@@ -205,6 +266,8 @@ const AppContent: React.FC = () => {
     const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showSyncMenu, setShowSyncMenu] = useState(false);
+    const [showQuickHelp, setShowQuickHelp] = useState(false);
+    const [quickHelpIndex, setQuickHelpIndex] = useState(0);
 
     const canManageSync = !!(currentUser?.role === 'admin' || currentUser?.permissions?.syncAdmin);
 
@@ -285,6 +348,7 @@ const AppContent: React.FC = () => {
             if (event.key === 'Escape') {
                 setShowUserMenu(false);
                 setShowSyncMenu(false);
+                setShowQuickHelp(false);
             }
         };
 
@@ -398,6 +462,15 @@ const AppContent: React.FC = () => {
         showConfirmation('Logout', 'Anda yakin ingin keluar?', () => { logout(); }, { confirmText: 'Keluar', confirmColor: 'red' });
     };
 
+    const openQuickHelp = () => {
+        setQuickHelpIndex(0);
+        setShowQuickHelp(true);
+    };
+
+    const closeQuickHelp = () => {
+        setShowQuickHelp(false);
+    };
+
     const renderSyncButtonLabel = () => {
         if (settings.cloudSyncConfig?.provider === 'firebase') {
             return <i className="bi bi-cloud-check-fill text-app-success"></i>;
@@ -509,6 +582,7 @@ const AppContent: React.FC = () => {
     
     const isPortal = window.location.pathname.startsWith('/portal/') || window.location.pathname.startsWith('/psb/');
     const syncSummary = getSyncSummary();
+    const currentQuickHelpSlide = QUICK_HELP_SLIDES[quickHelpIndex];
 
     if (isPortal) {
         return (
@@ -618,6 +692,25 @@ const AppContent: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={openQuickHelp}
+                                className="hidden items-center gap-2 rounded-full border border-app-border bg-white px-3 py-2 text-sm font-semibold text-app-text shadow-soft transition-colors hover:border-teal-200 hover:bg-teal-50/60 md:flex"
+                                aria-label="Buka Quick Help"
+                                title="Quick Help"
+                            >
+                                <i className="bi bi-info-circle text-teal-700"></i>
+                                <span>Quick Help</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={openQuickHelp}
+                                className="app-button-secondary h-11 w-11 rounded-full px-0 md:hidden"
+                                aria-label="Buka Quick Help"
+                                title="Quick Help"
+                            >
+                                <i className="bi bi-info-circle text-lg"></i>
+                            </button>
                             <button
                                 type="button"
                                 onClick={(event) => {
@@ -801,6 +894,68 @@ const AppContent: React.FC = () => {
                                     </button>
                                 </>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showQuickHelp && (
+                <div className="app-overlay fixed inset-0 z-[110] flex items-center justify-center p-4" onClick={closeQuickHelp}>
+                    <div className="app-modal w-full max-w-2xl overflow-hidden rounded-panel" onClick={(event) => event.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-app-border bg-slate-50/80 px-5 py-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-app-text">Quick Help eSantri Web</h3>
+                                <p className="text-xs app-text-muted">Ringkasan singkat untuk pengunjung dan pengguna</p>
+                            </div>
+                            <button onClick={closeQuickHelp} className="flex h-10 w-10 items-center justify-center rounded-full border border-app-border bg-white text-app-textMuted hover:bg-teal-50 hover:text-app-text">
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div className="space-y-4 p-5 md:p-6">
+                            <div className="flex items-start gap-4 rounded-xl border border-app-border bg-app-surface p-4">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-teal-200 bg-teal-50 text-teal-700">
+                                    <i className={`bi ${currentQuickHelpSlide.icon} text-xl`}></i>
+                                </div>
+                                <div className="min-w-0">
+                                    <h4 className="text-base font-bold text-app-text">{currentQuickHelpSlide.title}</h4>
+                                    <p className="mt-1 text-sm app-text-secondary">{currentQuickHelpSlide.body}</p>
+                                </div>
+                            </div>
+                            <ul className="space-y-2">
+                                {currentQuickHelpSlide.points.map((point, idx) => (
+                                    <li key={idx} className="flex items-start gap-2 text-sm app-text-secondary">
+                                        <i className="bi bi-dot mt-[2px] text-base text-teal-700"></i>
+                                        <span>{point}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            <div className="flex flex-col gap-3 border-t border-app-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-center gap-1.5">
+                                    {QUICK_HELP_SLIDES.map((_, idx) => (
+                                        <button
+                                            key={idx}
+                                            type="button"
+                                            onClick={() => setQuickHelpIndex(idx)}
+                                            className={`h-2.5 rounded-full transition-all ${idx === quickHelpIndex ? 'w-6 bg-teal-600' : 'w-2.5 bg-slate-300 hover:bg-slate-400'}`}
+                                            aria-label={`Ke slide ${idx + 1}`}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setQuickHelpIndex((prev) => (prev - 1 + QUICK_HELP_SLIDES.length) % QUICK_HELP_SLIDES.length)}
+                                        className="app-button-secondary px-3 py-2 text-xs"
+                                    >
+                                        <i className="bi bi-arrow-left mr-1"></i> Sebelumnya
+                                    </button>
+                                    <button
+                                        onClick={() => setQuickHelpIndex((prev) => (prev + 1) % QUICK_HELP_SLIDES.length)}
+                                        className="app-button-primary px-3 py-2 text-xs"
+                                    >
+                                        Berikutnya <i className="bi bi-arrow-right ml-1"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

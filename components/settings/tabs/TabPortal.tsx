@@ -1,8 +1,7 @@
 
-import React, { useEffect, useState } from 'react';
-import { PondokSettings, PortalConfig, PortalContact } from '../../../types';
+import React, { useState } from 'react';
+import { PondokSettings, PortalAnnouncementPost, PortalConfig, PortalContact } from '../../../types';
 import { useAppContext } from '../../../AppContext';
-import { useFirebase } from '../../../contexts/FirebaseContext';
 import { SectionCard } from '../../common/SectionCard';
 
 interface TabPortalProps {
@@ -26,9 +25,25 @@ const ICONS = [
     'bi-facebook', 'bi-twitter-x', 'bi-youtube', 'bi-telegram', 'bi-geo-alt'
 ];
 
+const normalizeAnnouncementPosts = (config: PortalConfig): PortalAnnouncementPost[] => {
+    const posts = (config.announcementPosts || []).filter(Boolean);
+    if (posts.length > 0) return posts as PortalAnnouncementPost[];
+    if (config.announcement?.trim()) {
+        return [{
+            id: 'legacy-announcement',
+            title: 'Pengumuman',
+            content: config.announcement.trim(),
+            publishedAt: new Date().toISOString(),
+            isPublished: true
+        }];
+    }
+    return [];
+};
+
 const PortalPreview: React.FC<{ config: PortalConfig; settings: PondokSettings }> = ({ config, settings }) => {
     const [view, setView] = useState<'login' | 'dashboard'>('login');
     const theme = THEMES.find(t => t.id === config.theme) || THEMES[0];
+    const announcementPosts = normalizeAnnouncementPosts(config).filter(post => post.isPublished);
 
     return (
         <div className="flex flex-col items-center sticky top-6">
@@ -106,13 +121,20 @@ const PortalPreview: React.FC<{ config: PortalConfig; settings: PondokSettings }
                             </div>
 
                             <div className="p-4 -mt-4 bg-gray-50 rounded-t-2xl flex-1 space-y-4">
-                                {config.announcement && (
+                                {announcementPosts.length > 0 && (
                                     <div className={`p-3 rounded-xl border ${theme.border} ${theme.light} relative overflow-hidden`}>
                                         <div className={`absolute top-0 left-0 w-1 h-full ${theme.color}`}></div>
-                                        <h3 className={`text-[10px] font-bold ${theme.text} mb-1 flex items-center gap-1`}>
+                                        <h3 className={`text-[10px] font-bold ${theme.text} mb-2 flex items-center gap-1`}>
                                             <i className="bi bi-megaphone"></i> Pengumuman
                                         </h3>
-                                        <p className="text-[9px] text-gray-700 line-clamp-2">{config.announcement}</p>
+                                        <div className="space-y-2">
+                                            {announcementPosts.slice(0, 2).map(post => (
+                                                <div key={post.id} className="rounded-md bg-white/60 px-2 py-1">
+                                                    <p className="text-[9px] font-semibold text-gray-800 line-clamp-1">{post.title}</p>
+                                                    <p className="text-[9px] text-gray-700 line-clamp-2">{post.content}</p>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
 
@@ -163,19 +185,16 @@ const PortalPreview: React.FC<{ config: PortalConfig; settings: PondokSettings }
 
 export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSettings, onSaveSettings }) => {
     const { showToast } = useAppContext();
-    const { fbUser, initializeAuthState } = useFirebase();
-
-    useEffect(() => {
-        if (localSettings.cloudSyncConfig?.provider === 'firebase' || localSettings.cloudSyncConfig?.portalEnabled) {
-            void initializeAuthState();
-        }
-    }, [initializeAuthState, localSettings.cloudSyncConfig?.portalEnabled, localSettings.cloudSyncConfig?.provider]);
-    
-    // Get Tenant ID for URL
-    const tenantId = localSettings.cloudSyncConfig?.firebasePairedTenantId || fbUser?.uid;
+    const [showScriptHelper, setShowScriptHelper] = useState(false);
+    const [editingPostId, setEditingPostId] = useState<string | null>(null);
+    const tenantId = localSettings.portalConfig?.portalId || 'default-portal';
     
     const portalConfig: PortalConfig = localSettings.portalConfig || {
         enabled: localSettings.cloudSyncConfig?.portalEnabled || false,
+        provider: 'gas',
+        portalId: 'default-portal',
+        gasEndpoint: '',
+        gasApiKey: '',
         theme: 'teal',
         showFinance: true,
         showAcademic: true,
@@ -185,25 +204,17 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
         showLibrary: true,
         welcomeMessage: 'Selamat Datang di Portal Wali Santri',
         announcement: '',
+        announcementPosts: [],
         contacts: [],
         customLinks: [],
         baseUrl: ''
     };
+    const announcementPosts = normalizeAnnouncementPosts(portalConfig);
 
     const effectiveBaseUrl = portalConfig.baseUrl || window.location.origin;
-    const portalUrl = tenantId ? `${effectiveBaseUrl}/portal/${tenantId}` : '';
+    const gasParam = portalConfig.gasEndpoint ? `?gas=${encodeURIComponent(portalConfig.gasEndpoint)}${portalConfig.gasApiKey ? `&token=${encodeURIComponent(portalConfig.gasApiKey)}` : ''}` : '';
+    const portalUrl = tenantId ? `${effectiveBaseUrl}/portal/${tenantId}${gasParam}` : '';
     const qrCodeUrl = portalUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(portalUrl)}` : '';
-
-    // Suggested Firebase Hosting URL
-    const firebaseProjectId = localSettings.cloudSyncConfig?.firebaseProjectId;
-    const suggestedFirebaseUrl = firebaseProjectId ? `https://${firebaseProjectId}.web.app` : '';
-
-    const handleUseSuggestedUrl = () => {
-        if (suggestedFirebaseUrl) {
-            updatePortalConfig({ baseUrl: suggestedFirebaseUrl });
-            showToast('Menggunakan domain Firebase Hosting!', 'success');
-        }
-    };
 
     const updatePortalConfig = (updates: Partial<PortalConfig>) => {
         const newConfig = { ...portalConfig, ...updates };
@@ -256,6 +267,55 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
             customLinks: portalConfig.customLinks.filter((_, i) => i !== index)
         });
     };
+
+    const handleAddAnnouncementPost = () => {
+        const id = Date.now().toString();
+        const newPost: PortalAnnouncementPost = {
+            id,
+            title: '',
+            content: '',
+            publishedAt: new Date().toISOString(),
+            isPublished: true
+        };
+        const updatedPosts = [...announcementPosts, newPost];
+        updatePortalConfig({ announcementPosts: updatedPosts, announcement: '' });
+        setEditingPostId(id);
+    };
+
+    const handleUpdateAnnouncementPost = (id: string, updates: Partial<PortalAnnouncementPost>) => {
+        const updatedPosts = announcementPosts.map(post => post.id === id ? { ...post, ...updates } : post);
+        updatePortalConfig({ announcementPosts: updatedPosts, announcement: '' });
+    };
+
+    const handleRemoveAnnouncementPost = (id: string) => {
+        const updatedPosts = announcementPosts.filter(post => post.id !== id);
+        updatePortalConfig({ announcementPosts: updatedPosts, announcement: '' });
+        if (editingPostId === id) setEditingPostId(null);
+    };
+
+    const portalGasScript = `/**
+ * eSantri Portal Bridge - Google Apps Script
+ *
+ * ===================== WAJIB DIISI USER =====================
+ * 1) Ganti PORTAL_ID_DEFAULT (contoh: ponpes-alikhlas)
+ * 2) Token opsional:
+ *    - Jika ingin pakai token, isi API_TOKEN
+ *    - Jika tidak ingin pakai token, biarkan kosong ''
+ * ============================================================
+ */
+const SHEET_PORTALS='portals';
+const SHEET_PSB='portal_psb_submissions';
+const PORTAL_ID_DEFAULT='ganti-portal-id-di-sini';
+const API_TOKEN=''; // contoh: 'isi-token-rahasia'
+function doGet(e){try{const a=(e.parameter.action||'').trim();if(a==='getPortalConfig')return out(getPortalConfig(e));return out({success:false,message:'Action GET tidak valid.'});}catch(err){return out({success:false,message:err.message||String(err)})}}
+function doPost(e){try{const b=JSON.parse(e.postData.contents||'{}');const a=(b.action||'').trim();if(a==='upsertPortalConfig')return out(upsertPortalConfig(b));if(a==='submitPortalPsb')return out(submitPortalPsb(b));return out({success:false,message:'Action POST tidak valid.'});}catch(err){return out({success:false,message:err.message||String(err)})}}
+function out(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON)}
+function ensureSheet(name,headers){const ss=SpreadsheetApp.getActiveSpreadsheet();let sh=ss.getSheetByName(name);if(!sh){sh=ss.insertSheet(name);sh.getRange(1,1,1,headers.length).setValues([headers]);}return sh}
+function authCheck(inputApiKey){const expectedByConstant=(API_TOKEN||'').trim();const expectedByProperty=(PropertiesService.getScriptProperties().getProperty('PORTAL_API_KEY')||'').trim();const expected=expectedByConstant||expectedByProperty;if(!expected)return true;return expected===(inputApiKey||'')}
+function resolvePortalId(inputPortalId){const p=(inputPortalId||'').trim();if(p)return p;const fallback=(PORTAL_ID_DEFAULT||'').trim();if(fallback && !fallback.includes('ganti-portal-id'))return fallback;throw new Error('portalId wajib diisi. Isi di aplikasi atau ubah PORTAL_ID_DEFAULT di script.')}
+function getPortalConfig(e){const portalId=resolvePortalId(e.parameter.portalId);const apiKey=(e.parameter.apiKey||'').trim();if(!authCheck(apiKey))throw new Error('API key tidak valid.');const sh=ensureSheet(SHEET_PORTALS,['portalId','payloadJson','updatedAt']);const values=sh.getDataRange().getValues();const headers=values.shift();const idxPortal=headers.indexOf('portalId');const idxPayload=headers.indexOf('payloadJson');for(let i=values.length-1;i>=0;i--){if((values[i][idxPortal]||'').toString().trim()===portalId){const payload=JSON.parse(values[i][idxPayload]||'{}');return {success:true,data:payload.settings||null};}}return {success:false,message:'Data portal tidak ditemukan.'};}
+function upsertPortalConfig(body){const portalId=resolvePortalId(body.portalId);const apiKey=(body.apiKey||'').trim();const payload=body.payload||{};if(!authCheck(apiKey))throw new Error('API key tidak valid.');const sh=ensureSheet(SHEET_PORTALS,['portalId','payloadJson','updatedAt']);const values=sh.getDataRange().getValues();const headers=values.shift();const idxPortal=headers.indexOf('portalId');let targetRow=-1;for(let i=0;i<values.length;i++){if((values[i][idxPortal]||'').toString().trim()===portalId){targetRow=i+2;break;}}const row=[portalId,JSON.stringify(payload),new Date().toISOString()];if(targetRow>0){sh.getRange(targetRow,1,1,row.length).setValues([row]);}else{sh.appendRow(row);}return {success:true,message:'Portal config tersimpan.'};}
+function submitPortalPsb(body){const portalId=resolvePortalId(body.portalId);const apiKey=(body.apiKey||'').trim();const fields=body.fields||{};const submittedAt=body.submittedAt||new Date().toISOString();if(!authCheck(apiKey))throw new Error('API key tidak valid.');const sh=ensureSheet(SHEET_PSB,['submittedAt','portalId','namaLengkap','nisn','nik','jenisKelamin','tanggalLahir','namaWali','teleponWali','rawJson']);sh.appendRow([submittedAt,portalId,fields.namaLengkap||'',fields.nisn||'',fields.nik||'',fields.jenisKelamin||'',fields.tanggalLahir||'',fields.namaWali||'',fields.teleponWali||'',JSON.stringify(fields)]);return {success:true,message:'Pendaftaran berhasil tersimpan.'};}`;
 
     return (
         <div className="flex flex-col items-start gap-6 lg:flex-row">
@@ -316,14 +376,13 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                                 </button>
                                             </div>
                                             <p className="text-[10px] text-blue-500 italic">
-                                                * Link ini menggunakan {portalConfig.baseUrl ? 'Domain Kustom' : 'Domain Saat Ini'}. 
-                                                {window.location.hostname === 'localhost' && !portalConfig.baseUrl && ' (Localhost tidak bisa diakses dari luar jaringan)'}
+                                                * Link ini menggunakan {portalConfig.baseUrl ? 'Domain Kustom' : 'Domain Saat Ini'} dan terhubung ke Google Apps Script.
                                             </p>
                                         </div>
                                     ) : (
                                         <div className="text-xs text-red-600 font-medium bg-red-50 p-2 rounded border border-red-100">
                                             <i className="bi bi-exclamation-circle mr-1"></i> 
-                                            Link belum tersedia. Pastikan Anda sudah terhubung ke Cloud Sync (Firebase) untuk mendapatkan Tenant ID.
+                                            Link belum tersedia. Isi Portal ID dan URL Web App GAS terlebih dahulu.
                                         </div>
                                     )}
                                 </div>
@@ -370,24 +429,80 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                         </button>
                                     )}
                                 </div>
-                                {suggestedFirebaseUrl && portalConfig.baseUrl !== suggestedFirebaseUrl && (
-                                    <div className="mt-2 p-2 bg-teal-50 border border-teal-100 rounded-lg flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <i className="bi bi-magic text-teal-600"></i>
-                                            <span className="text-[10px] text-teal-800 font-medium">Saran: Gunakan Firebase Hosting Anda</span>
-                                        </div>
-                                        <button 
-                                            onClick={handleUseSuggestedUrl}
-                                            className="text-[10px] bg-teal-600 text-white px-2 py-1 rounded font-bold hover:bg-teal-700 transition-colors"
-                                        >
-                                            Gunakan Link Rekomendasi
-                                        </button>
-                                    </div>
-                                )}
                                 <p className="text-[10px] text-slate-500">
                                     * Kosongkan untuk menggunakan domain saat ini secara otomatis.
                                 </p>
                             </div>
+                        </section>
+
+                        <section className="rounded-xl border border-app-border bg-app-subtle p-4">
+                            <h3 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
+                                <i className="bi bi-database-gear text-teal-600"></i> Koneksi Google Sheets + GAS
+                            </h3>
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Portal ID</label>
+                                    <input
+                                        type="text"
+                                        value={portalConfig.portalId || ''}
+                                        onChange={(e) => updatePortalConfig({ portalId: e.target.value })}
+                                        className="app-input"
+                                        placeholder="contoh: ponpes-alikhlas"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">Token API (Opsional)</label>
+                                    <input
+                                        type="text"
+                                        value={portalConfig.gasApiKey || ''}
+                                        onChange={(e) => updatePortalConfig({ gasApiKey: e.target.value })}
+                                        className="app-input"
+                                        placeholder="token rahasia GAS (opsional)"
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="mb-1 block text-xs font-medium text-slate-600">URL Web App GAS</label>
+                                    <input
+                                        type="url"
+                                        value={portalConfig.gasEndpoint || ''}
+                                        onChange={(e) => updatePortalConfig({ gasEndpoint: e.target.value })}
+                                        className="app-input"
+                                        placeholder="https://script.google.com/macros/s/.../exec"
+                                    />
+                                </div>
+                            </div>
+                            <p className="mt-3 text-xs text-slate-500">
+                                Portal wali memakai Google Sheets + Google Apps Script sebagai jembatan data publik.
+                            </p>
+                            <button
+                                onClick={() => setShowScriptHelper((prev) => !prev)}
+                                className="mt-3 text-xs text-blue-600 underline hover:text-blue-800"
+                            >
+                                {showScriptHelper ? 'Sembunyikan Kode GAS' : 'Lihat Kode Google Apps Script'}
+                            </button>
+                            {showScriptHelper && (
+                                <div className="mt-3 rounded-lg border border-blue-100 bg-white p-3">
+                                    <p className="mb-2 text-[11px] text-slate-600">
+                                        Tempel kode ini ke <strong>Extensions &gt; Apps Script</strong>, lalu deploy <strong>Web App</strong> dan ambil URL <code>/exec</code>.
+                                    </p>
+                                    <textarea
+                                        readOnly
+                                        value={portalGasScript}
+                                        className="h-56 w-full rounded border border-slate-200 bg-slate-50 p-2 font-mono text-[10px] leading-relaxed text-slate-700"
+                                    />
+                                    <div className="mt-2 flex justify-end">
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(portalGasScript);
+                                                showToast('Kode Google Apps Script berhasil disalin.', 'success');
+                                            }}
+                                            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                                        >
+                                            <i className="bi bi-clipboard mr-1"></i> Salin Kode
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </section>
 
                         {/* TEMA */}
@@ -443,9 +558,17 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
 
                         {/* INFORMASI & PENGUMUMAN */}
                         <section>
-                            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
-                                <i className="bi bi-megaphone text-teal-600"></i> Informasi & Pengumuman
-                            </h3>
+                            <div className="mb-4 flex items-center justify-between">
+                                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-700">
+                                    <i className="bi bi-megaphone text-teal-600"></i> Informasi & Pengumuman
+                                </h3>
+                                <button
+                                    onClick={handleAddAnnouncementPost}
+                                    className="inline-flex items-center gap-1 rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-600 hover:bg-teal-100"
+                                >
+                                    <i className="bi bi-plus-lg"></i> Tambah Post
+                                </button>
+                            </div>
                             <div className="space-y-4">
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-slate-600">Pesan Selamat Datang</label>
@@ -458,14 +581,71 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
                                     />
                                 </div>
                                 <div>
-                                    <label className="mb-1 block text-xs font-medium text-slate-600">Pengumuman Penting (Muncul di Dashboard Portal)</label>
-                                    <textarea 
-                                        value={portalConfig.announcement}
-                                        onChange={(e) => updatePortalConfig({ announcement: e.target.value })}
-                                        rows={3}
-                                        className="app-input w-full p-2.5 text-sm"
-                                        placeholder="Tulis pengumuman atau informasi penting untuk wali santri..."
-                                    />
+                                    <label className="mb-2 block text-xs font-medium text-slate-600">Daftar Pengumuman (Model Blog Mini)</label>
+                                    <div className="space-y-3">
+                                        {announcementPosts.length === 0 && (
+                                            <p className="rounded-lg border border-dashed border-app-border bg-app-subtle py-4 text-center text-xs italic text-slate-400">
+                                                Belum ada pengumuman. Klik Tambah Post untuk membuat pengumuman baru.
+                                            </p>
+                                        )}
+                                        {announcementPosts.map((post) => (
+                                            <div key={post.id} className="rounded-lg border border-app-border bg-app-subtle p-3">
+                                                <div className="mb-2 flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleUpdateAnnouncementPost(post.id, { isPublished: !post.isPublished })}
+                                                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${post.isPublished ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}
+                                                        >
+                                                            {post.isPublished ? 'Tayang' : 'Draft'}
+                                                        </button>
+                                                        <span className="text-[10px] text-slate-500">
+                                                            {new Date(post.publishedAt).toLocaleDateString('id-ID')}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditingPostId(editingPostId === post.id ? null : post.id)}
+                                                            className="rounded-md px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50"
+                                                        >
+                                                            {editingPostId === post.id ? 'Tutup' : 'Edit'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveAnnouncementPost(post.id)}
+                                                            className="rounded-md px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                                                        >
+                                                            Hapus
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                {editingPostId === post.id ? (
+                                                    <div className="space-y-2">
+                                                        <input
+                                                            type="text"
+                                                            value={post.title}
+                                                            onChange={(e) => handleUpdateAnnouncementPost(post.id, { title: e.target.value })}
+                                                            className="app-input w-full p-2 text-sm"
+                                                            placeholder="Judul pengumuman"
+                                                        />
+                                                        <textarea
+                                                            value={post.content}
+                                                            onChange={(e) => handleUpdateAnnouncementPost(post.id, { content: e.target.value })}
+                                                            rows={3}
+                                                            className="app-input w-full p-2 text-sm"
+                                                            placeholder="Isi pengumuman..."
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-1">
+                                                        <p className="text-sm font-semibold text-slate-800">{post.title || 'Tanpa Judul'}</p>
+                                                        <p className="text-xs text-slate-600 whitespace-pre-wrap">{post.content || '-'}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </section>

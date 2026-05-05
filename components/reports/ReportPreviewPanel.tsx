@@ -4,6 +4,7 @@ import { ReportType } from '../../types';
 import { exportToHtml, exportToAutoTable, exportPreviewToExcelWorksheets, exportToWord, printPreviewExact } from '../../utils/exportUtils';
 import { generateContactCsv } from '../../services/csvService';
 import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel, exportEmisTemplate } from '../../services/excelService';
+import { generatePdf, printVisualPreview } from '../../utils/pdfGenerator';
 
 interface ReportPreviewPanelProps {
     previewContent: React.ReactNode | null;
@@ -138,8 +139,8 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handlePrintNative = async () => {
         setIsGeneratingFile(true);
         try {
-            await printPreviewExact('preview-area', `${getBaseFileName()}.pdf`);
-            onToast('Membuka dialog cetak preview...', 'info');
+            await printVisualPreview('preview-area', paperSize || 'A4');
+            onToast('Membuka dialog cetak visual (sama dengan preview)...', 'info');
             setTimeout(() => setShowDonationModal(true), 2000);
         } catch (error) {
             console.error(error);
@@ -153,11 +154,28 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         setIsGeneratingFile(true);
         try {
             await printPreviewExact('preview-area', `${getBaseFileName()}.pdf`);
-            onToast('Dialog cetak dibuka. Pilih "Save as PDF" untuk hasil paling akurat.', 'info');
+            onToast('Dialog cetak dibuka. Pilih "Save as PDF" untuk hasil vector.', 'info');
             setTimeout(() => setShowDonationModal(true), 2000);
         } catch (error) {
             console.error(error);
             onToast('Gagal membuat PDF visual.', 'error');
+        } finally {
+            setIsGeneratingFile(false);
+            setIsDownloadMenuOpen(false);
+        }
+    };
+
+    const handleDownloadImagePdf = async () => {
+        setIsGeneratingFile(true);
+        try {
+            await generatePdf('preview-area', {
+                paperSize: paperSize || 'A4',
+                fileName: `${getBaseFileName()}.pdf`
+            });
+            triggerSuccessDownload('PDF Gambar berhasil diunduh.');
+        } catch (error) {
+            console.error(error);
+            onToast('Gagal membuat PDF Gambar.', 'error');
         } finally {
             setIsGeneratingFile(false);
             setIsDownloadMenuOpen(false);
@@ -358,7 +376,11 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                                 )}
 
                                 <button onClick={handleDownloadVisualPdf} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2 bg-red-50/40">
-                                    <i className="bi bi-file-earmark-pdf text-red-600"></i> PDF Visual (Akurat)
+                                    <i className="bi bi-file-earmark-pdf text-red-600"></i> PDF via Cetak (Vector)
+                                </button>
+
+                                <button onClick={handleDownloadImagePdf} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2">
+                                    <i className="bi bi-file-earmark-image text-red-500"></i> PDF Gambar (Stabil)
                                 </button>
                                 
                                 <button onClick={handlePrintNative} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2">

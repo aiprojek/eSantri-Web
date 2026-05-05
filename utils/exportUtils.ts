@@ -9,12 +9,37 @@ const getUnifiedPreviewPrintStyles = () => `
         page-break-after: always;
         break-after: page;
     }
+    .page-break-after:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
     .report-signature-footer {
-        position: absolute !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        background: #fff !important;
+        display: none !important;
+    }
+    .print-portrait,
+    .print-landscape {
+        position: relative !important;
+        overflow: hidden !important;
+    }
+    .print-portrait::after,
+    .print-landscape::after {
+        content: "dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        color: #000 !important;
+        opacity: 0.25 !important;
+        font-size: 16pt;
+        font-weight: 700;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 0;
+    }
+    .print-portrait > *,
+    .print-landscape > * {
+        position: relative;
+        z-index: 1;
     }
     #jadwal-print-area .printable-content-wrapper,
     #jadwal-print-area .page-break-after {
@@ -48,22 +73,15 @@ const getUnifiedPreviewPrintStyles = () => `
         page-break-before: avoid !important;
         break-before: avoid-page !important;
     }
-    @media print {
-        html, body {
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #fff !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-        @page {
-            margin: 0;
-            size: auto;
-        }
-        @page :first {
-            margin: 0;
-        }
-        .no-print { display: none !important; }
+        @media print {
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .no-print { display: none !important; }
         .printable-content-wrapper {
             box-shadow: none !important;
             border-radius: 0 !important;
@@ -90,10 +108,23 @@ const collectDocumentStyles = () => {
     return styles;
 };
 
-const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: { showToolbar?: boolean; isJadwalPrint?: boolean }) => {
+const extractPrintableContent = (element: HTMLElement, elementId: string): string => {
+    // For report preview, avoid exporting the zoom wrapper (transform: scale)
+    // and use raw page nodes directly.
+    if (elementId === 'preview-area') {
+        const zoomWrapper = element.querySelector('.printable-content-wrapper');
+        if (zoomWrapper) {
+            return (zoomWrapper as HTMLElement).innerHTML;
+        }
+    }
+    return element.innerHTML;
+};
+
+const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: { showToolbar?: boolean; isJadwalPrint?: boolean; isSarprasPrint?: boolean }) => {
     const styles = collectDocumentStyles();
     const showToolbar = options?.showToolbar ?? false;
     const isJadwalPrint = options?.isJadwalPrint ?? false;
+    const isSarprasPrint = options?.isSarprasPrint ?? false;
 
     return `
 <!DOCTYPE html>
@@ -107,10 +138,31 @@ const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: {
         body { background-color: #f3f4f6; padding: 2rem; }
         ${getUnifiedPreviewPrintStyles()}
         @media print {
-            @page {
-                margin: 0;
-                size: ${isJadwalPrint ? 'A4 landscape' : 'auto'};
+            @page portrait { size: A4 portrait; margin: 0; }
+            @page landscape { size: A4 landscape; margin: 0; }
+            .print-portrait { page: portrait; }
+            .print-landscape { page: landscape; }
+            .print-portrait,
+            .print-landscape {
+                break-inside: avoid-page;
+                page-break-inside: avoid;
             }
+            ${isJadwalPrint ? '@page { margin: 0; size: A4 landscape; }' : ''}
+            body { padding: 0 !important; background: #fff !important; }
+            .printable-content-wrapper {
+                width: auto !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+                position: relative !important;
+                z-index: 1 !important;
+            }
+            ${isSarprasPrint ? `
+            #sarpras-print-area .printable-content-wrapper {
+                min-height: auto !important;
+                page-break-after: auto !important;
+                break-after: auto !important;
+            }
+            ` : ''}
         }
     </style>
 </head>
@@ -137,8 +189,9 @@ export const exportToHtml = (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
     const isJadwalPrint = elementId === 'jadwal-print-area';
-    const content = element.innerHTML;
-    const finalHtml = buildUnifiedHtmlDocument(content, fileName, { showToolbar: true, isJadwalPrint });
+    const isSarprasPrint = elementId === 'sarpras-print-area';
+    const content = extractPrintableContent(element, elementId);
+    const finalHtml = buildUnifiedHtmlDocument(content, fileName, { showToolbar: true, isJadwalPrint, isSarprasPrint });
 
     const blob = new Blob([finalHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -155,7 +208,8 @@ export const printPreviewExact = async (elementId: string, fileName: string): Pr
     const element = document.getElementById(elementId);
     if (!element) return;
     const isJadwalPrint = elementId === 'jadwal-print-area';
-    const content = element.innerHTML;
+    const isSarprasPrint = elementId === 'sarpras-print-area';
+    const content = extractPrintableContent(element, elementId);
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
@@ -170,7 +224,7 @@ export const printPreviewExact = async (elementId: string, fileName: string): Pr
 
     doc.open();
     doc.write(
-        `${buildUnifiedHtmlDocument(content, fileName, { showToolbar: false, isJadwalPrint })}
+        `${buildUnifiedHtmlDocument(content, fileName, { showToolbar: false, isJadwalPrint, isSarprasPrint })}
          <script>
             window.onload = () => {
                 setTimeout(() => {
@@ -193,7 +247,7 @@ export const exportToWord = (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
     const isJadwalPrint = elementId === 'jadwal-print-area';
-    const content = element.innerHTML;
+    const content = extractPrintableContent(element, elementId);
     const styles = collectDocumentStyles();
     const finalHtml = `
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -248,8 +302,8 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
     const doc = new jsPDF('p', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     
-    // Find all visual pages
-    const pages = element.querySelectorAll('.page-break-after');
+    // Find all visual pages (including the last page without page-break-after)
+    const pages = element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after');
     
     if (pages.length === 0) {
         alert("Tidak ditemukan halaman laporan yang bisa diproses.");
@@ -298,7 +352,7 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
             let allMetaLines: string[] = [];
             
             metaContainers.forEach(metaContainer => {
-                if (metaContainer.classList.contains('print-header-subtitle')) return;
+                if (metaContainer.classList.contains('print-header-subtitle') || metaContainer.classList.contains('report-signature-footer')) return;
                 
                 let metaText = '';
                 if (metaContainer.classList.contains('grid')) {
@@ -309,16 +363,17 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
                         }
                     });
                     metaText = metaText.replace(/ \|\ $/, '');
-                    if (metaText) allMetaLines.push(metaText);
+                    if (metaText && !metaText.toLowerCase().includes('dibuat dengan aplikasi esantri web')) allMetaLines.push(metaText);
                 } else if (metaContainer.nodeName.toLowerCase() === 'table') {
                     Array.from(metaContainer.querySelectorAll('tr')).forEach(tr => {
                         let rowText = '';
                         Array.from(tr.querySelectorAll('td, th')).forEach(td => rowText += (td.textContent?.trim() + " "));
-                        if (rowText.trim()) allMetaLines.push(rowText.replace(/\s+/g, ' ').trim());
+                        const cleaned = rowText.replace(/\s+/g, ' ').trim();
+                        if (cleaned && !cleaned.toLowerCase().includes('dibuat dengan aplikasi esantri web')) allMetaLines.push(cleaned);
                     });
                 } else {
                     metaText = metaContainer.textContent?.replace(/\s+/g, ' ').trim() || '';
-                    if (metaText) allMetaLines.push(metaText);
+                    if (metaText && !metaText.toLowerCase().includes('dibuat dengan aplikasi esantri web')) allMetaLines.push(metaText);
                 }
             });
             
@@ -369,7 +424,7 @@ export const exportPreviewToExcelWorksheets = async (elementId: string, fileName
     if (!element) return;
     const XLSX = await loadXLSX();
 
-    const pages = element.querySelectorAll('.page-break-after');
+    const pages = element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after');
     
     if (pages.length === 0) {
         alert("Tidak ditemukan halaman laporan yang bisa diproses.");
@@ -411,7 +466,7 @@ export const exportPreviewToExcelWorksheets = async (elementId: string, fileName
             titles.forEach(t => metaLines.push(t.textContent?.trim() || ''));
             
             metaContainers.forEach(metaContainer => {
-                if (metaContainer.classList.contains('print-header-subtitle')) return;
+                if (metaContainer.classList.contains('print-header-subtitle') || metaContainer.classList.contains('report-signature-footer')) return;
                 
                 let metaText = '';
                 if (metaContainer.classList.contains('grid')) {
@@ -420,16 +475,17 @@ export const exportPreviewToExcelWorksheets = async (elementId: string, fileName
                         if (text) metaText += text + " | ";
                     });
                     metaText = metaText.replace(/ \|\ $/, '');
-                    if (metaText) metaLines.push(metaText);
+                    if (metaText && !metaText.toLowerCase().includes('dibuat dengan aplikasi esantri web')) metaLines.push(metaText);
                 } else if (metaContainer.nodeName.toLowerCase() === 'table') {
                     Array.from(metaContainer.querySelectorAll('tr')).forEach(tr => {
                         let rowText = '';
                         Array.from(tr.querySelectorAll('td, th')).forEach(td => rowText += (td.textContent?.trim() + " "));
-                        if (rowText.trim()) metaLines.push(rowText.replace(/\s+/g, ' ').trim());
+                        const cleaned = rowText.replace(/\s+/g, ' ').trim();
+                        if (cleaned && !cleaned.toLowerCase().includes('dibuat dengan aplikasi esantri web')) metaLines.push(cleaned);
                     });
                 } else {
                     metaText = metaContainer.textContent?.replace(/\s+/g, ' ').trim() || '';
-                    if (metaText) metaLines.push(metaText);
+                    if (metaText && !metaText.toLowerCase().includes('dibuat dengan aplikasi esantri web')) metaLines.push(metaText);
                 }
             });
             metaLines = metaLines.filter(m => m !== '');

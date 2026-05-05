@@ -19,8 +19,18 @@ export const SarprasReportTemplate: React.FC<SarprasReportTemplateProps> = ({ se
     const kondisiRusak = assets.filter(a => a.kondisi !== 'Baik').length;
 
     return (
-        <div className="font-sans text-black p-6 bg-white flex flex-col h-full justify-between printable-content-wrapper" style={{ width: '21cm' }}>
-            <div>
+        <div
+            className="font-sans text-black p-6 bg-white printable-content-wrapper"
+            style={{
+                width: '21cm',
+                minHeight: '29.7cm',
+                margin: '0 auto',
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexDirection: 'column'
+            }}
+        >
+            <div style={{ flex: 1 }}>
                 <PrintHeader settings={settings} title="LAPORAN DATA ASET & INVENTARIS" />
                 
                 <div className="flex justify-between items-end mb-4 border-b-2 border-black pb-2">

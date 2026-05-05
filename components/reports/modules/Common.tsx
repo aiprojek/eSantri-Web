@@ -84,10 +84,8 @@ export const ReportFooter: React.FC = () => (
         className="report-signature-footer print-meta border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full"
         style={{
             breakInside: 'avoid',
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
+            position: 'relative',
+            marginTop: 'auto',
             paddingTop: '0.25cm',
             paddingBottom: '0.05cm',
             background: 'white',

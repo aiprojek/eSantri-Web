@@ -249,12 +249,12 @@ const Reports: React.FC = () => {
           setPreviewContent(
               <>
                   {generatedPages.map((p, i) => (
-                      <div key={i} className={`bg-white shadow-lg mx-auto page-break-after flex flex-col ${p.orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} ${i < generatedPages.length - 1 ? 'mb-8' : 'mb-2'}`}
+                      <div key={i} className={`bg-white shadow-lg mx-auto ${i < generatedPages.length - 1 ? 'page-break-after' : ''} flex flex-col ${p.orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} ${i < generatedPages.length - 1 ? 'mb-8' : 'mb-2'}`}
                           style={{ 
                               width: p.isFullPage ? 'auto' : `${p.orientation === 'landscape' ? currentPaper.height : currentPaper.width}cm`,
                               minHeight: p.isFullPage ? '0' : `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`
                           }}>
-                          <div style={{ padding: p.isFullPage ? '0' : `${currentMarginCm}cm ${currentMarginCm}cm ${Math.max(currentMarginCm, 1)}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%', position: 'relative' }}>
+                          <div style={{ padding: p.isFullPage ? '0' : `${currentMarginCm}cm ${currentMarginCm}cm ${Math.max(currentMarginCm, 1)}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%', boxSizing: 'border-box', position: 'relative' }}>
                               {p.content}
                           </div>
                       </div>

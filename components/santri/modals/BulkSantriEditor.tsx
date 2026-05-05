@@ -858,6 +858,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         'Lainnya',
     ];
     const displayDateRegex = /^(0?[1-9]|[12]\d|3[01])[\/-](0?[1-9]|1[0-2])[\/-]\d{4}$/;
+    const normalizeNisValue = (value: string): string => value.replace(/[\s./-]+/g, '').trim();
 
     const rowValidationErrors = useMemo(() => {
         const errorsByRow: Record<number, Record<string, string>> = {};
@@ -866,6 +867,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
             const rowErrors: Record<string, string> = {};
             const namaLengkap = String(row.namaLengkap || '').trim();
             const nis = String(row.nis || '').trim();
+            const normalizedNis = normalizeNisValue(nis);
             const nik = String(row.nik || '').trim();
             const tanggalLahir = String(row.tanggalLahir || '').trim();
             const tanggalMasuk = String(row.tanggalMasuk || '').trim();
@@ -875,7 +877,9 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
             const rombelId = Number(row.rombelId || 0);
 
             if (!namaLengkap) rowErrors.namaLengkap = 'Nama lengkap wajib diisi.';
-            if (nis && !/^\d+$/.test(nis)) rowErrors.nis = 'NIS hanya boleh angka.';
+            if (nis && (!/^[0-9\s./-]+$/.test(nis) || !/^\d+$/.test(normalizedNis))) {
+                rowErrors.nis = 'NIS hanya boleh angka (boleh pakai spasi/pemisah).';
+            }
             if (nik && !/^\d{16}$/.test(nik)) rowErrors.nik = 'NIK harus 16 digit angka.';
             if (tanggalLahir && !displayDateRegex.test(tanggalLahir)) rowErrors.tanggalLahir = 'Format tanggal lahir harus dd/mm/yyyy.';
             if (!tanggalMasuk) rowErrors.tanggalMasuk = 'Tanggal masuk wajib diisi.';
@@ -919,7 +923,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
             return Array.from(counts.entries()).reduce((acc, [, count]) => acc + (count > 1 ? count : 0), 0);
         };
 
-        const duplicateNisRows = countDuplicates(rows.map(row => String(row.nis || '').trim()));
+        const duplicateNisRows = countDuplicates(rows.map(row => normalizeNisValue(String(row.nis || ''))));
         const duplicateNikRows = countDuplicates(rows.map(row => String(row.nik || '').trim()));
 
         return {

@@ -84,6 +84,56 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
 
     const currentPaper = getPaperDimensions();
 
+    const paginateItems = <T,>(items: T[], perPage: number): T[][] => {
+        if (perPage <= 0) return [items];
+        const pages: T[][] = [];
+        for (let i = 0; i < items.length; i += perPage) {
+            pages.push(items.slice(i, i + perPage));
+        }
+        return pages;
+    };
+
+    const selectedSantri = useMemo(
+        () => filteredSantri.filter((s) => selectedSantriIds.includes(s.id)),
+        [filteredSantri, selectedSantriIds]
+    );
+    const selectedBuku = useMemo(
+        () => filteredBuku.filter((b) => selectedBukuIds.includes(b.id)),
+        [filteredBuku, selectedBukuIds]
+    );
+
+    const kartuPages = useMemo(() => {
+        if (selectedSantri.length === 0) return [];
+        const itemW = cardTheme === 'vertical' ? 5.398 : 8.56;
+        const itemH = cardTheme === 'vertical' ? 8.56 : 5.398;
+        const gap = 0.25;
+        const usableW = Math.max(1, currentPaper.w - (margin.left + margin.right));
+        const usableH = Math.max(1, currentPaper.h - (margin.top + margin.bottom));
+        const cols = Math.max(1, Math.floor((usableW + gap) / (itemW + gap)));
+        const rows = Math.max(1, Math.floor((usableH + gap) / (itemH + gap)));
+        return paginateItems(selectedSantri, cols * rows);
+    }, [selectedSantri, cardTheme, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom]);
+
+    const slipPages = useMemo(() => {
+        if (selectedBuku.length === 0) return [];
+        const gap = 0.35;
+        const usableW = Math.max(1, currentPaper.w - (margin.left + margin.right));
+        const usableH = Math.max(1, currentPaper.h - (margin.top + margin.bottom));
+        const cols = Math.max(1, Math.floor((usableW + gap) / (slipSize.w + gap)));
+        const rows = Math.max(1, Math.floor((usableH + gap) / (slipSize.h + gap)));
+        return paginateItems(selectedBuku, cols * rows);
+    }, [selectedBuku, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom, slipSize.w, slipSize.h]);
+
+    const labelPages = useMemo(() => {
+        if (selectedBuku.length === 0) return [];
+        const gap = 0.15;
+        const usableW = Math.max(1, currentPaper.w - (margin.left + margin.right));
+        const usableH = Math.max(1, currentPaper.h - (margin.top + margin.bottom));
+        const cols = Math.max(1, Math.floor((usableW + gap) / (labelSize.w + gap)));
+        const rows = Math.max(1, Math.floor((usableH + gap) / (labelSize.h + gap)));
+        return paginateItems(selectedBuku, cols * rows);
+    }, [selectedBuku, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom, labelSize.w, labelSize.h]);
+
     const handlePrint = (elementId: string, filename: string) => {
         // Inject style for print margin & size dynamically
         const styleId = 'dynamic-print-margin';
@@ -252,77 +302,89 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
             </div>
 
             {/* Preview Area */}
-            <div className="w-full lg:w-2/3 app-panel-soft rounded-panel border border-[color:var(--border-subtle)]">
-                <div className="border-b border-[color:var(--border-subtle)] px-4 py-3 sm:px-6">
+            <div className="w-full lg:w-2/3 app-panel-soft rounded-panel border border-[color:var(--border-subtle)] flex min-h-[560px] flex-col overflow-hidden">
+                <div className="sticky top-0 z-10 border-b border-[color:var(--border-subtle)] bg-[color:var(--bg-surface)] px-4 py-3 sm:px-6">
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-app-text-secondary">Preview Cetak</p>
                 </div>
-                <div className="app-scrollbar overflow-auto p-4 sm:p-6 lg:p-8 flex justify-center min-h-[480px]">
-                {activeTab === 'kartu' && selectedSantriIds.length > 0 && (
-                    <div 
-                        id="preview-kartu" 
-                        className="bg-white shadow-lg printable-content-wrapper rounded-md" 
-                        style={{ 
-                            width: `${currentPaper.w}cm`, 
-                            minHeight: `${currentPaper.h}cm`, 
-                            paddingTop: `${margin.top}cm`,
-                            paddingRight: `${margin.right}cm`,
-                            paddingBottom: `${margin.bottom}cm`,
-                            paddingLeft: `${margin.left}cm`
-                        }}
-                    >
-                        <div className="flex flex-wrap gap-2 justify-center content-start">
-                            {filteredSantri.filter(s => selectedSantriIds.includes(s.id)).map(santri => (
-                                <div key={santri.id} className="break-inside-avoid mb-2" style={{ pageBreakInside: 'avoid' }}>
-                                    <KartuPerpusTemplate santri={santri} settings={settings} theme={cardTheme as any} />
+                <div className="app-scrollbar h-[65vh] min-h-[460px] overflow-auto p-4 sm:h-[70vh] sm:p-6 lg:p-8 flex justify-center">
+                {activeTab === 'kartu' && kartuPages.length > 0 && (
+                    <div id="preview-kartu" className="space-y-6">
+                        {kartuPages.map((pageItems, pageIndex) => (
+                            <div
+                                key={`kartu-page-${pageIndex}`}
+                                className={`bg-white shadow-lg printable-content-wrapper rounded-md ${pageIndex < kartuPages.length - 1 ? 'page-break-after' : ''}`}
+                                style={{
+                                    width: `${currentPaper.w}cm`,
+                                    minHeight: `${currentPaper.h}cm`,
+                                    paddingTop: `${margin.top}cm`,
+                                    paddingRight: `${margin.right}cm`,
+                                    paddingBottom: `${margin.bottom}cm`,
+                                    paddingLeft: `${margin.left}cm`
+                                }}
+                            >
+                                <div className="flex flex-wrap gap-2 justify-center content-start">
+                                    {pageItems.map((santri) => (
+                                        <div key={santri.id} className="break-inside-avoid mb-2" style={{ pageBreakInside: 'avoid' }}>
+                                            <KartuPerpusTemplate santri={santri} settings={settings} theme={cardTheme as any} />
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 
-                {activeTab === 'slip' && selectedBukuIds.length > 0 && (
-                    <div 
-                        id="preview-slip" 
-                        className="bg-white shadow-lg printable-content-wrapper rounded-md" 
-                        style={{ 
-                            width: `${currentPaper.w}cm`, 
-                            minHeight: `${currentPaper.h}cm`, 
-                            paddingTop: `${margin.top}cm`,
-                            paddingRight: `${margin.right}cm`,
-                            paddingBottom: `${margin.bottom}cm`,
-                            paddingLeft: `${margin.left}cm`
-                        }}
-                    >
-                         <div className="flex flex-wrap gap-4 justify-start content-start">
-                            {filteredBuku.filter(b => selectedBukuIds.includes(b.id)).map(buku => (
-                                <div key={buku.id} className="break-inside-avoid mb-2" style={{ pageBreakInside: 'avoid' }}>
-                                    <SlipBukuTemplate buku={buku} settings={settings} width={slipSize.w} height={slipSize.h} />
+                {activeTab === 'slip' && slipPages.length > 0 && (
+                    <div id="preview-slip" className="space-y-6">
+                        {slipPages.map((pageItems, pageIndex) => (
+                            <div
+                                key={`slip-page-${pageIndex}`}
+                                className={`bg-white shadow-lg printable-content-wrapper rounded-md ${pageIndex < slipPages.length - 1 ? 'page-break-after' : ''}`}
+                                style={{
+                                    width: `${currentPaper.w}cm`,
+                                    minHeight: `${currentPaper.h}cm`,
+                                    paddingTop: `${margin.top}cm`,
+                                    paddingRight: `${margin.right}cm`,
+                                    paddingBottom: `${margin.bottom}cm`,
+                                    paddingLeft: `${margin.left}cm`
+                                }}
+                            >
+                                <div className="flex flex-wrap gap-4 justify-start content-start">
+                                    {pageItems.map((buku) => (
+                                        <div key={buku.id} className="break-inside-avoid mb-2" style={{ pageBreakInside: 'avoid' }}>
+                                            <SlipBukuTemplate buku={buku} settings={settings} width={slipSize.w} height={slipSize.h} />
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 
-                {activeTab === 'label' && selectedBukuIds.length > 0 && (
-                    <div 
-                        id="preview-label" 
-                        className="bg-white shadow-lg printable-content-wrapper rounded-md" 
-                        style={{ 
-                            width: `${currentPaper.w}cm`, 
-                            minHeight: `${currentPaper.h}cm`, 
-                            paddingTop: `${margin.top}cm`,
-                            paddingRight: `${margin.right}cm`,
-                            paddingBottom: `${margin.bottom}cm`,
-                            paddingLeft: `${margin.left}cm`
-                        }}
-                    >
-                         <div className="flex flex-wrap gap-1 justify-start content-start">
-                            {filteredBuku.filter(b => selectedBukuIds.includes(b.id)).map(buku => (
-                                <div key={buku.id} className="break-inside-avoid mb-1" style={{ pageBreakInside: 'avoid' }}>
-                                    <LabelBukuTemplate buku={buku} settings={settings} width={labelSize.w} height={labelSize.h} />
+                {activeTab === 'label' && labelPages.length > 0 && (
+                    <div id="preview-label" className="space-y-6">
+                        {labelPages.map((pageItems, pageIndex) => (
+                            <div
+                                key={`label-page-${pageIndex}`}
+                                className={`bg-white shadow-lg printable-content-wrapper rounded-md ${pageIndex < labelPages.length - 1 ? 'page-break-after' : ''}`}
+                                style={{
+                                    width: `${currentPaper.w}cm`,
+                                    minHeight: `${currentPaper.h}cm`,
+                                    paddingTop: `${margin.top}cm`,
+                                    paddingRight: `${margin.right}cm`,
+                                    paddingBottom: `${margin.bottom}cm`,
+                                    paddingLeft: `${margin.left}cm`
+                                }}
+                            >
+                                <div className="flex flex-wrap gap-1 justify-start content-start">
+                                    {pageItems.map((buku) => (
+                                        <div key={buku.id} className="break-inside-avoid mb-1" style={{ pageBreakInside: 'avoid' }}>
+                                            <LabelBukuTemplate buku={buku} settings={settings} width={labelSize.w} height={labelSize.h} />
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))}
                     </div>
                 )}
                 

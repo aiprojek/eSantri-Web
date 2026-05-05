@@ -598,7 +598,7 @@ const AppContent: React.FC = () => {
 
             <div className="min-h-screen">
                 <header className="app-topbar fixed inset-x-0 top-0 z-30 border-b no-print">
-                    <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-3.5 md:px-6 lg:px-8">
+                    <div className="flex w-full items-center justify-between gap-4 px-4 py-3.5 md:px-6 lg:px-8">
                         <div className="flex min-w-0 items-center gap-3">
                             <button
                                 onClick={() => setSidebarOpen(!isSidebarOpen)}
@@ -726,7 +726,7 @@ const AppContent: React.FC = () => {
                 </header>
 
                 <main className="app-canvas min-h-screen overflow-y-auto px-4 pb-8 pt-28 md:pl-[calc(17.5rem+1.5rem)] md:pr-6 md:pt-28 lg:pr-8">
-                    <div className="mx-auto max-w-[1600px]">
+                    <div className="w-full">
                     <ErrorBoundary>
                         {renderContent()}
                     </ErrorBoundary>

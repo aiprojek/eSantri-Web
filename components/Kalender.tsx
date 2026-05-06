@@ -142,9 +142,10 @@ interface PrintModalProps {
     settings: PondokSettings;
     events: CalendarEvent[];
     year: number;
+    isProcessing?: boolean;
 }
 
-const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTable, settings, events, year }) => {
+const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTable, settings, events, year, isProcessing = false }) => {
     const [theme, setTheme] = useState<'classic' | 'modern' | 'bold' | 'dark' | 'ceria'>('classic');
     const [layout, setLayout] = useState<'1_sheet' | '3_sheets' | '4_sheets'>('1_sheet');
     const [primarySystem, setPrimarySystem] = useState<'Masehi' | 'Hijriah'>('Masehi');
@@ -553,20 +554,22 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTab
 
                         <div className="p-4 border-t bg-gray-50 flex flex-col gap-2">
                             <button 
+                                disabled={isProcessing}
                                 onClick={() => onExportPdfTable({
                                     startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
                                 }, 'print')}
-                                className="w-full py-3 bg-teal-600 text-white rounded-lg font-bold shadow-lg hover:bg-teal-700 transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-teal-600 text-white rounded-lg font-bold shadow-lg hover:bg-teal-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                <i className="bi bi-printer-fill"></i> Cetak Kalender
+                                <i className={`bi ${isProcessing ? 'bi-arrow-repeat animate-spin' : 'bi-printer-fill'}`}></i> {isProcessing ? 'Memproses...' : 'Cetak Kalender'}
                             </button>
                             <button 
+                                disabled={isProcessing}
                                 onClick={() => onExportPdfTable({
                                     startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
                                 }, 'pdf')}
-                                className="w-full py-3 bg-red-600 text-white rounded-lg font-bold shadow-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-red-600 text-white rounded-lg font-bold shadow-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                <i className="bi bi-file-earmark-pdf-fill"></i> Export PDF
+                                <i className={`bi ${isProcessing ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-pdf-fill'}`}></i> {isProcessing ? 'Memproses...' : 'Export PDF'}
                             </button>
                         </div>
                     </div>
@@ -885,6 +888,7 @@ const Kalender: React.FC = () => {
     const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [primarySystem, setPrimarySystem] = useState<'Masehi' | 'Hijriah'>('Masehi');
     const [showFasting, setShowFasting] = useState(false); // NEW TOGGLE
     const [activeView, setActiveView] = useState<'kalender' | 'piket'>('kalender'); // NEW TAB
@@ -1077,15 +1081,20 @@ const Kalender: React.FC = () => {
     };
 
     const handlePrintRequest = (theme: any, layout: any, system: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => {
+        if (isExporting) return;
+        setIsExporting(true);
         setPrintConfig({ theme, layout, primarySystem: system, showKop, customImage, imagePosition });
         setIsPrintModalOpen(false);
         // Gunakan visual print agar hasil jendela cetak konsisten dengan preview kalender.
         setTimeout(() => {
             printVisualPreview('calendar-print-area', 'A4');
+            setTimeout(() => setIsExporting(false), 600);
         }, 1000);
     };
 
     const handleExportPdfRequest = (theme: any, layout: any, system: 'Masehi' | 'Hijriah', showKop: boolean, customImage?: string, imagePosition?: 'banner' | 'watermark' | 'none') => {
+        if (isExporting) return;
+        setIsExporting(true);
         setPrintConfig({ theme, layout, primarySystem: system, showKop, customImage, imagePosition });
         setIsPrintModalOpen(false);
         setTimeout(() => {
@@ -1093,10 +1102,13 @@ const Kalender: React.FC = () => {
                 fileName: `Kalender_Akademik_${anchorDate.getFullYear()}.pdf`,
                 paperSize: 'A4'
             });
+            setTimeout(() => setIsExporting(false), 600);
         }, 1000);
     };
 
     const handleExportPdfTableRequest = (options: any, mode: 'print' | 'pdf' = 'print') => {
+        if (isExporting) return;
+        setIsExporting(true);
         setPrintConfig({ 
             theme: options.theme, 
             layout: options.layout, 
@@ -1119,6 +1131,7 @@ const Kalender: React.FC = () => {
             } else {
                 printVisualPreview('calendar-print-area', 'A4');
             }
+            setTimeout(() => setIsExporting(false), 600);
         }, 1500);
     };
 
@@ -1229,8 +1242,8 @@ const Kalender: React.FC = () => {
                         </div>
 
                          <div className="flex gap-2 ml-auto">
-                            <button onClick={() => setIsPrintModalOpen(true)} className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center gap-2">
-                                <i className="bi bi-printer"></i> Cetak
+                            <button disabled={isExporting} onClick={() => setIsPrintModalOpen(true)} className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                                <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-printer'}`}></i> {isExporting ? 'Memproses...' : 'Cetak'}
                             </button>
                             {canWrite && (
                                 <div className="flex gap-2">
@@ -1345,6 +1358,7 @@ const Kalender: React.FC = () => {
                 settings={settings}
                 events={events}
                 year={anchorDate.getFullYear()}
+                isProcessing={isExporting}
             />
 
             {/* Hidden Print Area - Accessible by html2canvas but invisible to user */}

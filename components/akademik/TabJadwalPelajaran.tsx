@@ -10,7 +10,7 @@ import { formatDate } from '../reports/modules/Common';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { loadJsPdf, loadJsPdfAutoTable } from '../../utils/lazyClientLibs';
 import { formatAcademicYearDisplay, getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
-import { exportPreviewToExcelWorksheets, exportToHtml, exportToWord, printPreviewExact } from '../../utils/exportUtils';
+import { printExportFacade } from '../../utils/printExportFacade';
 
 // --- MODAL ARSIP ---
 interface ArchiveModalProps {
@@ -236,6 +236,7 @@ export const TabJadwalPelajaran: React.FC = () => {
     const [isTeacherLoadModalOpen, setIsTeacherLoadModalOpen] = useState(false);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     
     const [selectedSlot, setSelectedSlot] = useState<{ hari: number, jamKe: number } | null>(null);
     const [editingJadwal, setEditingJadwal] = useState<JadwalPelajaran | null>(null);
@@ -270,10 +271,32 @@ export const TabJadwalPelajaran: React.FC = () => {
         return [];
     }, [filterJenjangId, filterKelasId, filterRombelId, settings.rombel, settings.kelas]);
 
-    const exportTitleSuffix = filterRombelId
-        ? (settings.rombel.find(r => r.id === filterRombelId)?.nama || 'Rombel')
-        : `GABUNGAN_${targetRombels.length}_Kelas`;
-    const exportFileName = `Jadwal_${exportTitleSuffix}`;
+    const toSlug = (value: string) =>
+        value
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+    const getTimestampSlug = () => {
+        const now = new Date();
+        const yyyy = String(now.getFullYear());
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mi = String(now.getMinutes()).padStart(2, '0');
+        const ss = String(now.getSeconds()).padStart(2, '0');
+        return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+    };
+
+    const jenjangLabel = settings.jenjang.find((j) => j.id === filterJenjangId)?.nama || 'semua-marhalah';
+    const kelasLabel = filterKelasId
+        ? (settings.kelas.find((k) => k.id === filterKelasId)?.nama || 'kelas')
+        : 'semua-kelas';
+    const rombelLabel = filterRombelId
+        ? (settings.rombel.find((r) => r.id === filterRombelId)?.nama || 'rombel')
+        : 'semua-rombel';
+    const exportFileName = `${getTimestampSlug()}-jadwal-mapel-${toSlug(jenjangLabel)}-${toSlug(kelasLabel)}-${toSlug(rombelLabel)}`;
 
     // Use localJamConfig for display and editing
     const jamConfig = localJamConfig;
@@ -544,7 +567,7 @@ export const TabJadwalPelajaran: React.FC = () => {
             // Header
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
-            doc.text(`JADWAL PELAJARAN KELAS ${rombel.nama.toUpperCase()}`, 148.5, 15, { align: 'center' });
+            doc.text(getJadwalSheetTitle(rombel.id), 148.5, 15, { align: 'center' });
             
             doc.setFontSize(12);
             doc.setFont('helvetica', 'normal');
@@ -623,22 +646,29 @@ export const TabJadwalPelajaran: React.FC = () => {
         showToast('PDF Berhasil dibuat', 'success');
     };
 
-    const runExportAction = async (mode: 'pdfVisual' | 'print' | 'pdfAutoTable' | 'excel' | 'word' | 'html') => {
+    const runExportAction = async (mode: 'pdfVisual' | 'pdfImage' | 'print' | 'pdfAutoTable' | 'excel' | 'word' | 'html') => {
+        if (isExporting) return;
         if (targetRombels.length === 0) {
             showToast('Pilih setidaknya satu kelas untuk dicetak.', 'error');
             return;
         }
 
         setIsExportMenuOpen(false);
+        setIsExporting(true);
 
         try {
             if (mode === 'pdfVisual') {
-                await printPreviewExact('jadwal-print-area', exportFileName);
+                await printExportFacade.printDialog({ elementId: 'jadwal-print-area', fileName: exportFileName, paperSize: 'A4', target: 'jadwal' });
                 showToast('Dialog cetak dibuka. Pilih "Save as PDF" untuk hasil visual paling akurat.', 'info');
                 return;
             }
+            if (mode === 'pdfImage') {
+                await printExportFacade.downloadPdfImage({ elementId: 'jadwal-print-area', fileName: exportFileName, paperSize: 'A4', target: 'jadwal' });
+                showToast('PDF Gambar berhasil diunduh.', 'success');
+                return;
+            }
             if (mode === 'print') {
-                await printPreviewExact('jadwal-print-area', exportFileName);
+                await printExportFacade.printDialog({ elementId: 'jadwal-print-area', fileName: exportFileName, paperSize: 'A4', target: 'jadwal' });
                 return;
             }
             if (mode === 'pdfAutoTable') {
@@ -646,21 +676,23 @@ export const TabJadwalPelajaran: React.FC = () => {
                 return;
             }
             if (mode === 'excel') {
-                await exportPreviewToExcelWorksheets('jadwal-print-area', exportFileName);
+                await printExportFacade.downloadExcelVisual({ elementId: 'jadwal-print-area', fileName: exportFileName, paperSize: 'A4', target: 'jadwal' });
                 showToast('Excel berhasil diunduh.', 'success');
                 return;
             }
             if (mode === 'word') {
-                exportToWord('jadwal-print-area', exportFileName);
+                printExportFacade.downloadWord({ elementId: 'jadwal-print-area', fileName: exportFileName, paperSize: 'A4', target: 'jadwal' });
                 showToast('Word berhasil diunduh.', 'success');
                 return;
             }
             if (mode === 'html') {
-                exportToHtml('jadwal-print-area', exportFileName);
+                printExportFacade.downloadHtml({ elementId: 'jadwal-print-area', fileName: exportFileName, paperSize: 'A4', target: 'jadwal' });
                 showToast('HTML berhasil diunduh.', 'success');
             }
         } catch {
             showToast('Proses export gagal. Coba lagi.', 'error');
+        } finally {
+            setIsExporting(false);
         }
     };
     
@@ -671,6 +703,34 @@ export const TabJadwalPelajaran: React.FC = () => {
         const teacher = settings.tenagaPengajar.find(t => t.id === guruId);
         if (!teacher) return '-';
         return teacher.kodeGuru ? `${teacher.kodeGuru} - ${teacher.nama}` : teacher.nama;
+    };
+
+    const getJadwalSheetTitle = (rombelId: number): string => {
+        const rombel = settings.rombel.find((r) => r.id === rombelId);
+        if (!rombel) return 'JADWAL PELAJARAN KELAS';
+
+        const kelas = settings.kelas.find((k) => k.id === rombel.kelasId);
+        const jenjang = kelas ? settings.jenjang.find((j) => j.id === kelas.jenjangId) : undefined;
+
+        const parts = [
+            jenjang?.nama ? `JENJANG ${jenjang.nama.toUpperCase()}` : '',
+            kelas?.nama ? `KELAS ${kelas.nama.toUpperCase()}` : '',
+            `ROMBEL ${rombel.nama.toUpperCase()}`,
+        ].filter(Boolean);
+
+        return `JADWAL PELAJARAN ${parts.join(' | ')}`;
+    };
+
+    const getRombelMeta = (rombelId: number): { jenjang: string; kelas: string; rombel: string } => {
+        const rombel = settings.rombel.find((r) => r.id === rombelId);
+        if (!rombel) return { jenjang: '-', kelas: '-', rombel: '-' };
+        const kelas = settings.kelas.find((k) => k.id === rombel.kelasId);
+        const jenjang = kelas ? settings.jenjang.find((j) => j.id === kelas.jenjangId) : undefined;
+        return {
+            jenjang: jenjang?.nama || '-',
+            kelas: kelas?.nama || '-',
+            rombel: rombel.nama || '-',
+        };
     };
 
     // --- Archive Actions ---
@@ -760,17 +820,18 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 <span>Filter</span>
                             </button>
                             <div className="relative shrink-0">
-                                <button onClick={() => setIsExportMenuOpen(v => !v)} disabled={targetRombels.length === 0} className="w-[44px] h-[44px] flex items-center justify-center bg-gray-900 text-white rounded-xl disabled:opacity-50 shadow-lg">
-                                    <i className="bi bi-printer text-xl"></i>
+                                <button onClick={() => setIsExportMenuOpen(v => !v)} disabled={targetRombels.length === 0 || isExporting} className="w-[44px] h-[44px] flex items-center justify-center bg-gray-900 text-white rounded-xl disabled:opacity-50 shadow-lg">
+                                    <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-printer'} text-xl`}></i>
                                 </button>
                                 {isExportMenuOpen && (
                                     <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                        <button onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b">PDF Visual</button>
-                                        <button onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b">Cetak</button>
-                                        <button onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b">PDF AutoTable</button>
-                                        <button onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b">Excel</button>
-                                        <button onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b">Word</button>
-                                        <button onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50">HTML</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF Visual</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 border-b disabled:opacity-50">PDF Gambar</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b disabled:opacity-50">Cetak</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b disabled:opacity-50">PDF AutoTable</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b disabled:opacity-50">Excel</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b disabled:opacity-50">Word</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50 disabled:opacity-50">HTML</button>
                                     </div>
                                 )}
                             </div>
@@ -818,19 +879,20 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 </>
                             )}
                             <div className={`relative ${canWrite ? '' : 'md:col-span-3'}`}>
-                                <button onClick={() => setIsExportMenuOpen(v => !v)} disabled={targetRombels.length === 0} className="w-full justify-center bg-gray-900 text-white px-4 py-2.5 rounded-xl text-sm font-black items-center gap-2 hover:bg-black disabled:opacity-50 transition-all flex">
-                                    <i className="bi bi-printer"></i>
-                                    <span>Aksi Cetak Mapel</span>
+                                <button onClick={() => setIsExportMenuOpen(v => !v)} disabled={targetRombels.length === 0 || isExporting} className="w-full justify-center bg-gray-900 text-white px-4 py-2.5 rounded-xl text-sm font-black items-center gap-2 hover:bg-black disabled:opacity-50 transition-all flex">
+                                    <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-printer'}`}></i>
+                                    <span>{isExporting ? 'Memproses...' : 'Aksi Cetak Mapel'}</span>
                                     <i className={`bi ${isExportMenuOpen ? 'bi-chevron-up' : 'bi-chevron-down'} text-xs`}></i>
                                 </button>
                                 {isExportMenuOpen && (
                                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                        <button onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b">PDF Visual</button>
-                                        <button onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b">Cetak</button>
-                                        <button onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b">PDF AutoTable</button>
-                                        <button onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b">Excel</button>
-                                        <button onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b">Word</button>
-                                        <button onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50">HTML</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF Visual</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 border-b disabled:opacity-50">PDF Gambar</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b disabled:opacity-50">Cetak</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b disabled:opacity-50">PDF AutoTable</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b disabled:opacity-50">Excel</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b disabled:opacity-50">Word</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50 disabled:opacity-50">HTML</button>
                                     </div>
                                 )}
                             </div>
@@ -1021,7 +1083,12 @@ export const TabJadwalPelajaran: React.FC = () => {
                                     {targetRombels.map(rombel => (
                                         <div key={rombel.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                                             <div className="flex justify-between items-center mb-4 pb-2 border-b">
-                                                <h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="bi bi-calendar-event text-teal-600"></i> {rombel.nama}</h3>
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="bi bi-calendar-event text-teal-600"></i> {rombel.nama}</h3>
+                                                    <p className="text-[11px] text-gray-500 mt-0.5">
+                                                        Jenjang: {getRombelMeta(rombel.id).jenjang} | Kelas: {getRombelMeta(rombel.id).kelas}
+                                                    </p>
+                                                </div>
                                                 {canWrite && (
                                                     <button onClick={() => handleEditRombel(rombel.id)} className="text-xs bg-teal-50 text-teal-700 px-3 py-1.5 rounded hover:bg-teal-100 font-medium border border-teal-200 flex items-center gap-1 transition-colors">
                                                         <i className="bi bi-pencil-square"></i> Edit Jadwal
@@ -1113,9 +1180,9 @@ export const TabJadwalPelajaran: React.FC = () => {
                     <div className="hidden print:block">
                         <div id="jadwal-print-area">
                             {targetRombels.map((rombel, idx) => (
-                                <div key={rombel.id} className="printable-content-wrapper jadwal-sheet bg-white page-break-after relative" style={{ width: '29.7cm', minHeight: '21cm', marginBottom: idx < targetRombels.length-1 ? '2cm' : '0' }}> 
+                                <div key={rombel.id} className="printable-content-wrapper jadwal-sheet print-landscape bg-white page-break-after relative" style={{ width: '29.7cm', minHeight: '21cm', marginBottom: idx < targetRombels.length-1 ? '2cm' : '0' }}> 
                                     <div className="jadwal-header-block">
-                                        <PrintHeader settings={settings} compact title={`JADWAL PELAJARAN KELAS ${rombel.nama.toUpperCase()}`} />
+                                        <PrintHeader settings={settings} compact title={getJadwalSheetTitle(rombel.id)} />
                                     </div>
                                     <div className="jadwal-table-block">
                                     <table className="w-full border-collapse border border-black text-center text-[10px] mt-1">

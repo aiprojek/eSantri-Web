@@ -4,6 +4,7 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { generateRaporFormHtml } from '../../services/academicService';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
+import { buildStandardExportFileName } from '../../utils/exportFileName';
 
 const GOOGLE_SCRIPT_TEMPLATE = `
 /* GOOGLE APPS SCRIPT FOR RAPOR (eSantri Web) */
@@ -308,13 +309,9 @@ export const TabGeneratorFormulir: React.FC = () => {
             const a = document.createElement('a');
             a.href = url;
             
-            let filename = `Form_Nilai_`;
-            if (genRombelId > 0) {
-                 filename += settings.rombel.find(r=>r.id===genRombelId)?.nama;
-            } else if (genJenjangId > 0) {
-                 filename += `Jenjang_${settings.jenjang.find(j=>j.id===genJenjangId)?.nama}_ALL`;
-            }
-            
+            const targetJenjang = genJenjangId > 0 ? settings.jenjang.find(j => j.id === genJenjangId)?.nama : 'semua-marhalah';
+            const targetRombel = genRombelId > 0 ? settings.rombel.find(r => r.id === genRombelId)?.nama : 'semua-rombel';
+            const filename = buildStandardExportFileName('form-nilai', [targetJenjang, targetRombel, genSemester, genTahunAjaran]);
             a.download = `${filename}.html`;
             document.body.appendChild(a);
             a.click();

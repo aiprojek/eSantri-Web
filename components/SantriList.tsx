@@ -15,6 +15,7 @@ import { SantriFilterBar } from './common/SantriFilterBar';
 import { PageHeader } from './common/PageHeader';
 import { SectionCard } from './common/SectionCard';
 import { EmptyState } from './common/EmptyState';
+import { buildStandardExportFileName } from '../utils/exportFileName';
 
 const SantriList: React.FC = () => {
     const { settings, showToast, showConfirmation, currentUser } = useAppContext();
@@ -175,7 +176,11 @@ const SantriList: React.FC = () => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'template_santri.csv';
+        a.download = `${buildStandardExportFileName('template-santri', [
+            santriFilters.jenjang || 'semua-marhalah',
+            santriFilters.kelas || 'semua-kelas',
+            santriFilters.rombel || 'semua-rombel',
+        ])}.csv`;
         a.click();
         window.URL.revokeObjectURL(url);
         setIsOptionsMenuOpen(false);
@@ -187,7 +192,11 @@ const SantriList: React.FC = () => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'data_santri_backup.csv';
+        a.download = `${buildStandardExportFileName('backup-santri', [
+            santriFilters.jenjang || 'semua-marhalah',
+            santriFilters.kelas || 'semua-kelas',
+            santriFilters.rombel || 'semua-rombel',
+        ])}.csv`;
         a.click();
         window.URL.revokeObjectURL(url);
         setIsOptionsMenuOpen(false);

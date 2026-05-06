@@ -1,10 +1,10 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { ReportType } from '../../types';
-import { exportToHtml, exportToAutoTable, exportPreviewToExcelWorksheets, exportToWord, printPreviewExact } from '../../utils/exportUtils';
 import { generateContactCsv } from '../../services/csvService';
 import { exportSantriToExcel, exportContactsToExcel, exportArusKasToExcel, exportFinanceSummaryToExcel, exportEmisTemplate } from '../../services/excelService';
-import { generatePdf } from '../../utils/pdfGenerator';
+import { printExportFacade } from '../../utils/printExportFacade';
+import { buildStandardExportFileName } from '../../utils/exportFileName';
 
 interface ReportPreviewPanelProps {
     previewContent: React.ReactNode | null;
@@ -60,21 +60,6 @@ const REPORT_LABELS: Record<ReportType, string> = {
     [ReportType.RekapKonseling]: 'rekap-konseling',
 };
 
-const toFileSlug = (value: string): string =>
-    value
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-
-const getDateDDMMYYYY = (): string => {
-    const now = new Date();
-    const dd = String(now.getDate()).padStart(2, '0');
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const yyyy = String(now.getFullYear());
-    return `${dd}${mm}${yyyy}`;
-};
-
 export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewContent, activeReport, pageCount, isLoading, paperSize, onToast, filteredSantri, settings, filters, excelData }) => {
     const previewContainerRef = useRef<HTMLDivElement>(null);
     const contentWrapperRef = useRef<HTMLDivElement>(null);
@@ -87,13 +72,11 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const [showDonationModal, setShowDonationModal] = useState(false);
 
     const getBaseFileName = (): string => {
-        const reportName = REPORT_LABELS[activeReport] ?? toFileSlug(activeReport);
-        const jenjangName = filters.jenjangId ? settings.jenjang.find((j: any) => j.id === parseInt(filters.jenjangId, 10))?.nama : '';
-        const kelasName = filters.kelasId ? settings.kelas.find((k: any) => k.id === parseInt(filters.kelasId, 10))?.nama : '';
-        const rombelName = filters.rombelId ? settings.rombel.find((r: any) => r.id === parseInt(filters.rombelId, 10))?.nama : '';
-        const filterParts = [jenjangName, kelasName, rombelName].filter(Boolean).map(toFileSlug).filter(Boolean);
-        const filterSegment = filterParts.length > 0 ? `-(${filterParts.join('-')})` : '';
-        return `${reportName}${filterSegment}-${getDateDDMMYYYY()}`;
+        const reportName = REPORT_LABELS[activeReport] ?? activeReport;
+        const jenjangName = filters.jenjangId ? settings.jenjang.find((j: any) => j.id === parseInt(filters.jenjangId, 10))?.nama : 'semua-marhalah';
+        const kelasName = filters.kelasId ? settings.kelas.find((k: any) => k.id === parseInt(filters.kelasId, 10))?.nama : 'semua-kelas';
+        const rombelName = filters.rombelId ? settings.rombel.find((r: any) => r.id === parseInt(filters.rombelId, 10))?.nama : 'semua-rombel';
+        return buildStandardExportFileName(reportName, [jenjangName, kelasName, rombelName]);
     };
 
     // Auto-fit zoom logic
@@ -139,7 +122,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handlePrintNative = async () => {
         setIsGeneratingFile(true);
         try {
-            await printPreviewExact('preview-area', `${getBaseFileName()}.pdf`);
+            await printExportFacade.printDialog({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             onToast('Membuka dialog cetak...', 'info');
             setTimeout(() => setShowDonationModal(true), 2000);
         } catch (error) {
@@ -153,7 +136,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadVisualPdf = async () => {
         setIsGeneratingFile(true);
         try {
-            await printPreviewExact('preview-area', `${getBaseFileName()}.pdf`);
+            await printExportFacade.printDialog({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             onToast('Dialog cetak dibuka. Pilih "Save as PDF" untuk hasil vector.', 'info');
             setTimeout(() => setShowDonationModal(true), 2000);
         } catch (error) {
@@ -168,10 +151,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadImagePdf = async () => {
         setIsGeneratingFile(true);
         try {
-            await generatePdf('preview-area', {
-                paperSize: paperSize || 'A4',
-                fileName: `${getBaseFileName()}.pdf`
-            });
+            await printExportFacade.downloadPdfImage({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('PDF Gambar berhasil diunduh.');
         } catch (error) {
             console.error(error);
@@ -234,7 +214,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadAutoTable = async () => {
         setIsGeneratingFile(true);
         try {
-            await exportToAutoTable('preview-area', getBaseFileName());
+            await printExportFacade.downloadPdfAutoTable({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('PDF AutoTable berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor AutoTable.', 'error');
@@ -247,7 +227,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadVisualExcel = async () => {
         setIsGeneratingFile(true);
         try {
-            await exportPreviewToExcelWorksheets('preview-area', getBaseFileName());
+            await printExportFacade.downloadExcelVisual({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('Excel Visual berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor Excel Visual.', 'error');
@@ -260,7 +240,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadHtml = () => {
         setIsGeneratingFile(true);
         try {
-            exportToHtml('preview-area', getBaseFileName());
+            printExportFacade.downloadHtml({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('HTML Offline berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor HTML.', 'error');
@@ -273,7 +253,7 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const handleDownloadWord = () => {
         setIsGeneratingFile(true);
         try {
-            exportToWord('preview-area', getBaseFileName());
+            printExportFacade.downloadWord({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('Word Document (.doc) berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor Word Document.', 'error');

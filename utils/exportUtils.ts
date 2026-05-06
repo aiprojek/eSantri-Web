@@ -38,22 +38,30 @@ const getUnifiedPreviewPrintStyles = () => `
         position: relative !important;
     }
     #jadwal-print-area .jadwal-sheet {
-        display: flex !important;
-        flex-direction: column !important;
-        height: 21cm !important;
+        display: block !important;
+        min-height: 21cm !important;
+        height: auto !important;
     }
     #jadwal-print-area .jadwal-header-block {
-        flex: 0 0 auto !important;
+        display: block !important;
     }
     #jadwal-print-area .jadwal-table-block {
-        flex: 1 1 auto !important;
-        min-height: 0 !important;
-        overflow: hidden !important;
+        display: block !important;
+        overflow: visible !important;
     }
     #jadwal-print-area table {
         margin-top: 0.35cm !important;
         page-break-before: avoid !important;
         break-before: avoid-page !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+    }
+    #jadwal-print-area .report-signature-footer {
+        position: relative !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        margin-top: 0.2cm !important;
     }
         @media print {
             html, body {
@@ -105,6 +113,14 @@ const getUnifiedPreviewPrintStyles = () => `
         #jadwal-print-area .page-break-after {
             width: 29.7cm !important;
             min-height: 21cm !important;
+            box-sizing: border-box !important;
+            overflow: visible !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+        }
+        #jadwal-print-area .jadwal-sheet {
+            min-height: 21cm !important;
+            height: auto !important;
         }
     }
 `;
@@ -409,6 +425,14 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
             // @ts-ignore
             yPos = (doc as any).lastAutoTable.finalY + 5;
         });
+
+        // Credit line placed after table area (kept above bottom margin)
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const creditY = Math.min(Math.max(yPos + 3, 18), pageHeight - 8);
+        doc.setFontSize(8);
+        doc.setTextColor(120, 120, 120);
+        doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', pageWidth / 2, creditY, { align: 'center' });
+        doc.setTextColor(0, 0, 0);
     });
 
     if (isFirstPage) {

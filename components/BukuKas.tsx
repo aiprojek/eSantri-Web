@@ -7,6 +7,8 @@ import { TransaksiKas } from '../types';
 import { formatRupiah } from '../utils/formatters';
 import { db } from '../db';
 import { loadXLSX } from '../utils/lazyClientLibs';
+import { buildStandardExportFileName } from '../utils/exportFileName';
+import { printExportFacade } from '../utils/printExportFacade';
 import { Pagination } from './common/Pagination';
 import { PageHeader } from './common/PageHeader';
 import { SectionCard } from './common/SectionCard';
@@ -78,6 +80,7 @@ const BukuKas: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const itemsPerPage = 15;
     
     // Stats State (Calculated separately for full view)
@@ -201,22 +204,22 @@ const BukuKas: React.FC = () => {
     };
 
     const buildFileName = (ext: 'csv' | 'xlsx') => {
-        const d = new Date();
-        const stamp = `${String(d.getDate()).padStart(2, '0')}${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
         const suffix = [
             filters.startDate ? `from-${filters.startDate}` : '',
             filters.endDate ? `to-${filters.endDate}` : '',
             filters.jenis || 'semua-jenis',
             filters.kategori ? `kat-${filters.kategori.replace(/\s+/g, '-')}` : '',
-        ].filter(Boolean).join('_');
-        return `buku-kas_${suffix || 'semua-data'}_${stamp}.${ext}`;
+        ].filter(Boolean);
+        return `${buildStandardExportFileName('buku-kas', suffix)}.${ext}`;
     };
 
     const handleExportCsv = () => {
+        if (isExporting) return;
         if (filteredRows.length === 0) {
             showToast('Tidak ada data untuk diekspor.', 'info');
             return;
         }
+        setIsExporting(true);
         const rows = buildExportRows();
         const headers = Object.keys(rows[0]);
         const csv = [
@@ -235,13 +238,16 @@ const BukuKas: React.FC = () => {
         link.click();
         URL.revokeObjectURL(url);
         showToast('Ekspor CSV berhasil.', 'success');
+        setIsExporting(false);
     };
 
     const handleExportExcel = async () => {
+        if (isExporting) return;
         if (filteredRows.length === 0) {
             showToast('Tidak ada data untuk diekspor.', 'info');
             return;
         }
+        setIsExporting(true);
         try {
             const XLSX = await loadXLSX();
             const rows = buildExportRows();
@@ -252,6 +258,35 @@ const BukuKas: React.FC = () => {
             showToast('Ekspor Excel berhasil.', 'success');
         } catch (e) {
             showAlert('Ekspor Gagal', 'Terjadi kendala saat membuat file Excel.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleExportPdfImage = async () => {
+        if (isExporting) return;
+        if (filteredRows.length === 0) {
+            showToast('Tidak ada data untuk diekspor.', 'info');
+            return;
+        }
+        setIsExporting(true);
+        try {
+            const suffix = [
+                filters.startDate ? `from-${filters.startDate}` : '',
+                filters.endDate ? `to-${filters.endDate}` : '',
+                filters.jenis || 'semua-jenis',
+                filters.kategori ? `kat-${filters.kategori.replace(/\s+/g, '-')}` : '',
+            ].filter(Boolean);
+            await printExportFacade.downloadPdfImage({
+                elementId: 'buku-kas-export-area',
+                fileName: buildStandardExportFileName('buku-kas', suffix),
+                paperSize: 'A4',
+            });
+            showToast('Ekspor PDF Gambar berhasil.', 'success');
+        } catch (e) {
+            showAlert('Ekspor Gagal', 'Terjadi kendala saat membuat PDF Gambar.');
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -270,6 +305,7 @@ const BukuKas: React.FC = () => {
                 <StatCard title="Saldo Akhir (Aktual)" value={formatRupiah(stats.saldoAkhir)} icon="bi-wallet2" color="bg-blue-100 text-blue-600" textColor="text-blue-600" />
             </div>
 
+            <div id="buku-kas-export-area">
             <SectionCard title="Transaksi Kas" description="Gunakan filter untuk menelusuri transaksi dan memantau posisi saldo." contentClassName="overflow-hidden">
                 <div className="app-toolbar border-b border-app-border p-4">
                     <div className="mb-3 flex flex-wrap items-center gap-2 lg:mb-2">
@@ -277,8 +313,9 @@ const BukuKas: React.FC = () => {
                         <button type="button" onClick={() => applyDatePreset(7)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">7 Hari</button>
                         <button type="button" onClick={() => applyDatePreset(30)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">30 Hari</button>
                         <button type="button" onClick={resetFilters} className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100">Reset Filter</button>
-                        <button type="button" onClick={handleExportCsv} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"><i className="bi bi-filetype-csv mr-1"></i>CSV</button>
-                        <button type="button" onClick={handleExportExcel} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"><i className="bi bi-file-earmark-spreadsheet mr-1"></i>Excel</button>
+                        <button type="button" disabled={isExporting} onClick={handleExportPdfImage} className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-image'} mr-1`}></i>{isExporting ? 'Memproses...' : 'PDF Gambar'}</button>
+                        <button type="button" disabled={isExporting} onClick={handleExportCsv} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-filetype-csv'} mr-1`}></i>{isExporting ? 'Memproses...' : 'CSV'}</button>
+                        <button type="button" disabled={isExporting} onClick={handleExportExcel} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-spreadsheet'} mr-1`}></i>{isExporting ? 'Memproses...' : 'Excel'}</button>
                     </div>
                     <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-4">
                         <div>
@@ -369,6 +406,7 @@ const BukuKas: React.FC = () => {
                      <Pagination currentPage={currentPage} totalPages={Math.ceil(totalItems / itemsPerPage)} onPageChange={setCurrentPage} />
                 </div>
             </SectionCard>
+            </div>
             {isModalOpen && <TransaksiModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSave} existingKategori={existingKategori} />}
         </div>
     );

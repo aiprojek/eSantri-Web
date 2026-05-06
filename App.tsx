@@ -695,7 +695,7 @@ const AppContent: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={openQuickHelp}
-                                className="hidden items-center gap-2 rounded-full border border-app-border bg-white px-3 py-2 text-sm font-semibold text-app-text shadow-soft transition-colors hover:border-teal-200 hover:bg-teal-50/60 md:flex"
+                                className="hidden h-11 items-center gap-2 rounded-full border border-app-border bg-white px-3 text-sm font-semibold text-app-text shadow-soft transition-colors hover:border-teal-200 hover:bg-teal-50/60 md:flex"
                                 aria-label="Buka Quick Help"
                                 title="Quick Help"
                             >

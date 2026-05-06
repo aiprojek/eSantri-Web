@@ -25,6 +25,7 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
     // Custom Dimensions State
     const [slipSize, setSlipSize] = useState({ w: 7.5, h: 12.0 });
     const [labelSize, setLabelSize] = useState({ w: 3.0, h: 4.0 });
+    const [isProcessingPrint, setIsProcessingPrint] = useState(false);
 
     // Kartu Anggota State
     const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
@@ -135,6 +136,8 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
     }, [selectedBuku, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom, labelSize.w, labelSize.h]);
 
     const handlePrint = (elementId: string, filename: string) => {
+        if (isProcessingPrint) return;
+        setIsProcessingPrint(true);
         // Inject style for print margin & size dynamically
         const styleId = 'dynamic-print-margin';
         let styleEl = document.getElementById(styleId);
@@ -154,6 +157,7 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
         `; 
         
         printToPdfNative(elementId, filename);
+        setTimeout(() => setIsProcessingPrint(false), 700);
     };
 
     return (
@@ -258,7 +262,7 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                                 </div>
                             ))}
                         </div>
-                        <button onClick={() => handlePrint('preview-kartu', 'Kartu_Anggota_Perpus')} disabled={selectedSantriIds.length === 0} className="w-full bg-teal-600 text-white py-2 rounded font-bold hover:bg-teal-700 disabled:bg-gray-300">Cetak Kartu</button>
+                        <button onClick={() => handlePrint('preview-kartu', 'Kartu_Anggota_Perpus')} disabled={selectedSantriIds.length === 0 || isProcessingPrint} className="w-full bg-teal-600 text-white py-2 rounded font-bold hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed">{isProcessingPrint ? 'Memproses...' : 'Cetak Kartu'}</button>
                     </div>
                 )}
 
@@ -292,10 +296,10 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                         </div>
                         <button 
                             onClick={() => handlePrint(activeTab === 'slip' ? 'preview-slip' : 'preview-label', activeTab === 'slip' ? 'Slip_Buku' : 'Label_Buku')} 
-                            disabled={selectedBukuIds.length === 0} 
+                            disabled={selectedBukuIds.length === 0 || isProcessingPrint} 
                             className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:bg-gray-300"
                         >
-                            {activeTab === 'slip' ? 'Cetak Slip' : 'Cetak Label'}
+                            {isProcessingPrint ? 'Memproses...' : (activeTab === 'slip' ? 'Cetak Slip' : 'Cetak Label')}
                         </button>
                     </div>
                 )}

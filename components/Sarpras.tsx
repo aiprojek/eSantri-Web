@@ -6,9 +6,9 @@ import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { Inventaris } from '../types';
 import { formatRupiah, formatDateTime } from '../utils/formatters';
-import { generatePdf, printVisualPreview } from '../utils/pdfGenerator';
 import { loadXLSX } from '../utils/lazyClientLibs';
-import { exportToHtml, exportToWord } from '../utils/exportUtils';
+import { printExportFacade } from '../utils/printExportFacade';
+import { buildStandardExportFileName } from '../utils/exportFileName';
 import { SarprasReportTemplate } from './sarpras/SarprasReportTemplate';
 import { PageHeader } from './common/PageHeader';
 import { SectionCard } from './common/SectionCard';
@@ -232,6 +232,7 @@ const Sarpras: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterKondisi, setFilterKondisi] = useState('');
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -283,29 +284,34 @@ const Sarpras: React.FC = () => {
     };
 
     const buildSarprasFileName = () => {
-        const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const scope = activeTab === 'dashboard' ? 'semua' : activeTab === 'bergerak' ? 'bergerak' : 'tetap';
-        return `Laporan_Sarpras_${scope}_${datePart}`;
+        return buildStandardExportFileName('laporan-sarpras', [scope]);
     };
 
-    const handleExportAction = async (type: 'pdfVisual' | 'print' | 'word' | 'excel' | 'html') => {
+    const handleExportAction = async (type: 'pdfVisual' | 'pdfImage' | 'print' | 'word' | 'excel' | 'html') => {
+        if (isExporting) return;
         const fileName = buildSarprasFileName();
         setIsExportMenuOpen(false);
+        setIsExporting(true);
         try {
             if (type === 'pdfVisual') {
-                await generatePdf('sarpras-print-area', { paperSize: 'A4', fileName: `${fileName}.pdf` });
+                await printExportFacade.printDialog({ elementId: 'sarpras-print-area', fileName, paperSize: 'A4', target: 'sarpras' });
+                return;
+            }
+            if (type === 'pdfImage') {
+                await printExportFacade.downloadPdfImage({ elementId: 'sarpras-print-area', fileName, paperSize: 'A4', target: 'sarpras' });
                 return;
             }
             if (type === 'print') {
-                await printVisualPreview('sarpras-print-area', 'A4');
+                await printExportFacade.printDialog({ elementId: 'sarpras-print-area', fileName, paperSize: 'A4', target: 'sarpras' });
                 return;
             }
             if (type === 'word') {
-                exportToWord('sarpras-print-area', fileName);
+                printExportFacade.downloadWord({ elementId: 'sarpras-print-area', fileName, paperSize: 'A4', target: 'sarpras' });
                 return;
             }
             if (type === 'html') {
-                exportToHtml('sarpras-print-area', fileName);
+                printExportFacade.downloadHtml({ elementId: 'sarpras-print-area', fileName, paperSize: 'A4', target: 'sarpras' });
                 return;
             }
             if (type === 'excel') {
@@ -335,6 +341,8 @@ const Sarpras: React.FC = () => {
         } catch (error) {
             console.error(error);
             showToast('Gagal mengekspor laporan sarpras.', 'error');
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -374,17 +382,20 @@ const Sarpras: React.FC = () => {
                         <div className="relative">
                             <button
                                 onClick={() => setIsExportMenuOpen(prev => !prev)}
-                                className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center justify-center gap-2 w-full lg:w-auto"
+                                disabled={isExporting}
+                                className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center justify-center gap-2 w-full lg:w-auto disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                <i className="bi bi-printer-fill"></i> Aksi Laporan
+                                <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-printer-fill'}`}></i>
+                                {isExporting ? 'Memproses...' : 'Aksi Laporan'}
                             </button>
                             {isExportMenuOpen && (
                                 <div className="absolute right-0 z-20 mt-2 w-44 rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden">
-                                    <button onClick={() => handleExportAction('pdfVisual')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">PDF Visual</button>
-                                    <button onClick={() => handleExportAction('print')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">Cetak</button>
-                                    <button onClick={() => handleExportAction('word')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">Word</button>
-                                    <button onClick={() => handleExportAction('excel')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">Excel</button>
-                                    <button onClick={() => handleExportAction('html')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">HTML</button>
+                                    <button disabled={isExporting} onClick={() => handleExportAction('pdfVisual')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">PDF Visual</button>
+                                    <button disabled={isExporting} onClick={() => handleExportAction('pdfImage')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">PDF Gambar</button>
+                                    <button disabled={isExporting} onClick={() => handleExportAction('print')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">Cetak</button>
+                                    <button disabled={isExporting} onClick={() => handleExportAction('word')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">Word</button>
+                                    <button disabled={isExporting} onClick={() => handleExportAction('excel')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">Excel</button>
+                                    <button disabled={isExporting} onClick={() => handleExportAction('html')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">HTML</button>
                                 </div>
                             )}
                         </div>

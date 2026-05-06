@@ -7,6 +7,8 @@ import { PrintHeader } from './common/PrintHeader';
 import { ReportFooter } from './reports/modules/Common';
 import { JurnalMengajarModal } from './akademik/modals/JurnalMengajarModal';
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from '../utils/lazyClientLibs';
+import { buildStandardExportFileName } from '../utils/exportFileName';
+import { printExportFacade } from '../utils/printExportFacade';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
 import { MobileFilterDrawer } from './common/MobileFilterDrawer';
@@ -471,7 +473,7 @@ const AbsensiInput: React.FC = () => {
 
 // --- SUB-COMPONENT: REKAP & LAPORAN ---
 const AbsensiRekap: React.FC = () => {
-    const { settings } = useAppContext();
+    const { settings, showToast } = useAppContext();
     const { santriList, absensiList } = useSantriContext();
     
     const now = new Date();
@@ -479,6 +481,7 @@ const AbsensiRekap: React.FC = () => {
     const [tahun, setTahun] = useState(now.getFullYear());
     const [rombelId, setRombelId] = useState<number>(0);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const exportMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -541,13 +544,39 @@ const AbsensiRekap: React.FC = () => {
     }, [attendanceMatrix]);
 
     const handlePrint = () => {
+        if (isExporting) return;
+        setIsExporting(true);
         window.print();
+        setTimeout(() => setIsExporting(false), 500);
     };
 
-    const handleExport = async (format: 'xlsx' | 'pdf') => {
+    const handleExport = async (format: 'xlsx' | 'pdf' | 'pdfImage') => {
+        if (isExporting) return;
         setIsExportMenuOpen(false);
-        const fileName = `Rekap_Absensi_${selectedRombel?.nama.replace(/\s+/g, '_')}_${bulan}_${tahun}`;
+        setIsExporting(true);
+        const fileName = buildStandardExportFileName('rekap-absensi', [
+            selectedRombel?.nama || 'semua-rombel',
+            `bulan-${bulan}`,
+            `tahun-${tahun}`,
+        ]);
         const periodeName = new Date(tahun, bulan - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
+        if (format === 'pdfImage') {
+            try {
+                await printExportFacade.downloadPdfImage({
+                    elementId: 'absensi-rekap-export-area',
+                    fileName,
+                    paperSize: 'A4',
+                });
+                showToast('PDF Gambar berhasil diunduh.', 'success');
+            } catch (error) {
+                console.error(error);
+                alert('Gagal membuat PDF Gambar. Cek konsol.');
+            } finally {
+                setIsExporting(false);
+            }
+            return;
+        }
 
         if (format === 'pdf') {
             try {
@@ -648,11 +677,14 @@ const AbsensiRekap: React.FC = () => {
             } catch (error) {
                 console.error(error);
                 alert("Gagal membuat PDF. Cek konsol.");
+            } finally {
+                setIsExporting(false);
             }
         } else if (format === 'xlsx') {
-            const XLSX = await loadXLSX();
-            const wb = XLSX.utils.book_new();
-            const wsData: any[][] = [];
+            try {
+                const XLSX = await loadXLSX();
+                const wb = XLSX.utils.book_new();
+                const wsData: any[][] = [];
             
             // Header
             wsData.push([settings.namaPonpes]);
@@ -677,22 +709,25 @@ const AbsensiRekap: React.FC = () => {
                 wsData.push(row);
             });
 
-            const ws = XLSX.utils.aoa_to_sheet(wsData);
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
             
             // Adjust col widths
-            const wscols = [{wch: 5}, {wch: 30}];
-            for(let i=0; i<daysInMonth; i++) wscols.push({wch: 3}); // Date cols
-            wscols.push({wch: 5}, {wch: 5}, {wch: 5}, {wch: 5}); // Summary cols
-            ws['!cols'] = wscols;
+                const wscols = [{wch: 5}, {wch: 30}];
+                for(let i=0; i<daysInMonth; i++) wscols.push({wch: 3}); // Date cols
+                wscols.push({wch: 5}, {wch: 5}, {wch: 5}, {wch: 5}); // Summary cols
+                ws['!cols'] = wscols;
 
-            XLSX.utils.book_append_sheet(wb, ws, "Absensi");
-            XLSX.writeFile(wb, `${fileName}.xlsx`);
+                XLSX.utils.book_append_sheet(wb, ws, "Absensi");
+                XLSX.writeFile(wb, `${fileName}.xlsx`);
+            } finally {
+                setIsExporting(false);
+            }
         }
     };
 
     return (
         <div className="space-y-6">
-            <div className="bg-white p-6 rounded-lg shadow-md no-print">
+            <div id="absensi-rekap-export-area" className="bg-white p-6 rounded-lg shadow-md no-print">
                 <div className="flex flex-col xl:flex-row justify-between items-end gap-4 mb-6">
                     <div>
                         <h2 className="text-lg font-bold text-gray-800">Rekap & Laporan Absensi</h2>
@@ -711,18 +746,21 @@ const AbsensiRekap: React.FC = () => {
                         </select>
                         
                         <div className="relative" ref={exportMenuRef}>
-                            <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 flex items-center gap-2">
-                                <i className="bi bi-download"></i> Export
+                            <button disabled={isExporting} onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                                <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-download'}`}></i> {isExporting ? 'Memproses...' : 'Export'}
                             </button>
                             {isExportMenuOpen && (
                                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
-                                    <button onClick={() => handleExport('pdf')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
+                                    <button disabled={isExporting} onClick={() => handleExport('pdf')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 disabled:opacity-50">
                                         <i className="bi bi-file-earmark-pdf text-red-500"></i> Download PDF
                                     </button>
-                                    <button onClick={() => handleExport('xlsx')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
+                                    <button disabled={isExporting} onClick={() => handleExport('pdfImage')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 disabled:opacity-50">
+                                        <i className="bi bi-file-earmark-image text-orange-500"></i> PDF Gambar
+                                    </button>
+                                    <button disabled={isExporting} onClick={() => handleExport('xlsx')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 disabled:opacity-50">
                                         <i className="bi bi-file-earmark-spreadsheet text-green-500"></i> Download Excel
                                     </button>
-                                    <button onClick={handlePrint} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-t">
+                                    <button disabled={isExporting} onClick={handlePrint} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 border-t disabled:opacity-50">
                                         <i className="bi bi-printer"></i> Cetak Langsung
                                     </button>
                                 </div>

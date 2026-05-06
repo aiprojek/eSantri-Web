@@ -4,6 +4,7 @@ import { useSantriContext } from '../../contexts/SantriContext';
 import { Pendaftar, PondokSettings, Santri, RiwayatStatus } from '../../types';
 import { db } from '../../db';
 import { loadJsZip, loadSyncService } from '../../utils/lazyCloudServices';
+import { buildStandardExportFileName } from '../../utils/exportFileName';
 import { LoadingFallback } from '../common/LoadingFallback';
 
 const PendaftarModal = React.lazy(() => import('./modals/PendaftarModal').then((module) => ({ default: module.PendaftarModal })));
@@ -444,7 +445,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             const url = window.URL.createObjectURL(content);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `Arsip_PSB_${new Date().toISOString().split('T')[0]}.zip`;
+            link.download = `${buildStandardExportFileName('arsip-psb', ['dokumen'])}.zip`;
             link.click();
             window.URL.revokeObjectURL(url);
             

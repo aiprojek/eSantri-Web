@@ -25,8 +25,9 @@ const getUnifiedPreviewPrintStyles = () => `
     }
     #jadwal-print-area .printable-content-wrapper,
     #jadwal-print-area .page-break-after {
-        width: 29.7cm !important;
-        min-height: 21cm !important;
+        width: 100% !important;
+        max-width: 29.7cm !important;
+        min-height: auto !important;
         box-sizing: border-box !important;
         page-break-inside: auto !important;
         break-inside: auto !important;
@@ -34,12 +35,12 @@ const getUnifiedPreviewPrintStyles = () => `
         display: block !important;
     }
     #jadwal-print-area .printable-content-wrapper {
-        padding: 1.1cm 1.1cm 0.9cm 1.1cm !important;
+        padding: 0.6cm 0.7cm 0.5cm 0.7cm !important;
         position: relative !important;
     }
     #jadwal-print-area .jadwal-sheet {
         display: block !important;
-        min-height: 21cm !important;
+        min-height: auto !important;
         height: auto !important;
     }
     #jadwal-print-area .jadwal-header-block {
@@ -55,6 +56,9 @@ const getUnifiedPreviewPrintStyles = () => `
         break-before: avoid-page !important;
         page-break-inside: auto !important;
         break-inside: auto !important;
+        width: 100% !important;
+        table-layout: fixed !important;
+        font-size: 9px !important;
     }
     #jadwal-print-area .report-signature-footer {
         position: relative !important;
@@ -111,15 +115,16 @@ const getUnifiedPreviewPrintStyles = () => `
         tr, td, th { page-break-inside: avoid !important; break-inside: avoid !important; }
         #jadwal-print-area .printable-content-wrapper,
         #jadwal-print-area .page-break-after {
-            width: 29.7cm !important;
-            min-height: 21cm !important;
+            width: 100% !important;
+            max-width: 29.7cm !important;
+            min-height: auto !important;
             box-sizing: border-box !important;
             overflow: visible !important;
             page-break-inside: auto !important;
             break-inside: auto !important;
         }
         #jadwal-print-area .jadwal-sheet {
-            min-height: 21cm !important;
+            min-height: auto !important;
             height: auto !important;
         }
     }
@@ -167,7 +172,7 @@ const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: {
             @page landscape { size: A4 landscape; margin: 10mm; }
             .print-portrait { page: portrait; }
             .print-landscape { page: landscape; }
-            ${isJadwalPrint ? '@page { margin: 0; size: A4 landscape; }' : ''}
+            ${isJadwalPrint ? '@page { margin: 6mm; size: A4 landscape; }' : ''}
             body { padding: 0 !important; background: #fff !important; }
             .printable-content-wrapper {
                 width: auto !important;
@@ -335,6 +340,9 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
     pages.forEach((pageContainer, pageIndex) => {
         const titles = pageContainer.querySelectorAll('h1, h2, h3, h4');
         const metaContainers = pageContainer.querySelectorAll('.print-meta');
+        const schoolNameFromH2 = pageContainer.querySelector('h2')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        const addressFromParagraph = pageContainer.querySelector('p')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        const reportTitleFromSubtitle = pageContainer.querySelector('.print-header-subtitle')?.textContent?.replace(/\s+/g, ' ').trim() || '';
         
         // Find tables in this specific page, excluding meta tables
         const allPageTables = pageContainer.querySelectorAll('table');
@@ -355,20 +363,52 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
         isFirstPage = false;
         
         let yPos = 15;
+        let reportTitle = '';
+        let schoolName = '';
+        let address = '';
 
-        // Print Titles
-        titles.forEach((title, idx) => {
-            const text = title.textContent?.trim();
-            if (text && idx < 3) {
-                doc.setFontSize(idx === 0 ? 16 : 12);
-                doc.text(text, pageWidth / 2, yPos, { align: 'center' });
-                yPos += (idx === 0 ? 10 : 7);
-            }
-        });
+        const titleTexts = Array.from(titles)
+            .map((title) => title.textContent?.replace(/\s+/g, ' ').trim() || '')
+            .filter(Boolean);
+
+        if (titleTexts.length > 0) {
+            schoolName = titleTexts[0];
+            reportTitle = titleTexts.length > 1 ? titleTexts[titleTexts.length - 1] : '';
+        }
+        if (schoolNameFromH2) schoolName = schoolName || schoolNameFromH2;
+        if (addressFromParagraph) address = addressFromParagraph;
+        if (reportTitleFromSubtitle) reportTitle = reportTitleFromSubtitle;
+
+        // KOP rapi: nama pondok -> alamat -> garis -> judul
+        if (schoolName) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            doc.text(schoolName, pageWidth / 2, yPos, { align: 'center' });
+            yPos += 6;
+        }
+        if (address) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(address, pageWidth / 2, yPos, { align: 'center' });
+            yPos += 5;
+        }
+
+        doc.setDrawColor(80, 80, 80);
+        doc.setLineWidth(0.3);
+        doc.line(10, yPos, pageWidth - 10, yPos);
+        yPos += 8;
+
+        if (reportTitle) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.text(reportTitle, pageWidth / 2, yPos, { align: 'center' });
+            yPos += 7;
+        }
 
         // Print Meta
         if (metaContainers.length > 0) {
-            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
             let allMetaLines: string[] = [];
             
             metaContainers.forEach(metaContainer => {
@@ -399,22 +439,28 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
             
             allMetaLines.forEach(line => {
                 const wrappedLines = doc.splitTextToSize(line, pageWidth - 30);
-                doc.text(wrappedLines, 15, yPos);
-                yPos += (wrappedLines.length * 5) + 2;
+                wrappedLines.forEach((wrapped: string) => {
+                    doc.text(wrapped, pageWidth / 2, yPos, { align: 'center' });
+                    yPos += 4.5;
+                });
+                yPos += 1.5;
             });
-            yPos += 5; // Extra spacing before tables
+            yPos += 3;
         }
 
         // Print Tables for this page
         tables.forEach((table, index) => {
             if (index > 0) yPos += 10;
-            
+
             // @ts-ignore
             doc.autoTable({
                 html: table,
                 startY: yPos,
                 theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 2 },
+                styles: {
+                    fontSize: 8,
+                    cellPadding: 2
+                },
                 headStyles: { fillColor: [45, 120, 110], textColor: 255 },
                 margin: { left: 10, right: 10 },
                 didDrawPage: (data: any) => {
@@ -426,12 +472,16 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
             yPos = (doc as any).lastAutoTable.finalY + 5;
         });
 
-        // Credit line placed after table area (kept above bottom margin)
+        // Footer tetap di bawah halaman
         const pageHeight = doc.internal.pageSize.getHeight();
-        const creditY = Math.min(Math.max(yPos + 3, 18), pageHeight - 8);
+        const footerLineY = pageHeight - 9;
+        const footerTextY = pageHeight - 5;
+        doc.setDrawColor(170, 170, 170);
+        doc.setLineWidth(0.15);
+        doc.line(10, footerLineY, pageWidth - 10, footerLineY);
         doc.setFontSize(8);
         doc.setTextColor(120, 120, 120);
-        doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', pageWidth / 2, creditY, { align: 'center' });
+        doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', pageWidth / 2, footerTextY, { align: 'center' });
         doc.setTextColor(0, 0, 0);
     });
 

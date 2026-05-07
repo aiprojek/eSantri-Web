@@ -7,6 +7,29 @@ interface PortalFetchResponse {
     message?: string;
 }
 
+export interface PortalSantriSummary {
+    id: number;
+    nis: string;
+    namaLengkap: string;
+    tanggalLahir: string;
+    jenjangId: number;
+    kelasId: number;
+    rombelId: number;
+    namaWali: string;
+    teleponWali: string;
+    attendanceToday: string;
+    saldoTabungan: number;
+    tunggakanBulanIni: number;
+    tahfizhTerakhir: { tanggal: string; tipe: string; surah: string; ayat: string } | null;
+    kesehatanTerakhir: { tanggal: string; status: string; diagnosa: string } | null;
+    pinjamanBukuAktif: number;
+}
+
+export interface PortalBundle {
+    settings: PondokSettings | null;
+    santriSummary: PortalSantriSummary[];
+}
+
 const ensureGasEndpoint = (settings: PondokSettings): string => {
     const endpoint = settings.portalConfig?.gasEndpoint?.trim();
     if (!endpoint) {
@@ -27,7 +50,7 @@ export const fetchPortalSettingsFromGas = async (
     gasEndpoint: string,
     portalId: string,
     apiKey?: string
-): Promise<PondokSettings | null> => {
+): Promise<PortalBundle> => {
     const url = new URL(gasEndpoint);
     url.searchParams.set('action', 'getPortalConfig');
     url.searchParams.set('portalId', portalId);
@@ -44,7 +67,21 @@ export const fetchPortalSettingsFromGas = async (
     if (result.success === false) {
         throw new Error(result.message || 'Gagal mengambil konfigurasi portal dari GAS.');
     }
-    return (result.data || null) as PondokSettings | null;
+    const data = result.data || null;
+
+    if (!data) {
+        return { settings: null, santriSummary: [] };
+    }
+
+    // Backward compatibility: GAS lama hanya mengirim settings langsung.
+    if (data && !data.settings && !data.santriSummary) {
+        return { settings: data as PondokSettings, santriSummary: [] };
+    }
+
+    return {
+        settings: (data.settings || null) as PondokSettings | null,
+        santriSummary: (data.santriSummary || []) as PortalSantriSummary[],
+    };
 };
 
 export const submitPortalPsbToGas = async (
@@ -56,7 +93,7 @@ export const submitPortalPsbToGas = async (
     const response = await fetch(gasEndpoint, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({
             action: 'submitPortalPsb',
@@ -71,7 +108,21 @@ export const submitPortalPsbToGas = async (
         throw new Error(`Gagal menyimpan pendaftaran portal (HTTP ${response.status}).`);
     }
 
-    const result = await response.json();
+    let result: PortalFetchResponse = {};
+    try {
+        result = await response.json();
+    } catch {
+        const text = await response.text();
+        if (!text) {
+            result = { success: true };
+        } else {
+            try {
+                result = JSON.parse(text);
+            } catch {
+                throw new Error(`Respon GAS tidak valid JSON: ${text.slice(0, 200)}`);
+            }
+        }
+    }
     if (result?.success === false) {
         throw new Error(result?.message || 'Gagal menyimpan pendaftaran ke GAS.');
     }
@@ -157,7 +208,7 @@ export const syncPortalBridgeToGas = async (settings: PondokSettings): Promise<v
     const response = await fetch(gasEndpoint, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({
             action: 'upsertPortalConfig',
@@ -171,7 +222,21 @@ export const syncPortalBridgeToGas = async (settings: PondokSettings): Promise<v
         throw new Error(`Gagal sinkronisasi portal ke GAS (HTTP ${response.status}).`);
     }
 
-    const result = await response.json();
+    let result: PortalFetchResponse = {};
+    try {
+        result = await response.json();
+    } catch {
+        const text = await response.text();
+        if (!text) {
+            result = { success: true };
+        } else {
+            try {
+                result = JSON.parse(text);
+            } catch {
+                throw new Error(`Respon GAS tidak valid JSON: ${text.slice(0, 200)}`);
+            }
+        }
+    }
     if (result?.success === false) {
         throw new Error(result?.message || 'Sinkronisasi portal ke GAS gagal.');
     }

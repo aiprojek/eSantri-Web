@@ -7,7 +7,6 @@ import { useFirebase } from '../../../contexts/FirebaseContext';
 import { formatBytes } from '../../../utils/formatters';
 import { loadSyncService } from '../../../utils/lazyCloudServices';
 import { loadFirebaseRealtimeRuntime } from '../../../utils/lazyFirebaseRuntimes';
-import { syncPortalBridgeToGas } from '../../../services/portalGasService';
 import { LoadingFallback } from '../../common/LoadingFallback';
 import { SectionCard } from '../../common/SectionCard';
 
@@ -15,7 +14,6 @@ const FirebaseCloudPanel = React.lazy(() => import('../cloud/FirebaseCloudPanel'
 const DropboxCloudPanel = React.lazy(() => import('../cloud/DropboxCloudPanel').then((module) => ({ default: module.DropboxCloudPanel })));
 const WebDavCloudPanel = React.lazy(() => import('../cloud/WebDavCloudPanel').then((module) => ({ default: module.WebDavCloudPanel })));
 const CloudPairingPanel = React.lazy(() => import('../cloud/CloudPairingPanel').then((module) => ({ default: module.CloudPairingPanel })));
-const PortalBridgePanel = React.lazy(() => import('../cloud/PortalBridgePanel').then((module) => ({ default: module.PortalBridgePanel })));
 const CloudPairingModals = React.lazy(() => import('../cloud/CloudPairingModals').then((module) => ({ default: module.CloudPairingModals })));
 
 const StorageIndicator: React.FC<{ stats: StorageStats | null, isLoading: boolean, provider: SyncProvider }> = ({ stats, isLoading, provider }) => {
@@ -104,9 +102,19 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
     const [isProcessingPairing, setIsProcessingPairing] = useState(false);
     const [pairingStep, setPairingStep] = useState(''); 
 
-    // Portal States
-    const [isPortalEnabled, setIsPortalEnabled] = useState(localSettings.cloudSyncConfig?.portalEnabled || false);
-    const [isSyncingPortal, setIsSyncingPortal] = useState(false);
+    const saveSettingsSafely = async (candidate: PondokSettings) => {
+        const dataToSave = { ...candidate };
+        if (!dataToSave.cloudSyncConfig.dropboxAppKey && settings.cloudSyncConfig.dropboxAppKey) {
+            dataToSave.cloudSyncConfig.dropboxAppKey = settings.cloudSyncConfig.dropboxAppKey;
+        }
+        if (!dataToSave.cloudSyncConfig.dropboxAppSecret && settings.cloudSyncConfig.dropboxAppSecret) {
+            dataToSave.cloudSyncConfig.dropboxAppSecret = settings.cloudSyncConfig.dropboxAppSecret;
+        }
+        if (!dataToSave.cloudSyncConfig.webdavPassword && settings.cloudSyncConfig.webdavPassword) {
+            dataToSave.cloudSyncConfig.webdavPassword = settings.cloudSyncConfig.webdavPassword;
+        }
+        await onSaveSettings(dataToSave);
+    };
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -157,27 +165,6 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
         }));
     };
 
-    const handlePortalToggle = (checked: boolean) => {
-        setIsPortalEnabled(checked);
-        setLocalSettings(prev => ({
-            ...prev,
-            cloudSyncConfig: { ...prev.cloudSyncConfig, portalEnabled: checked },
-            portalConfig: { ...prev.portalConfig!, enabled: checked }
-        }));
-    };
-
-    const handleSyncToPortal = async () => {
-        setIsSyncingPortal(true);
-        try {
-            await syncPortalBridgeToGas(localSettings);
-            showToast('Data berhasil disinkronkan ke Portal Wali.', 'success');
-        } catch (error) {
-            showToast(`Gagal sinkronisasi data ke portal: ${(error as Error).message}`, 'error');
-        } finally {
-            setIsSyncingPortal(false);
-        }
-    };
-
     const handleOpenDropboxAuth = () => {
         // App Key might be in UI state (localSettings) or saved in DB (settings)
         const appKey = localSettings.cloudSyncConfig.dropboxAppKey || settings.cloudSyncConfig.dropboxAppKey;
@@ -224,7 +211,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                 ...localSettings.cloudSyncConfig,
                 ...updatedConfig
             };
-            await onSaveSettings({ ...localSettings, cloudSyncConfig: fullyUpdatedConfig });
+            await saveSettingsSafely({ ...localSettings, cloudSyncConfig: fullyUpdatedConfig });
             setManualAuthCode('');
             
             showToast('Berhasil terhubung dengan Dropbox! Kredensial telah disembunyikan demi keamanan.', 'success');
@@ -246,7 +233,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             const { getCloudStorageStats } = await loadSyncService();
             const stats = await getCloudStorageStats(localSettings.cloudSyncConfig);
             if (stats) setStorageStats(stats);
-            await onSaveSettings(localSettings);
+            await saveSettingsSafely(localSettings);
             showToast('Koneksi WebDAV Berhasil!', 'success');
         } catch (e) {
             showToast(`Gagal koneksi WebDAV: ${(e as Error).message}. Pastikan CORS diaktifkan di server Anda.`, 'error');
@@ -375,7 +362,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             }
             
             // 1. Save Config Locally
-            await onSaveSettings({ ...settings, cloudSyncConfig: updatedConfig });
+            await saveSettingsSafely({ ...settings, cloudSyncConfig: updatedConfig });
             
             // 2. Validate Session immediately (Force Refresh Token usage)
             setPairingStep('validating');
@@ -568,15 +555,6 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         />
                     )}
 
-                    {localSettings.cloudSyncConfig?.provider !== 'none' && (
-                        <PortalBridgePanel
-                            isPortalEnabled={isPortalEnabled}
-                            isSyncingPortal={isSyncingPortal}
-                            onPortalToggle={handlePortalToggle}
-                            onOpenPortalSettings={() => window.dispatchEvent(new CustomEvent('change-settings-tab', { detail: 'portal' }))}
-                            onSyncToPortal={handleSyncToPortal}
-                        />
-                    )}
                 </Suspense>
             </div>
 

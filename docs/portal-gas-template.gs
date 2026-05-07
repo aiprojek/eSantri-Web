@@ -12,8 +12,11 @@
 
 const SHEET_PORTALS = 'portals';
 const SHEET_PSB = 'portal_psb_submissions';
+const SHEET_SYNC_LOGS = 'portal_sync_logs';
 const PORTAL_ID_DEFAULT = 'ganti-portal-id-di-sini';
 const API_TOKEN = ''; // contoh: 'isi-token-rahasia'
+const PAYLOAD_CHUNK_SIZE = 45000; // aman di bawah limit 50.000 char per sel
+const PAYLOAD_MAX_PARTS = 20; // total kapasitas ~900.000 char
 
 function doGet(e) {
   try {
@@ -56,6 +59,14 @@ function ensureSheet(name, headers) {
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
+  }
+
+  // Self-healing header:
+  // Jika sheet sudah ada tapi header baris 1 tidak sesuai,
+  // otomatis ditulis ulang agar proses baca/tulis tidak gagal diam-diam.
+  const currentHeaders = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+  const isHeaderMatch = headers.every((h, i) => (currentHeaders[i] || '').toString().trim() === h);
+  if (!isHeaderMatch) {
     sh.getRange(1, 1, 1, headers.length).setValues([headers]);
   }
   return sh;
@@ -65,6 +76,47 @@ function rowToObject(headers, row) {
   const result = {};
   headers.forEach((h, idx) => result[h] = row[idx]);
   return result;
+}
+
+function getPortalHeaders() {
+  const partHeaders = [];
+  for (let i = 1; i <= PAYLOAD_MAX_PARTS; i++) {
+    partHeaders.push('payloadPart' + i);
+  }
+  return ['portalId', 'updatedAt', 'partCount', 'payloadSize'].concat(partHeaders);
+}
+
+function splitPayload(payloadJson) {
+  const parts = [];
+  for (let i = 0; i < payloadJson.length; i += PAYLOAD_CHUNK_SIZE) {
+    parts.push(payloadJson.slice(i, i + PAYLOAD_CHUNK_SIZE));
+  }
+  if (parts.length > PAYLOAD_MAX_PARTS) {
+    throw new Error(
+      'Payload portal terlalu besar (' + payloadJson.length + ' karakter). Maksimum saat ini ' +
+      (PAYLOAD_CHUNK_SIZE * PAYLOAD_MAX_PARTS) + ' karakter.'
+    );
+  }
+  return parts;
+}
+
+function mergePayloadFromRow(headers, row) {
+  const idxLegacyPayload = headers.indexOf('payloadJson');
+  if (idxLegacyPayload >= 0) {
+    return (row[idxLegacyPayload] || '').toString();
+  }
+
+  const idxPartCount = headers.indexOf('partCount');
+  const partCount = Number(row[idxPartCount] || 0);
+  if (!partCount || partCount < 1) return '';
+
+  let merged = '';
+  for (let i = 1; i <= partCount; i++) {
+    const idxPart = headers.indexOf('payloadPart' + i);
+    if (idxPart < 0) continue;
+    merged += (row[idxPart] || '').toString();
+  }
+  return merged;
 }
 
 function authCheck(inputApiKey) {
@@ -91,16 +143,22 @@ function handleGetPortalConfig(e) {
   const apiKey = (e.parameter.apiKey || '').trim();
   if (!authCheck(apiKey)) throw new Error('API key tidak valid.');
 
-  const sh = ensureSheet(SHEET_PORTALS, ['portalId', 'payloadJson', 'updatedAt']);
+  const sh = ensureSheet(SHEET_PORTALS, getPortalHeaders());
   const values = sh.getDataRange().getValues();
   const headers = values.shift();
   const idxPortal = headers.indexOf('portalId');
-  const idxPayload = headers.indexOf('payloadJson');
 
   for (let i = values.length - 1; i >= 0; i--) {
     if ((values[i][idxPortal] || '').toString().trim() === portalId) {
-      const payload = JSON.parse(values[i][idxPayload] || '{}');
-      return { success: true, data: payload.settings || null };
+      const payloadJson = mergePayloadFromRow(headers, values[i]);
+      const payload = JSON.parse(payloadJson || '{}');
+      return {
+        success: true,
+        data: {
+          settings: payload.settings || null,
+          santriSummary: payload.santriSummary || [],
+        },
+      };
     }
   }
 
@@ -113,7 +171,8 @@ function handleUpsertPortalConfig(body) {
   const payload = body.payload || {};
   if (!authCheck(apiKey)) throw new Error('API key tidak valid.');
 
-  const sh = ensureSheet(SHEET_PORTALS, ['portalId', 'payloadJson', 'updatedAt']);
+  const portalHeaders = getPortalHeaders();
+  const sh = ensureSheet(SHEET_PORTALS, portalHeaders);
   const values = sh.getDataRange().getValues();
   const headers = values.shift();
   const idxPortal = headers.indexOf('portalId');
@@ -126,12 +185,35 @@ function handleUpsertPortalConfig(body) {
     }
   }
 
-  const rowData = [portalId, JSON.stringify(payload), new Date().toISOString()];
+  const payloadJson = JSON.stringify(payload);
+  const payloadParts = splitPayload(payloadJson);
+  const rowData = new Array(portalHeaders.length).fill('');
+  rowData[portalHeaders.indexOf('portalId')] = portalId;
+  rowData[portalHeaders.indexOf('updatedAt')] = new Date().toISOString();
+  rowData[portalHeaders.indexOf('partCount')] = payloadParts.length;
+  rowData[portalHeaders.indexOf('payloadSize')] = payloadJson.length;
+  for (let i = 0; i < payloadParts.length; i++) {
+    rowData[portalHeaders.indexOf('payloadPart' + (i + 1))] = payloadParts[i];
+  }
   if (targetRow > 0) {
     sh.getRange(targetRow, 1, 1, rowData.length).setValues([rowData]);
   } else {
     sh.appendRow(rowData);
   }
+
+  const logSheet = ensureSheet(
+    SHEET_SYNC_LOGS,
+    ['loggedAt', 'portalId', 'status', 'santriCount', 'payloadSize', 'note']
+  );
+  const santriCount = Array.isArray(payload.santriSummary) ? payload.santriSummary.length : 0;
+  logSheet.appendRow([
+    new Date().toISOString(),
+    portalId,
+    targetRow > 0 ? 'updated' : 'inserted',
+    santriCount,
+    payloadJson.length,
+    'upsertPortalConfig',
+  ]);
 
   return { success: true, message: 'Portal config tersimpan.' };
 }

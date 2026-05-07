@@ -288,7 +288,7 @@ const Sarpras: React.FC = () => {
         return buildStandardExportFileName('laporan-sarpras', [scope]);
     };
 
-    const handleExportAction = async (type: 'pdfVisual' | 'pdfImage' | 'print' | 'word' | 'excel' | 'html') => {
+    const handleExportAction = async (type: 'pdfVisual' | 'pdfImage' | 'print' | 'pdfAutoTable' | 'word' | 'excel' | 'html') => {
         if (isExporting) return;
         const fileName = buildSarprasFileName();
         setIsExportMenuOpen(false);
@@ -304,6 +304,10 @@ const Sarpras: React.FC = () => {
             }
             if (type === 'print') {
                 await printExportFacade.printDialog({ elementId: 'sarpras-print-area', fileName, paperSize: 'A4', target: 'sarpras' });
+                return;
+            }
+            if (type === 'pdfAutoTable') {
+                await printExportFacade.downloadPdfAutoTable({ elementId: 'sarpras-print-area', fileName, paperSize: 'A4', target: 'sarpras' });
                 return;
             }
             if (type === 'word') {
@@ -393,6 +397,7 @@ const Sarpras: React.FC = () => {
                                     <button disabled={isExporting} onClick={() => handleExportAction('pdfVisual')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">PDF Visual</button>
                                     <button disabled={isExporting} onClick={() => handleExportAction('pdfImage')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">PDF Gambar</button>
                                     <button disabled={isExporting} onClick={() => handleExportAction('print')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">Cetak</button>
+                                    <button disabled={isExporting} onClick={() => handleExportAction('pdfAutoTable')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">PDF AutoTable</button>
                                     <button disabled={isExporting} onClick={() => handleExportAction('word')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">Word</button>
                                     <button disabled={isExporting} onClick={() => handleExportAction('excel')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">Excel</button>
                                     <button disabled={isExporting} onClick={() => handleExportAction('html')} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50">HTML</button>

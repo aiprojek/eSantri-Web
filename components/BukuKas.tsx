@@ -290,6 +290,34 @@ const BukuKas: React.FC = () => {
         }
     };
 
+    const handleExportPdfAutoTable = async () => {
+        if (isExporting) return;
+        if (filteredRows.length === 0) {
+            showToast('Tidak ada data untuk diekspor.', 'info');
+            return;
+        }
+        setIsExporting(true);
+        try {
+            const suffix = [
+                filters.startDate ? `from-${filters.startDate}` : '',
+                filters.endDate ? `to-${filters.endDate}` : '',
+                filters.jenis || 'semua-jenis',
+                filters.kategori ? `kat-${filters.kategori.replace(/\s+/g, '-')}` : '',
+            ].filter(Boolean);
+            await printExportFacade.downloadPdfAutoTable({
+                elementId: 'buku-kas-export-area',
+                fileName: buildStandardExportFileName('buku-kas', suffix),
+                paperSize: 'A4',
+                target: 'report',
+            });
+            showToast('Ekspor PDF AutoTable berhasil.', 'success');
+        } catch (e) {
+            showAlert('Ekspor Gagal', 'Terjadi kendala saat membuat PDF AutoTable.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     return (
         <div className="w-full space-y-6">
             <PageHeader
@@ -314,6 +342,7 @@ const BukuKas: React.FC = () => {
                         <button type="button" onClick={() => applyDatePreset(30)} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">30 Hari</button>
                         <button type="button" onClick={resetFilters} className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100">Reset Filter</button>
                         <button type="button" disabled={isExporting} onClick={handleExportPdfImage} className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-image'} mr-1`}></i>{isExporting ? 'Memproses...' : 'PDF Gambar'}</button>
+                        <button type="button" disabled={isExporting} onClick={handleExportPdfAutoTable} className="rounded-md border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 transition-colors hover:bg-teal-100 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-ruled'} mr-1`}></i>{isExporting ? 'Memproses...' : 'PDF AutoTable'}</button>
                         <button type="button" disabled={isExporting} onClick={handleExportCsv} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-filetype-csv'} mr-1`}></i>{isExporting ? 'Memproses...' : 'CSV'}</button>
                         <button type="button" disabled={isExporting} onClick={handleExportExcel} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-spreadsheet'} mr-1`}></i>{isExporting ? 'Memproses...' : 'Excel'}</button>
                     </div>

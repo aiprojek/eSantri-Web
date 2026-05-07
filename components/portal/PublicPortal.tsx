@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { PondokSettings, PortalAnnouncementPost, PsbConfig } from '../../types';
 import { LoadingFallback } from '../common/LoadingFallback';
-import { fetchPortalSettingsFromGas, submitPortalPsbToGas } from '../../services/portalGasService';
+import { fetchPortalSettingsFromGas, PortalSantriSummary, submitPortalPsbToGas } from '../../services/portalGasService';
 
 const fieldGroups = [
     {
@@ -73,10 +73,17 @@ export const PublicPortal: React.FC = () => {
     const portalType = pathParts[0]; 
     const tenantId = pathParts[1];
     const templateId = pathParts[2]; 
+    const [debugInfo, setDebugInfo] = useState<{ portalId: string; gasEndpoint: string }>({ portalId: '', gasEndpoint: '' });
 
     const [tenantSettings, setTenantSettings] = useState<PondokSettings | null>(null);
+    const [santriSummary, setSantriSummary] = useState<PortalSantriSummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [nisInput, setNisInput] = useState('');
+    const [dobInput, setDobInput] = useState('');
+    const [loginNotice, setLoginNotice] = useState<string>('');
+    const [loggedInSantri, setLoggedInSantri] = useState<PortalSantriSummary | null>(null);
+    const [activeFeature, setActiveFeature] = useState<'keuangan' | 'akademik' | 'presensi' | 'tahfizh' | 'kesehatan' | 'perpus'>('keuangan');
 
     useEffect(() => {
         const fetchTenantData = async () => {
@@ -89,12 +96,14 @@ export const PublicPortal: React.FC = () => {
                 const url = new URL(window.location.href);
                 const gasEndpoint = url.searchParams.get('gas') || localStorage.getItem('esantri_portal_gas_url') || '';
                 const gasApiKey = url.searchParams.get('token') || localStorage.getItem('esantri_portal_gas_token') || '';
+                setDebugInfo({ portalId: tenantId, gasEndpoint });
                 if (!gasEndpoint) {
                     throw new Error('Portal GAS URL belum disiapkan. Tambahkan parameter ?gas=... pada URL portal.');
                 }
-                const portalSettings = await fetchPortalSettingsFromGas(gasEndpoint, tenantId, gasApiKey);
-                if (portalSettings) {
-                    setTenantSettings(portalSettings);
+                const portalBundle = await fetchPortalSettingsFromGas(gasEndpoint, tenantId, gasApiKey);
+                if (portalBundle.settings) {
+                    setTenantSettings(portalBundle.settings);
+                    setSantriSummary(portalBundle.santriSummary || []);
                 } else {
                     setError('Data pesantren tidak ditemukan di Portal GAS.');
                 }
@@ -116,6 +125,14 @@ export const PublicPortal: React.FC = () => {
                     <div className="text-red-500 text-5xl mb-4"><i className="bi bi-exclamation-triangle-fill"></i></div>
                     <h1 className="text-xl font-bold text-gray-800 mb-2">Terjadi Kesalahan</h1>
                     <p className="text-gray-600 mb-6">{error}</p>
+                    <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-3 text-left">
+                        <p className="text-[11px] font-semibold text-slate-700 mb-2 uppercase tracking-wide">Info Debug Portal</p>
+                        <p className="text-xs text-slate-600 break-all"><span className="font-semibold">Portal ID URL:</span> {debugInfo.portalId || '-'}</p>
+                        <p className="text-xs text-slate-600 break-all mt-1"><span className="font-semibold">GAS Endpoint:</span> {debugInfo.gasEndpoint || '-'}</p>
+                        <p className="text-[11px] text-slate-500 mt-2">
+                            Pastikan <code>portalId</code> pada URL sama persis dengan kolom <code>portalId</code> di sheet <code>portals</code>.
+                        </p>
+                    </div>
                     <a href="/" className="inline-block bg-teal-600 text-white px-6 py-2 rounded-lg font-bold">Kembali ke Beranda</a>
                 </div>
             </div>
@@ -124,6 +141,35 @@ export const PublicPortal: React.FC = () => {
 
     if (!tenantSettings) return null;
     const portalConfig = tenantSettings.portalConfig;
+    const portalContacts = portalConfig?.contacts || [];
+    const normalizeExternalUrl = (rawValue: string, iconHint?: string): string => {
+        const v = (rawValue || '').trim();
+        if (!v) return '#';
+        const lower = v.toLowerCase();
+
+        if (lower.startsWith('http://') || lower.startsWith('https://')) return v;
+        if (lower.startsWith('mailto:') || lower.startsWith('tel:')) return v;
+
+        if (lower.startsWith('wa.me/') || lower.startsWith('api.whatsapp.com/') || lower.startsWith('t.me/') || lower.startsWith('telegram.me/')) {
+            return `https://${v}`;
+        }
+
+        if (v.includes('@') && !v.includes(' ')) {
+            return `mailto:${v}`;
+        }
+
+        const digits = v.replace(/\D/g, '');
+        if (iconHint === 'bi-whatsapp' && digits.length >= 8) {
+            let phone = digits;
+            if (phone.startsWith('0')) phone = `62${phone.slice(1)}`;
+            return `https://wa.me/${phone}`;
+        }
+        if (iconHint === 'bi-telephone' && digits.length >= 8) {
+            return `tel:${digits}`;
+        }
+
+        return `https://${v}`;
+    };
     const announcementPosts: PortalAnnouncementPost[] = (() => {
         const posts = (portalConfig?.announcementPosts || []).filter(post => post && post.isPublished && (post.title || post.content));
         if (posts.length > 0) return posts;
@@ -138,33 +184,289 @@ export const PublicPortal: React.FC = () => {
         }
         return [];
     })();
+    const jenjangMap = new Map((tenantSettings.jenjang || []).map((j) => [j.id, j.nama]));
+    const kelasMap = new Map((tenantSettings.kelas || []).map((k) => [k.id, k.nama]));
+    const featureItems = (portalConfig?.showFinance ? [{ key: 'keuangan', label: 'Keuangan', icon: 'bi-cash-stack' }] : [])
+        .concat(portalConfig?.showAcademic ? [{ key: 'akademik', label: 'Akademik', icon: 'bi-mortarboard' }] : [])
+        .concat(portalConfig?.showAttendance ? [{ key: 'presensi', label: 'Presensi', icon: 'bi-calendar-check' }] : [])
+        .concat(portalConfig?.showTahfizh ? [{ key: 'tahfizh', label: 'Tahfizh', icon: 'bi-book' }] : [])
+        .concat(portalConfig?.showHealth ? [{ key: 'kesehatan', label: 'Kesehatan', icon: 'bi-heart-pulse' }] : [])
+        .concat(portalConfig?.showLibrary ? [{ key: 'perpus', label: 'Perpus', icon: 'bi-journal-bookmark' }] : []);
 
     if (portalType === 'psb') {
         return <PsbPublicForm settings={tenantSettings} templateId={templateId} tenantId={tenantId} />;
     }
 
+    const handlePortalLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+        const normalizedNis = nisInput.replace(/\s+/g, '').toLowerCase();
+        if (!normalizedNis || !dobInput.trim()) {
+            setLoginNotice('Silakan isi NIS dan tanggal lahir terlebih dahulu.');
+            return;
+        }
+
+        const matched = santriSummary.find((santri) => {
+            const santriNis = (santri.nis || '').replace(/\s+/g, '').toLowerCase();
+            const santriDob = (santri.tanggalLahir || '').slice(0, 10);
+            return santriNis === normalizedNis && santriDob === dobInput;
+        });
+
+        if (!matched) {
+            setLoggedInSantri(null);
+            setLoginNotice('NIS atau tanggal lahir tidak sesuai. Silakan periksa kembali.');
+            return;
+        }
+
+        setLoggedInSantri(matched);
+        setActiveFeature('keuangan');
+        setLoginNotice('');
+    };
+
     return (
-        <div className="min-h-screen bg-teal-900 flex items-center justify-center p-6">
-             <div className="bg-white p-10 rounded-2xl shadow-2xl text-center max-w-lg border-t-8 border-amber-500">
-                <h1 className="text-3xl font-bold text-teal-900 mb-2">{tenantSettings.namaPonpes}</h1>
-                <div className="text-amber-600 font-bold uppercase tracking-widest text-sm mb-6 pb-4 border-b">Portal Wali Santri</div>
-                <p className="text-gray-600 mb-8 italic">"Segera Hadir: Fitur pemantauan nilai, absensi, dan keuangan santri via portal online."</p>
-                {announcementPosts.length > 0 && (
-                    <div className="mb-6 rounded-xl border border-teal-100 bg-teal-50 p-4 text-left">
-                        <h3 className="mb-2 text-sm font-bold text-teal-800">Pengumuman</h3>
-                        <div className="space-y-2">
-                            {announcementPosts.slice(0, 3).map(post => (
-                                <div key={post.id} className="rounded-lg border border-teal-100 bg-white px-3 py-2">
-                                    <p className="text-xs font-semibold text-teal-900">{post.title || 'Tanpa Judul'}</p>
-                                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{post.content}</p>
-                                </div>
-                            ))}
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-100 flex items-center justify-center p-3 sm:p-6">
+             <div className={`bg-white rounded-2xl shadow-2xl text-center w-full border border-teal-100 ${loggedInSantri ? 'max-w-5xl p-4 sm:p-6' : 'max-w-lg p-6 sm:p-8'}`}>
+                <div className="flex flex-col items-center mb-4">
+                    {tenantSettings.logoPonpesUrl ? (
+                        <img src={tenantSettings.logoPonpesUrl} alt="Logo" className="w-16 h-16 rounded-full mb-3 shadow-sm border border-gray-100 object-contain bg-white p-1" referrerPolicy="no-referrer" />
+                    ) : (
+                        <div className="w-16 h-16 rounded-full bg-teal-600 flex items-center justify-center text-white text-2xl font-bold mb-3">
+                            {(tenantSettings.namaPonpes || 'E').charAt(0)}
                         </div>
-                    </div>
+                    )}
+                    <h1 className="text-2xl font-bold text-teal-900 mb-1">{tenantSettings.namaPonpes}</h1>
+                    <div className="text-amber-600 font-bold uppercase tracking-widest text-xs mb-2">Portal Wali Santri</div>
+                    <p className="text-xs text-slate-500">{portalConfig?.welcomeMessage || 'Selamat Datang di Portal Wali Santri'}</p>
+                </div>
+                {!loggedInSantri ? (
+                    <>
+                        <p className="text-gray-600 mb-6">Silakan login untuk mengakses data akademik, absensi, dan keuangan santri.</p>
+                        <form onSubmit={handlePortalLogin} className="text-left mb-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">NIS / ID Santri</label>
+                                <input
+                                    type="text"
+                                    value={nisInput}
+                                    onChange={(e) => setNisInput(e.target.value)}
+                                    placeholder="Contoh: 4625 3 0602"
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wide">Tanggal Lahir</label>
+                                <input
+                                    type="date"
+                                    value={dobInput}
+                                    onChange={(e) => setDobInput(e.target.value)}
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                />
+                                <p className="mt-1 text-[11px] text-slate-500">
+                                    Gunakan tanggal lahir santri. Format default data: <strong>DD/MM/YYYY</strong> (contoh 31/12/2011).
+                                </p>
+                            </div>
+                            <button type="submit" className="w-full rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-700 transition-colors">
+                                Masuk Portal
+                            </button>
+                            {loginNotice && (
+                                <p className="text-xs text-center text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                                    {loginNotice}
+                                </p>
+                            )}
+                        </form>
+                        {portalContacts.length > 0 && (
+                            <div className="mt-6 border-t pt-4">
+                                <p className="text-[11px] text-center text-slate-500 mb-3">Butuh bantuan? Hubungi kami:</p>
+                                <div className="flex flex-wrap justify-center gap-2">
+                                    {portalContacts.map((c) => (
+                                        <a
+                                            key={c.id}
+                                            href={normalizeExternalUrl(c.value || '', c.icon)}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-1 rounded-full border border-teal-100 bg-teal-50 px-3 py-1.5 text-[11px] font-semibold text-teal-700"
+                                        >
+                                            <i className={`bi ${c.icon}`}></i>
+                                            <span>{c.label}</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div className="mb-2 text-left">
+                        <div className="rounded-2xl bg-gradient-to-r from-teal-700 to-cyan-700 text-white p-4 sm:p-5">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-teal-100">Selamat datang</p>
+                                    <p className="text-xl font-bold">{loggedInSantri.namaLengkap}</p>
+                                    <p className="text-xs text-teal-100 mt-1">NIS: {loggedInSantri.nis} • Wali: {loggedInSantri.namaWali || '-'}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="text-xs font-semibold text-white/90 hover:text-white bg-white/10 rounded-lg px-3 py-1.5"
+                                    onClick={() => {
+                                        setLoggedInSantri(null);
+                                        setNisInput('');
+                                        setDobInput('');
+                                        setLoginNotice('');
+                                    }}
+                                >
+                                    Logout
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                            <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+                                <p className="text-[11px] text-slate-500">Tunggakan Bulan Ini</p>
+                                <p className="text-base font-bold text-slate-800">Rp {Number(loggedInSantri.tunggakanBulanIni || 0).toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+                                <p className="text-[11px] text-slate-500">Saldo Tabungan</p>
+                                <p className="text-base font-bold text-slate-800">Rp {Number(loggedInSantri.saldoTabungan || 0).toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+                                <p className="text-[11px] text-slate-500">Status Presensi</p>
+                                <p className="text-base font-bold text-slate-800">{loggedInSantri.attendanceToday || 'Belum Absen'}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+                                <p className="text-[11px] text-slate-500">Pinjaman Buku</p>
+                                <p className="text-base font-bold text-slate-800">{loggedInSantri.pinjamanBukuAktif || 0} buku</p>
+                            </div>
+                        </div>
+
+                        {announcementPosts.length > 0 && (
+                            <div className="mt-4 rounded-xl border border-teal-100 bg-teal-50 p-4">
+                                <h3 className="mb-2 text-xs font-bold text-teal-800">Pengumuman</h3>
+                                <div className="space-y-2">
+                                    {announcementPosts.slice(0, 2).map((post) => (
+                                        <div key={post.id} className="rounded-md bg-white px-2 py-1.5 border border-teal-100">
+                                            <p className="text-[11px] font-semibold text-slate-800">{post.title || 'Tanpa Judul'}</p>
+                                            <p className="text-[11px] text-slate-600 whitespace-pre-wrap">{post.content}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                            <div className="flex gap-2 overflow-x-auto">
+                                {featureItems.map((item) => (
+                                    <button
+                                        key={item.label}
+                                        type="button"
+                                        onClick={() => setActiveFeature(item.key as typeof activeFeature)}
+                                        className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                                            activeFeature === item.key
+                                                ? 'border-teal-200 bg-teal-600 text-white'
+                                                : 'border-slate-200 bg-white text-slate-700 hover:bg-teal-50'
+                                        }`}
+                                    >
+                                        <i className={`bi ${item.icon} mr-1`}></i>
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-teal-100 bg-white p-4 shadow-sm">
+                            {activeFeature === 'keuangan' && (
+                                <>
+                                    <p className="text-[11px] text-slate-500">Tunggakan Bulan Ini</p>
+                                    <p className="text-base font-bold text-slate-800">Rp {Number(loggedInSantri.tunggakanBulanIni || 0).toLocaleString('id-ID')}</p>
+                                </>
+                            )}
+                            {activeFeature === 'akademik' && (
+                                <>
+                                    <p className="text-[11px] text-slate-500">Informasi Akademik</p>
+                                    <p className="text-sm font-bold text-slate-800">
+                                        {jenjangMap.get(loggedInSantri.jenjangId) || '-'} • Kelas {kelasMap.get(loggedInSantri.kelasId) || '-'}
+                                    </p>
+                                </>
+                            )}
+                            {activeFeature === 'presensi' && (
+                                <>
+                                    <p className="text-[11px] text-slate-500">Status Absensi Hari Ini</p>
+                                    <p className="text-base font-bold text-slate-800">{loggedInSantri.attendanceToday || 'Belum Absen'}</p>
+                                </>
+                            )}
+                            {activeFeature === 'tahfizh' && (
+                                <>
+                                    <p className="text-[11px] text-slate-500">Setoran Tahfizh Terakhir</p>
+                                    <p className="text-sm font-bold text-slate-800">
+                                        {loggedInSantri.tahfizhTerakhir
+                                            ? `${loggedInSantri.tahfizhTerakhir.surah} (${loggedInSantri.tahfizhTerakhir.ayat})`
+                                            : 'Belum ada data'}
+                                    </p>
+                                </>
+                            )}
+                            {activeFeature === 'kesehatan' && (
+                                <>
+                                    <p className="text-[11px] text-slate-500">Catatan Kesehatan Terakhir</p>
+                                    <p className="text-sm font-bold text-slate-800">
+                                        {loggedInSantri.kesehatanTerakhir
+                                            ? `${loggedInSantri.kesehatanTerakhir.status}${loggedInSantri.kesehatanTerakhir.diagnosa ? ` - ${loggedInSantri.kesehatanTerakhir.diagnosa}` : ''}`
+                                            : 'Belum ada data'}
+                                    </p>
+                                </>
+                            )}
+                            {activeFeature === 'perpus' && (
+                                <>
+                                    <p className="text-[11px] text-slate-500">Pinjaman Buku Aktif</p>
+                                    <p className="text-base font-bold text-slate-800">{loggedInSantri.pinjamanBukuAktif || 0} buku</p>
+                                </>
+                            )}
+                        </div>
+                        {(portalConfig?.customLinks || []).length > 0 && (
+                            <div className="mt-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                                <h3 className="mb-2 text-xs font-bold text-slate-700">Link Penting</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    {(portalConfig?.customLinks || []).map((l, i) => (
+                                        <a
+                                            key={i}
+                                            href={normalizeExternalUrl(l.url || '')}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="flex items-center justify-between rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5 text-[11px] text-slate-700"
+                                        >
+                                            <span>{l.label || 'Link Kustom'}</span>
+                                            <i className="bi bi-chevron-right text-[10px] text-slate-400"></i>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {portalContacts.length > 0 && (
+                            <div className="mt-3 rounded-xl border border-teal-100 bg-teal-50 p-3">
+                                <p className="text-[11px] text-slate-500 mb-2">Bantuan:</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {portalContacts.map((c) => (
+                                        <a
+                                            key={c.id}
+                                            href={normalizeExternalUrl(c.value || '', c.icon)}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-1 rounded-full border border-teal-100 bg-white px-2 py-1 text-[10px] font-semibold text-teal-700"
+                                        >
+                                            <i className={`bi ${c.icon}`}></i>
+                                            <span>{c.label}</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        </div>
                 )}
-                <div className="flex justify-center gap-4">
-                    <div className="text-teal-700 bg-teal-50 px-4 py-2 rounded-full text-xs font-bold border border-teal-100">Cek Tagihan</div>
-                    <div className="text-teal-700 bg-teal-50 px-4 py-2 rounded-full text-xs font-bold border border-teal-100">Buku Saku</div>
+                <div className="mt-6 border-t border-slate-100 pt-3 text-center text-[11px] text-slate-500">
+                    dibuat dengan eSantri Web by{' '}
+                    <a
+                        href="https://aiprojek01.my.id"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-teal-700 hover:text-teal-800 underline"
+                    >
+                        AI Projek
+                    </a>
                 </div>
              </div>
         </div>

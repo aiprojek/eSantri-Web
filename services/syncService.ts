@@ -74,11 +74,25 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries: number
     try {
         const response = await fetch(url, options);
         if (response.ok) return response;
+
+        let detailMessage = '';
+        try {
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                const errJson = await response.clone().json();
+                detailMessage = errJson?.error_summary || errJson?.error_description || errJson?.error || JSON.stringify(errJson);
+            } else {
+                detailMessage = (await response.clone().text()).slice(0, 500);
+            }
+        } catch {
+            detailMessage = '';
+        }
+
         // Don't retry for 4xx client errors (except 429 too many requests)
         if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-            throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP Error ${response.status}: ${response.statusText}${detailMessage ? ` | ${detailMessage}` : ''}`);
         }
-        throw new Error(`Server Error ${response.status}`);
+        throw new Error(`Server Error ${response.status}${detailMessage ? ` | ${detailMessage}` : ''}`);
     } catch (error) {
         if (retries > 0) {
             console.warn(`Fetch failed, retrying in ${backoff}ms... (${retries} left)`, error);
@@ -130,22 +144,32 @@ const ensureWebDAVFolders = async (client: WebDAVClient) => {
 };
 
 export const getValidDropboxToken = async (config: CloudSyncConfig): Promise<string> => {
-    if (!config.dropboxRefreshToken || !config.dropboxAppKey) {
+    const savedSettings = (await db.settings.toArray())[0];
+    const mergedConfig: CloudSyncConfig = {
+        ...config,
+        dropboxRefreshToken: config.dropboxRefreshToken || savedSettings?.cloudSyncConfig?.dropboxRefreshToken,
+        dropboxAppKey: config.dropboxAppKey || savedSettings?.cloudSyncConfig?.dropboxAppKey,
+        dropboxAppSecret: config.dropboxAppSecret || savedSettings?.cloudSyncConfig?.dropboxAppSecret,
+        dropboxToken: config.dropboxToken || savedSettings?.cloudSyncConfig?.dropboxToken,
+        dropboxTokenExpiresAt: config.dropboxTokenExpiresAt || savedSettings?.cloudSyncConfig?.dropboxTokenExpiresAt,
+    };
+
+    if (!mergedConfig.dropboxRefreshToken || !mergedConfig.dropboxAppKey) {
         throw new Error("Dropbox belum dikonfigurasi sepenuhnya. Silakan cek menu Pengaturan > Sync Cloud.");
     }
-    if (config.dropboxToken && config.dropboxTokenExpiresAt && Date.now() < config.dropboxTokenExpiresAt - 300000) {
-        return config.dropboxToken;
+    if (mergedConfig.dropboxToken && mergedConfig.dropboxTokenExpiresAt && Date.now() < mergedConfig.dropboxTokenExpiresAt - 300000) {
+        return mergedConfig.dropboxToken;
     }
     
     const params: Record<string, string> = {
         grant_type: 'refresh_token',
-        refresh_token: config.dropboxRefreshToken,
-        client_id: config.dropboxAppKey,
+        refresh_token: mergedConfig.dropboxRefreshToken,
+        client_id: mergedConfig.dropboxAppKey,
     };
     
     // Add Client Secret if available (Confidential Client flow)
-    if (config.dropboxAppSecret) {
-        params.client_secret = config.dropboxAppSecret;
+    if (mergedConfig.dropboxAppSecret) {
+        params.client_secret = mergedConfig.dropboxAppSecret;
     }
 
     const response = await fetchWithRetry('https://api.dropboxapi.com/oauth2/token', {

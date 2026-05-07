@@ -101,6 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setPage, isSidebarOpen }
           key: "sistem",
           items: [
               { page: Page.AuditLog, icon: 'bi-activity', show: canAccess('auditlog') },
+              { page: Page.PortalWali, icon: 'bi-globe2', show: canAccess('pengaturan'), label: 'Portal Wali' },
               { page: Page.Pengaturan, icon: 'bi-gear-fill', show: canAccess('pengaturan') },
               { page: Page.SyncAdmin, icon: 'bi-cloud-check-fill', show: canManageSync },
               { page: Page.Tentang, icon: 'bi-info-circle-fill', show: true },

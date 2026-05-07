@@ -406,16 +406,17 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
             }
             #jadwal-print-area .page-break-after,
             #jadwal-print-area .printable-content-wrapper {
-                width: 29.7cm !important;
-                min-height: 21cm !important;
+                width: 100% !important;
+                max-width: 29.7cm !important;
+                min-height: auto !important;
                 overflow: visible !important;
                 box-sizing: border-box !important;
             }
             #jadwal-print-area .jadwal-sheet {
                 display: flex !important;
                 flex-direction: column !important;
-                height: 21cm !important;
-                overflow: hidden !important;
+                height: auto !important;
+                overflow: visible !important;
             }
             #jadwal-print-area .jadwal-header-block {
                 flex: 0 0 auto !important;
@@ -423,7 +424,7 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
             #jadwal-print-area .jadwal-table-block {
                 flex: 1 1 auto !important;
                 min-height: 0 !important;
-                overflow: hidden !important;
+                overflow: visible !important;
             }
             
             /* Reset card shadows for cleaner printing */

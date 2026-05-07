@@ -11,16 +11,14 @@ const TabAkun = React.lazy(() => import('./settings/tabs/TabAkun').then((module)
 const TabNis = React.lazy(() => import('./settings/tabs/TabNis').then((module) => ({ default: module.TabNis })));
 const TabCloud = React.lazy(() => import('./settings/tabs/TabCloud').then((module) => ({ default: module.TabCloud })));
 const TabBackup = React.lazy(() => import('./settings/tabs/TabBackup').then((module) => ({ default: module.TabBackup })));
-const TabPortal = React.lazy(() => import('./settings/tabs/TabPortal').then((module) => ({ default: module.TabPortal })));
 const TabDiagnostik = React.lazy(() => import('./settings/tabs/TabDiagnostik').then((module) => ({ default: module.TabDiagnostik })));
 
-type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'portal' | 'backup' | 'diagnostik';
+type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'backup' | 'diagnostik';
 
 const SETTINGS_TABS: HeaderTabItem<SettingsTab>[] = [
     { value: 'umum', label: 'Umum', icon: 'bi-info-circle' },
     { value: 'akun', label: 'User & Keamanan', icon: 'bi-shield-lock' },
     { value: 'nis', label: 'Generator NIS', icon: 'bi-123' },
-    { value: 'portal', label: 'Portal Wali', icon: 'bi-globe2' },
     { value: 'cloud', label: 'Sync Cloud', icon: 'bi-cloud-arrow-up' },
     { value: 'backup', label: 'Backup & Restore', icon: 'bi-hdd-fill' },
     { value: 'diagnostik', label: 'Diagnosa', icon: 'bi-heart-pulse-fill' },
@@ -160,7 +158,6 @@ const Settings: React.FC = () => {
                     {activeTab === 'umum' && <TabUmum localSettings={localSettings} handleInputChange={handleInputChange} activeTeachers={activeTeachers} />}
                     {activeTab === 'akun' && <TabAkun localSettings={localSettings} handleInputChange={handleInputChange} />}
                     {activeTab === 'nis' && <TabNis localSettings={localSettings} setLocalSettings={setLocalSettings} />}
-                    {activeTab === 'portal' && <TabPortal localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
                     {activeTab === 'cloud' && <TabCloud localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
                     {activeTab === 'backup' && <TabBackup localSettings={localSettings} setLocalSettings={setLocalSettings} />}
                     {activeTab === 'diagnostik' && <TabDiagnostik />}

@@ -23,6 +23,7 @@ const Dashboard = React.lazy(() => import('./components/Dashboard'));
 const SantriList = React.lazy(() => import('./components/SantriList'));
 const DataMaster = React.lazy(() => import('./components/DataMaster'));
 const Settings = React.lazy(() => import('./components/Settings'));
+const PortalManagement = React.lazy(() => import('./components/PortalManagement'));
 const Reports = React.lazy(() => import('./components/Reports'));
 const Finance = React.lazy(() => import('./components/Finance'));
 const Asrama = React.lazy(() => import('./components/Asrama'));
@@ -562,6 +563,8 @@ const AppContent: React.FC = () => {
                             return checkAccess('psb') ? <PSB /> : <AccessDenied />;
                         case Page.Pengaturan:
                             return checkAccess('pengaturan') ? <Settings /> : <AccessDenied />;
+                        case Page.PortalWali:
+                            return checkAccess('pengaturan') ? <PortalManagement /> : <AccessDenied />;
                         case Page.Laporan:
                             return checkAccess('laporan') ? <Reports /> : <AccessDenied />;
                         case Page.AuditLog:

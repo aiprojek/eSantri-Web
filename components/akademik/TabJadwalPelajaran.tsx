@@ -564,17 +564,28 @@ export const TabJadwalPelajaran: React.FC = () => {
         targetRombels.forEach((rombel, index) => {
             if (index > 0) doc.addPage();
 
-            // Header
-            doc.setFontSize(16);
+            // Header standar: Nama Pondok -> Alamat -> Garis -> Judul -> Info tambahan
+            doc.setFontSize(14);
             doc.setFont('helvetica', 'bold');
-            doc.text(getJadwalSheetTitle(rombel.id), 148.5, 15, { align: 'center' });
-            
-            doc.setFontSize(12);
+            doc.text(settings.namaPonpes, 148.5, 14, { align: 'center' });
+
+            doc.setFontSize(9);
             doc.setFont('helvetica', 'normal');
-            doc.text(settings.namaPonpes, 148.5, 22, { align: 'center' });
-            
-            doc.setFontSize(10);
-            doc.text(`${settings.alamat || ''}`, 148.5, 27, { align: 'center' });
+            doc.text(`${settings.alamat || ''}`, 148.5, 19, { align: 'center' });
+
+            doc.setDrawColor(80, 80, 80);
+            doc.setLineWidth(0.3);
+            doc.line(10, 22, 287, 22);
+
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text(getJadwalSheetTitle(rombel.id), 148.5, 27, { align: 'center' });
+
+            const meta = getRombelMeta(rombel.id);
+            const infoLine = `Tahun Ajaran: ${formatAcademicYearDisplay(settings, defaultAcademicYear)}  |  Jenjang: ${meta.jenjang}  |  Kelas: ${meta.kelas}  |  Rombel: ${meta.rombel}`;
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.text(infoLine, 148.5, 31.5, { align: 'center' });
 
             // Table Data
             const head = [['Jam', ...days]];
@@ -610,7 +621,7 @@ export const TabJadwalPelajaran: React.FC = () => {
             autoTable(doc, {
                 head: head,
                 body: body,
-                startY: 35,
+                startY: 34,
                 theme: 'grid',
                 styles: {
                     fontSize: 8,
@@ -631,15 +642,23 @@ export const TabJadwalPelajaran: React.FC = () => {
                 },
                 alternateRowStyles: {
                     fillColor: [250, 250, 250]
+                },
+                margin: {
+                    left: 10,
+                    right: 10,
+                    bottom: 12
                 }
             });
 
             // Footer
             const pageHeight = doc.internal.pageSize.getHeight();
+            doc.setDrawColor(170, 170, 170);
+            doc.setLineWidth(0.15);
+            doc.line(14, pageHeight - 9, 283, pageHeight - 9);
             doc.setFontSize(8);
             doc.setFont('helvetica', 'italic');
-            doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, pageHeight - 6);
-            doc.text(`dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id`, 283, pageHeight - 6, { align: 'right' });
+            doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, pageHeight - 5);
+            doc.text(`dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id`, 283, pageHeight - 5, { align: 'right' });
         });
 
         doc.save(`${exportFileName}.pdf`);
@@ -658,8 +677,7 @@ export const TabJadwalPelajaran: React.FC = () => {
 
         try {
             if (mode === 'pdfVisual') {
-                await printExportFacade.printDialog({ elementId: 'jadwal-print-area', fileName: exportFileName, paperSize: 'A4', target: 'jadwal' });
-                showToast('Dialog cetak dibuka. Pilih "Save as PDF" untuk hasil visual paling akurat.', 'info');
+                await handlePrint();
                 return;
             }
             if (mode === 'pdfImage') {
@@ -668,7 +686,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                 return;
             }
             if (mode === 'print') {
-                await printExportFacade.printDialog({ elementId: 'jadwal-print-area', fileName: exportFileName, paperSize: 'A4', target: 'jadwal' });
+                await handlePrint();
                 return;
             }
             if (mode === 'pdfAutoTable') {
@@ -825,9 +843,9 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 </button>
                                 {isExportMenuOpen && (
                                     <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF Visual</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF AutoTable (Utama)</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 border-b disabled:opacity-50">PDF Gambar</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b disabled:opacity-50">Cetak</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b disabled:opacity-50">Cetak via AutoTable</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b disabled:opacity-50">PDF AutoTable</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b disabled:opacity-50">Excel</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b disabled:opacity-50">Word</button>
@@ -886,9 +904,9 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 </button>
                                 {isExportMenuOpen && (
                                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF Visual</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF AutoTable (Utama)</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 border-b disabled:opacity-50">PDF Gambar</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b disabled:opacity-50">Cetak</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b disabled:opacity-50">Cetak via AutoTable</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b disabled:opacity-50">PDF AutoTable</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b disabled:opacity-50">Excel</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b disabled:opacity-50">Word</button>
@@ -1180,12 +1198,12 @@ export const TabJadwalPelajaran: React.FC = () => {
                     <div className="hidden print:block">
                         <div id="jadwal-print-area">
                             {targetRombels.map((rombel, idx) => (
-                                <div key={rombel.id} className="printable-content-wrapper jadwal-sheet print-landscape bg-white page-break-after relative" style={{ width: '29.7cm', minHeight: '21cm', marginBottom: idx < targetRombels.length-1 ? '2cm' : '0' }}> 
+                                <div key={rombel.id} className={`printable-content-wrapper jadwal-sheet print-landscape bg-white relative ${idx < targetRombels.length - 1 ? 'page-break-after' : ''}`} style={{ width: '29.7cm', minHeight: '21cm' }}> 
                                     <div className="jadwal-header-block">
                                         <PrintHeader settings={settings} compact title={getJadwalSheetTitle(rombel.id)} />
                                     </div>
                                     <div className="jadwal-table-block">
-                                    <table className="w-full border-collapse border border-black text-center text-[10px] mt-1">
+                                    <table className="w-full border-collapse border border-black text-center text-[9px] mt-1">
                                         <thead className="bg-gray-200 uppercase font-bold">
                                             <tr>
                                                 <th className="p-1 border border-black w-14">Jam</th>
@@ -1195,8 +1213,8 @@ export const TabJadwalPelajaran: React.FC = () => {
                                         <tbody>
                                             {jamConfig.map(jam => (
                                                 <tr key={jam.id}>
-                                                    <td className="p-1 border border-black bg-gray-100 font-bold leading-tight">
-                                                        {jam.urutan}<br/><span className="font-normal text-[10px]">{jam.jamMulai}-{jam.jamSelesai}</span>
+                                                    <td className="p-0.5 border border-black bg-gray-100 font-bold leading-tight">
+                                                        {jam.urutan}<br/><span className="font-normal text-[9px]">{jam.jamMulai}-{jam.jamSelesai}</span>
                                                     </td>
                                                     {days.map((day, dayIdx) => {
                                                         const item = jadwalList.find(j => j.rombelId === rombel.id && j.hari === dayIdx && j.jamKe === jam.urutan);
@@ -1204,14 +1222,14 @@ export const TabJadwalPelajaran: React.FC = () => {
                                                         const guru = getGuruLabel(item?.guruId);
 
                                                         return (
-                                                            <td key={dayIdx} className="p-1 border border-black align-top h-12 leading-tight">
+                                                            <td key={dayIdx} className="p-0.5 border border-black align-top h-10 leading-tight">
                                                                 {item ? (
                                                                     item.keterangan ? (
                                                                         <div className="font-bold italic">{item.keterangan}</div>
                                                                     ) : (
                                                                         <>
-                                                                            <div className="font-bold text-[10px]">{mapel}</div>
-                                                                            <div className="text-[9px]">{guru}</div>
+                                                                            <div className="font-bold text-[9px]">{mapel}</div>
+                                                                            <div className="text-[8px]">{guru}</div>
                                                                         </>
                                                                     )
                                                                 ) : ''}
@@ -1225,7 +1243,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                                     </div>
                                     <div
                                         className="report-signature-footer print-meta border-t border-gray-400 text-[8pt] text-gray-500 italic w-full flex items-center justify-between px-8"
-                                        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: '0.25cm', paddingBottom: '0.1cm', background: 'white' }}
+                                        style={{ marginTop: '0.2cm', paddingTop: '0.15cm', paddingBottom: '0.05cm', background: 'white' }}
                                     >
                                         <span>Dicetak pada: {new Date().toLocaleString('id-ID')}</span>
                                         <span>dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</span>

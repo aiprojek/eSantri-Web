@@ -3,7 +3,7 @@ export type Page =
   | 'Dashboard' | 'Santri' | 'Absensi' | 'Tahfizh' | 'Akademik' | 'Kurikulum' | 'Rapor' | 'Sarpras' 
   | 'Kalender' | 'Perpustakaan' | 'Kesehatan' | 'BK' | 'BukuTamu' | 'DataMaster' 
   | 'Keuangan' | 'Keasramaan' | 'BukuKas' | 'Koperasi' | 'Surat' | 'PSB' 
-  | 'Pengaturan' | 'Laporan' | 'AuditLog' | 'WhatsApp' | 'SyncAdmin' | 'Tentang';
+  | 'PortalWali' | 'Pengaturan' | 'Laporan' | 'AuditLog' | 'WhatsApp' | 'SyncAdmin' | 'Tentang';
 
 export const Page = {
   Dashboard: 'Dashboard',
@@ -26,6 +26,7 @@ export const Page = {
   Koperasi: 'Koperasi',
   Surat: 'Surat',
   PSB: 'PSB',
+  PortalWali: 'PortalWali',
   Pengaturan: 'Pengaturan',
   Laporan: 'Laporan',
   AuditLog: 'AuditLog',

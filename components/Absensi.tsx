@@ -587,27 +587,27 @@ const AbsensiRekap: React.FC = () => {
                 const autoTable = autoTableModule.default;
                 const doc = new jsPDF('l', 'mm', 'a4'); // Landscape, mm, A4
                 
-                // --- 1. Header (Kop) ---
+                // --- 1. Header (Kop Standar) ---
                 doc.setFontSize(14);
                 doc.setFont('helvetica', 'bold');
-                doc.text(settings.namaPonpes.toUpperCase(), 14, 15);
-                
-                doc.setFontSize(10);
+                doc.text(settings.namaPonpes.toUpperCase(), 148.5, 15, { align: 'center' });
+
+                doc.setFontSize(9);
                 doc.setFont('helvetica', 'normal');
-                doc.text(settings.alamat, 14, 20);
-                
+                doc.text(settings.alamat, 148.5, 20, { align: 'center' });
+
                 // Line separator
-                doc.setLineWidth(0.5);
+                doc.setLineWidth(0.3);
                 doc.line(14, 24, 283, 24);
 
                 // --- 2. Title & Metadata ---
                 doc.setFontSize(12);
                 doc.setFont('helvetica', 'bold');
-                doc.text(`REKAPITULASI ABSENSI KELAS ${selectedRombel?.nama.toUpperCase()}`, 14, 32);
-                
-                doc.setFontSize(10);
+                doc.text(`REKAPITULASI ABSENSI KELAS ${selectedRombel?.nama.toUpperCase()}`, 148.5, 30, { align: 'center' });
+
+                doc.setFontSize(9);
                 doc.setFont('helvetica', 'normal');
-                doc.text(`PERIODE: ${periodeName.toUpperCase()}`, 14, 37);
+                doc.text(`PERIODE: ${periodeName.toUpperCase()}`, 148.5, 35, { align: 'center' });
 
                 // --- 3. Table Structure ---
                 const headRow1: any[] = [
@@ -663,7 +663,7 @@ const AbsensiRekap: React.FC = () => {
 
                 // Generate Table
                 autoTable(doc, {
-                    startY: 42,
+                    startY: 40,
                     head: [headRow1],
                     body: bodyData,
                     columnStyles: colStyles,
@@ -671,6 +671,15 @@ const AbsensiRekap: React.FC = () => {
                     headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
                     theme: 'grid'
                 });
+
+                const pageHeight = doc.internal.pageSize.getHeight();
+                doc.setDrawColor(170, 170, 170);
+                doc.setLineWidth(0.15);
+                doc.line(14, pageHeight - 9, 283, pageHeight - 9);
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'italic');
+                doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, pageHeight - 5);
+                doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', 283, pageHeight - 5, { align: 'right' });
 
                 doc.save(`${fileName}.pdf`);
 

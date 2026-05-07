@@ -528,10 +528,10 @@ export const panduanData: PanduanSectionData[] = [
                             </ul>
                         </div>
                         <ol className="list-decimal pl-5 space-y-1 text-sm">
-                            <li>Buka menu <strong>Pengaturan &gt; Portal Wali</strong>.</li>
+                            <li>Buka menu <strong>Portal Wali</strong> di sidebar.</li>
                             <li>Pastikan status portal <strong>Aktif</strong>.</li>
                             <li>Isi <strong>Portal ID</strong>, <strong>URL Web App GAS</strong>, dan token opsional.</li>
-                            <li>Klik <strong>Update Data Portal</strong> di tab Sync Cloud untuk mengirim data ringkas pertama kali.</li>
+                            <li>Klik <strong>Sinkronkan Sekarang</strong> untuk mengirim data ringkas pertama kali.</li>
                         </ol>
                     </div>
                 )
@@ -542,7 +542,7 @@ export const panduanData: PanduanSectionData[] = [
                     <div className="space-y-3 text-sm">
                         <p>Ikuti urutan ini dari awal sampai akhir agar Portal Wali bisa aktif tanpa error:</p>
                         <ol className="list-decimal pl-5 space-y-1">
-                            <li>Buka <strong>Pengaturan &gt; Portal Wali</strong>.</li>
+                            <li>Buka <strong>Portal Wali</strong> di sidebar.</li>
                             <li>Isi <strong>Portal ID</strong> (contoh: <code>ponpes-al-ikhlas</code>).</li>
                             <li>Klik <strong>Lihat Kode Google Apps Script</strong>, lalu klik <strong>Salin Kode</strong>.</li>
                             <li>Buat <strong>Google Sheet baru</strong> di akun Google Anda.</li>
@@ -556,7 +556,7 @@ export const panduanData: PanduanSectionData[] = [
                             <li>Salin URL Web App yang berakhiran <code>/exec</code>.</li>
                             <li>Kembali ke eSantri, tempel URL itu ke kolom <strong>URL Web App GAS</strong>.</li>
                             <li>Jika ingin pakai token keamanan, isi <strong>API_TOKEN</strong> di script dan isi nilai yang sama di kolom <strong>Token API</strong> eSantri.</li>
-                            <li>Simpan pengaturan portal, lalu buka <strong>Pengaturan &gt; Sync Cloud</strong> dan klik <strong>Update Data Portal</strong>.</li>
+                            <li>Simpan pengaturan portal, lalu klik tombol <strong>Sinkronkan Sekarang</strong> di halaman Portal Wali.</li>
                             <li>Buka URL Portal Wali yang muncul, lalu uji dari HP/laptop lain.</li>
                         </ol>
                         <div className="rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
@@ -648,7 +648,7 @@ export const panduanData: PanduanSectionData[] = [
                 color: 'orange',
                 content: (
                     <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm">
-                        <p>Setelah melakukan perubahan data (misal: input absensi baru atau mengubah pengaturan portal), jangan lupa klik tombol <strong>"Update Data Portal"</strong> di menu <em>Pengaturan &gt; Portal Wali</em> atau <em>Pengaturan &gt; Sync Cloud</em> agar data di portal wali sinkron dengan data terbaru di laptop Anda.</p>
+                        <p>Setelah melakukan perubahan data (misal: input absensi baru atau mengubah pengaturan portal), klik tombol <strong>Sinkronkan Sekarang</strong> di halaman <em>Portal Wali</em> agar data di portal wali ikut terbarui.</p>
                     </div>
                 )
             },

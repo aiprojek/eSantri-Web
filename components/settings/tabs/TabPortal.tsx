@@ -44,10 +44,18 @@ const PortalPreview: React.FC<{ config: PortalConfig; settings: PondokSettings }
     const [view, setView] = useState<'login' | 'dashboard'>('login');
     const theme = THEMES.find(t => t.id === config.theme) || THEMES[0];
     const announcementPosts = normalizeAnnouncementPosts(config).filter(post => post.isPublished);
+    const featureItems = [
+        config.showFinance ? { label: 'Keuangan', icon: 'bi-cash-stack' } : null,
+        config.showAcademic ? { label: 'Akademik', icon: 'bi-mortarboard' } : null,
+        config.showAttendance ? { label: 'Presensi', icon: 'bi-calendar-check' } : null,
+        config.showTahfizh ? { label: 'Tahfizh', icon: 'bi-book' } : null,
+        config.showHealth ? { label: 'Kesehatan', icon: 'bi-heart-pulse' } : null,
+        config.showLibrary ? { label: 'Perpus', icon: 'bi-journal-bookmark' } : null,
+    ].filter(Boolean) as Array<{ label: string; icon: string }>;
 
     return (
-        <div className="flex flex-col items-center sticky top-6">
-            <div className="flex gap-2 mb-4 bg-gray-100 p-1 rounded-lg">
+        <div className="sticky top-6 flex flex-col items-center">
+            <div className="mb-4 flex gap-2 rounded-lg bg-gray-100 p-1">
                 <button 
                     onClick={() => setView('login')}
                     className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${view === 'login' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
@@ -62,14 +70,11 @@ const PortalPreview: React.FC<{ config: PortalConfig; settings: PondokSettings }
                 </button>
             </div>
 
-            <div className="w-[280px] h-[560px] bg-white rounded-[3rem] border-[8px] border-gray-800 shadow-2xl overflow-hidden relative flex flex-col">
-                {/* Notch */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-gray-800 rounded-b-2xl z-20"></div>
-                
-                <div className="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar">
-                    {view === 'login' ? (
-                        <div className="min-h-full flex flex-col p-6 pt-12">
-                            <div className="flex flex-col items-center mb-8">
+            <div className="w-[300px] overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-100 p-3 shadow-2xl">
+                <div className="custom-scrollbar h-[580px] overflow-y-auto rounded-2xl border border-teal-100 bg-white p-4">
+                    {view === 'login' && (
+                        <div className="text-center">
+                            <div className="mb-4 flex flex-col items-center">
                                 {settings.logoPonpesUrl ? (
                                     <img src={settings.logoPonpesUrl} alt="Logo" className="w-16 h-16 rounded-full mb-3 shadow-sm border border-gray-100" referrerPolicy="no-referrer" />
                                 ) : (
@@ -77,114 +82,123 @@ const PortalPreview: React.FC<{ config: PortalConfig; settings: PondokSettings }
                                         {settings.namaPonpes?.charAt(0) || 'E'}
                                     </div>
                                 )}
-                                <h1 className="text-sm font-bold text-gray-800 text-center">{settings.namaPonpes || 'eSantri Pondok'}</h1>
-                                <p className="text-[10px] text-gray-500 text-center mt-1">{config.welcomeMessage}</p>
+                                <h1 className="text-sm font-bold text-teal-900">{settings.namaPonpes || 'eSantri Pondok'}</h1>
+                                <div className="mb-1 mt-1 text-[10px] font-bold uppercase tracking-widest text-amber-600">Portal Wali Santri</div>
+                                <p className="text-[10px] text-slate-500">{config.welcomeMessage}</p>
                             </div>
 
-                            <div className="space-y-3">
+                            <div className="space-y-3 text-left">
                                 <div>
-                                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">NIS / ID Santri</label>
+                                    <label className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-slate-500">NIS / ID Santri</label>
                                     <div className="w-full h-8 bg-white border border-gray-200 rounded-md"></div>
                                 </div>
                                 <div>
-                                    <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Tanggal Lahir</label>
+                                    <label className="mb-1 block text-[9px] font-bold uppercase tracking-wide text-slate-500">Tanggal Lahir</label>
                                     <div className="w-full h-8 bg-white border border-gray-200 rounded-md"></div>
+                                    <p className="mt-1 text-[9px] text-slate-400">Format tanggal lahir: DD/MM/YYYY</p>
                                 </div>
-                                <button className={`w-full py-2 rounded-md text-white text-xs font-bold shadow-sm ${theme.color}`}>
+                                <button className={`w-full rounded-lg py-2 text-xs font-bold text-white shadow-sm ${theme.color}`}>
                                     Masuk Portal
                                 </button>
                             </div>
 
-                            <div className="mt-auto pt-8">
-                                <p className="text-[9px] text-center text-gray-400 mb-3">Butuh bantuan? Hubungi kami:</p>
-                                <div className="flex flex-wrap justify-center gap-2">
+                            <div className="mt-5 border-t border-slate-100 pt-3">
+                                <p className="mb-2 text-[9px] text-center text-slate-400">Butuh bantuan? Hubungi kami:</p>
+                                <div className="flex flex-wrap justify-center gap-1.5">
                                     {config.contacts.map(c => (
-                                        <div key={c.id} className={`w-6 h-6 rounded-full ${theme.light} ${theme.text} flex items-center justify-center text-xs border ${theme.border}`}>
+                                        <div key={c.id} className={`flex items-center gap-1 rounded-full border px-2 py-1 text-[9px] ${theme.light} ${theme.text} ${theme.border}`}>
                                             <i className={`bi ${c.icon}`}></i>
+                                            <span>{c.label || 'Kontak'}</span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         </div>
-                    ) : (
-                        <div className="min-h-full flex flex-col">
-                            <div className={`${theme.color} p-6 pt-10 text-white`}>
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-lg font-bold">
-                                        S
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xs font-bold">Ahmad Santri</h2>
-                                        <p className="text-[9px] opacity-80">NIS: 2024001 • Kelas 7A</p>
-                                    </div>
+                    )}
+
+                    {view === 'dashboard' && (
+                        <div className="text-left">
+                            <div className="rounded-xl bg-gradient-to-r from-teal-700 to-cyan-700 p-3 text-white">
+                                <p className="text-[10px] font-semibold text-teal-100">Selamat datang</p>
+                                <p className="text-sm font-bold">Ahmad Santri</p>
+                                <p className="mt-0.5 text-[9px] text-teal-100">NIS: 2024001 • Wali: Bapak Ahmad</p>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                                <div className="rounded-lg border border-slate-100 bg-white p-2">
+                                    <p className="text-[9px] text-slate-500">Tunggakan</p>
+                                    <p className="text-[11px] font-bold text-slate-800">Rp 0</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-100 bg-white p-2">
+                                    <p className="text-[9px] text-slate-500">Tabungan</p>
+                                    <p className="text-[11px] font-bold text-slate-800">Rp 0</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-100 bg-white p-2">
+                                    <p className="text-[9px] text-slate-500">Presensi</p>
+                                    <p className="text-[11px] font-bold text-slate-800">Belum Absen</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-100 bg-white p-2">
+                                    <p className="text-[9px] text-slate-500">Perpus</p>
+                                    <p className="text-[11px] font-bold text-slate-800">0 Buku</p>
                                 </div>
                             </div>
 
-                            <div className="p-4 -mt-4 bg-gray-50 rounded-t-2xl flex-1 space-y-4">
-                                {announcementPosts.length > 0 && (
-                                    <div className={`p-3 rounded-xl border ${theme.border} ${theme.light} relative overflow-hidden`}>
-                                        <div className={`absolute top-0 left-0 w-1 h-full ${theme.color}`}></div>
-                                        <h3 className={`text-[10px] font-bold ${theme.text} mb-2 flex items-center gap-1`}>
-                                            <i className="bi bi-megaphone"></i> Pengumuman
-                                        </h3>
-                                        <div className="space-y-2">
-                                            {announcementPosts.slice(0, 2).map(post => (
-                                                <div key={post.id} className="rounded-md bg-white/60 px-2 py-1">
-                                                    <p className="text-[9px] font-semibold text-gray-800 line-clamp-1">{post.title}</p>
-                                                    <p className="text-[9px] text-gray-700 line-clamp-2">{post.content}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="grid grid-cols-3 gap-2">
-                                    {[
-                                        { id: 'showFinance', label: 'Keuangan', icon: 'bi-cash-stack' },
-                                        { id: 'showAcademic', label: 'Akademik', icon: 'bi-mortarboard' },
-                                        { id: 'showAttendance', label: 'Presensi', icon: 'bi-calendar-check' },
-                                        { id: 'showTahfizh', label: 'Tahfizh', icon: 'bi-book' },
-                                        { id: 'showHealth', label: 'Kesehatan', icon: 'bi-heart-pulse' },
-                                        { id: 'showLibrary', label: 'Perpus', icon: 'bi-journal-bookmark' },
-                                    ].filter(item => (config as any)[item.id]).map(item => (
-                                        <div key={item.id} className="bg-white p-2 rounded-xl border border-gray-100 shadow-sm flex flex-col items-center gap-1">
-                                            <div className={`w-8 h-8 rounded-lg ${theme.light} ${theme.text} flex items-center justify-center text-sm`}>
-                                                <i className={`bi ${item.icon}`}></i>
-                                            </div>
-                                            <span className="text-[8px] font-bold text-gray-600">{item.label}</span>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
-                                    <h3 className="text-[10px] font-bold text-gray-800 mb-2">Link Penting</h3>
-                                    <div className="space-y-2">
-                                        {config.customLinks.map((l, i) => (
-                                            <div key={i} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-100">
-                                                <span className="text-[9px] font-medium text-gray-700">{l.label || 'Link Kustom'}</span>
-                                                <i className="bi bi-chevron-right text-[8px] text-gray-400"></i>
+                            {announcementPosts.length > 0 && (
+                                <div className={`relative mt-3 overflow-hidden rounded-lg border p-2 ${theme.border} ${theme.light}`}>
+                                    <div className={`absolute left-0 top-0 h-full w-1 ${theme.color}`}></div>
+                                    <h3 className={`mb-1 pl-2 text-[10px] font-bold ${theme.text}`}>
+                                        <i className="bi bi-megaphone mr-1"></i>Pengumuman
+                                    </h3>
+                                    <div className="space-y-1 pl-2">
+                                        {announcementPosts.slice(0, 2).map(post => (
+                                            <div key={post.id} className="rounded-md bg-white/70 px-2 py-1">
+                                                <p className="line-clamp-1 text-[9px] font-semibold text-slate-800">{post.title}</p>
+                                                <p className="line-clamp-2 text-[9px] text-slate-600">{post.content}</p>
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+
+                            <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                <div className="flex gap-1 overflow-x-auto">
+                                    {featureItems.map((item) => (
+                                        <div key={item.label} className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[9px] font-semibold text-slate-600">
+                                            <i className={`bi ${item.icon} mr-1`}></i>
+                                            {item.label}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="mt-3 rounded-lg border border-teal-100 bg-white p-3 shadow-sm">
+                                <p className="text-[9px] text-slate-500">Panel Data Aktif</p>
+                                <p className="text-[11px] font-bold text-slate-800">Keuangan / Akademik / Presensi</p>
+                            </div>
+
+                            <div className="mt-3 rounded-lg border border-slate-100 bg-white p-2">
+                                <h3 className="mb-1 text-[10px] font-bold text-slate-700">Link Penting</h3>
+                                <div className="space-y-1">
+                                    {config.customLinks.slice(0, 3).map((l, i) => (
+                                        <div key={i} className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50 px-2 py-1">
+                                            <span className="text-[9px] text-slate-700">{l.label || 'Link Kustom'}</span>
+                                            <i className="bi bi-chevron-right text-[8px] text-slate-400"></i>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
                     )}
                 </div>
-
-                {/* Home Indicator */}
-                <div className="h-6 bg-white flex items-center justify-center">
-                    <div className="w-20 h-1 bg-gray-200 rounded-full"></div>
-                </div>
             </div>
             
-            <p className="mt-4 text-[10px] text-gray-400 italic">* Preview tampilan di layar HP</p>
+            <p className="mt-3 text-[10px] italic text-gray-400">* Preview diselaraskan dengan tampilan portal live</p>
         </div>
     );
 };
 
 export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSettings, onSaveSettings }) => {
-    const { showToast } = useAppContext();
+    const { showToast, settings } = useAppContext();
     const [showScriptHelper, setShowScriptHelper] = useState(false);
     const [editingPostId, setEditingPostId] = useState<string | null>(null);
     const tenantId = localSettings.portalConfig?.portalId || 'default-portal';
@@ -293,6 +307,27 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
         if (editingPostId === id) setEditingPostId(null);
     };
 
+    const handleSavePortalSettings = async () => {
+        try {
+            const dataToSave = { ...localSettings };
+
+            if (!dataToSave.cloudSyncConfig.dropboxAppKey && settings.cloudSyncConfig.dropboxAppKey) {
+                dataToSave.cloudSyncConfig.dropboxAppKey = settings.cloudSyncConfig.dropboxAppKey;
+            }
+            if (!dataToSave.cloudSyncConfig.dropboxAppSecret && settings.cloudSyncConfig.dropboxAppSecret) {
+                dataToSave.cloudSyncConfig.dropboxAppSecret = settings.cloudSyncConfig.dropboxAppSecret;
+            }
+            if (!dataToSave.cloudSyncConfig.webdavPassword && settings.cloudSyncConfig.webdavPassword) {
+                dataToSave.cloudSyncConfig.webdavPassword = settings.cloudSyncConfig.webdavPassword;
+            }
+
+            await onSaveSettings(dataToSave);
+            showToast('Pengaturan portal berhasil disimpan.', 'success');
+        } catch (error) {
+            showToast(`Gagal menyimpan pengaturan portal: ${(error as Error).message}`, 'error');
+        }
+    };
+
     const portalGasScript = `/**
  * eSantri Portal Bridge - Google Apps Script
  *
@@ -305,21 +340,27 @@ export const TabPortal: React.FC<TabPortalProps> = ({ localSettings, setLocalSet
  */
 const SHEET_PORTALS='portals';
 const SHEET_PSB='portal_psb_submissions';
+const SHEET_SYNC_LOGS='portal_sync_logs';
 const PORTAL_ID_DEFAULT='ganti-portal-id-di-sini';
 const API_TOKEN=''; // contoh: 'isi-token-rahasia'
+const PAYLOAD_CHUNK_SIZE=45000;
+const PAYLOAD_MAX_PARTS=20;
 function doGet(e){try{const a=(e.parameter.action||'').trim();if(a==='getPortalConfig')return out(getPortalConfig(e));return out({success:false,message:'Action GET tidak valid.'});}catch(err){return out({success:false,message:err.message||String(err)})}}
 function doPost(e){try{const b=JSON.parse(e.postData.contents||'{}');const a=(b.action||'').trim();if(a==='upsertPortalConfig')return out(upsertPortalConfig(b));if(a==='submitPortalPsb')return out(submitPortalPsb(b));return out({success:false,message:'Action POST tidak valid.'});}catch(err){return out({success:false,message:err.message||String(err)})}}
 function out(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON)}
-function ensureSheet(name,headers){const ss=SpreadsheetApp.getActiveSpreadsheet();let sh=ss.getSheetByName(name);if(!sh){sh=ss.insertSheet(name);sh.getRange(1,1,1,headers.length).setValues([headers]);}return sh}
+function ensureSheet(name,headers){const ss=SpreadsheetApp.getActiveSpreadsheet();let sh=ss.getSheetByName(name);if(!sh){sh=ss.insertSheet(name);}const currentHeaders=sh.getRange(1,1,1,headers.length).getValues()[0];const isHeaderMatch=headers.every((h,i)=>(currentHeaders[i]||'').toString().trim()===h);if(!isHeaderMatch){sh.getRange(1,1,1,headers.length).setValues([headers]);}return sh}
+function getPortalHeaders(){const partHeaders=[];for(let i=1;i<=PAYLOAD_MAX_PARTS;i++){partHeaders.push('payloadPart'+i);}return ['portalId','updatedAt','partCount','payloadSize'].concat(partHeaders)}
+function splitPayload(payloadJson){const parts=[];for(let i=0;i<payloadJson.length;i+=PAYLOAD_CHUNK_SIZE){parts.push(payloadJson.slice(i,i+PAYLOAD_CHUNK_SIZE));}if(parts.length>PAYLOAD_MAX_PARTS){throw new Error('Payload portal terlalu besar ('+payloadJson.length+' karakter). Maksimum saat ini '+(PAYLOAD_CHUNK_SIZE*PAYLOAD_MAX_PARTS)+' karakter.');}return parts}
+function mergePayloadFromRow(headers,row){const idxLegacyPayload=headers.indexOf('payloadJson');if(idxLegacyPayload>=0){return (row[idxLegacyPayload]||'').toString();}const idxPartCount=headers.indexOf('partCount');const partCount=Number(row[idxPartCount]||0);if(!partCount||partCount<1)return '';let merged='';for(let i=1;i<=partCount;i++){const idxPart=headers.indexOf('payloadPart'+i);if(idxPart<0)continue;merged+=(row[idxPart]||'').toString();}return merged}
 function authCheck(inputApiKey){const expectedByConstant=(API_TOKEN||'').trim();const expectedByProperty=(PropertiesService.getScriptProperties().getProperty('PORTAL_API_KEY')||'').trim();const expected=expectedByConstant||expectedByProperty;if(!expected)return true;return expected===(inputApiKey||'')}
 function resolvePortalId(inputPortalId){const p=(inputPortalId||'').trim();if(p)return p;const fallback=(PORTAL_ID_DEFAULT||'').trim();if(fallback && !fallback.includes('ganti-portal-id'))return fallback;throw new Error('portalId wajib diisi. Isi di aplikasi atau ubah PORTAL_ID_DEFAULT di script.')}
-function getPortalConfig(e){const portalId=resolvePortalId(e.parameter.portalId);const apiKey=(e.parameter.apiKey||'').trim();if(!authCheck(apiKey))throw new Error('API key tidak valid.');const sh=ensureSheet(SHEET_PORTALS,['portalId','payloadJson','updatedAt']);const values=sh.getDataRange().getValues();const headers=values.shift();const idxPortal=headers.indexOf('portalId');const idxPayload=headers.indexOf('payloadJson');for(let i=values.length-1;i>=0;i--){if((values[i][idxPortal]||'').toString().trim()===portalId){const payload=JSON.parse(values[i][idxPayload]||'{}');return {success:true,data:payload.settings||null};}}return {success:false,message:'Data portal tidak ditemukan.'};}
-function upsertPortalConfig(body){const portalId=resolvePortalId(body.portalId);const apiKey=(body.apiKey||'').trim();const payload=body.payload||{};if(!authCheck(apiKey))throw new Error('API key tidak valid.');const sh=ensureSheet(SHEET_PORTALS,['portalId','payloadJson','updatedAt']);const values=sh.getDataRange().getValues();const headers=values.shift();const idxPortal=headers.indexOf('portalId');let targetRow=-1;for(let i=0;i<values.length;i++){if((values[i][idxPortal]||'').toString().trim()===portalId){targetRow=i+2;break;}}const row=[portalId,JSON.stringify(payload),new Date().toISOString()];if(targetRow>0){sh.getRange(targetRow,1,1,row.length).setValues([row]);}else{sh.appendRow(row);}return {success:true,message:'Portal config tersimpan.'};}
+function getPortalConfig(e){const portalId=resolvePortalId(e.parameter.portalId);const apiKey=(e.parameter.apiKey||'').trim();if(!authCheck(apiKey))throw new Error('API key tidak valid.');const sh=ensureSheet(SHEET_PORTALS,getPortalHeaders());const values=sh.getDataRange().getValues();const headers=values.shift();const idxPortal=headers.indexOf('portalId');for(let i=values.length-1;i>=0;i--){if((values[i][idxPortal]||'').toString().trim()===portalId){const payloadJson=mergePayloadFromRow(headers,values[i]);const payload=JSON.parse(payloadJson||'{}');return {success:true,data:{settings:payload.settings||null,santriSummary:payload.santriSummary||[]}};}}return {success:false,message:'Data portal tidak ditemukan.'};}
+function upsertPortalConfig(body){const portalId=resolvePortalId(body.portalId);const apiKey=(body.apiKey||'').trim();const payload=body.payload||{};if(!authCheck(apiKey))throw new Error('API key tidak valid.');const portalHeaders=getPortalHeaders();const sh=ensureSheet(SHEET_PORTALS,portalHeaders);const values=sh.getDataRange().getValues();const headers=values.shift();const idxPortal=headers.indexOf('portalId');let targetRow=-1;for(let i=0;i<values.length;i++){if((values[i][idxPortal]||'').toString().trim()===portalId){targetRow=i+2;break;}}const payloadJson=JSON.stringify(payload);const payloadParts=splitPayload(payloadJson);const rowData=new Array(portalHeaders.length).fill('');rowData[portalHeaders.indexOf('portalId')]=portalId;rowData[portalHeaders.indexOf('updatedAt')]=new Date().toISOString();rowData[portalHeaders.indexOf('partCount')]=payloadParts.length;rowData[portalHeaders.indexOf('payloadSize')]=payloadJson.length;for(let i=0;i<payloadParts.length;i++){rowData[portalHeaders.indexOf('payloadPart'+(i+1))]=payloadParts[i];}if(targetRow>0){sh.getRange(targetRow,1,1,rowData.length).setValues([rowData]);}else{sh.appendRow(rowData);}const logSh=ensureSheet(SHEET_SYNC_LOGS,['loggedAt','portalId','status','santriCount','payloadSize','note']);const count=Array.isArray(payload.santriSummary)?payload.santriSummary.length:0;logSh.appendRow([new Date().toISOString(),portalId,targetRow>0?'updated':'inserted',count,payloadJson.length,'upsertPortalConfig']);return {success:true,message:'Portal config tersimpan.'};}
 function submitPortalPsb(body){const portalId=resolvePortalId(body.portalId);const apiKey=(body.apiKey||'').trim();const fields=body.fields||{};const submittedAt=body.submittedAt||new Date().toISOString();if(!authCheck(apiKey))throw new Error('API key tidak valid.');const sh=ensureSheet(SHEET_PSB,['submittedAt','portalId','namaLengkap','nisn','nik','jenisKelamin','tanggalLahir','namaWali','teleponWali','rawJson']);sh.appendRow([submittedAt,portalId,fields.namaLengkap||'',fields.nisn||'',fields.nik||'',fields.jenisKelamin||'',fields.tanggalLahir||'',fields.namaWali||'',fields.teleponWali||'',JSON.stringify(fields)]);return {success:true,message:'Pendaftaran berhasil tersimpan.'};}`;
 
     return (
         <div className="flex flex-col items-start gap-6 lg:flex-row">
-            <div className="flex-1 w-full space-y-6">
+            <div className="flex-1 w-full min-w-0 space-y-6">
                 <SectionCard
                     title="Pengaturan Portal Wali Santri"
                     description="Konfigurasi tampilan, fitur, alamat portal, dan akses publik untuk wali santri."
@@ -351,8 +392,8 @@ function submitPortalPsb(body){const portalId=resolvePortalId(body.portalId);con
 
                     {portalConfig.enabled && (
                         <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
-                            <div className="flex flex-col md:flex-row gap-6">
-                                <div className="flex-1">
+                            <div className="flex flex-col gap-6 md:flex-row md:items-start">
+                                <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2 mb-2">
                                         <i className="bi bi-link-45deg text-blue-600 text-xl"></i>
                                         <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wider">URL Portal Wali Santri</h3>
@@ -361,18 +402,20 @@ function submitPortalPsb(body){const portalId=resolvePortalId(body.portalId);con
                                     
                                     {portalUrl ? (
                                         <div className="space-y-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 truncate rounded border border-blue-300 bg-white p-2 font-mono text-sm text-blue-900">
-                                                    {portalUrl}
+                                            <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
+                                                <div className="min-w-0 flex-1 overflow-hidden rounded border border-blue-300 bg-white">
+                                                    <div className="overflow-x-auto p-2 font-mono text-sm text-blue-900 whitespace-nowrap">
+                                                        {portalUrl}
+                                                    </div>
                                                 </div>
                                                 <button 
                                                     onClick={() => {
                                                         navigator.clipboard.writeText(portalUrl);
                                                         showToast('Link portal disalin!', 'success');
                                                     }}
-                                                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 md:shrink-0"
                                                 >
-                                                    <i className="bi bi-clipboard"></i> Salin
+                                                    <i className="bi bi-clipboard"></i> Salin URL
                                                 </button>
                                             </div>
                                             <p className="text-[10px] text-blue-500 italic">
@@ -388,7 +431,7 @@ function submitPortalPsb(body){const portalId=resolvePortalId(body.portalId);con
                                 </div>
 
                                 {portalUrl && (
-                                    <div className="flex flex-col items-center gap-2 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
+                                    <div className="shrink-0 flex flex-col items-center gap-2 bg-white p-3 rounded-lg border border-blue-200 shadow-sm">
                                         <img 
                                             src={qrCodeUrl} 
                                             alt="QR Code Portal" 
@@ -756,7 +799,7 @@ function submitPortalPsb(body){const portalId=resolvePortalId(body.portalId);con
 
                     <div className="mt-8 flex justify-end border-t border-app-border pt-6">
                         <button
-                            onClick={() => onSaveSettings(localSettings)}
+                            onClick={() => { void handleSavePortalSettings(); }}
                             className="app-button-primary inline-flex items-center gap-2 px-8 py-2.5"
                         >
                             <i className="bi bi-save"></i> Simpan Pengaturan Portal

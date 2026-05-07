@@ -18,10 +18,11 @@ import {
 const TABLES_TO_SYNC = [
     'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas', 'chartOfAccounts',
     'payrollRecords', 'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
-    'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
+    'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi', 'jurnalMengajar',
     'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
     'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules', 'users',
-    'auditLogs', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'settings'
+    'auditLogs', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang',
+    'warehouses', 'stockTransfers', 'settings'
 ];
 
 let unsubscribers: (() => void)[] = [];

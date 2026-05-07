@@ -421,6 +421,9 @@ function submitPortalPsb(body){const portalId=resolvePortalId(body.portalId);con
                                             <p className="text-[10px] text-blue-500 italic">
                                                 * Link ini menggunakan {portalConfig.baseUrl ? 'Domain Kustom' : 'Domain Saat Ini'} dan terhubung ke Google Apps Script.
                                             </p>
+                                            <p className="text-[10px] text-blue-500 italic">
+                                                * Jika ingin link lebih pendek dan mudah dibagikan, Anda bisa menggunakan layanan URL shortener (mis. Bitly, TinyURL, atau s.id: https://home.s.id/lo/id).
+                                            </p>
                                         </div>
                                     ) : (
                                         <div className="text-xs text-red-600 font-medium bg-red-50 p-2 rounded border border-red-100">

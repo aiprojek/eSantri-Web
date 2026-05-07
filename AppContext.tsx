@@ -210,6 +210,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     };
 
+    const onSaveSettingsWithSync = useCallback(async (newSettings: PondokSettings) => {
+        await sets.onSaveSettings(newSettings);
+        triggerAutoSync();
+    }, [sets.onSaveSettings, triggerAutoSync]);
+
     // Surat Actions
     const onSaveSuratTemplate = async (template: SuratTemplate) => { const withTs = addTimestamp(template); if (template.id) { await db.suratTemplates.put(withTs); await logActivity('suratTemplates', 'UPDATE', template.id.toString()); } else { const newId = generateUniqueId(); const newItem = { ...withTs, id: newId }; await db.suratTemplates.put(newItem); await logActivity('suratTemplates', 'INSERT', newId.toString()); } triggerAutoSync(); };
     const onDeleteSuratTemplate = async (id: number) => { const item = suratTemplates.find(t => t.id === id); if(!item) return; const deletedItem = { ...item, deleted: true, lastModified: Date.now() }; await db.suratTemplates.put(deletedItem); await logActivity('suratTemplates', 'DELETE', id.toString()); triggerAutoSync(); };
@@ -244,6 +249,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...ui,
             ...auth,
             ...sets,
+            onSaveSettings: onSaveSettingsWithSync,
+            onUpdateSettings: onSaveSettingsWithSync,
             santriFilters: santriCtx.santriFilters,
             setSantriFilters: santriCtx.setSantriFilters,
 

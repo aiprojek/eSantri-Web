@@ -33,11 +33,11 @@ export const panduanData: PanduanSectionData[] = [
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div className="bg-white p-3 rounded border border-yellow-200 shadow-sm">
-                                <h4 className="font-bold text-teal-700 text-xs uppercase mb-1">Opsi 1: Firebase Realtime (Rekomendasi)</h4>
+                                <h4 className="font-bold text-teal-700 text-xs uppercase mb-1">Opsi 1: Firebase (Realtime)</h4>
                                 <p className="text-[11px]">Data tersinkronisasi secara otomatis dan instan antar perangkat. Sangat cocok untuk kolaborasi tim secara langsung tanpa perlu kirim/terima manual.</p>
                             </div>
-                            <div className="bg-white p-3 rounded border border-yellow-200 shadow-sm opacity-80">
-                                <h4 className="font-bold text-gray-600 text-xs uppercase mb-1">Opsi 2: Cloud Sync (Hub & Spoke)</h4>
+                            <div className="bg-white p-3 rounded border border-yellow-200 shadow-sm">
+                                <h4 className="font-bold text-teal-700 text-xs uppercase mb-1">Opsi 2: Cloud Sync (Hub & Spoke)</h4>
                                 <p className="text-[11px]">Menggunakan Dropbox/WebDAV. Cocok untuk backup berkala atau jika Anda ingin kontrol penuh atas file database di cloud storage Anda sendiri.</p>
                             </div>
                         </div>

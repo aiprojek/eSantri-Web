@@ -225,18 +225,20 @@ export const PublicPortal: React.FC = () => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-100 flex items-center justify-center p-3 sm:p-6">
              <div className={`bg-white rounded-2xl shadow-2xl text-center w-full border border-teal-100 ${loggedInSantri ? 'max-w-5xl p-4 sm:p-6' : 'max-w-lg p-6 sm:p-8'}`}>
-                <div className="flex flex-col items-center mb-4">
-                    {tenantSettings.logoPonpesUrl ? (
-                        <img src={tenantSettings.logoPonpesUrl} alt="Logo" className="w-16 h-16 rounded-full mb-3 shadow-sm border border-gray-100 object-contain bg-white p-1" referrerPolicy="no-referrer" />
-                    ) : (
-                        <div className="w-16 h-16 rounded-full bg-teal-600 flex items-center justify-center text-white text-2xl font-bold mb-3">
-                            {(tenantSettings.namaPonpes || 'E').charAt(0)}
-                        </div>
-                    )}
-                    <h1 className="text-2xl font-bold text-teal-900 mb-1">{tenantSettings.namaPonpes}</h1>
-                    <div className="text-amber-600 font-bold uppercase tracking-widest text-xs mb-2">Portal Wali Santri</div>
-                    <p className="text-xs text-slate-500">{portalConfig?.welcomeMessage || 'Selamat Datang di Portal Wali Santri'}</p>
-                </div>
+                {!loggedInSantri && (
+                    <div className="flex flex-col items-center mb-4">
+                        {tenantSettings.logoPonpesUrl ? (
+                            <img src={tenantSettings.logoPonpesUrl} alt="Logo" className="w-16 h-16 rounded-full mb-3 shadow-sm border border-gray-100 object-contain bg-white p-1" referrerPolicy="no-referrer" />
+                        ) : (
+                            <div className="w-16 h-16 rounded-full bg-teal-600 flex items-center justify-center text-white text-2xl font-bold mb-3">
+                                {(tenantSettings.namaPonpes || 'E').charAt(0)}
+                            </div>
+                        )}
+                        <h1 className="text-2xl font-bold text-teal-900 mb-1">{tenantSettings.namaPonpes}</h1>
+                        <div className="text-amber-600 font-bold uppercase tracking-widest text-xs mb-2">Portal Wali Santri</div>
+                        <p className="text-xs text-slate-500">{portalConfig?.welcomeMessage || 'Selamat Datang di Portal Wali Santri'}</p>
+                    </div>
+                )}
                 {!loggedInSantri ? (
                     <>
                         <p className="text-gray-600 mb-6">Silakan login untuk mengakses data akademik, absensi, dan keuangan santri.</p>

@@ -178,6 +178,7 @@ type QuickHelpSlide = {
   title: string;
   body: string;
   points: string[];
+  ctaLabel?: string;
 };
 
 const QUICK_HELP_SLIDES: QuickHelpSlide[] = [
@@ -231,6 +232,17 @@ const QUICK_HELP_SLIDES: QuickHelpSlide[] = [
       'Berbagi praktik baik operasional agar pengguna lain terbantu.',
       'FOSS berarti kita sama-sama menjaga, memperbaiki, dan mengembangkan.'
     ]
+  },
+  {
+    icon: 'bi-info-circle',
+    title: 'Eksplorasi Lebih Lanjut',
+    body: 'Untuk panduan yang lebih kaya, studi kasus operasional, FAQ, rilis fitur, dan informasi detail lainnya, buka halaman Tentang Aplikasi.',
+    points: [
+      'Baca Panduan lengkap per modul dan alur kerja.',
+      'Cek FAQ, catatan rilis, serta informasi layanan.',
+      'Gunakan sebagai referensi onboarding tim operator baru.'
+    ],
+    ctaLabel: 'Buka Halaman Tentang'
   }
 ];
 
@@ -945,6 +957,19 @@ const AppContent: React.FC = () => {
                                     ))}
                                 </div>
                                 <div className="flex items-center gap-2">
+                                    {currentQuickHelpSlide.ctaLabel && (
+                                        <button
+                                            onClick={() => {
+                                                setCurrentPage(Page.Tentang);
+                                                setTentangTab('panduan');
+                                                setPanduanSection(undefined);
+                                                closeQuickHelp();
+                                            }}
+                                            className="app-button-secondary px-3 py-2 text-xs"
+                                        >
+                                            <i className="bi bi-box-arrow-up-right mr-1"></i> {currentQuickHelpSlide.ctaLabel}
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => setQuickHelpIndex((prev) => (prev - 1 + QUICK_HELP_SLIDES.length) % QUICK_HELP_SLIDES.length)}
                                         className="app-button-secondary px-3 py-2 text-xs"

@@ -22,6 +22,8 @@ export const FEATURE_DATA: FeatureCategory[] = [
         icon: 'bi-mortarboard-fill',
         items: [
             { icon: 'bi-calendar-week-fill', title: 'Jadwal Pelajaran Otomatis', desc: 'Penyusunan jadwal KBM dengan deteksi bentrok guru dan fitur salin jadwal antar kelas.' },
+            { icon: 'bi-calendar-check-fill', title: 'Absensi Harian Santri', desc: 'Input kehadiran per rombel, rekap bulanan, dan format cetak lembar absensi yang siap operasional.' },
+            { icon: 'bi-journal-text', title: 'Jurnal Mengajar & Agenda Kelas', desc: 'Pencatatan materi harian guru, agenda kelas, dan monitoring progres pembelajaran per tanggal.' },
             { icon: 'bi-file-earmark-spreadsheet-fill', title: 'Rapor Digital (Desentralisasi)', desc: 'Desain rapor custom, kirim form nilai HTML ke guru via WA, dan import nilai otomatis.' },
             { icon: 'bi-journal-bookmark-fill', title: 'Mutaba\'ah Tahfizh', desc: 'Pencatatan setoran hafalan (Ziyadah/Murojaah) dengan grafik perkembangan santri.' },
             { icon: 'bi-book-half', title: 'Perpustakaan & Sirkulasi', desc: 'Katalog buku, cetak label/slip, dan manajemen peminjaman dengan denda otomatis.' },
@@ -60,12 +62,15 @@ export const FEATURE_DATA: FeatureCategory[] = [
         color: 'text-purple-600',
         icon: 'bi-cpu-fill',
         items: [
+            { icon: 'bi-speedometer2', title: 'Dashboard Operasional', desc: 'Ringkasan cepat kondisi pondok: statistik santri, aktivitas harian, dan indikator utama operasional.' },
             { icon: 'bi-cloud-check-fill', title: 'Firebase Cloud Database', desc: 'Penyimpanan data aman di cloud dengan sinkronisasi real-time.' },
             { icon: 'bi-cloud-arrow-up-fill', title: 'Cloud Sync (Hub & Spoke)', desc: 'Sinkronisasi data antar Admin dan Staff menggunakan Dropbox/WebDAV dengan sistem Pairing Code.' },
             { icon: 'bi-whatsapp', title: 'WhatsApp Center', desc: 'Kirim pesan tagihan, pengumuman, dan laporan ke wali santri secara massal dengan template cerdas.' },
             { icon: 'bi-file-earmark-person-fill', title: 'PSB Online', desc: 'Formulir pendaftaran custom, integrasi WhatsApp, dan Google Sheet.' },
             { icon: 'bi-envelope-paper-fill', title: 'Surat Menyurat', desc: 'Buat surat massal dengan placeholder otomatis dan arsip digital.' },
             { icon: 'bi-printer-fill', title: 'Pusat Cetak Dokumen', desc: 'Cetak Kartu Santri, Kuitansi, Label, dan Laporan dalam format PDF/Excel.' },
+            { icon: 'bi-person-vcard-fill', title: 'Portal Wali Santri', desc: 'Akses online untuk wali melihat ringkasan absensi, akademik, keuangan, tahfizh, dan informasi santri.' },
+            { icon: 'bi-clipboard-data-fill', title: 'Log Aktivitas & Audit', desc: 'Pelacakan perubahan data oleh pengguna untuk transparansi, keamanan, dan kontrol operasional.' },
         ]
     }
 ];

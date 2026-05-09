@@ -1687,9 +1687,11 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Manajemen Data & Akademik',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm">
+                        <li><strong>Dashboard Operasional:</strong> ringkasan cepat statistik pondok dan indikator utama aktivitas harian.</li>
                         <li><strong>Data Santri:</strong> Profil lengkap, riwayat status, prestasi, dan pelanggaran.</li>
                         <li><strong>Akademik:</strong> Manajemen Marhalah, Kelas, Rombel, Mata Pelajaran, dan Jadwal Pelajaran.</li>
                         <li><strong>Absensi:</strong> Pencatatan kehadiran harian santri per rombel.</li>
+                        <li><strong>Jurnal Mengajar:</strong> Catatan materi/agenda kelas harian guru dan monitoring progres pembelajaran.</li>
                         <li><strong>Tahfizh:</strong> Setoran hafalan (Ziyadah/Murojaah) dengan target per juz/surah.</li>
                         <li><strong>Rapor Dinamis:</strong> Desain format rapor sendiri dengan sistem Grid & Formula.</li>
                     </ul>
@@ -1716,6 +1718,7 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Buku Tamu:</strong> Pencatatan kunjungan tamu dan pengawasan keamanan.</li>
                         <li><strong>WhatsApp Center:</strong> Broadcast pesan massal ke wali santri untuk tagihan, pengumuman, dan laporan.</li>
                         <li><strong>Surat Menyurat:</strong> Pembuatan surat resmi, tagihan, dan arsip digital.</li>
+                        <li><strong>Log Aktivitas (Audit):</strong> Jejak perubahan data oleh user untuk kontrol dan evaluasi.</li>
                     </ul>
                 )
             },

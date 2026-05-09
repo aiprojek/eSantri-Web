@@ -311,19 +311,126 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
     } else if (type === 'Rombel') {
         title = "DAFTAR SANTRI PER ROMBEL";
         orientation = 'landscape';
+        const defaultColumns = ['no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat'];
+        const activeColumns: string[] = (options.rombelVisibleColumns && options.rombelVisibleColumns.length > 0)
+            ? options.rombelVisibleColumns
+            : defaultColumns;
+        const getColumnLabel = (id: string) => {
+            const labels: Record<string, string> = {
+                no: 'No',
+                nis: 'NIS',
+                nisn: 'NISN',
+                nik: 'NIK',
+                namaLengkap: 'Nama Lengkap',
+                namaHijrah: 'Nama Hijrah',
+                lp: 'L/P',
+                tempatLahir: 'Tempat Lahir',
+                tanggalLahir: 'Tanggal Lahir',
+                ttl: 'TTL',
+                kewarganegaraan: 'Kewarganegaraan',
+                ayah: 'Nama Ayah',
+                ibu: 'Nama Ibu',
+                wali: 'Ayah / Wali / Ibu',
+                telepon: 'No. Telepon Utama',
+                teleponAyah: 'Telepon Ayah',
+                teleponIbu: 'Telepon Ibu',
+                teleponWali: 'Telepon Wali',
+                jenjang: 'Jenjang',
+                kelas: 'Kelas',
+                rombel: 'Rombel',
+                status: 'Status',
+                jenisSantri: 'Jenis Santri',
+                tanggalMasuk: 'Tanggal Masuk',
+                alamat: 'Alamat Lengkap',
+                desa: 'Desa/Kelurahan',
+                kecamatan: 'Kecamatan',
+                kabupaten: 'Kabupaten/Kota',
+                provinsi: 'Provinsi',
+                kodePos: 'Kode Pos',
+                sekolahAsal: 'Sekolah Asal',
+                anakKe: 'Anak Ke-',
+                jumlahSaudara: 'Jml. Saudara',
+                tinggiBadan: 'Tinggi (cm)',
+                beratBadan: 'Berat (kg)',
+            };
+            return labels[id] || id;
+        };
+        const getColumnClass = (id: string) => {
+            if (id === 'no') return 'border border-black p-2 text-center w-8';
+            if (id === 'lp') return 'border border-black p-2 text-center w-10';
+            if (id === 'alamat') return 'border border-black p-2 w-48';
+            return 'border border-black p-2';
+        };
         tableHeader = (
             <thead className="bg-gray-200">
-                <tr><th className="border border-black p-2 w-8">No</th><th className="border border-black p-2 w-24">NIS</th><th className="border border-black p-2">Nama Lengkap</th><th className="border border-black p-2 w-10">L/P</th><th className="border border-black p-2 w-32">TTL</th><th className="border border-black p-2 w-32">Ayah / Wali / Ibu</th><th className="border border-black p-2 w-32">No. Telepon</th><th className="border border-black p-2 w-48">Alamat</th></tr>
+                <tr>
+                    {activeColumns.map(col => (
+                        <th key={col} className={getColumnClass(col)}>{getColumnLabel(col)}</th>
+                    ))}
+                </tr>
             </thead>
         );
         tableRow = (s, i) => {
+            const currentRombel = settings.rombel.find(r => r.id === s.rombelId);
+            const currentKelas = settings.kelas.find(k => k.id === s.kelasId);
+            const currentJenjang = settings.jenjang.find(j => j.id === s.jenjangId);
             const wali = s.namaWali || s.namaAyah || s.namaIbu || '-';
             const telepon = s.teleponWali || (s as any).nomorHpWali || s.teleponAyah || s.teleponIbu || '-';
             const alamat = formatAlamat(s.alamat) || '-';
+            const valueMap: Record<string, string> = {
+                no: String(i + 1),
+                nis: s.nis || '-',
+                nisn: s.nisn || '-',
+                nik: s.nik || '-',
+                namaLengkap: s.namaLengkap || '-',
+                namaHijrah: s.namaHijrah || '-',
+                lp: s.jenisKelamin === 'Laki-laki' ? 'L' : 'P',
+                tempatLahir: s.tempatLahir || '-',
+                tanggalLahir: s.tanggalLahir ? formatDate(s.tanggalLahir) : '-',
+                ttl: `${s.tempatLahir || '-'}, ${s.tanggalLahir ? formatDate(s.tanggalLahir) : '-'}`,
+                kewarganegaraan: s.kewarganegaraan || '-',
+                ayah: s.namaAyah || '-',
+                ibu: s.namaIbu || '-',
+                wali,
+                telepon,
+                teleponAyah: s.teleponAyah || '-',
+                teleponIbu: s.teleponIbu || '-',
+                teleponWali: s.teleponWali || ((s as any).nomorHpWali || '-'),
+                jenjang: currentJenjang?.nama || '-',
+                kelas: currentKelas?.nama || '-',
+                rombel: currentRombel?.nama || '-',
+                status: s.status || '-',
+                jenisSantri: s.jenisSantri || '-',
+                tanggalMasuk: s.tanggalMasuk ? formatDate(s.tanggalMasuk) : '-',
+                alamat,
+                desa: s.alamat?.desaKelurahan || '-',
+                kecamatan: s.alamat?.kecamatan || '-',
+                kabupaten: s.alamat?.kabupatenKota || '-',
+                provinsi: s.alamat?.provinsi || '-',
+                kodePos: s.alamat?.kodePos || '-',
+                sekolahAsal: s.sekolahAsal || '-',
+                anakKe: typeof s.anakKe === 'number' ? String(s.anakKe) : '-',
+                jumlahSaudara: typeof s.jumlahSaudara === 'number' ? String(s.jumlahSaudara) : '-',
+                tinggiBadan: typeof s.tinggiBadan === 'number' ? String(s.tinggiBadan) : '-',
+                beratBadan: typeof s.beratBadan === 'number' ? String(s.beratBadan) : '-',
+            };
             
             return (
                 <tr key={s.id}>
-                    <td className="border border-black p-2 text-center">{i+1}</td><td className="border border-black p-2 text-center">{s.nis}</td><td className="border border-black p-2 font-semibold">{s.namaLengkap} {s.status === 'Hiatus' && <span className="italic text-xs font-normal text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>}</td><td className="border border-black p-2 text-center">{s.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td><td className="border border-black p-2">{s.tempatLahir}, {formatDate(s.tanggalLahir)}</td><td className="border border-black p-2">{wali}</td><td className="border border-black p-2 font-mono whitespace-nowrap">{telepon}</td><td className="border border-black p-2 text-[10px] leading-tight">{alamat}</td>
+                    {activeColumns.map(col => (
+                        <td key={col} className={getColumnClass(col)}>
+                            {col === 'namaLengkap' ? (
+                                <>
+                                    <span className="font-semibold">{valueMap[col]}</span>
+                                    {s.status === 'Hiatus' && (
+                                        <span className="italic text-xs font-normal text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>
+                                    )}
+                                </>
+                            ) : (
+                                valueMap[col] || '-'
+                            )}
+                        </td>
+                    ))}
                 </tr>
             );
         };

@@ -475,7 +475,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                         className="app-select block w-full p-2.5 text-sm"
                     >
                         <option value="none">Tidak Aktif</option>
-                        <option value="firebase">Firebase Realtime (Rekomendasi - Multi User)</option>
+                        <option value="firebase">Firebase (Realtime)</option>
                         <option value="dropbox">Dropbox (Mudah & Gratis)</option>
                         <option value="webdav">WebDAV / Nextcloud (Self-Hosted/CasaOS)</option>
                     </select>
@@ -503,6 +503,37 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             </div>
 
             <div className="grid grid-cols-1 gap-6">
+                {localSettings.cloudSyncConfig?.provider !== 'none' && (
+                    <div className="rounded-xl border border-app-border bg-app-subtle p-4">
+                        <h4 className="mb-3 text-sm font-semibold text-slate-700">Kontak Admin Inti (Notifikasi Setelah Setor Data)</h4>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                            <input
+                                type="text"
+                                value={localSettings.cloudSyncConfig.adminNotifyName || ''}
+                                onChange={(e) => handleSyncConfigChange('adminNotifyName', e.target.value)}
+                                className="app-input w-full p-2.5 text-sm"
+                                placeholder="Nama admin inti (opsional)"
+                            />
+                            <input
+                                type="text"
+                                value={localSettings.cloudSyncConfig.adminNotifyWhatsapp || ''}
+                                onChange={(e) => handleSyncConfigChange('adminNotifyWhatsapp', e.target.value)}
+                                className="app-input w-full p-2.5 text-sm"
+                                placeholder="WhatsApp admin, contoh 62812xxxx"
+                            />
+                            <input
+                                type="text"
+                                value={localSettings.cloudSyncConfig.adminNotifyTelegram || ''}
+                                onChange={(e) => handleSyncConfigChange('adminNotifyTelegram', e.target.value)}
+                                className="app-input w-full p-2.5 text-sm"
+                                placeholder="Telegram @username atau https://t.me/..."
+                            />
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                            Setelah staff berhasil setor data (sync upload), sistem akan menampilkan dialog untuk mengirim konfirmasi ke admin inti.
+                        </p>
+                    </div>
+                )}
                 <Suspense fallback={<LoadingFallback />}>
                     {localSettings.cloudSyncConfig?.provider === 'firebase' && (
                         <FirebaseCloudPanel

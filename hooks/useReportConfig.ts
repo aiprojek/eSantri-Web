@@ -104,6 +104,9 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
     const [kesehatanEndDate, setKesehatanEndDate] = useState<string>(mutasiEndDate);
     const [bkStartDate, setBkStartDate] = useState<string>(mutasiStartDate);
     const [bkEndDate, setBkEndDate] = useState<string>(mutasiEndDate);
+    const [rombelVisibleColumns, setRombelVisibleColumns] = useState<string[]>([
+        'no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat'
+    ]);
 
 
     const isFinancialReport = activeReport === ReportType.LaporanArusKas || activeReport === ReportType.RekeningKoranSantri;
@@ -150,6 +153,7 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
         setLabelWidth(6.4);
         setLabelHeight(3.2);
         setLabelFontSize(10);
+        setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat']);
     }, [defaultAcademicYear]);
 
     const canGenerate = useMemo(() => {
@@ -272,6 +276,7 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             kesehatanEndDate, setKesehatanEndDate,
             bkStartDate, setBkStartDate,
             bkEndDate, setBkEndDate,
+            rombelVisibleColumns, setRombelVisibleColumns,
         }
     };
 };

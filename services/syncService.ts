@@ -315,14 +315,17 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
     for (const table of tablesToSync) {
         data[table] = await getIncrementalData(table, lastSyncTime);
     }
+    const changedTableEntries = Object.entries(data)
+        .map(([table, rows]: [string, any]) => ({ table, count: Array.isArray(rows) ? rows.length : 0 }))
+        .filter(item => item.count > 0);
+    const totalChanges = changedTableEntries.reduce((acc, item) => acc + item.count, 0);
 
     // Always include settings if there's any update or force
     if (data.settings.length === 0 && !forceFull) {
         // Option: skip if no changes across most important tables? 
         // For now, let's check if all tables are empty
-        const totalChanges = Object.values(data).reduce((acc: number, curr: any) => acc + curr.length, 0);
         if (totalChanges === 0) {
-            return { skipped: true, timestamp: new Date().toISOString() };
+            return { skipped: true, timestamp: new Date().toISOString(), totalChanges: 0, changedTables: [] as { table: string; count: number }[] };
         }
     }
 
@@ -363,7 +366,7 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
         throw new Error("Provider tidak valid");
     }
     
-    return { filename, timestamp: payload.timestamp };
+    return { filename, timestamp: payload.timestamp, totalChanges, changedTables: changedTableEntries };
 };
 
 // ... downloadAndMergeMaster (updated) ...

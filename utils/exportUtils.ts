@@ -318,13 +318,46 @@ ${content}
 export const exportToAutoTable = async (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
+
+    const detectAutoOrientation = (): 'p' | 'l' => {
+        const pages = element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after');
+        let maxEstimatedWidth = 0;
+
+        pages.forEach((pageContainer) => {
+            const tables = Array.from(pageContainer.querySelectorAll('table')).filter(t => !t.classList.contains('print-meta')) as HTMLTableElement[];
+            tables.forEach((table) => {
+                const headers = Array.from(table.querySelectorAll('thead th'));
+                if (headers.length === 0) return;
+
+                const columnCount = headers.length;
+                let textFactor = 0;
+                headers.forEach((th) => {
+                    const len = (th.textContent || '').replace(/\s+/g, ' ').trim().length;
+                    textFactor += Math.min(len, 20);
+                });
+
+                // Estimasi sederhana lebar tabel:
+                // - basis lebar per kolom
+                // - ditambah bobot panjang header
+                const estimatedWidth = (columnCount * 22) + (textFactor * 1.2);
+                if (estimatedWidth > maxEstimatedWidth) {
+                    maxEstimatedWidth = estimatedWidth;
+                }
+            });
+        });
+
+        // Ambang ini membuat tabel sempit tetap portrait, tabel lebar otomatis landscape.
+        return maxEstimatedWidth > 165 ? 'l' : 'p';
+    };
+
     const [{ jsPDF }, autoTableModule] = await Promise.all([
         loadJsPdf(),
         loadJsPdfAutoTable()
     ]);
     const autoTable = autoTableModule.default;
 
-    const doc = new jsPDF('p', 'mm', 'a4');
+    const orientation = detectAutoOrientation();
+    const doc = new jsPDF(orientation, 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     
     // Find all visual pages (including the last page without page-break-after)

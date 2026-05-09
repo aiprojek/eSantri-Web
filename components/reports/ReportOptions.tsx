@@ -124,6 +124,51 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         { id: 'ceria', label: 'Ceria / TPQ (Landscape)' },
     ], []);
 
+    const daftarRombelColumns = useMemo(() => ([
+        { id: 'no', label: 'No' },
+        { id: 'nis', label: 'NIS' },
+        { id: 'nisn', label: 'NISN' },
+        { id: 'nik', label: 'NIK' },
+        { id: 'namaLengkap', label: 'Nama Lengkap' },
+        { id: 'namaHijrah', label: 'Nama Hijrah' },
+        { id: 'lp', label: 'L/P' },
+        { id: 'tempatLahir', label: 'Tempat Lahir' },
+        { id: 'tanggalLahir', label: 'Tanggal Lahir' },
+        { id: 'ttl', label: 'TTL' },
+        { id: 'kewarganegaraan', label: 'Kewarganegaraan' },
+        { id: 'ayah', label: 'Nama Ayah' },
+        { id: 'ibu', label: 'Nama Ibu' },
+        { id: 'wali', label: 'Ayah / Wali / Ibu' },
+        { id: 'telepon', label: 'No. Telepon Utama' },
+        { id: 'teleponAyah', label: 'Telepon Ayah' },
+        { id: 'teleponIbu', label: 'Telepon Ibu' },
+        { id: 'teleponWali', label: 'Telepon Wali' },
+        { id: 'jenjang', label: 'Jenjang' },
+        { id: 'kelas', label: 'Kelas' },
+        { id: 'rombel', label: 'Rombel' },
+        { id: 'status', label: 'Status Santri' },
+        { id: 'jenisSantri', label: 'Jenis Santri' },
+        { id: 'tanggalMasuk', label: 'Tanggal Masuk' },
+        { id: 'alamat', label: 'Alamat Lengkap' },
+        { id: 'desa', label: 'Desa/Kelurahan' },
+        { id: 'kecamatan', label: 'Kecamatan' },
+        { id: 'kabupaten', label: 'Kabupaten/Kota' },
+        { id: 'provinsi', label: 'Provinsi' },
+        { id: 'kodePos', label: 'Kode Pos' },
+        { id: 'sekolahAsal', label: 'Sekolah Asal' },
+        { id: 'anakKe', label: 'Anak Ke-' },
+        { id: 'jumlahSaudara', label: 'Jumlah Saudara' },
+        { id: 'tinggiBadan', label: 'Tinggi Badan' },
+        { id: 'beratBadan', label: 'Berat Badan' },
+    ]), []);
+
+    const handleRombelColumnToggle = (columnId: string) => {
+        options.setRombelVisibleColumns((prev: string[]) => {
+            if (prev.includes(columnId)) return prev.filter((id) => id !== columnId);
+            return [...prev, columnId];
+        });
+    };
+
     const handleMapelSelection = (mapelId: number) => {
         options.setSelectedMapelIds(prev => 
           prev.includes(mapelId) 
@@ -535,6 +580,26 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                             <div><label htmlFor="semester-absensi" className="block mb-1 text-sm font-medium text-gray-700">Semester</label><select id="semester-absensi" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select></div>
                             <div><label htmlFor="tahun-ajaran-absensi" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label><AcademicYearSelect id="tahun-ajaran-absensi" /></div>
                         </div>
+                    </div>
+                </div>
+            );
+        case ReportType.DaftarRombel:
+            return (
+                <div className="pt-4 border-t space-y-4">
+                    <h3 className="text-md font-semibold text-gray-700">Kolom yang Ditampilkan</h3>
+                    <p className="text-xs text-gray-500">Default mengikuti format laporan saat ini. Minimal pilih 1 kolom selain nomor.</p>
+                    <div className="space-y-2">
+                        {daftarRombelColumns.map((col) => (
+                            <label key={col.id} className="flex items-center rounded-md border border-gray-200 bg-white p-2 text-sm text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    checked={options.rombelVisibleColumns.includes(col.id)}
+                                    onChange={() => handleRombelColumnToggle(col.id)}
+                                    className="mr-2 h-4 w-4 text-teal-600"
+                                />
+                                {col.label}
+                            </label>
+                        ))}
                     </div>
                 </div>
             );

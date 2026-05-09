@@ -962,7 +962,7 @@ const AppContent: React.FC = () => {
                                             onClick={() => {
                                                 setCurrentPage(Page.Tentang);
                                                 setTentangTab('panduan');
-                                                setPanduanSection(undefined);
+                                                setPanduanSection(null);
                                                 closeQuickHelp();
                                             }}
                                             className="app-button-secondary px-3 py-2 text-xs"

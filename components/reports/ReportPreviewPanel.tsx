@@ -70,6 +70,39 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
     const [isGeneratingFile, setIsGeneratingFile] = useState(false);
     const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
     const [showDonationModal, setShowDonationModal] = useState(false);
+    const downloadButtonRef = useRef<HTMLButtonElement>(null);
+    const downloadMenuRef = useRef<HTMLDivElement>(null);
+    const [downloadMenuPos, setDownloadMenuPos] = useState<{ top: number; left: number; width: number; maxHeight: number }>({ top: 0, left: 0, width: 224, maxHeight: 320 });
+
+    useEffect(() => {
+        if (!isDownloadMenuOpen) return;
+        const recalcPosition = () => {
+            if (!downloadButtonRef.current) return;
+            const rect = downloadButtonRef.current.getBoundingClientRect();
+            const width = 224;
+            const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+            const top = Math.min(window.innerHeight - 48, rect.bottom + 8);
+            const maxHeight = Math.max(120, window.innerHeight - top - 8);
+            setDownloadMenuPos({ top, left, width, maxHeight });
+        };
+        const handleOutsideClick = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (
+                downloadButtonRef.current?.contains(target) ||
+                downloadMenuRef.current?.contains(target)
+            ) return;
+            setIsDownloadMenuOpen(false);
+        };
+        recalcPosition();
+        window.addEventListener('resize', recalcPosition);
+        window.addEventListener('scroll', recalcPosition, true);
+        document.addEventListener('mousedown', handleOutsideClick);
+        return () => {
+            window.removeEventListener('resize', recalcPosition);
+            window.removeEventListener('scroll', recalcPosition, true);
+            document.removeEventListener('mousedown', handleOutsideClick);
+        };
+    }, [isDownloadMenuOpen]);
 
     const getBaseFileName = (): string => {
         const reportName = REPORT_LABELS[activeReport] ?? activeReport;
@@ -338,12 +371,16 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
 
                     {/* Download Actions */}
                     <div className="relative">
-                        <button onClick={() => setIsDownloadMenuOpen(!isDownloadMenuOpen)} disabled={isGeneratingFile} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm disabled:opacity-70">
+                        <button ref={downloadButtonRef} onClick={() => setIsDownloadMenuOpen(!isDownloadMenuOpen)} disabled={isGeneratingFile} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm disabled:opacity-70">
                             {isGeneratingFile ? <span className="animate-spin h-3 w-3 border-2 border-white rounded-full border-t-transparent"></span> : <i className="bi bi-download"></i>}
                             <span className="hidden sm:inline">Unduh</span>
                         </button>
                         {isDownloadMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-56 max-w-[calc(100vw-1.5rem)] bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
+                            <div
+                                ref={downloadMenuRef}
+                                className="fixed bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 z-[90] overflow-y-auto overflow-x-hidden"
+                                style={{ top: downloadMenuPos.top, left: downloadMenuPos.left, width: downloadMenuPos.width, maxHeight: downloadMenuPos.maxHeight }}
+                            >
                                 {/* Excel Option (Priority) */}
                                 {canExportToExcel && (
                                     <button onClick={handleDownloadExcel} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 border-b flex items-center gap-2 bg-green-50/50">

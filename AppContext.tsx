@@ -107,6 +107,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const addTimestamp = (data: any) => ({ ...data, lastModified: Date.now() });
 
+    const normalizeWhatsAppTarget = (value?: string) => {
+        if (!value) return '';
+        const trimmed = value.trim();
+        if (!trimmed) return '';
+        const digits = trimmed.replace(/\D/g, '');
+        if (digits.length >= 8) return digits;
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+        return '';
+    };
+
+    const normalizeTelegramTarget = (value?: string) => {
+        if (!value) return '';
+        const trimmed = value.trim();
+        if (!trimmed) return '';
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+        const username = trimmed.replace(/^@/, '');
+        return username ? `https://t.me/${username}` : '';
+    };
+
+    const triggerAdminNotifyPrompt = (syncResult: any, actorName?: string) => {
+        const config = sets.settings.cloudSyncConfig || {};
+        const waTarget = normalizeWhatsAppTarget(config.adminNotifyWhatsapp);
+        const tgTarget = normalizeTelegramTarget(config.adminNotifyTelegram);
+        if (!waTarget && !tgTarget) return;
+
+        const changedTables = Array.isArray(syncResult?.changedTables) ? syncResult.changedTables : [];
+        const topChanges = changedTables.slice(0, 8).map((item: any) => `${item.table}: ${item.count}`).join(', ');
+        const totalChanges = Number(syncResult?.totalChanges || 0);
+        const sender = actorName || auth.currentUser?.fullName || auth.currentUser?.username || 'Staff';
+        const adminName = (config.adminNotifyName || '').trim();
+        const message =
+            `Assalamu'alaikum, ${adminName || 'Admin'}.\n` +
+            `${sender} sudah setor data terbaru ke Cloud Hub.\n` +
+            `Waktu: ${new Date().toLocaleString('id-ID')}\n` +
+            `Total perubahan: ${totalChanges}\n` +
+            `${topChanges ? `Rincian: ${topChanges}` : ''}\n` +
+            `Mohon cek sinkronisasi di perangkat admin inti.`;
+
+        ui.showConfirmation(
+            'Notifikasi ke Admin Inti',
+            'Setor data berhasil. Kirim notifikasi sekarang ke admin inti?',
+            async () => {
+                try {
+                    await navigator.clipboard.writeText(message);
+                } catch {}
+                if (waTarget) {
+                    const waUrl = waTarget.startsWith('http')
+                        ? waTarget
+                        : `https://wa.me/${waTarget}?text=${encodeURIComponent(message)}`;
+                    window.open(waUrl, '_blank', 'noopener,noreferrer');
+                    if (tgTarget) {
+                        ui.showToast('Pesan disalin. Jika perlu, kirim juga ke Telegram admin.', 'info');
+                    }
+                    return;
+                }
+                if (tgTarget) {
+                    const tgUrl = tgTarget.includes('?')
+                        ? tgTarget
+                        : `${tgTarget}${tgTarget.includes('t.me/share/url') ? '&' : '?'}text=${encodeURIComponent(message)}`;
+                    window.open(tgUrl, '_blank', 'noopener,noreferrer');
+                }
+            }
+        );
+    };
+
     // Sync Logic
     // Effect for Auto-Pull on Login (First login in session)
     useEffect(() => {
@@ -139,12 +204,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             try {
                 const username = auth.currentUser?.username || 'user';
                 const { uploadStaffChanges } = await loadSyncService();
-                await uploadStaffChanges(sets.settings.cloudSyncConfig, username);
+                const result = await uploadStaffChanges(sets.settings.cloudSyncConfig, username);
                 
                 const id = sets.settings.id;
                 await db.settings.update(id!, { 
                     cloudSyncConfig: { ...sets.settings.cloudSyncConfig, lastSync: new Date().toISOString() } 
                 });
+                if (!(result as any).skipped) {
+                    triggerAdminNotifyPrompt(result, auth.currentUser?.fullName || auth.currentUser?.username);
+                }
 
                 setSyncStatus('success');
                 setTimeout(() => setSyncStatus('idle'), 3000);
@@ -183,6 +251,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         cloudSyncConfig: { ...config, lastSync: new Date().toISOString() } 
                     });
                     if (!silent) ui.showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
+                    triggerAdminNotifyPrompt(result, auth.currentUser?.fullName || auth.currentUser?.username);
                 } else {
                     if (!silent) ui.showToast('Tidak ada perubahan baru untuk dikirim.', 'info');
                 }

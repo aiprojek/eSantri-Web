@@ -352,6 +352,9 @@ export interface CloudSyncConfig {
     lastSync?: string;
     autoSync?: boolean;
     portalEnabled?: boolean;
+    adminNotifyName?: string;
+    adminNotifyWhatsapp?: string;
+    adminNotifyTelegram?: string;
 }
 
 export type BackupFrequency = 'daily' | 'weekly' | 'never';

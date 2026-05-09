@@ -111,7 +111,10 @@ export const initialSettings: PondokSettings = {
         dobPadding: 3
     },
     cloudSyncConfig: {
-        provider: 'none'
+        provider: 'none',
+        adminNotifyName: '',
+        adminNotifyWhatsapp: '',
+        adminNotifyTelegram: ''
     },
     backupConfig: {
         frequency: 'weekly'

@@ -48,11 +48,19 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
                 <p className="print-meta text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
                 
                 <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Utama</h4>
-                <div className="grid grid-cols-3 gap-4 text-center mb-6">
-                    <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Total Santri</div><div className="text-2xl font-bold">{totalSantri}</div></div>
-                    <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Santri Putra</div><div className="text-2xl font-bold">{totalPutra}</div></div>
-                    <div className="p-2 border border-black rounded"><div className="text-xs text-gray-700">Santri Putri</div><div className="text-2xl font-bold">{totalPutri}</div></div>
-                </div>
+                <table className="w-full text-sm border-collapse border border-black mb-6">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="p-2 border border-black text-left">Ringkasan</th>
+                            <th className="p-2 border border-black text-right">Nilai</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td className="p-2 border border-black">Total Santri</td><td className="p-2 border border-black text-right font-bold">{totalSantri}</td></tr>
+                        <tr><td className="p-2 border border-black">Santri Putra</td><td className="p-2 border border-black text-right font-bold">{totalPutra}</td></tr>
+                        <tr><td className="p-2 border border-black">Santri Putri</td><td className="p-2 border border-black text-right font-bold">{totalPutri}</td></tr>
+                    </tbody>
+                </table>
 
                 <div className="grid grid-cols-2 gap-6 mb-6" style={{ breakInside: 'avoid' }}>
                     <div>
@@ -74,33 +82,59 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
                 </div>
 
                 <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Detail Distribusi Santri</h4>
-                <div className="space-y-4">
-                    {jenjangBreakdown.map((j, idx) => (
-                        <div key={idx} className="border border-black rounded p-3" style={{ breakInside: 'avoid' }}>
-                            <div className="flex justify-between items-center mb-2 border-b border-gray-300 pb-1">
-                                <span className="font-bold text-base">{j.nama}</span>
-                                <span className="font-bold text-sm">Total: {j.total} (L:{j.putra}, P:{j.putri})</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                                {j.kelasBreakdown.map((k, kIdx) => (
-                                    <div key={kIdx} className="text-xs">
-                                        <div className="font-semibold bg-gray-100 px-1">{k.nama} <span className="float-right">{k.total}</span></div>
-                                        <div className="pl-2 space-y-0.5 mt-0.5">
-                                            {k.rombels.map((r, rIdx) => (
-                                                <div key={rIdx} className="flex justify-between text-[10px] text-gray-600">
-                                                    <span>- {r.nama}</span>
-                                                    <span>{r.total} (L:{r.putra}, P:{r.putri})</span>
-                                                </div>
-                                            ))}
-                                            {k.rombels.length === 0 && <div className="italic text-gray-400">- Belum ada rombel</div>}
-                                        </div>
-                                    </div>
-                                ))}
-                                {j.kelasBreakdown.length === 0 && <div className="text-xs italic text-gray-500">Belum ada data kelas.</div>}
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                <table className="w-full text-xs border-collapse border border-black">
+                    <thead className="bg-gray-100">
+                        <tr>
+                            <th className="p-2 border border-black text-left">Jenjang</th>
+                            <th className="p-2 border border-black text-left">Kelas</th>
+                            <th className="p-2 border border-black text-left">Rombel</th>
+                            <th className="p-2 border border-black text-right">Total</th>
+                            <th className="p-2 border border-black text-right">Putra</th>
+                            <th className="p-2 border border-black text-right">Putri</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {jenjangBreakdown.flatMap((j) => {
+                            if (j.kelasBreakdown.length === 0) {
+                                return (
+                                    <tr key={`jenjang-${j.nama}`}>
+                                        <td className="p-2 border border-black font-semibold">{j.nama}</td>
+                                        <td className="p-2 border border-black italic text-gray-500" colSpan={2}>Belum ada data kelas/rombel</td>
+                                        <td className="p-2 border border-black text-right font-semibold">{j.total}</td>
+                                        <td className="p-2 border border-black text-right">{j.putra}</td>
+                                        <td className="p-2 border border-black text-right">{j.putri}</td>
+                                    </tr>
+                                );
+                            }
+
+                            return j.kelasBreakdown.flatMap((k) => {
+                                if (k.rombels.length === 0) {
+                                    return (
+                                        <tr key={`kelas-${j.nama}-${k.nama}`}>
+                                            <td className="p-2 border border-black font-semibold">{j.nama}</td>
+                                            <td className="p-2 border border-black">{k.nama}</td>
+                                            <td className="p-2 border border-black italic text-gray-500">Belum ada rombel</td>
+                                            <td className="p-2 border border-black text-right">{k.total}</td>
+                                            <td className="p-2 border border-black text-right">-</td>
+                                            <td className="p-2 border border-black text-right">-</td>
+                                        </tr>
+                                    );
+                                }
+
+                                return k.rombels.map((r) => (
+                                    <tr key={`rombel-${j.nama}-${k.nama}-${r.nama}`}>
+                                        <td className="p-2 border border-black font-semibold">{j.nama}</td>
+                                        <td className="p-2 border border-black">{k.nama}</td>
+                                        <td className="p-2 border border-black">{r.nama}</td>
+                                        <td className="p-2 border border-black text-right">{r.total}</td>
+                                        <td className="p-2 border border-black text-right">{r.putra}</td>
+                                        <td className="p-2 border border-black text-right">{r.putri}</td>
+                                    </tr>
+                                ));
+                            });
+                        })}
+                    </tbody>
+                </table>
             </div>
             <ReportFooter />
         </div>

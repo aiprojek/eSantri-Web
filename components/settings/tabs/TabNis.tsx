@@ -380,6 +380,34 @@ export const TabNis: React.FC<TabNisProps> = ({ localSettings, setLocalSettings 
                                 );
                             })}
                         </div>
+
+                        {localSettings.nisSettings.jenjangConfig.some(jc => jc.method === 'custom') && (
+                            <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+                                <h4 className="mb-3 text-sm font-semibold text-gray-700">Sumber Tahun untuk Mode Kustom</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Sumber Tahun Masehi</label>
+                                        <div className="flex items-center gap-4">
+                                            <label className="flex items-center text-sm"><input type="radio" name="independentMasehiSource" value="auto" checked={localSettings.nisSettings.masehiYearSource === 'auto'} onChange={() => handleNisSettingChange('masehiYearSource', 'auto')} className="mr-2"/>Otomatis</label>
+                                            <label className="flex items-center text-sm"><input type="radio" name="independentMasehiSource" value="manual" checked={localSettings.nisSettings.masehiYearSource === 'manual'} onChange={() => handleNisSettingChange('masehiYearSource', 'manual')} className="mr-2"/>Manual</label>
+                                        </div>
+                                        {localSettings.nisSettings.masehiYearSource === 'manual' && (
+                                            <input type="number" value={localSettings.nisSettings.manualMasehiYear} onChange={(e) => handleNisSettingChange('manualMasehiYear', parseInt(e.target.value) || new Date().getFullYear())} className="mt-2 w-full border p-2 rounded bg-white"/>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Sumber Tahun Hijriah</label>
+                                        <div className="flex items-center gap-4">
+                                            <label className="flex items-center text-sm"><input type="radio" name="independentHijriSource" value="auto" checked={localSettings.nisSettings.hijriahYearSource === 'auto'} onChange={() => handleNisSettingChange('hijriahYearSource', 'auto')} className="mr-2"/>Otomatis</label>
+                                            <label className="flex items-center text-sm"><input type="radio" name="independentHijriSource" value="manual" checked={localSettings.nisSettings.hijriahYearSource === 'manual'} onChange={() => handleNisSettingChange('hijriahYearSource', 'manual')} className="mr-2"/>Manual</label>
+                                        </div>
+                                        {localSettings.nisSettings.hijriahYearSource === 'manual' && (
+                                            <input type="number" value={localSettings.nisSettings.manualHijriahYear} onChange={(e) => handleNisSettingChange('manualHijriahYear', parseInt(e.target.value) || 1445)} className="mt-2 w-full border p-2 rounded bg-white"/>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

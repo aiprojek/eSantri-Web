@@ -850,6 +850,12 @@ export interface JurnalMengajarRecord {
     guruId: number;
     mataPelajaranId: number;
     jamPelajaranIds?: number[];
+    sesiEkstra?: {
+        kegiatan: string;
+        materi?: string;
+        waktuMulai: string;
+        waktuSelesai: string;
+    }[];
     kompetensiMateri: string;
     catatanKejadian?: string;
     recordedBy?: string;

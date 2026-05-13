@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CalendarEvent } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 
@@ -15,6 +15,27 @@ export const BulkEventModal: React.FC<BulkEventModalProps> = ({ isOpen, onClose,
     const { showToast } = useAppContext();
     const [rows, setRows] = useState<EditableRow[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+    const [query, setQuery] = useState('');
+    const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
+    const [pasteText, setPasteText] = useState('');
+    const undoStackRef = useRef<EditableRow[][]>([]);
+    const redoStackRef = useRef<EditableRow[][]>([]);
+    const draftStorageKey = 'esantri:bulk-kalender-draft';
+
+    const cloneRows = (source: EditableRow[]) => source.map((row) => ({ ...row }));
+    const canUndo = undoStackRef.current.length > 0;
+    const canRedo = redoStackRef.current.length > 0;
+
+    const applyRowsMutation = (mutator: (draft: EditableRow[]) => EditableRow[]) => {
+        setRows(prev => {
+            const snapshot = cloneRows(prev);
+            const nextRows = mutator(cloneRows(prev));
+            undoStackRef.current.push(snapshot);
+            if (undoStackRef.current.length > 30) undoStackRef.current.shift();
+            redoStackRef.current = [];
+            return nextRows;
+        });
+    };
 
     const colors = [
         { label: 'Merah', val: 'bg-red-500' },
@@ -31,6 +52,9 @@ export const BulkEventModal: React.FC<BulkEventModalProps> = ({ isOpen, onClose,
 
     useEffect(() => {
         if (isOpen) {
+            undoStackRef.current = [];
+            redoStackRef.current = [];
+            setQuery('');
             // Start with 5 empty rows
             const initialRows = Array.from({ length: 5 }).map((_, i) => createEmptyRow(i));
             setRows(initialRows);
@@ -51,15 +75,15 @@ export const BulkEventModal: React.FC<BulkEventModalProps> = ({ isOpen, onClose,
     };
 
     const handleAddRow = () => {
-        setRows(prev => [...prev, createEmptyRow(prev.length)]);
+        applyRowsMutation(prev => [...prev, createEmptyRow(prev.length)]);
     };
 
     const handleRemoveRow = (tempId: number) => {
-        setRows(prev => prev.filter(r => r.tempId !== tempId));
+        applyRowsMutation(prev => prev.filter(r => r.tempId !== tempId));
     };
 
     const updateRow = (tempId: number, field: string, value: any) => {
-        setRows(prev => prev.map(row => {
+        applyRowsMutation(prev => prev.map(row => {
             if (row.tempId !== tempId) return row;
             
             // Auto sync End Date if Start Date changes and End Date was same/empty
@@ -72,6 +96,88 @@ export const BulkEventModal: React.FC<BulkEventModalProps> = ({ isOpen, onClose,
             return { ...row, [field]: value };
         }));
     };
+
+    const handleUndo = () => {
+        if (!undoStackRef.current.length) return;
+        setRows(prev => {
+            const previous = undoStackRef.current.pop()!;
+            redoStackRef.current.push(cloneRows(prev));
+            return cloneRows(previous);
+        });
+    };
+
+    const handleRedo = () => {
+        if (!redoStackRef.current.length) return;
+        setRows(prev => {
+            const next = redoStackRef.current.pop()!;
+            undoStackRef.current.push(cloneRows(prev));
+            return cloneRows(next);
+        });
+    };
+
+    const handleSaveDraft = () => {
+        localStorage.setItem(draftStorageKey, JSON.stringify({ savedAt: Date.now(), rows }));
+        showToast('Draft agenda massal disimpan.', 'success');
+    };
+
+    const handleLoadDraft = () => {
+        const raw = localStorage.getItem(draftStorageKey);
+        if (!raw) {
+            showToast('Draft agenda massal tidak ditemukan.', 'info');
+            return;
+        }
+        try {
+            const parsed = JSON.parse(raw) as { rows?: EditableRow[] };
+            if (!Array.isArray(parsed.rows)) return;
+            undoStackRef.current = [];
+            redoStackRef.current = [];
+            setRows(parsed.rows.map((row, i) => ({ ...row, tempId: row.tempId || Date.now() + i })));
+            showToast('Draft agenda massal dimuat.', 'success');
+        } catch {
+            showToast('Draft agenda massal tidak valid.', 'error');
+        }
+    };
+
+    const handleDeleteDraft = () => {
+        localStorage.removeItem(draftStorageKey);
+        showToast('Draft agenda massal dihapus.', 'success');
+    };
+
+    const parseRowsFromText = (text: string): EditableRow[] => {
+        const lines = text
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean);
+        return lines.map((line, i) => {
+            const chunks = line.includes('\t') ? line.split('\t') : line.split(';');
+            const row = createEmptyRow(i);
+            const parsedCategory = (chunks[3] || 'Kegiatan').trim();
+            row.title = (chunks[0] || '').trim();
+            row.startDate = (chunks[1] || row.startDate || '').trim();
+            row.endDate = (chunks[2] || row.startDate || '').trim();
+            row.category = (categories.includes(parsedCategory) ? parsedCategory : 'Kegiatan') as CalendarEvent['category'];
+            row.color = (chunks[4] || 'bg-blue-500').trim();
+            row.description = (chunks[5] || '').trim();
+            return row;
+        });
+    };
+
+    const handleApplyPaste = () => {
+        const parsed = parseRowsFromText(pasteText);
+        if (!parsed.length) return;
+        applyRowsMutation(prev => [...prev, ...parsed.map((row, i) => ({ ...row, tempId: Date.now() + i }))]);
+        setPasteText('');
+        setIsPasteModalOpen(false);
+    };
+
+    const filteredRows = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return rows;
+        return rows.filter(row =>
+            [row.title, row.category, row.description]
+                .some(v => (v || '').toString().toLowerCase().includes(q))
+        );
+    }, [rows, query]);
 
     const handleSave = async () => {
         const validRows = rows.filter(r => r.title?.trim());
@@ -118,6 +224,26 @@ export const BulkEventModal: React.FC<BulkEventModalProps> = ({ isOpen, onClose,
 
             {/* Table Container */}
             <div className="flex-grow overflow-auto p-6">
+                <div className="mb-4 bg-white border rounded-lg p-3 flex flex-wrap items-center gap-2">
+                    <input
+                        type="text"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Cari nama kegiatan/kategori..."
+                        className="border-gray-300 rounded text-sm h-9 px-3 min-w-[260px]"
+                    />
+                    <button onClick={handleUndo} disabled={!canUndo} className="px-3 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50">
+                        <i className="bi bi-arrow-counterclockwise"></i> Undo
+                    </button>
+                    <button onClick={handleRedo} disabled={!canRedo} className="px-3 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50">
+                        <i className="bi bi-arrow-clockwise"></i> Redo
+                    </button>
+                    <button onClick={handleSaveDraft} className="px-3 py-2 text-sm rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Simpan Draft</button>
+                    <button onClick={handleLoadDraft} className="px-3 py-2 text-sm rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Muat Draft</button>
+                    <button onClick={handleDeleteDraft} className="px-3 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200">Hapus Draft</button>
+                    <button onClick={() => setIsPasteModalOpen(true)} className="px-3 py-2 text-sm rounded bg-teal-50 text-teal-700 hover:bg-teal-100">Tempel Massal</button>
+                    <span className="text-xs text-gray-500 ml-auto">{filteredRows.length} baris tampil</span>
+                </div>
                 <div className="bg-white rounded-lg shadow border relative">
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -134,7 +260,7 @@ export const BulkEventModal: React.FC<BulkEventModalProps> = ({ isOpen, onClose,
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {rows.map((row, index) => (
+                                {filteredRows.map((row, index) => (
                                     <tr key={row.tempId} className="hover:bg-gray-50 group">
                                         <td className="px-2 py-2 text-center text-gray-500 border-r bg-gray-50">{index + 1}</td>
                                         
@@ -214,6 +340,34 @@ export const BulkEventModal: React.FC<BulkEventModalProps> = ({ isOpen, onClose,
                     </div>
                 </div>
             </div>
+            {isPasteModalOpen && (
+                <div className="fixed inset-0 z-[90] bg-black/30 flex items-center justify-center p-4">
+                    <div className="w-full max-w-3xl bg-white rounded-xl shadow-lg border">
+                        <div className="px-4 py-3 border-b flex items-center justify-between">
+                            <h3 className="font-semibold text-gray-800">Tempel Agenda Massal</h3>
+                            <button onClick={() => setIsPasteModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-3">
+                            <p className="text-sm text-gray-600">
+                                Format kolom: Nama Kegiatan;Mulai(YYYY-MM-DD);Selesai(YYYY-MM-DD);Kategori;Warna;Deskripsi
+                            </p>
+                            <textarea
+                                rows={10}
+                                value={pasteText}
+                                onChange={e => setPasteText(e.target.value)}
+                                className="w-full border-gray-300 rounded-lg text-sm p-3"
+                                placeholder="Ujian Tengah;2026-06-10;2026-06-12;Ujian;bg-red-500;UTS Semester Ganjil"
+                            />
+                        </div>
+                        <div className="px-4 py-3 border-t flex justify-end gap-2">
+                            <button onClick={() => setIsPasteModalOpen(false)} className="px-4 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200">Batal</button>
+                            <button onClick={handleApplyPaste} className="px-4 py-2 text-sm rounded bg-teal-600 text-white hover:bg-teal-700">Masukkan ke Tabel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

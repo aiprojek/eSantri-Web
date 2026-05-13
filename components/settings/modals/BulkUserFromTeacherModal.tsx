@@ -36,6 +36,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
     // State untuk menyimpan konfigurasi per user
     // Format: { [teacherId]: { role: 'admin'|'staff', syncAdmin: boolean, permissionPreset } }
     const [userConfigs, setUserConfigs] = useState<Record<number, BulkUserConfig>>({});
+    const [usernameDrafts, setUsernameDrafts] = useState<Record<number, string>>({});
 
     // Filter guru yang namanya belum ada di tabel user (Pencocokan sederhana)
     // dan sesuai search term
@@ -81,6 +82,14 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
         }
     };
 
+    const handleUsernameChange = (id: number, value: string) => {
+        const normalized = value.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+        setUsernameDrafts(prev => ({ ...prev, [id]: normalized }));
+        if (!selectedTeacherIds.includes(id)) {
+            setSelectedTeacherIds(prev => [...prev, id]);
+        }
+    };
+
     const generateUsername = (fullName: string): string => {
         // Hapus gelar (Dr., S.Pd, dll) dan karakter non-alfabet, ambil 2 kata pertama
         const cleanName = fullName
@@ -104,6 +113,10 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
             counter++;
         }
         return finalUsername;
+    };
+
+    const resolveUsername = (teacherId: number, teacherName: string) => {
+        return (usernameDrafts[teacherId] || generateUsername(teacherName)).trim().toLowerCase();
     };
 
     const modules: Array<{ key: keyof UserPermissions; label: string }> = [
@@ -161,19 +174,23 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
             const newUsers: User[] = selectedTeacherIds.map(tid => {
                 const teacher = teachers.find(t => t.id === tid)!;
                 const config = userConfigs[tid] || { role: 'staff', syncAdmin: false, permissionPreset: defaultPermissionPreset };
+                const username = resolveUsername(tid, teacher.nama);
+                if (!username) {
+                    throw new Error(`Username untuk "${teacher.nama}" kosong.`);
+                }
                 const finalPermissions = config.customPermissions
                     ? ({ ...config.customPermissions, syncAdmin: config.syncAdmin } as UserPermissions)
                     : resolvePermissionsFromPreset(config);
 
                 return {
                     id: Date.now() + Math.random(), // Unique ID
-                    username: generateUsername(teacher.nama),
+                    username,
                     fullName: teacher.nama,
                     role: config.role,
                     passwordHash: passwordHash,
                     permissions: normalizeUserPermissions({
                         id: -1,
-                        username: generateUsername(teacher.nama),
+                        username,
                         passwordHash: '',
                         fullName: teacher.nama,
                         role: config.role,
@@ -186,6 +203,22 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                     lastModified: Date.now(),
                 };
             });
+
+            const existingUsernameSet = new Set(existingUsers.map(u => u.username.toLowerCase()));
+            const duplicateWithExisting = newUsers.find(u => existingUsernameSet.has(u.username.toLowerCase()));
+            if (duplicateWithExisting) {
+                throw new Error(`Username "${duplicateWithExisting.username}" sudah dipakai user lain.`);
+            }
+            const seen = new Set<string>();
+            const duplicateInBatch = newUsers.find(u => {
+                const key = u.username.toLowerCase();
+                if (seen.has(key)) return true;
+                seen.add(key);
+                return false;
+            });
+            if (duplicateInBatch) {
+                throw new Error(`Ada username ganda pada batch: "${duplicateInBatch.username}".`);
+            }
 
             await onSave(newUsers);
             onClose();
@@ -306,7 +339,7 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                                     />
                                 </th>
                                 <th className="p-3 border-b">Nama Guru</th>
-                                <th className="p-3 border-b">Preview Username</th>
+                                <th className="p-3 border-b">Username (Bisa Diedit)</th>
                                 <th className="p-3 border-b w-32">Role</th>
                                 <th className="p-3 border-b w-44">Preset Izin</th>
                                 <th className="p-3 border-b w-28 text-center">Detail</th>
@@ -331,8 +364,14 @@ export const BulkUserFromTeacherModal: React.FC<BulkUserFromTeacherModalProps> =
                                         <td className="p-3 font-medium text-gray-800" onClick={() => handleToggleSelect(t.id)}>
                                             {t.nama}
                                         </td>
-                                        <td className="p-3 text-gray-500 font-mono text-xs" onClick={() => handleToggleSelect(t.id)}>
-                                            {generateUsername(t.nama)}
+                                        <td className="p-3">
+                                            <input
+                                                type="text"
+                                                value={resolveUsername(t.id, t.nama)}
+                                                onChange={(e) => handleUsernameChange(t.id, e.target.value)}
+                                                className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs font-mono"
+                                                placeholder="username"
+                                            />
                                         </td>
                                         <td className="p-3">
                                             <select 

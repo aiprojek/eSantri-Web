@@ -479,16 +479,26 @@ const AbsensiRekap: React.FC = () => {
     const now = new Date();
     const [bulan, setBulan] = useState(now.getMonth() + 1);
     const [tahun, setTahun] = useState(now.getFullYear());
+    const [jenjangId, setJenjangId] = useState<number>(0);
+    const [kelasId, setKelasId] = useState<number>(0);
     const [rombelId, setRombelId] = useState<number>(0);
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const exportMenuRef = useRef<HTMLDivElement>(null);
 
+    const availableKelas = useMemo(() => (
+        jenjangId ? settings.kelas.filter(k => k.jenjangId === jenjangId) : settings.kelas
+    ), [jenjangId, settings.kelas]);
+    const availableRombel = useMemo(() => (
+        kelasId ? settings.rombel.filter(r => r.kelasId === kelasId) : settings.rombel
+    ), [kelasId, settings.rombel]);
+
     useEffect(() => {
-        if (!rombelId && settings.rombel.length > 0) {
-            setRombelId(settings.rombel[0].id);
+        if (!rombelId && availableRombel.length > 0) {
+            setRombelId(availableRombel[0].id);
         }
-    }, [settings.rombel, rombelId]);
+    }, [availableRombel, rombelId]);
 
     // Close export menu on outside click
     useEffect(() => {
@@ -502,6 +512,8 @@ const AbsensiRekap: React.FC = () => {
     }, []);
 
     const selectedRombel = useMemo(() => settings.rombel.find(r => r.id === rombelId), [rombelId, settings.rombel]);
+    const selectedKelas = useMemo(() => settings.kelas.find(k => k.id === selectedRombel?.kelasId), [settings.kelas, selectedRombel]);
+    const selectedJenjang = useMemo(() => settings.jenjang.find(j => j.id === selectedKelas?.jenjangId), [settings.jenjang, selectedKelas]);
     
     const santriInRombel = useMemo(() => santriList.filter(s => s.rombelId === rombelId && s.status === 'Aktif').sort((a,b) => a.namaLengkap.localeCompare(b.namaLengkap)), [santriList, rombelId]);
     const daysInMonth = useMemo(() => new Date(tahun, bulan, 0).getDate(), [tahun, bulan]);
@@ -555,6 +567,8 @@ const AbsensiRekap: React.FC = () => {
         setIsExportMenuOpen(false);
         setIsExporting(true);
         const fileName = buildStandardExportFileName('rekap-absensi', [
+            selectedJenjang?.nama || 'semua-marhalah',
+            selectedKelas?.nama || 'semua-kelas',
             selectedRombel?.nama || 'semua-rombel',
             `bulan-${bulan}`,
             `tahun-${tahun}`,
@@ -603,7 +617,7 @@ const AbsensiRekap: React.FC = () => {
                 // --- 2. Title & Metadata ---
                 doc.setFontSize(12);
                 doc.setFont('helvetica', 'bold');
-                doc.text(`REKAPITULASI ABSENSI KELAS ${selectedRombel?.nama.toUpperCase()}`, 148.5, 30, { align: 'center' });
+                doc.text(`REKAPITULASI ABSENSI ${selectedJenjang?.nama?.toUpperCase() || '-'} / ${selectedKelas?.nama?.toUpperCase() || '-'} / ${selectedRombel?.nama?.toUpperCase() || '-'}`, 148.5, 30, { align: 'center' });
 
                 doc.setFontSize(9);
                 doc.setFont('helvetica', 'normal');
@@ -697,7 +711,7 @@ const AbsensiRekap: React.FC = () => {
             
             // Header
             wsData.push([settings.namaPonpes]);
-            wsData.push([`REKAP ABSENSI KELAS ${selectedRombel?.nama}`]);
+            wsData.push([`REKAP ABSENSI ${selectedJenjang?.nama || '-'} / ${selectedKelas?.nama || '-'} / ${selectedRombel?.nama || '-'}`]);
             wsData.push([`PERIODE: ${periodeName}`]);
             wsData.push([]); // Empty Row
 
@@ -717,6 +731,8 @@ const AbsensiRekap: React.FC = () => {
                 row.push(attendanceMatrix.stats[s.id].H);
                 wsData.push(row);
             });
+            wsData.push([]);
+            wsData.push(['dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id']);
 
                 const ws = XLSX.utils.aoa_to_sheet(wsData);
             
@@ -737,29 +753,62 @@ const AbsensiRekap: React.FC = () => {
     return (
         <div className="space-y-6">
             <div id="absensi-rekap-export-area" className="bg-white p-6 rounded-lg shadow-md no-print">
-                <div className="flex flex-col xl:flex-row justify-between items-end gap-4 mb-6">
+                <div className="flex flex-col gap-4 mb-6">
                     <div>
                         <h2 className="text-lg font-bold text-gray-800">Rekap & Laporan Absensi</h2>
-                        <p className="text-sm text-gray-500">Lihat statistik kehadiran bulanan per kelas.</p>
+                        <p className="text-sm text-gray-500">Lihat statistik kehadiran bulanan per marhalah, kelas, dan rombel.</p>
                     </div>
-                    
-                    <div className="flex flex-wrap gap-2 w-full xl:w-auto">
-                        <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="border rounded-lg p-2 text-sm flex-grow sm:flex-grow-0">
-                            {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>)}
-                        </select>
-                        <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="border rounded-lg p-2 text-sm flex-grow sm:flex-grow-0">
-                            {Array.from({length: 5}, (_, i) => <option key={i} value={now.getFullYear() - 2 + i}>{now.getFullYear() - 2 + i}</option>)}
-                        </select>
-                        <select value={rombelId} onChange={e => setRombelId(Number(e.target.value))} className="border rounded-lg p-2 text-sm max-w-[200px] flex-grow sm:flex-grow-0">
-                            {settings.rombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-                        </select>
-                        
+
+                    <div className="md:hidden">
+                        <button
+                            onClick={() => setIsFilterDrawerOpen(true)}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-sm"
+                        >
+                            <i className="bi bi-funnel-fill"></i>
+                            <span>Filter & Export Rekap</span>
+                        </button>
+                    </div>
+
+                    <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-6 gap-3">
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Bulan</label>
+                            <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm">
+                                {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Tahun</label>
+                            <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm">
+                                {Array.from({length: 5}, (_, i) => <option key={i} value={now.getFullYear() - 2 + i}>{now.getFullYear() - 2 + i}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Marhalah</label>
+                            <select value={jenjangId} onChange={e => { setJenjangId(Number(e.target.value)); setKelasId(0); setRombelId(0); }} className="w-full border rounded-lg p-2 text-sm">
+                                <option value={0}>Semua Marhalah</option>
+                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Kelas</label>
+                            <select value={kelasId} onChange={e => { setKelasId(Number(e.target.value)); setRombelId(0); }} className="w-full border rounded-lg p-2 text-sm">
+                                <option value={0}>Semua Kelas</option>
+                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Rombel</label>
+                            <select value={rombelId} onChange={e => setRombelId(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm">
+                                {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                            </select>
+                        </div>
                         <div className="relative" ref={exportMenuRef}>
-                            <button disabled={isExporting} onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Unduh / Cetak</label>
+                            <button disabled={isExporting} onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="w-full bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
                                 <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-download'}`}></i> {isExporting ? 'Memproses...' : 'Export'}
                             </button>
                             {isExportMenuOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
+                                <div className="absolute right-0 sm:left-0 lg:right-0 mt-2 w-full min-w-[220px] bg-white rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
                                     <button disabled={isExporting} onClick={() => handleExport('pdf')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 disabled:opacity-50">
                                         <i className="bi bi-file-earmark-pdf text-red-500"></i> Download PDF
                                     </button>
@@ -777,6 +826,53 @@ const AbsensiRekap: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+                <MobileFilterDrawer
+                    isOpen={isFilterDrawerOpen}
+                    onClose={() => setIsFilterDrawerOpen(false)}
+                    title="Filter & Export Rekap"
+                >
+                    <div className="space-y-4">
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Bulan</label>
+                            <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="w-full border rounded-lg p-3 text-sm">
+                                {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Tahun</label>
+                            <select value={tahun} onChange={e => setTahun(Number(e.target.value))} className="w-full border rounded-lg p-3 text-sm">
+                                {Array.from({length: 5}, (_, i) => <option key={i} value={now.getFullYear() - 2 + i}>{now.getFullYear() - 2 + i}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Marhalah</label>
+                            <select value={jenjangId} onChange={e => { setJenjangId(Number(e.target.value)); setKelasId(0); setRombelId(0); }} className="w-full border rounded-lg p-3 text-sm">
+                                <option value={0}>Semua Marhalah</option>
+                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Kelas</label>
+                            <select value={kelasId} onChange={e => { setKelasId(Number(e.target.value)); setRombelId(0); }} className="w-full border rounded-lg p-3 text-sm">
+                                <option value={0}>Semua Kelas</option>
+                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Rombel</label>
+                            <select value={rombelId} onChange={e => setRombelId(Number(e.target.value))} className="w-full border rounded-lg p-3 text-sm">
+                                {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                            </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-2">
+                            <button disabled={isExporting} onClick={() => handleExport('pdf')} className="px-3 py-2 text-sm rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50">PDF</button>
+                            <button disabled={isExporting} onClick={() => handleExport('xlsx')} className="px-3 py-2 text-sm rounded-lg border border-green-200 text-green-700 bg-green-50 hover:bg-green-100 disabled:opacity-50">Excel</button>
+                            <button disabled={isExporting} onClick={() => handleExport('pdfImage')} className="px-3 py-2 text-sm rounded-lg border border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 disabled:opacity-50">PDF Gambar</button>
+                            <button disabled={isExporting} onClick={handlePrint} className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Cetak</button>
+                        </div>
+                    </div>
+                </MobileFilterDrawer>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-green-50 p-3 rounded-lg border border-green-100 text-center">
@@ -844,7 +940,7 @@ const AbsensiRekap: React.FC = () => {
 
             {/* Hidden Print Area */}
             <div className="hidden print:block">
-                 <PrintHeader settings={settings} title={`REKAPITULASI ABSENSI KELAS ${selectedRombel?.nama.toUpperCase()}`} />
+                 <PrintHeader settings={settings} title={`REKAPITULASI ABSENSI ${selectedJenjang?.nama?.toUpperCase() || '-'} / ${selectedKelas?.nama?.toUpperCase() || '-'} / ${selectedRombel?.nama?.toUpperCase() || '-'}`} />
                  <p className="text-center text-sm mb-4">PERIODE: {new Date(tahun, bulan-1).toLocaleDateString('id-ID', {month: 'long', year: 'numeric'}).toUpperCase()}</p>
                  <table className="w-full text-xs text-center border-collapse border border-black">
                         <thead>

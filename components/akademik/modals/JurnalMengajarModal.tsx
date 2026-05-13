@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../../../AppContext';
 import { useSantriContext } from '../../../contexts/SantriContext';
 import { JurnalMengajarRecord } from '../../../types';
+import { db } from '../../../db';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 interface JurnalMengajarModalProps {
     isOpen: boolean;
@@ -20,10 +22,12 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
     const [guruId, setGuruId] = useState<number>(0);
     const [mataPelajaranId, setMataPelajaranId] = useState<number>(0);
     const [jamPelajaranIds, setJamPelajaranIds] = useState<number[]>([]);
+    const [sesiEkstra, setSesiEkstra] = useState<{ kegiatan: string; materi: string; waktuMulai: string; waktuSelesai: string }[]>([]);
     const [kompetensiMateri, setKompetensiMateri] = useState('');
     const [catatanKejadian, setCatatanKejadian] = useState('');
 
     const recordsToday = jurnalMengajarList.filter(j => j.rombelId === rombelId && j.tanggal === tanggal).sort((a,b) => (a.jamPelajaranIds?.[0] || 0) - (b.jamPelajaranIds?.[0] || 0));
+    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
 
     // Reset form when modal opens
     useEffect(() => {
@@ -31,14 +35,36 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
             setGuruId(0);
             setMataPelajaranId(0);
             setJamPelajaranIds([]);
+            setSesiEkstra([]);
             setKompetensiMateri('');
             setCatatanKejadian('');
         }
     }, [isOpen]);
 
-    if (!isOpen) return null;
-
     const rombel = settings.rombel.find(r => r.id === rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjangId = kelas?.jenjangId;
+    const filteredMapel = useMemo(() => {
+        if (!jenjangId) return settings.mataPelajaran;
+        return settings.mataPelajaran.filter(m => m.jenjangId === jenjangId);
+    }, [settings.mataPelajaran, jenjangId]);
+    const jamPilihan = useMemo(() => {
+        if (!jenjangId) return [1, 2, 3, 4, 5, 6, 7, 8];
+        const jamConfig = (settings.jamPelajaran || []).filter(j => j.jenjangId === jenjangId && j.jenis === 'KBM');
+        const maxFromConfig = jamConfig.length ? Math.max(...jamConfig.map(j => j.urutan || j.id || 0)) : 0;
+        const maxFromJadwal = jadwalList
+            .filter(j => j.rombelId === rombelId)
+            .reduce((max, j) => Math.max(max, j.jamKe || 0), 0);
+        const totalJam = Math.max(maxFromConfig, maxFromJadwal, 1);
+        return Array.from({ length: totalJam }, (_, i) => i + 1);
+    }, [settings.jamPelajaran, jadwalList, jenjangId, rombelId]);
+
+    useEffect(() => {
+        if (!mataPelajaranId) return;
+        if (!filteredMapel.some(m => m.id === mataPelajaranId)) {
+            setMataPelajaranId(0);
+        }
+    }, [filteredMapel, mataPelajaranId]);
     
     // Mapping helpers
     const getGuruName = (id: number) => settings.tenagaPengajar.find(t => t.id === id)?.nama || 'Unknown';
@@ -48,6 +74,18 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
         setJamPelajaranIds(prev => 
             prev.includes(jam) ? prev.filter(j => j !== jam) : [...prev, jam].sort((a,b)=>a-b)
         );
+    };
+
+    const handleAddSesiEkstra = () => {
+        setSesiEkstra(prev => [...prev, { kegiatan: '', materi: '', waktuMulai: '', waktuSelesai: '' }]);
+    };
+
+    const handleUpdateSesiEkstra = (index: number, field: 'kegiatan' | 'materi' | 'waktuMulai' | 'waktuSelesai', value: string) => {
+        setSesiEkstra(prev => prev.map((item, idx) => (idx === index ? { ...item, [field]: value } : item)));
+    };
+
+    const handleRemoveSesiEkstra = (index: number) => {
+        setSesiEkstra(prev => prev.filter((_, idx) => idx !== index));
     };
 
     const handleSave = async (e: React.FormEvent) => {
@@ -65,6 +103,9 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
             guruId,
             mataPelajaranId,
             jamPelajaranIds,
+            sesiEkstra: sesiEkstra
+                .filter(s => s.kegiatan.trim() || s.materi.trim() || (s.waktuMulai && s.waktuSelesai))
+                .map(s => ({ kegiatan: s.kegiatan.trim(), materi: s.materi.trim(), waktuMulai: s.waktuMulai, waktuSelesai: s.waktuSelesai })),
             kompetensiMateri,
             catatanKejadian,
             recordedBy: currentUser?.username || 'Staff'
@@ -76,6 +117,7 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
             // reset form partial
             setMataPelajaranId(0);
             setJamPelajaranIds([]);
+            setSesiEkstra([]);
             setKompetensiMateri('');
             setCatatanKejadian('');
         } catch (error) {
@@ -99,6 +141,8 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
             { confirmText: 'Hapus', confirmColor: 'red' }
         );
     };
+
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm animate-fade-in" onClick={onClose}>
@@ -144,6 +188,19 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                                                      <p className="text-xs text-yellow-900 break-words">{r.catatanKejadian}</p>
                                                  </div>
                                             )}
+                                            {r.sesiEkstra && r.sesiEkstra.length > 0 && (
+                                                <div className="mt-2 bg-indigo-50/60 p-2.5 rounded-lg border border-indigo-100">
+                                                    <p className="text-[10px] font-bold text-indigo-700 uppercase mb-1">Sesi Ekstra</p>
+                                                    <div className="space-y-1">
+                                                        {r.sesiEkstra.map((s, idx) => (
+                                                            <p key={`${r.id}-extra-${idx}`} className="text-xs text-indigo-900">
+                                                                {s.kegiatan || 'Kegiatan Ekstra'} ({s.waktuMulai || '--:--'} - {s.waktuSelesai || '--:--'})
+                                                                {s.materi ? ` • Materi: ${s.materi}` : ''}
+                                                            </p>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                          </div>
                                          {canWrite && (
                                             <button onClick={() => handleDelete(r.id)} className="text-red-400 hover:text-red-600 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-md hover:bg-red-50 bg-white" title="Hapus Entri">
@@ -178,14 +235,14 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                                     <label className="block text-xs font-bold text-gray-700 mb-1.5">Mata Pelajaran <span className="text-red-500">*</span></label>
                                     <select required value={mataPelajaranId} onChange={e => setMataPelajaranId(Number(e.target.value))} className="w-full text-sm p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none">
                                         <option value={0}>-- Pilih Mapel --</option>
-                                        {settings.mataPelajaran.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                                        {filteredMapel.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
                                     </select>
                                 </div>
                                 
                                 <div>
                                     <label className="block text-xs font-bold text-gray-700 mb-1.5">Jam Pelajaran Ke / Sesi</label>
                                     <div className="flex flex-wrap gap-2">
-                                        {[1,2,3,4,5,6,7,8,9,10].map(jam => (
+                                        {jamPilihan.map(jam => (
                                             <button 
                                                 key={jam} type="button" 
                                                 onClick={() => handleToggleJam(jam)}
@@ -195,12 +252,60 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                                             </button>
                                         ))}
                                     </div>
-                                    <p className="text-[10px] text-gray-500 mt-1.5">Bisa lebih dari satu jam jika jam kosong (dobel).</p>
+                                    <p className="text-[10px] text-gray-500 mt-1.5">
+                                        Jam mengikuti konfigurasi jadwal marhalah/rombel. Bisa pilih lebih dari satu jika jam dobel.
+                                    </p>
                                 </div>
 
                                 <div>
                                     <label className="block text-xs font-bold text-gray-700 mb-1.5">Kompetensi Dasar / Materi yang Disampaikan <span className="text-red-500">*</span></label>
                                     <textarea required rows={3} value={kompetensiMateri} onChange={e => setKompetensiMateri(e.target.value)} placeholder="Misal: Bab 1 - Thoharoh (Halaman 5-10)..." className="w-full text-sm p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none resize-none"></textarea>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="block text-xs font-bold text-gray-700">Sesi Ekstra (Opsional)</label>
+                                        <button type="button" onClick={handleAddSesiEkstra} className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1.5 hover:bg-indigo-100">
+                                            <i className="bi bi-plus-circle mr-1"></i>Tambah Ekstra
+                                        </button>
+                                    </div>
+                                    {sesiEkstra.length > 0 && sesiEkstra.map((sesi, idx) => (
+                                        <div key={`extra-${idx}`} className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={sesi.kegiatan}
+                                                    onChange={e => handleUpdateSesiEkstra(idx, 'kegiatan', e.target.value)}
+                                                    placeholder="Kegiatan / Mapel Ekstra"
+                                                    className="text-sm p-2.5 bg-white border border-gray-300 rounded-lg"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={sesi.materi}
+                                                    onChange={e => handleUpdateSesiEkstra(idx, 'materi', e.target.value)}
+                                                    placeholder="Materi yang disampaikan"
+                                                    className="text-sm p-2.5 bg-white border border-gray-300 rounded-lg"
+                                                />
+                                                <input
+                                                    type="time"
+                                                    value={sesi.waktuMulai}
+                                                    onChange={e => handleUpdateSesiEkstra(idx, 'waktuMulai', e.target.value)}
+                                                    className="text-sm p-2.5 bg-white border border-gray-300 rounded-lg"
+                                                />
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="time"
+                                                        value={sesi.waktuSelesai}
+                                                        onChange={e => handleUpdateSesiEkstra(idx, 'waktuSelesai', e.target.value)}
+                                                        className="flex-1 text-sm p-2.5 bg-white border border-gray-300 rounded-lg"
+                                                    />
+                                                    <button type="button" onClick={() => handleRemoveSesiEkstra(idx)} className="px-2.5 py-2 text-red-600 hover:bg-red-50 rounded border border-red-200">
+                                                        <i className="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                                 
                                 <div>

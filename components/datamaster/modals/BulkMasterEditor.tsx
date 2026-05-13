@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PondokSettings } from '../../../types';
 
 export type MasterType = 'pendidik' | 'jenjang' | 'kelas' | 'rombel' | 'mapel';
@@ -17,6 +17,28 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
     isOpen, onClose, mode, settings, onSave, initialData 
 }) => {
     const [rows, setRows] = useState<any[]>([]);
+    const [query, setQuery] = useState('');
+    const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
+    const [pasteText, setPasteText] = useState('');
+    const undoStackRef = useRef<any[][]>([]);
+    const redoStackRef = useRef<any[][]>([]);
+    const draftStorageKey = `esantri:bulk-master-draft:${mode}`;
+
+    const cloneRows = (source: any[]) => source.map((row) => ({ ...row }));
+    const canUndo = undoStackRef.current.length > 0;
+    const canRedo = redoStackRef.current.length > 0;
+
+    const applyRowsMutation = (mutator: (draft: any[]) => any[]) => {
+        setRows(prev => {
+            const snapshot = cloneRows(prev);
+            const nextRows = mutator(cloneRows(prev));
+            undoStackRef.current.push(snapshot);
+            if (undoStackRef.current.length > 30) undoStackRef.current.shift();
+            redoStackRef.current = [];
+            return nextRows;
+        });
+    };
+
     const parseMultiValue = (value?: string) =>
         (value || '')
             .split(/\n|;/)
@@ -25,6 +47,9 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
 
     useEffect(() => {
         if (isOpen) {
+            undoStackRef.current = [];
+            redoStackRef.current = [];
+            setQuery('');
             if (initialData && initialData.length > 0) {
                 setRows(initialData.map((item, i) => ({ ...item, tempId: Date.now() + i })));
             } else {
@@ -38,7 +63,7 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
     const createEmptyRow = (index: number) => {
         const base = { tempId: Date.now() + index, nama: '' };
         switch (mode) {
-            case 'pendidik': return { ...base, jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0], telepon: '', email: '', rombelId: '' };
+            case 'pendidik': return { ...base, jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0], telepon: '', email: '', kelasId: '', rombelId: '' };
             case 'jenjang': return { ...base, kode: '', mudirId: '' };
             case 'kelas': return { ...base, jenjangId: settings.jenjang[0]?.id || '' };
             case 'rombel': return { ...base, kelasId: settings.kelas[0]?.id || '', waliKelasId: '' };
@@ -48,19 +73,107 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
     };
 
     const handleAddRow = () => {
-        setRows(prev => [...prev, createEmptyRow(prev.length)]);
+        applyRowsMutation(prev => [...prev, createEmptyRow(prev.length)]);
     };
 
     const handleRemoveRow = (tempId: number) => {
-        setRows(prev => prev.filter(r => r.tempId !== tempId));
+        applyRowsMutation(prev => prev.filter(r => r.tempId !== tempId));
     };
 
     const updateRow = (tempId: number, field: string, value: any) => {
-        setRows(prev => prev.map(row => {
+        applyRowsMutation(prev => prev.map(row => {
             if (row.tempId !== tempId) return row;
             return { ...row, [field]: value };
         }));
     };
+
+    const handleUndo = () => {
+        if (!undoStackRef.current.length) return;
+        setRows(prev => {
+            const previous = undoStackRef.current.pop()!;
+            redoStackRef.current.push(cloneRows(prev));
+            return cloneRows(previous);
+        });
+    };
+
+    const handleRedo = () => {
+        if (!redoStackRef.current.length) return;
+        setRows(prev => {
+            const next = redoStackRef.current.pop()!;
+            undoStackRef.current.push(cloneRows(prev));
+            return cloneRows(next);
+        });
+    };
+
+    const handleSaveDraft = () => {
+        localStorage.setItem(draftStorageKey, JSON.stringify({ savedAt: Date.now(), rows }));
+    };
+
+    const handleLoadDraft = () => {
+        const raw = localStorage.getItem(draftStorageKey);
+        if (!raw) return;
+        try {
+            const parsed = JSON.parse(raw) as { rows?: any[] };
+            if (!Array.isArray(parsed.rows)) return;
+            undoStackRef.current = [];
+            redoStackRef.current = [];
+            setRows(parsed.rows.map((row, i) => ({ ...row, tempId: row.tempId || Date.now() + i })));
+        } catch {
+            // ignore invalid draft
+        }
+    };
+
+    const handleDeleteDraft = () => {
+        localStorage.removeItem(draftStorageKey);
+    };
+
+    const getPasteFields = (): string[] => {
+        switch (mode) {
+            case 'pendidik':
+                return ['nama', 'jabatan', 'kelasId', 'rombelId', 'telepon', 'email', 'tanggalMulai'];
+            case 'jenjang':
+                return ['nama', 'kode', 'mudirId'];
+            case 'kelas':
+                return ['nama', 'jenjangId'];
+            case 'rombel':
+                return ['nama', 'kelasId', 'waliKelasId'];
+            case 'mapel':
+                return ['nama', 'kkm', 'modul', 'linkUnduh', 'linkPembelian', 'jenjangId'];
+            default:
+                return ['nama'];
+        }
+    };
+
+    const parseRowsFromText = (text: string) => {
+        const lines = text
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean);
+        if (!lines.length) return [];
+        const fields = getPasteFields();
+        return lines.map((line, i) => {
+            const chunks = line.includes('\t') ? line.split('\t') : line.split(';');
+            const row: any = createEmptyRow(i);
+            fields.forEach((field, idx) => {
+                row[field] = (chunks[idx] || '').trim();
+            });
+            return row;
+        });
+    };
+
+    const handleApplyPaste = () => {
+        const parsed = parseRowsFromText(pasteText);
+        if (!parsed.length) return;
+        applyRowsMutation(prev => [...prev, ...parsed.map((row, i) => ({ ...row, tempId: Date.now() + i }))]);
+        setPasteText('');
+        setIsPasteModalOpen(false);
+    };
+
+    const filteredRows = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return rows;
+        return rows.filter(row => (row.nama || '').toString().toLowerCase().includes(q));
+    }, [rows, query]);
 
     const handleSave = () => {
         // Filter baris yang punya Nama
@@ -120,6 +233,26 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
 
             {/* Table Container */}
             <div className="flex-grow overflow-auto p-6">
+                <div className="mb-4 bg-white border rounded-lg p-3 flex flex-wrap items-center gap-2">
+                    <input
+                        type="text"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Cari nama..."
+                        className="border-gray-300 rounded text-sm h-9 px-3 min-w-[220px]"
+                    />
+                    <button onClick={handleUndo} disabled={!canUndo} className="px-3 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50">
+                        <i className="bi bi-arrow-counterclockwise"></i> Undo
+                    </button>
+                    <button onClick={handleRedo} disabled={!canRedo} className="px-3 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50">
+                        <i className="bi bi-arrow-clockwise"></i> Redo
+                    </button>
+                    <button onClick={handleSaveDraft} className="px-3 py-2 text-sm rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Simpan Draft</button>
+                    <button onClick={handleLoadDraft} className="px-3 py-2 text-sm rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Muat Draft</button>
+                    <button onClick={handleDeleteDraft} className="px-3 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200">Hapus Draft</button>
+                    <button onClick={() => setIsPasteModalOpen(true)} className="px-3 py-2 text-sm rounded bg-teal-50 text-teal-700 hover:bg-teal-100">Tempel Massal</button>
+                    <span className="text-xs text-gray-500 ml-auto">{filteredRows.length} baris tampil</span>
+                </div>
                 <div className="bg-white rounded-lg shadow border relative">
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
                         <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
@@ -130,6 +263,7 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
                                 {mode === 'pendidik' && (
                                     <>
                                         <th className="px-4 py-3 text-left font-semibold text-gray-600 min-w-[150px]">Jabatan Awal</th>
+                                        <th className="px-4 py-3 text-left font-semibold text-gray-600 min-w-[180px]">Kelas (Wali)</th>
                                         <th className="px-4 py-3 text-left font-semibold text-gray-600 min-w-[150px]">Rombel (Wali)</th>
                                         <th className="px-4 py-3 text-left font-semibold text-gray-600 min-w-[150px]">No. Telp</th>
                                         <th className="px-4 py-3 text-left font-semibold text-gray-600 min-w-[180px]">Email</th>
@@ -169,7 +303,7 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {rows.map((row, index) => (
+                            {filteredRows.map((row, index) => (
                                 <tr key={row.tempId} className="hover:bg-gray-50 group">
                                     <td className="px-4 py-2 text-center text-gray-500 border-r bg-gray-50">{index + 1}</td>
                                     <td className="px-4 py-2">
@@ -188,9 +322,26 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
                                                 </select>
                                             </td>
                                             <td className="px-4 py-2">
+                                                <select
+                                                    value={row.kelasId || ''}
+                                                    onChange={e => {
+                                                        updateRow(row.tempId, 'kelasId', e.target.value);
+                                                        updateRow(row.tempId, 'rombelId', '');
+                                                    }}
+                                                    disabled={row.jabatan !== 'Wali Kelas'}
+                                                    className="w-full border-gray-300 rounded text-sm h-9 px-1 disabled:opacity-50"
+                                                >
+                                                    <option value="">-- Kelas --</option>
+                                                    {settings.kelas.map(k => {
+                                                        const parentJenjang = settings.jenjang.find(j => j.id === k.jenjangId);
+                                                        return <option key={k.id} value={k.id}>{parentJenjang?.nama} - {k.nama}</option>;
+                                                    })}
+                                                </select>
+                                            </td>
+                                            <td className="px-4 py-2">
                                                 <select value={row.rombelId} onChange={e => updateRow(row.tempId, 'rombelId', e.target.value)} disabled={row.jabatan !== 'Wali Kelas'} className="w-full border-gray-300 rounded text-sm h-9 px-1 disabled:opacity-50">
                                                     <option value="">-- Rombel --</option>
-                                                    {settings.rombel.map(r => {
+                                                    {settings.rombel.filter(r => !row.kelasId || r.kelasId === parseInt(row.kelasId)).map(r => {
                                                         const kelas = settings.kelas.find(k => k.id === r.kelasId);
                                                         return <option key={r.id} value={r.id}>{kelas?.nama} - {r.nama}</option>
                                                     })}
@@ -278,6 +429,34 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
                     </button>
                 </div>
             </div>
+            {isPasteModalOpen && (
+                <div className="fixed inset-0 z-[90] bg-black/30 flex items-center justify-center p-4">
+                    <div className="w-full max-w-3xl bg-white rounded-xl shadow-lg border">
+                        <div className="px-4 py-3 border-b flex items-center justify-between">
+                            <h3 className="font-semibold text-gray-800">Tempel Data Massal</h3>
+                            <button onClick={() => setIsPasteModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-3">
+                            <p className="text-sm text-gray-600">
+                                Tempel data per baris. Gunakan pemisah kolom tab atau titik koma (<code>;</code>).
+                            </p>
+                            <textarea
+                                rows={10}
+                                value={pasteText}
+                                onChange={e => setPasteText(e.target.value)}
+                                className="w-full border-gray-300 rounded-lg text-sm p-3"
+                                placeholder="Nama;Jabatan;KelasId;RombelId;Telepon;Email;TanggalMulai"
+                            />
+                        </div>
+                        <div className="px-4 py-3 border-t flex justify-end gap-2">
+                            <button onClick={() => setIsPasteModalOpen(false)} className="px-4 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200">Batal</button>
+                            <button onClick={handleApplyPaste} className="px-4 py-2 text-sm rounded bg-teal-600 text-white hover:bg-teal-700">Masukkan ke Tabel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

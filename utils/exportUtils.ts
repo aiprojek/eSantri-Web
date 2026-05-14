@@ -5,6 +5,10 @@ const getUnifiedPreviewPrintStyles = () => `
         background-color: white;
         margin: 0 auto;
     }
+    .printable-content-wrapper > div {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
     .page-break-after {
         page-break-after: always;
         break-after: page;
@@ -34,6 +38,13 @@ const getUnifiedPreviewPrintStyles = () => `
         overflow: visible !important;
         display: block !important;
     }
+    #jadwal-print-area .printable-content-wrapper > div,
+    #jadwal-print-area .jadwal-sheet > div {
+        page-break-after: auto !important;
+        break-after: auto !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+    }
     #jadwal-print-area .printable-content-wrapper {
         padding: 0.6cm 0.7cm 0.5cm 0.7cm !important;
         position: relative !important;
@@ -42,12 +53,16 @@ const getUnifiedPreviewPrintStyles = () => `
         display: block !important;
         min-height: auto !important;
         height: auto !important;
+        min-height: 19.2cm !important;
+        display: flex !important;
+        flex-direction: column !important;
     }
     #jadwal-print-area .jadwal-header-block {
         display: block !important;
     }
     #jadwal-print-area .jadwal-table-block {
         display: block !important;
+        flex: 1 1 auto !important;
         overflow: visible !important;
     }
     #jadwal-print-area table {
@@ -65,7 +80,44 @@ const getUnifiedPreviewPrintStyles = () => `
         left: auto !important;
         right: auto !important;
         bottom: auto !important;
-        margin-top: 0.2cm !important;
+        margin-top: auto !important;
+        padding-top: 0.16cm !important;
+        border-top: 1px solid rgba(100, 116, 139, 0.55) !important;
+        color: rgba(71, 85, 105, 0.78) !important;
+        font-size: 8.5pt !important;
+        font-style: italic !important;
+    }
+    #calendar-print-area .calendar-sheet {
+        width: 21cm !important;
+        min-height: 29.7cm !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+    }
+    #calendar-print-area .calendar-layout-1_sheet {
+        padding: 7mm 7mm 6mm 7mm !important;
+    }
+    #calendar-print-area .calendar-layout-3_sheets {
+        padding: 10mm 9mm 8mm 9mm !important;
+    }
+    #calendar-print-area .calendar-layout-4_sheets {
+        padding: 12mm 11mm 9mm 11mm !important;
+    }
+    #calendar-print-area .calendar-sheet-content {
+        align-content: start !important;
+    }
+    #calendar-print-area .calendar-sheet-header {
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+    }
+    #calendar-print-area .calendar-sheet-footer {
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+    }
+    #calendar-print-area .calendar-sheet-content > div {
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
     }
         @media print {
             html, body {
@@ -123,9 +175,53 @@ const getUnifiedPreviewPrintStyles = () => `
             page-break-inside: auto !important;
             break-inside: auto !important;
         }
+        #jadwal-print-area .printable-content-wrapper > div,
+        #jadwal-print-area .jadwal-sheet > div {
+            page-break-after: auto !important;
+            break-after: auto !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid-page !important;
+        }
         #jadwal-print-area .jadwal-sheet {
-            min-height: auto !important;
+            min-height: 19.2cm !important;
             height: auto !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        #jadwal-print-area .jadwal-table-block {
+            flex: 1 1 auto !important;
+        }
+        #jadwal-print-area .report-signature-footer {
+            margin-top: auto !important;
+            padding-top: 0.16cm !important;
+            border-top: 1px solid rgba(100, 116, 139, 0.55) !important;
+            color: rgba(71, 85, 105, 0.78) !important;
+            font-size: 8.5pt !important;
+            font-style: italic !important;
+        }
+        #calendar-print-area .calendar-sheet {
+            width: 21cm !important;
+            min-height: 29.7cm !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid-page !important;
+        }
+        #calendar-print-area .calendar-layout-1_sheet {
+            padding: 7mm 7mm 6mm 7mm !important;
+        }
+        #calendar-print-area .calendar-layout-3_sheets {
+            padding: 10mm 9mm 8mm 9mm !important;
+        }
+        #calendar-print-area .calendar-layout-4_sheets {
+            padding: 12mm 11mm 9mm 11mm !important;
+        }
+        #calendar-print-area .calendar-sheet-content {
+            align-content: start !important;
+        }
+        #calendar-print-area .calendar-sheet-content > div {
+            page-break-inside: avoid !important;
+            break-inside: avoid-page !important;
         }
     }
 `;
@@ -150,11 +246,17 @@ const extractPrintableContent = (element: HTMLElement, elementId: string): strin
     return element.innerHTML;
 };
 
-const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: { showToolbar?: boolean; isJadwalPrint?: boolean; isSarprasPrint?: boolean }) => {
+const buildUnifiedHtmlDocument = (
+    content: string,
+    fileName: string,
+    options?: { showToolbar?: boolean; isJadwalPrint?: boolean; isSarprasPrint?: boolean; elementId?: string }
+) => {
     const styles = collectDocumentStyles();
     const showToolbar = options?.showToolbar ?? false;
     const isJadwalPrint = options?.isJadwalPrint ?? false;
     const isSarprasPrint = options?.isSarprasPrint ?? false;
+    const rootElementId = options?.elementId ?? 'print-root';
+    const isCalendarPrint = rootElementId === 'calendar-print-area';
 
     return `
 <!DOCTYPE html>
@@ -173,6 +275,7 @@ const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: {
             .print-portrait { page: portrait; }
             .print-landscape { page: landscape; }
             ${isJadwalPrint ? '@page { margin: 6mm; size: A4 landscape; }' : ''}
+            ${isCalendarPrint ? '@page { margin: 0mm; size: A4 portrait; }' : ''}
             body { padding: 0 !important; background: #fff !important; }
             .printable-content-wrapper {
                 width: auto !important;
@@ -181,6 +284,28 @@ const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: {
                 position: relative !important;
                 z-index: 1 !important;
             }
+            ${isCalendarPrint ? `
+            #calendar-print-area .calendar-sheet {
+                width: 210mm !important;
+                min-height: 297mm !important;
+                height: 297mm !important;
+                margin: 0 !important;
+                box-sizing: border-box !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                overflow: hidden !important;
+            }
+            #calendar-print-area .calendar-sheet:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
+            }
+            #calendar-print-area .calendar-sheet-header,
+            #calendar-print-area .calendar-sheet-content,
+            #calendar-print-area .calendar-sheet-footer {
+                page-break-inside: avoid !important;
+                break-inside: avoid-page !important;
+            }
+            ` : ''}
             ${isSarprasPrint ? `
             #sarpras-print-area .printable-content-wrapper {
                 min-height: auto !important;
@@ -201,7 +326,9 @@ const buildUnifiedHtmlDocument = (content: string, fileName: string, options?: {
         <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-weight: 500;">Cetak / Simpan PDF</button>
     </div>
     ` : ''}
+    <div id="${rootElementId}">
     ${content}
+    </div>
 </body>
 </html>`;
 };
@@ -216,7 +343,7 @@ export const exportToHtml = (elementId: string, fileName: string) => {
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isSarprasPrint = elementId === 'sarpras-print-area';
     const content = extractPrintableContent(element, elementId);
-    const finalHtml = buildUnifiedHtmlDocument(content, fileName, { showToolbar: true, isJadwalPrint, isSarprasPrint });
+    const finalHtml = buildUnifiedHtmlDocument(content, fileName, { showToolbar: true, isJadwalPrint, isSarprasPrint, elementId });
 
     const blob = new Blob([finalHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -249,7 +376,7 @@ export const printPreviewExact = async (elementId: string, fileName: string): Pr
 
     doc.open();
     doc.write(
-        `${buildUnifiedHtmlDocument(content, fileName, { showToolbar: false, isJadwalPrint, isSarprasPrint })}
+        `${buildUnifiedHtmlDocument(content, fileName, { showToolbar: false, isJadwalPrint, isSarprasPrint, elementId })}
          <script>
             window.onload = () => {
                 setTimeout(() => {

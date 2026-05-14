@@ -65,6 +65,8 @@ const renderPageCanvas = async (page: HTMLElement) => {
     });
 };
 
+const isCalendarElement = (elementId: string): boolean => elementId === 'calendar-print-area';
+
 // Method 1: Visual Generator using html2canvas (Bitmap PDF)
 export const generatePdf = async (elementId: string, options: PdfGeneratorOptions): Promise<void> => {
     const element = document.getElementById(elementId);
@@ -101,6 +103,8 @@ export const generatePdf = async (elementId: string, options: PdfGeneratorOption
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
 
+        const calendarMode = isCalendarElement(elementId);
+
         for (let i = 0; i < pages.length; i++) {
             const page = pages[i];
             if (page.style.display === 'none') continue;
@@ -110,6 +114,41 @@ export const generatePdf = async (elementId: string, options: PdfGeneratorOption
             const canvas = await renderPageCanvas(page);
 
             if (canvas.width > 0) {
+                if (calendarMode) {
+                    const isVeryFirstOutputPage = i === 0;
+                    if (!isVeryFirstOutputPage) {
+                        doc.addPage(format, isLandscape ? 'l' : 'p');
+                    }
+
+                    const imgAspect = canvas.width / canvas.height;
+                    const pageAspect = pageWidth / pageHeight;
+                    let pdfImgWidth = pageWidth;
+                    let pdfImgHeight = pageHeight;
+                    let offsetX = 0;
+                    let offsetY = 0;
+
+                    if (imgAspect > pageAspect) {
+                        pdfImgHeight = pageWidth / imgAspect;
+                        offsetY = (pageHeight - pdfImgHeight) / 2;
+                    } else {
+                        pdfImgWidth = pageHeight * imgAspect;
+                        offsetX = (pageWidth - pdfImgWidth) / 2;
+                    }
+
+                    const imgData = canvas.toDataURL('image/png');
+                    try {
+                        doc.addImage(imgData, 'PNG', offsetX, offsetY, pdfImgWidth, pdfImgHeight, undefined, 'FAST');
+                    } catch (e) {
+                        console.error("PDF addImage error:", e);
+                        try {
+                            doc.addImage(imgData, offsetX, offsetY, pdfImgWidth, pdfImgHeight);
+                        } catch (e2) {
+                            console.error("PDF addImage fallback error:", e2);
+                        }
+                    }
+                    continue;
+                }
+
                 const pageCanvasHeightPx = Math.floor((canvas.width * pageHeight) / pageWidth);
                 const totalSlices = Math.max(1, Math.ceil(canvas.height / pageCanvasHeightPx));
 
@@ -186,6 +225,7 @@ export const printVisualPreview = async (elementId: string, paperSize: string): 
         if (pages.length === 0) return;
 
         const [pageWidthMm, pageHeightMm] = getPageDimensions(paperSize);
+        const calendarMode = isCalendarElement(elementId);
         const renderedPages: Array<{ src: string; widthMm: number; heightMm: number }> = [];
 
         for (const page of pages) {
@@ -193,6 +233,15 @@ export const printVisualPreview = async (elementId: string, paperSize: string): 
             const isLandscape = page.classList.contains('print-landscape');
             const widthMm = isLandscape ? pageHeightMm : pageWidthMm;
             const heightMm = isLandscape ? pageWidthMm : pageHeightMm;
+
+            if (calendarMode) {
+                renderedPages.push({
+                    src: canvas.toDataURL('image/png'),
+                    widthMm,
+                    heightMm
+                });
+                continue;
+            }
 
             const pageCanvasHeightPx = Math.floor((canvas.width * heightMm) / widthMm);
             const totalSlices = Math.max(1, Math.ceil(canvas.height / pageCanvasHeightPx));
@@ -271,7 +320,7 @@ export const printVisualPreview = async (elementId: string, paperSize: string): 
                 .print-page img {
                     width: 100%;
                     height: 100%;
-                    object-fit: fill;
+                    object-fit: contain;
                     display: block;
                 }
             </style>
@@ -385,20 +434,16 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
                 min-height: 29.7cm !important;
                 box-sizing: border-box !important;
                 margin: 0 !important;
-                page-break-inside: auto !important;
-                break-inside: auto !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid-page !important;
                 page-break-after: always !important;
                 break-after: page !important;
+                overflow: hidden !important;
             }
             #calendar-print-area .calendar-sheet-header {
                 display: block !important;
                 page-break-after: avoid !important;
                 break-after: avoid-page !important;
-            }
-            #calendar-print-area .calendar-layout-1_sheet {
-                transform: scale(0.88) !important;
-                transform-origin: top center !important;
-                width: calc(21cm / 0.88) !important;
             }
             #calendar-print-area .printable-content-wrapper:last-child {
                 page-break-after: auto !important;

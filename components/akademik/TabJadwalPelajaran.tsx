@@ -12,6 +12,8 @@ import { loadJsPdf, loadJsPdfAutoTable } from '../../utils/lazyClientLibs';
 import { formatAcademicYearDisplay, getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 import { printExportFacade } from '../../utils/printExportFacade';
 
+const PENDING_RESTORE_ROMBEL_KEY = 'esantri_jadwal_pending_restore_rombel_id';
+
 // --- MODAL ARSIP ---
 interface ArchiveModalProps {
     isOpen: boolean;
@@ -257,6 +259,23 @@ export const TabJadwalPelajaran: React.FC = () => {
     }, [filterKelasId, filterJenjangId, settings.rombel, settings.kelas]);
 
     const activeJenjang = useMemo(() => settings.jenjang.find(j => j.id === filterJenjangId), [filterJenjangId, settings.jenjang]);
+
+    // Pulihkan mode edit rombel sekali pakai setelah update jam (jika komponen sempat reset state)
+    useEffect(() => {
+        if (filterRombelId > 0) return;
+        const raw = sessionStorage.getItem(PENDING_RESTORE_ROMBEL_KEY);
+        if (!raw) return;
+        const pendingId = Number(raw);
+        if (!pendingId) {
+            sessionStorage.removeItem(PENDING_RESTORE_ROMBEL_KEY);
+            return;
+        }
+        const isStillAvailable = settings.rombel.some(r => r.id === pendingId);
+        if (isStillAvailable) {
+            setFilterRombelId(pendingId);
+        }
+        sessionStorage.removeItem(PENDING_RESTORE_ROMBEL_KEY);
+    }, [filterRombelId, settings.rombel]);
     
     // Determine which Rombels are targeted for Display/Print
     const targetRombels = useMemo(() => {
@@ -305,6 +324,33 @@ export const TabJadwalPelajaran: React.FC = () => {
 
     // --- Actions Active View ---
 
+    const persistJadwalSlot = async (data: Partial<JadwalPelajaran>) => {
+        const payload = {
+            ...data,
+            rombelId: filterRombelId,
+            lastModified: Date.now()
+        } as JadwalPelajaran;
+
+        let savedId = editingJadwal?.id;
+        if (editingJadwal) {
+            await db.jadwalPelajaran.put({ ...payload, id: editingJadwal.id });
+            showToast('Jadwal diperbarui', 'success');
+        } else {
+            const existing = jadwalList.find(j => j.rombelId === filterRombelId && j.hari === data.hari && j.jamKe === data.jamKe);
+            if (existing) {
+                await db.jadwalPelajaran.put({ ...payload, id: existing.id });
+                savedId = existing.id;
+            } else {
+                savedId = Number(await db.jadwalPelajaran.add(payload));
+            }
+            showToast('Jadwal ditambahkan', 'success');
+        }
+
+        if (savedId) {
+            setEditingJadwal({ ...payload, id: savedId });
+        }
+    };
+
     const handleSaveJadwal = async (data: Partial<JadwalPelajaran>) => {
         if (!filterRombelId) return;
 
@@ -323,25 +369,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                     'Konflik Jadwal Guru',
                     `Guru ini sudah mengajar di kelas ${conflictRombel} pada waktu yang sama. Tetap simpan?`,
                     async () => {
-                        const payload = {
-                            ...data,
-                            rombelId: filterRombelId,
-                            lastModified: Date.now()
-                        } as JadwalPelajaran;
-
-                        if (editingJadwal) {
-                            await db.jadwalPelajaran.put({ ...payload, id: editingJadwal.id });
-                            showToast('Jadwal diperbarui', 'success');
-                        } else {
-                            const existing = jadwalList.find(j => j.rombelId === filterRombelId && j.hari === data.hari && j.jamKe === data.jamKe);
-                            if (existing) {
-                                await db.jadwalPelajaran.put({ ...payload, id: existing.id });
-                            } else {
-                                await db.jadwalPelajaran.add(payload);
-                            }
-                            showToast('Jadwal ditambahkan', 'success');
-                        }
-                        setIsJadwalModalOpen(false);
+                        await persistJadwalSlot(data);
                     },
                     { confirmText: 'Tetap Simpan', confirmColor: 'yellow' }
                 );
@@ -349,30 +377,12 @@ export const TabJadwalPelajaran: React.FC = () => {
             }
         }
 
-        const payload = {
-            ...data,
-            rombelId: filterRombelId,
-            lastModified: Date.now()
-        } as JadwalPelajaran;
-
-        if (editingJadwal) {
-            await db.jadwalPelajaran.put({ ...payload, id: editingJadwal.id });
-            showToast('Jadwal diperbarui', 'success');
-        } else {
-            const existing = jadwalList.find(j => j.rombelId === filterRombelId && j.hari === data.hari && j.jamKe === data.jamKe);
-            if (existing) {
-                 await db.jadwalPelajaran.put({ ...payload, id: existing.id });
-            } else {
-                 await db.jadwalPelajaran.add(payload);
-            }
-            showToast('Jadwal ditambahkan', 'success');
-        }
-        setIsJadwalModalOpen(false);
+        await persistJadwalSlot(data);
     };
 
     const handleDeleteJadwal = async (id: number) => {
         await db.jadwalPelajaran.delete(id);
-        setIsJadwalModalOpen(false);
+        setEditingJadwal(null);
         showToast('Jadwal dihapus', 'success');
     };
     
@@ -511,7 +521,10 @@ export const TabJadwalPelajaran: React.FC = () => {
         );
     };
 
-    const handleAddJam = () => {
+    const handleAddJam = async () => {
+        if (filterRombelId > 0) {
+            sessionStorage.setItem(PENDING_RESTORE_ROMBEL_KEY, String(filterRombelId));
+        }
         const nextUrutan = jamConfig.length + 1;
         const newJam: JamPelajaran = {
             id: Date.now(),
@@ -521,14 +534,19 @@ export const TabJadwalPelajaran: React.FC = () => {
             jenis: 'KBM',
             jenjangId: filterJenjangId
         };
-        handleSaveJamConfig([...jamConfig, newJam]);
+        await handleSaveJamConfig([...jamConfig, newJam]);
+        setFilterRombelId((prev) => prev);
     };
 
-    const handleRemoveJam = (index: number) => {
+    const handleRemoveJam = async (index: number) => {
+        if (filterRombelId > 0) {
+            sessionStorage.setItem(PENDING_RESTORE_ROMBEL_KEY, String(filterRombelId));
+        }
         const updatedConfig = [...jamConfig];
         updatedConfig.splice(index, 1);
         const reindexed = updatedConfig.map((j, idx) => ({ ...j, urutan: idx + 1 }));
-        handleSaveJamConfig(reindexed);
+        await handleSaveJamConfig(reindexed);
+        setFilterRombelId((prev) => prev);
     };
 
     const handleCellClick = (dayIdx: number, jamUrutan: number) => {
@@ -542,7 +560,10 @@ export const TabJadwalPelajaran: React.FC = () => {
     // Quick nav from preview to edit
     const handleEditRombel = (rombelId: number) => {
         setFilterRombelId(rombelId);
-        // Ensure kelas filter also updates for consistency if needed, but not strictly required
+        setTimeout(() => {
+            const panel = document.getElementById('jam-config-panel');
+            panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 120);
     };
 
     const handlePrint = async () => {
@@ -665,7 +686,135 @@ export const TabJadwalPelajaran: React.FC = () => {
         showToast('PDF Berhasil dibuat', 'success');
     };
 
-    const runExportAction = async (mode: 'pdfVisual' | 'pdfImage' | 'print' | 'pdfAutoTable' | 'excel' | 'word' | 'html') => {
+    const openPreviewPrintWindow = () => {
+        const source = document.getElementById('jadwal-print-area');
+        if (!source) {
+            showToast('Preview jadwal tidak ditemukan.', 'error');
+            return;
+        }
+
+        const printWindow = window.open('', '_blank', 'width=1400,height=900');
+        if (!printWindow) {
+            showToast('Popup diblokir browser. Izinkan popup untuk fitur cetak.', 'error');
+            return;
+        }
+
+        const sheetsHtml = Array.from(source.querySelectorAll('.jadwal-sheet'))
+            .map((sheet) => (sheet as HTMLElement).outerHTML)
+            .join('\n');
+
+        if (!sheetsHtml.trim()) {
+            showToast('Konten cetak jadwal kosong.', 'error');
+            printWindow.close();
+            return;
+        }
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Preview Cetak Jadwal</title>
+                    <style>
+                        @page { size: A4 landscape; margin: 8mm; }
+                        * { box-sizing: border-box; }
+                        html, body { margin: 0; padding: 0; background: #fff; color: #111827; font-family: Arial, Helvetica, sans-serif; }
+                        body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+                        .jadwal-print-root { padding: 0; margin: 0; }
+                        .jadwal-sheet {
+                            width: 100% !important;
+                            min-height: calc(210mm - 16mm) !important;
+                            margin: 0 0 8mm 0 !important;
+                            padding: 0 !important;
+                            background: #fff !important;
+                            display: flex !important;
+                            flex-direction: column !important;
+                            page-break-after: always;
+                            break-after: page;
+                        }
+                        .jadwal-sheet:last-child {
+                            page-break-after: auto;
+                            break-after: auto;
+                        }
+                        .jadwal-header-block {
+                            break-inside: avoid-page;
+                            page-break-inside: avoid;
+                        }
+                        .jadwal-header-block > div { margin-bottom: 3mm; }
+                        .jadwal-header-block .flex { display: flex !important; justify-content: space-between !important; align-items: center !important; }
+                        .jadwal-header-block .justify-center { justify-content: center !important; }
+                        .jadwal-header-block .items-center { align-items: center !important; }
+                        .jadwal-header-block .w-14 { width: 56px !important; min-width: 56px !important; height: 56px !important; }
+                        .jadwal-header-block .h-14 { height: 56px !important; }
+                        .jadwal-header-block .w-20 { width: 80px !important; min-width: 80px !important; height: 80px !important; }
+                        .jadwal-header-block .h-20 { height: 80px !important; }
+                        .jadwal-header-block .px-4 { padding-left: 12px !important; padding-right: 12px !important; }
+                        .jadwal-header-block .text-center { text-align: center !important; }
+                        .jadwal-header-block h2 { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 700; text-align: center; }
+                        .jadwal-header-block p { margin: 2px 0; text-align: center; }
+                        .jadwal-header-block .text-xs { font-size: 12px !important; }
+                        .jadwal-header-block .text-sm { font-size: 13px !important; }
+                        .jadwal-header-block .text-base { font-size: 16px !important; }
+                        .jadwal-header-block .text-lg { font-size: 18px !important; }
+                        .jadwal-header-block .text-xl { font-size: 22px !important; }
+                        .jadwal-header-block .font-bold { font-weight: 700 !important; }
+                        .jadwal-header-block .font-semibold { font-weight: 600 !important; }
+                        .jadwal-header-block img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+                        .jadwal-header-block hr { border: 0; border-top: 2px solid #111827; margin: 5mm 0 4mm 0; }
+                        .jadwal-header-block .print-header-subtitle { text-align: center !important; text-transform: uppercase; letter-spacing: 0.2px; }
+                        .jadwal-table-block {
+                            flex: 1 1 auto;
+                            break-inside: avoid-page;
+                            page-break-inside: avoid;
+                            margin-top: 2mm;
+                        }
+                        .report-signature-footer {
+                            display: flex !important;
+                            justify-content: space-between !important;
+                            align-items: center !important;
+                            position: static !important;
+                            margin-top: auto !important;
+                            padding-top: 2mm !important;
+                            border-top: 1px solid rgba(100, 116, 139, 0.55) !important;
+                            font-size: 9px !important;
+                            font-style: italic !important;
+                            color: rgba(71, 85, 105, 0.78) !important;
+                            break-inside: avoid-page;
+                            page-break-inside: avoid;
+                        }
+                        table {
+                            width: 100% !important;
+                            border-collapse: collapse !important;
+                            table-layout: fixed !important;
+                            font-size: 9px !important;
+                        }
+                        th, td {
+                            border: 1px solid #111827 !important;
+                            vertical-align: top !important;
+                            word-break: break-word;
+                            white-space: normal;
+                        }
+                        th {
+                            background: #e5e7eb !important;
+                            text-align: center !important;
+                            font-weight: 700 !important;
+                        }
+                        .page-break-after { page-break-after: always !important; break-after: page !important; }
+                    </style>
+                </head>
+                <body>
+                    <div class="jadwal-print-root">
+                        ${sheetsHtml}
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+        }, 350);
+    };
+
+    const runExportAction = async (mode: 'pdfVisual' | 'pdfImage' | 'print' | 'excel' | 'word' | 'html') => {
         if (isExporting) return;
         if (targetRombels.length === 0) {
             showToast('Pilih setidaknya satu kelas untuk dicetak.', 'error');
@@ -686,11 +835,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                 return;
             }
             if (mode === 'print') {
-                await handlePrint();
-                return;
-            }
-            if (mode === 'pdfAutoTable') {
-                await handlePrint();
+                openPreviewPrintWindow();
                 return;
             }
             if (mode === 'excel') {
@@ -843,10 +988,9 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 </button>
                                 {isExportMenuOpen && (
                                     <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF AutoTable (Utama)</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF Tabel</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 border-b disabled:opacity-50">PDF Gambar</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b disabled:opacity-50">Cetak via AutoTable</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b disabled:opacity-50">PDF AutoTable</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-sky-50 border-b disabled:opacity-50">Preview & Cetak</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b disabled:opacity-50">Excel</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b disabled:opacity-50">Word</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50 disabled:opacity-50">HTML</button>
@@ -904,10 +1048,9 @@ export const TabJadwalPelajaran: React.FC = () => {
                                 </button>
                                 {isExportMenuOpen && (
                                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF AutoTable (Utama)</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF Tabel</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 border-b disabled:opacity-50">PDF Gambar</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 border-b disabled:opacity-50">Cetak via AutoTable</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfAutoTable')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 border-b disabled:opacity-50">PDF AutoTable</button>
+                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-sky-50 border-b disabled:opacity-50">Preview & Cetak</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b disabled:opacity-50">Excel</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b disabled:opacity-50">Word</button>
                                         <button disabled={isExporting} onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50 disabled:opacity-50">HTML</button>
@@ -1002,7 +1145,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                             {/* Time Slot Config (Left) */}
                             <div className="lg:col-span-3">
-                                <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                                <div id="jam-config-panel" className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="font-bold text-gray-700 text-sm">Pengaturan Jam</h3>
                                         {canWrite && <button onClick={() => {
@@ -1017,7 +1160,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                                                 <span>-</span>
                                                 <input type="time" value={jam.jamSelesai} onChange={e => { const newConfig = [...jamConfig]; newConfig[idx] = { ...newConfig[idx], jamSelesai: e.target.value }; setLocalJamConfig(newConfig); }} className="border rounded p-1 w-16 text-center" disabled={!canWrite} />
                                                 {canWrite && (
-                                                    <button onClick={() => handleRemoveJam(idx)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button type="button" onClick={() => handleRemoveJam(idx)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <i className="bi bi-trash"></i>
                                                     </button>
                                                 )}
@@ -1026,7 +1169,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                                     </div>
                                     {canWrite && (
                                         <div className="space-y-2 mt-3">
-                                            <button onClick={handleAddJam} className="w-full border border-dashed border-teal-300 text-teal-700 p-1.5 rounded text-xs font-bold hover:bg-teal-50 flex items-center justify-center gap-1">
+                                            <button type="button" onClick={handleAddJam} className="w-full border border-dashed border-teal-300 text-teal-700 p-1.5 rounded text-xs font-bold hover:bg-teal-50 flex items-center justify-center gap-1">
                                                 <i className="bi bi-plus-circle"></i> Tambah Jam
                                             </button>
                                              <button onClick={() => setIsCopyModalOpen(true)} className="w-full bg-blue-50 text-blue-700 border border-blue-200 p-1.5 rounded text-xs font-bold hover:bg-blue-100 flex items-center justify-center gap-1">
@@ -1276,6 +1419,11 @@ export const TabJadwalPelajaran: React.FC = () => {
                                             {canWrite && (
                                                 <button onClick={() => handleRestore(a)} className="flex-1 bg-white border border-blue-300 text-blue-700 text-xs py-1.5 rounded hover:bg-blue-50 font-medium">
                                                     <i className="bi bi-arrow-counterclockwise mr-1"></i> Pulihkan ke Editor
+                                                </button>
+                                            )}
+                                            {canWrite && (
+                                                <button onClick={() => handleRestore(a)} className="flex-1 bg-blue-600 text-white text-xs py-1.5 rounded hover:bg-blue-700 font-medium">
+                                                    <i className="bi bi-pencil-square mr-1"></i> Edit Ulang
                                                 </button>
                                             )}
                                         </div>

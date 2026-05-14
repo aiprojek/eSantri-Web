@@ -68,7 +68,7 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
     
     // Mapping helpers
     const getGuruName = (id: number) => settings.tenagaPengajar.find(t => t.id === id)?.nama || 'Unknown';
-    const getMapelName = (id: number) => settings.mataPelajaran.find(m => m.id === id)?.nama || 'Unknown';
+    const getMapelName = (id?: number) => id ? (settings.mataPelajaran.find(m => m.id === id)?.nama || 'Unknown') : 'Kegiatan Non-Mapel';
 
     const handleToggleJam = (jam: number) => {
         setJamPelajaranIds(prev => 
@@ -93,19 +93,25 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
         if(!canWrite) return;
         
         if(!guruId) return showToast('Pilih guru pengajar', 'error');
-        if(!mataPelajaranId) return showToast('Pilih mata pelajaran', 'error');
+        const validSesiEkstra = sesiEkstra
+            .filter(s => s.kegiatan.trim() || s.materi.trim() || (s.waktuMulai && s.waktuSelesai))
+            .map(s => ({ kegiatan: s.kegiatan.trim(), materi: s.materi.trim(), waktuMulai: s.waktuMulai, waktuSelesai: s.waktuSelesai }));
+        if(!mataPelajaranId && validSesiEkstra.length === 0) {
+            return showToast('Pilih mapel atau isi minimal 1 sesi ekstra', 'error');
+        }
         if(!kompetensiMateri.trim()) return showToast('Isi materi / kompetensi dasar', 'error');
+        const tipeEntri: 'kbm' | 'ekstra' | 'campuran' =
+            mataPelajaranId && validSesiEkstra.length > 0 ? 'campuran' : mataPelajaranId ? 'kbm' : 'ekstra';
 
         const record: JurnalMengajarRecord = {
             id: Date.now() + Math.random(),
             tanggal,
             rombelId,
             guruId,
-            mataPelajaranId,
+            mataPelajaranId: mataPelajaranId || undefined,
+            tipeEntri,
             jamPelajaranIds,
-            sesiEkstra: sesiEkstra
-                .filter(s => s.kegiatan.trim() || s.materi.trim() || (s.waktuMulai && s.waktuSelesai))
-                .map(s => ({ kegiatan: s.kegiatan.trim(), materi: s.materi.trim(), waktuMulai: s.waktuMulai, waktuSelesai: s.waktuSelesai })),
+            sesiEkstra: validSesiEkstra,
             kompetensiMateri,
             catatanKejadian,
             recordedBy: currentUser?.username || 'Staff'
@@ -171,6 +177,9 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                                          <div>
                                             <div className="flex flex-wrap items-center gap-2 mb-1">
                                                 <span className="font-bold text-gray-800">{getMapelName(r.mataPelajaranId)}</span>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded-full border ${r.tipeEntri === 'ekstra' ? 'bg-purple-50 text-purple-700 border-purple-200' : r.tipeEntri === 'campuran' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
+                                                    {(r.tipeEntri || 'kbm').toUpperCase()}
+                                                </span>
                                                 {r.jamPelajaranIds && r.jamPelajaranIds.length > 0 && (
                                                     <span className="text-xs bg-indigo-50 text-indigo-700 font-medium px-2 py-0.5 rounded border border-indigo-100 shrink-0">Jam ke-{r.jamPelajaranIds.join(', ')}</span>
                                                 )}
@@ -232,9 +241,9 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-700 mb-1.5">Mata Pelajaran <span className="text-red-500">*</span></label>
-                                    <select required value={mataPelajaranId} onChange={e => setMataPelajaranId(Number(e.target.value))} className="w-full text-sm p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none">
-                                        <option value={0}>-- Pilih Mapel --</option>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1.5">Mata Pelajaran (Opsional jika hanya sesi ekstra)</label>
+                                    <select value={mataPelajaranId} onChange={e => setMataPelajaranId(Number(e.target.value))} className="w-full text-sm p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none">
+                                        <option value={0}>-- Tidak memilih mapel (khusus ekstra/non-mapel) --</option>
                                         {filteredMapel.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
                                     </select>
                                 </div>
@@ -313,7 +322,7 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                                     <textarea rows={2} value={catatanKejadian} onChange={e => setCatatanKejadian(e.target.value)} placeholder="Misal: Siswa sebagian besar belum hafal, 2 orang tidur..." className="w-full text-sm p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 outline-none resize-none"></textarea>
                                 </div>
 
-                                <button type="submit" disabled={!guruId || !mataPelajaranId || !kompetensiMateri.trim()} className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <button type="submit" disabled={!guruId || !kompetensiMateri.trim() || (!mataPelajaranId && sesiEkstra.length === 0)} className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
                                     Simpan Jurnal
                                 </button>
                             </form>

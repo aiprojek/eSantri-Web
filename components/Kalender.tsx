@@ -5,7 +5,8 @@ import { useForm } from 'react-hook-form';
 import { db } from '../db';
 import { useAppContext } from '../AppContext';
 import { CalendarEvent, PondokSettings, PiketSchedule, Santri } from '../types';
-import { generatePdf, printVisualPreview } from '../utils/pdfGenerator';
+import { printExportFacade } from '../utils/printExportFacade';
+import { loadJsPdf, loadJsPdfAutoTable } from '../utils/lazyClientLibs';
 import { CalendarPrintTemplate } from './kalender/CalendarPrintTemplate';
 import { BulkEventModal } from './kalender/modals/BulkEventModal';
 import { formatDate, getHijriDate, findStartOfHijriMonth } from '../utils/formatters';
@@ -138,7 +139,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onUpda
 interface PrintModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onExportPdfTable: (options: any, mode?: 'print' | 'pdf') => void;
+    onExportPdfTable: (options: any, mode?: 'print' | 'pdf' | 'pdf_table' | 'html') => void;
     settings: PondokSettings;
     events: CalendarEvent[];
     year: number;
@@ -150,6 +151,8 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTab
     const [layout, setLayout] = useState<'1_sheet' | '3_sheets' | '4_sheets'>('1_sheet');
     const [primarySystem, setPrimarySystem] = useState<'Masehi' | 'Hijriah'>('Masehi');
     const [showKop, setShowKop] = useState(true);
+    const [useAcademicPeriodLabel, setUseAcademicPeriodLabel] = useState(true);
+    const [actionMode, setActionMode] = useState<'print' | 'pdf' | 'pdf_table' | 'html'>('print');
     const [activeTab, setActiveTab] = useState<'settings' | 'theme' | 'images'>('settings');
     const [zoomScale, setZoomScale] = useState(0.4);
 
@@ -178,51 +181,40 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTab
 
     const previewRef = useRef<HTMLDivElement>(null);
 
+    const HIJRI_MONTH_ALIASES: Record<string, number> = {
+        muharram: 1, safar: 2, rabiulawal: 3, rabiulawwal: 3, "rabi'ulawwal": 3, rabiulakhir: 4, "rabi'ulakhir": 4,
+        jumadilawal: 5, jumadilula: 5, jumadilakhir: 6, jumadilakhira: 6, rajab: 7, syaban: 8, syaaban: 8, "sya'ban": 8,
+        ramadhan: 9, ramadan: 9, syawal: 10, syawwal: 10, dzulqadah: 11, "dzulqa'dah": 11, dzulhijjah: 12
+    };
+    const normalizeText = (value: unknown) =>
+        String(value || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9']/g, '');
+    const toNumber = (value: unknown): number | undefined => {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        if (typeof value === 'string') {
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+        return undefined;
+    };
+    const toHijriMonthNumber = (value: unknown): number | undefined => {
+        const numeric = toNumber(value);
+        if (numeric !== undefined) return numeric;
+        const normalized = normalizeText(value);
+        return HIJRI_MONTH_ALIASES[normalized];
+    };
+    const academicHijriStart = useMemo(() => {
+        if (!activeAcademicYear) return { monthIndex: undefined as number | undefined, year: undefined as number | undefined };
+        const monthNum = toHijriMonthNumber((activeAcademicYear as any).hijriStartMonth) ??
+            toHijriMonthNumber((activeAcademicYear as any).startHijriMonth) ??
+            toHijriMonthNumber((activeAcademicYear as any).hijrahStartMonth);
+        const yearNum = toNumber((activeAcademicYear as any).hijriStartYear) ??
+            toNumber((activeAcademicYear as any).startHijriYear);
+        if (monthNum === undefined || yearNum === undefined) return { monthIndex: undefined, year: undefined };
+        return { monthIndex: monthNum >= 1 && monthNum <= 12 ? monthNum - 1 : monthNum, year: yearNum };
+    }, [activeAcademicYear]);
+
     const applyActiveAcademicYear = useCallback(() => {
         if (!activeAcademicYear) return;
-        const toNumber = (value: unknown): number | undefined => {
-            if (typeof value === 'number' && Number.isFinite(value)) return value;
-            if (typeof value === 'string') {
-                const parsed = Number(value);
-                if (Number.isFinite(parsed)) return parsed;
-            }
-            return undefined;
-        };
-        const HIJRI_MONTH_ALIASES: Record<string, number> = {
-            muharram: 1,
-            safar: 2,
-            rabiulawal: 3,
-            rabiulawwal: 3,
-            "rabi'ulawwal": 3,
-            rabiulakhir: 4,
-            "rabi'ulakhir": 4,
-            jumadilawal: 5,
-            jumadilula: 5,
-            jumadilakhir: 6,
-            jumadilakhira: 6,
-            rajab: 7,
-            syaban: 8,
-            syaaban: 8,
-            "sya'ban": 8,
-            ramadhan: 9,
-            ramadan: 9,
-            syawal: 10,
-            syawwal: 10,
-            dzulqadah: 11,
-            "dzulqa'dah": 11,
-            dzulhijjah: 12,
-        };
-        const normalizeText = (value: unknown) =>
-            String(value || '')
-                .toLowerCase()
-                .replace(/\s+/g, '')
-                .replace(/[^a-z0-9']/g, '');
-        const toHijriMonthNumber = (value: unknown): number | undefined => {
-            const numeric = toNumber(value);
-            if (numeric !== undefined) return numeric;
-            const normalized = normalizeText(value);
-            return HIJRI_MONTH_ALIASES[normalized];
-        };
         const parseYearsFromHijriLabel = (label?: string): { start?: number; end?: number } => {
             if (!label) return {};
             const matches = label.match(/\d{4}/g);
@@ -290,6 +282,7 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTab
         setStartYear(toNumber((activeAcademicYear as any).masehiStartYear) || new Date().getFullYear());
         setEndMonth(normalizeMonthIndex(toNumber((activeAcademicYear as any).masehiEndMonth), 11));
         setEndYear(toNumber((activeAcademicYear as any).masehiEndYear) || new Date().getFullYear());
+        setUseAcademicPeriodLabel(true);
     }, [activeAcademicYear, primarySystem, settings.hijriAdjustment]);
 
     // Sync rentang saat sistem berubah:
@@ -427,26 +420,26 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTab
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Mulai</label>
-                                                        <select value={startMonth} onChange={e => setStartMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                        <select value={startMonth} onChange={e => { setStartMonth(Number(e.target.value)); setUseAcademicPeriodLabel(false); }} className="w-full p-2 border rounded text-sm">
                                                             {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
                                                         </select>
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Mulai</label>
-                                                        <input type="number" value={startYear} onChange={e => setStartYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                        <input type="number" value={startYear} onChange={e => { setStartYear(Number(e.target.value)); setUseAcademicPeriodLabel(false); }} className="w-full p-2 border rounded text-sm" />
                                                     </div>
                                                 </div>
 
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Selesai</label>
-                                                        <select value={endMonth} onChange={e => setEndMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                        <select value={endMonth} onChange={e => { setEndMonth(Number(e.target.value)); setUseAcademicPeriodLabel(false); }} className="w-full p-2 border rounded text-sm">
                                                             {["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"].map((m, i) => <option key={i} value={i}>{m}</option>)}
                                                         </select>
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Selesai</label>
-                                                        <input type="number" value={endYear} onChange={e => setEndYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                        <input type="number" value={endYear} onChange={e => { setEndYear(Number(e.target.value)); setUseAcademicPeriodLabel(false); }} className="w-full p-2 border rounded text-sm" />
                                                     </div>
                                                 </div>
                                             </>
@@ -455,26 +448,26 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTab
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Hijriah Mulai</label>
-                                                        <select value={startMonth} onChange={e => setStartMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                        <select value={startMonth} onChange={e => { setStartMonth(Number(e.target.value)); setUseAcademicPeriodLabel(false); }} className="w-full p-2 border rounded text-sm">
                                                             {["Muharram", "Safar", "Rabi'ul Awwal", "Rabi'ul Akhir", "Jumadil Ula", "Jumadil Akhira", "Rajab", "Sya'ban", "Ramadhan", "Syawwal", "Dzulqa'dah", "Dzulhijjah"].map((m, i) => <option key={i} value={i}>{m}</option>)}
                                                         </select>
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Hijriah Mulai</label>
-                                                        <input type="number" value={startYear} onChange={e => setStartYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                        <input type="number" value={startYear} onChange={e => { setStartYear(Number(e.target.value)); setUseAcademicPeriodLabel(false); }} className="w-full p-2 border rounded text-sm" />
                                                     </div>
                                                 </div>
 
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Bulan Hijriah Selesai</label>
-                                                        <select value={endMonth} onChange={e => setEndMonth(Number(e.target.value))} className="w-full p-2 border rounded text-sm">
+                                                        <select value={endMonth} onChange={e => { setEndMonth(Number(e.target.value)); setUseAcademicPeriodLabel(false); }} className="w-full p-2 border rounded text-sm">
                                                             {["Muharram", "Safar", "Rabi'ul Awwal", "Rabi'ul Akhir", "Jumadil Ula", "Jumadil Akhira", "Rajab", "Sya'ban", "Ramadhan", "Syawwal", "Dzulqa'dah", "Dzulhijjah"].map((m, i) => <option key={i} value={i}>{m}</option>)}
                                                         </select>
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tahun Hijriah Selesai</label>
-                                                        <input type="number" value={endYear} onChange={e => setEndYear(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+                                                        <input type="number" value={endYear} onChange={e => { setEndYear(Number(e.target.value)); setUseAcademicPeriodLabel(false); }} className="w-full p-2 border rounded text-sm" />
                                                     </div>
                                                 </div>
                                             </>
@@ -553,24 +546,33 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTab
                         </div>
 
                         <div className="p-4 border-t bg-gray-50 flex flex-col gap-2">
-                            <button 
-                                disabled={isProcessing}
-                                onClick={() => onExportPdfTable({
-                                    startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
-                                }, 'print')}
-                                className="w-full py-3 bg-teal-600 text-white rounded-lg font-bold shadow-lg hover:bg-teal-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                <i className={`bi ${isProcessing ? 'bi-arrow-repeat animate-spin' : 'bi-printer-fill'}`}></i> {isProcessing ? 'Memproses...' : 'Cetak Kalender'}
-                            </button>
-                            <button 
-                                disabled={isProcessing}
-                                onClick={() => onExportPdfTable({
-                                    startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition
-                                }, 'pdf')}
-                                className="w-full py-3 bg-red-600 text-white rounded-lg font-bold shadow-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                <i className={`bi ${isProcessing ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-pdf-fill'}`}></i> {isProcessing ? 'Memproses...' : 'Export PDF'}
-                            </button>
+                            <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wide">Aksi Export</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <select
+                                    value={actionMode}
+                                    onChange={(e) => setActionMode(e.target.value as 'print' | 'pdf' | 'pdf_table' | 'html')}
+                                    className="col-span-2 w-full py-3 px-3 border rounded-lg text-sm font-medium bg-white"
+                                >
+                                    <option value="print">Cetak</option>
+                                    <option value="pdf">Export PDF Gambar</option>
+                                    <option value="pdf_table">Export PDF Tabel</option>
+                                    <option value="html">Export HTML</option>
+                                </select>
+                                <button 
+                                    disabled={isProcessing}
+                                    onClick={() => onExportPdfTable({
+                                        startMonth, startYear, endMonth, endYear, primarySystem, showKop, theme, layout, customImage, imagePosition,
+                                        periodLabelMasehi: activeAcademicYear?.labelMasehi,
+                                        periodLabelHijriah: activeAcademicYear?.labelHijriah,
+                                        useAcademicPeriodLabel,
+                                        academicHijriStartMonthIndex: academicHijriStart.monthIndex,
+                                        academicHijriStartYear: academicHijriStart.year
+                                    }, actionMode)}
+                                    className="w-full py-3 bg-teal-600 text-white rounded-lg font-bold shadow-lg hover:bg-teal-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    <i className={`bi ${isProcessing ? 'bi-arrow-repeat animate-spin' : 'bi-play-fill'}`}></i> {isProcessing ? 'Proses' : 'Jalankan'}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -601,6 +603,11 @@ const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, onExportPdfTab
                                     startYear={startYear}
                                     endMonth={endMonth}
                                     endYear={endYear}
+                                    periodLabelMasehi={activeAcademicYear?.labelMasehi}
+                                    periodLabelHijriah={activeAcademicYear?.labelHijriah}
+                                    useAcademicPeriodLabel={useAcademicPeriodLabel}
+                                    academicHijriStartMonthIndex={academicHijriStart.monthIndex}
+                                    academicHijriStartYear={academicHijriStart.year}
                                 />
                             </div>
                         </div>
@@ -904,7 +911,12 @@ const Kalender: React.FC = () => {
         startMonth?: number,
         startYear?: number,
         endMonth?: number,
-        endYear?: number
+        endYear?: number,
+        periodLabelMasehi?: string,
+        periodLabelHijriah?: string,
+        useAcademicPeriodLabel?: boolean,
+        academicHijriStartMonthIndex?: number,
+        academicHijriStartYear?: number
     } | null>(null);
 
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.kalender === 'write';
@@ -1085,10 +1097,17 @@ const Kalender: React.FC = () => {
         setIsExporting(true);
         setPrintConfig({ theme, layout, primarySystem: system, showKop, customImage, imagePosition });
         setIsPrintModalOpen(false);
-        // Gunakan visual print agar hasil jendela cetak konsisten dengan preview kalender.
-        setTimeout(() => {
-            printVisualPreview('calendar-print-area', 'A4');
-            setTimeout(() => setIsExporting(false), 600);
+        setTimeout(async () => {
+            try {
+                await printExportFacade.printDialog({
+                    elementId: 'calendar-print-area',
+                    fileName: `Kalender_Akademik_${anchorDate.getFullYear()}`,
+                    paperSize: 'A4',
+                    target: 'report',
+                });
+            } finally {
+                setTimeout(() => setIsExporting(false), 300);
+            }
         }, 1000);
     };
 
@@ -1097,18 +1116,28 @@ const Kalender: React.FC = () => {
         setIsExporting(true);
         setPrintConfig({ theme, layout, primarySystem: system, showKop, customImage, imagePosition });
         setIsPrintModalOpen(false);
-        setTimeout(() => {
-            generatePdf('calendar-print-area', {
-                fileName: `Kalender_Akademik_${anchorDate.getFullYear()}.pdf`,
-                paperSize: 'A4'
-            });
-            setTimeout(() => setIsExporting(false), 600);
+        setTimeout(async () => {
+            try {
+                await printExportFacade.downloadPdfImage({
+                    elementId: 'calendar-print-area',
+                    fileName: `Kalender_Akademik_${anchorDate.getFullYear()}`,
+                    paperSize: 'A4',
+                    target: 'report',
+                });
+            } finally {
+                setTimeout(() => setIsExporting(false), 300);
+            }
         }, 1000);
     };
 
-    const handleExportPdfTableRequest = (options: any, mode: 'print' | 'pdf' = 'print') => {
+    const handleExportPdfTableRequest = async (options: any, mode: 'print' | 'pdf' | 'pdf_table' | 'html' = 'print') => {
         if (isExporting) return;
         setIsExporting(true);
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        const exportBaseName = `${stamp}-kalender-pendidikan-${(options.primarySystem || 'masehi').toLowerCase()}-${options.layout || '1_sheet'}`;
+
         setPrintConfig({ 
             theme: options.theme, 
             layout: options.layout, 
@@ -1119,20 +1148,439 @@ const Kalender: React.FC = () => {
             endMonth: options.endMonth,
             endYear: options.endYear,
             customImage: options.customImage,
-            imagePosition: options.imagePosition
+            imagePosition: options.imagePosition,
+            periodLabelMasehi: options.periodLabelMasehi,
+            periodLabelHijriah: options.periodLabelHijriah,
+            useAcademicPeriodLabel: options.useAcademicPeriodLabel,
+            academicHijriStartMonthIndex: options.academicHijriStartMonthIndex,
+            academicHijriStartYear: options.academicHijriStartYear
         });
         setIsPrintModalOpen(false);
-        setTimeout(() => {
-            if (mode === 'pdf') {
-                generatePdf('calendar-print-area', {
-                    fileName: `Kalender_Akademik_Custom.pdf`,
-                    paperSize: 'A4'
-                });
-            } else {
-                printVisualPreview('calendar-print-area', 'A4');
+
+        if (mode === 'pdf_table') {
+            try {
+                const [{ jsPDF }, autoTableModule] = await Promise.all([loadJsPdf(), loadJsPdfAutoTable()]);
+                const autoTable = autoTableModule.default;
+                const doc = new jsPDF('p', 'mm', 'a4');
+                const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+                const hijriMonthNames = ['Muharram', 'Safar', "Rabi'ul Awwal", "Rabi'ul Akhir", 'Jumadil Ula', 'Jumadil Akhir', 'Rajab', "Sya'ban", 'Ramadhan', 'Syawwal', "Dzulqa'dah", 'Dzulhijjah'];
+                const cleanRange = (value: string) => value.replace(/PERIODE\s+(MASEHI|HIJRIAH)\s*/gi, '').replace(/\s+/g, ' ').trim();
+
+                const periodMasehi = options.useAcademicPeriodLabel && options.periodLabelMasehi
+                    ? cleanRange(options.periodLabelMasehi)
+                    : `${new Date(options.startYear, options.startMonth, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} - ${new Date(options.endYear, options.endMonth, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`;
+                const periodHijriah = options.useAcademicPeriodLabel && options.periodLabelHijriah
+                    ? cleanRange(options.periodLabelHijriah)
+                    : (() => {
+                        const startH = getHijriDate(new Date(options.startYear, options.startMonth, 1), settings.hijriAdjustment || 0);
+                        const endH = getHijriDate(new Date(options.endYear, options.endMonth + 1, 0), settings.hijriAdjustment || 0);
+                        return `${startH.year}-${endH.year}H`;
+                    })();
+                const periodText = `PERIODE ${periodHijriah.replace(/\s*H$/i, '')}H / ${periodMasehi.replace(/\s*M$/i, '')}M`;
+
+                const drawHeader = () => {
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(16);
+                    doc.text('KALENDER PENDIDIKAN', 105, 14, { align: 'center' });
+                    doc.setFontSize(13);
+                    doc.text(String(settings.namaPonpes || '').toUpperCase(), 105, 20, { align: 'center' });
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(10);
+                    doc.text(periodText, 105, 26, { align: 'center' });
+                    doc.setLineWidth(0.3);
+                    doc.line(14, 29, 196, 29);
+                };
+                const drawFooter = () => {
+                    const pageHeight = doc.internal.pageSize.getHeight();
+                    doc.setDrawColor(170, 170, 170);
+                    doc.setLineWidth(0.15);
+                    doc.line(14, pageHeight - 10, 196, pageHeight - 10);
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'italic');
+                    doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, pageHeight - 6);
+                    doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', 196, pageHeight - 6, { align: 'right' });
+                };
+                const formatEventRange = (startDate: string, endDate: string) => {
+                    const s = new Date(startDate);
+                    const e = new Date(endDate);
+                    s.setHours(0, 0, 0, 0);
+                    e.setHours(0, 0, 0, 0);
+                    const sameDay = s.getTime() === e.getTime();
+                    if (sameDay) return `${s.getDate()} ${s.toLocaleDateString('id-ID', { month: 'short' })}`;
+                    const sameMonthYear = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
+                    if (sameMonthYear) return `${s.getDate()}-${e.getDate()} ${s.toLocaleDateString('id-ID', { month: 'short' })}`;
+                    const sameYear = s.getFullYear() === e.getFullYear();
+                    if (sameYear) {
+                        return `${s.getDate()} ${s.toLocaleDateString('id-ID', { month: 'short' })} - ${e.getDate()} ${e.toLocaleDateString('id-ID', { month: 'short' })}`;
+                    }
+                    return `${s.toLocaleDateString('id-ID')} - ${e.toLocaleDateString('id-ID')}`;
+                };
+
+                const monthItems: Array<{ month: number; year: number; startDate: Date; endDate: Date; title: string; subtitle: string; mode: 'Masehi' | 'Hijriah' }> = [];
+                if (options.primarySystem === 'Masehi') {
+                    let currMonth = options.startMonth;
+                    let currYear = options.startYear;
+                    while (currYear < options.endYear || (currYear === options.endYear && currMonth <= options.endMonth)) {
+                        const hStart = getHijriDate(new Date(currYear, currMonth, 1), settings.hijriAdjustment || 0);
+                        const hEnd = getHijriDate(new Date(currYear, currMonth + 1, 0), settings.hijriAdjustment || 0);
+                        const hijriSubtitle = hStart.month === hEnd.month
+                            ? `${hStart.month} ${hStart.year}`
+                            : `${hStart.month} - ${hEnd.month} ${hStart.year}`;
+                        monthItems.push({
+                            month: currMonth,
+                            year: currYear,
+                            startDate: new Date(currYear, currMonth, 1),
+                            endDate: new Date(currYear, currMonth + 1, 0),
+                            title: `${monthNames[currMonth]} ${currYear}`.toUpperCase(),
+                            subtitle: hijriSubtitle.toUpperCase(),
+                            mode: 'Masehi',
+                        });
+                        currMonth += 1;
+                        if (currMonth > 11) {
+                            currMonth = 0;
+                            currYear += 1;
+                        }
+                    }
+                } else {
+                    const findHijriMonthStartDate = (targetYear: number, targetMonthIndex: number): Date => {
+                        const estimatedMasehiYear = Math.floor(targetYear * 0.97023 + 621.57);
+                        const anchor = new Date(estimatedMasehiYear, 5, 15);
+                        const maxSearchDays = 1200;
+                        for (let offset = 0; offset <= maxSearchDays; offset++) {
+                            const forward = new Date(anchor);
+                            forward.setDate(anchor.getDate() + offset);
+                            const hForward = getHijriDate(forward, settings.hijriAdjustment || 0);
+                            if (parseInt(hForward.year, 10) === targetYear && hForward.monthIndex === targetMonthIndex && hForward.day === '1') return forward;
+                            if (offset > 0) {
+                                const backward = new Date(anchor);
+                                backward.setDate(anchor.getDate() - offset);
+                                const hBackward = getHijriDate(backward, settings.hijriAdjustment || 0);
+                                if (parseInt(hBackward.year, 10) === targetYear && hBackward.monthIndex === targetMonthIndex && hBackward.day === '1') return backward;
+                            }
+                        }
+                        return new Date(estimatedMasehiYear, 0, 1);
+                    };
+
+                    let currMonth = options.startMonth;
+                    let currYear = options.startYear;
+                    let cursorDate = findHijriMonthStartDate(currYear, currMonth);
+                    while (currYear < options.endYear || (currYear === options.endYear && currMonth <= options.endMonth)) {
+                        const hStart = getHijriDate(cursorDate, settings.hijriAdjustment || 0);
+                        const monthName = hStart.month;
+                        const startDate = new Date(cursorDate);
+                        const lastDate = new Date(cursorDate);
+                        while (true) {
+                            const next = new Date(lastDate);
+                            next.setDate(next.getDate() + 1);
+                            const hNext = getHijriDate(next, settings.hijriAdjustment || 0);
+                            if (hNext.month !== monthName) break;
+                            lastDate.setDate(lastDate.getDate() + 1);
+                            if (lastDate.getTime() - startDate.getTime() > 35 * 24 * 3600 * 1000) break;
+                        }
+
+                        const masehiSubtitleStart = startDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                        const masehiSubtitleEnd = lastDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                        const masehiSubtitle = startDate.getMonth() === lastDate.getMonth() && startDate.getFullYear() === lastDate.getFullYear()
+                            ? masehiSubtitleStart
+                            : `${startDate.toLocaleDateString('id-ID', { month: 'long' })} - ${masehiSubtitleEnd}`;
+                        monthItems.push({
+                            month: currMonth,
+                            year: currYear,
+                            startDate: new Date(startDate),
+                            endDate: new Date(lastDate),
+                            title: `${monthName} ${hStart.year}`.toUpperCase(),
+                            subtitle: masehiSubtitle.toUpperCase(),
+                            mode: 'Hijriah',
+                        });
+
+                        const nextStart = new Date(lastDate);
+                        nextStart.setDate(nextStart.getDate() + 1);
+                        cursorDate = nextStart;
+                        currMonth += 1;
+                        if (currMonth > 11) {
+                            currMonth = 0;
+                            currYear += 1;
+                        }
+                    }
+                }
+
+                const layoutMode = options.layout || '1_sheet';
+                const cols = layoutMode === '1_sheet' ? 3 : layoutMode === '3_sheets' ? 2 : 1;
+                const rowsPerPage = layoutMode === '1_sheet' ? 4 : layoutMode === '3_sheets' ? 2 : 3;
+                const monthsPerPage = cols * rowsPerPage;
+                const pageGapX = 3;
+                const pageGapY = 3;
+                const pageTop = 32;
+                const pageBottom = 11;
+                const usableWidth = 210 - 14 - 14;
+                const usableHeight = 297 - pageTop - pageBottom;
+                const boxWidth = (usableWidth - (cols - 1) * pageGapX) / cols;
+                const boxHeight = (usableHeight - (rowsPerPage - 1) * pageGapY) / rowsPerPage;
+                const colorClassMap: Record<string, [number, number, number]> = {
+                    'bg-red-500': [239, 68, 68],
+                    'bg-green-500': [34, 197, 94],
+                    'bg-blue-500': [59, 130, 246],
+                    'bg-yellow-500': [234, 179, 8],
+                    'bg-purple-500': [168, 85, 247],
+                    'bg-pink-500': [236, 72, 153],
+                    'bg-gray-500': [107, 114, 128],
+                    'bg-teal-500': [20, 184, 166],
+                };
+                const hexToRgb = (hex: string): [number, number, number] | null => {
+                    const raw = hex.replace('#', '').trim();
+                    if (raw.length !== 6) return null;
+                    const r = Number.parseInt(raw.slice(0, 2), 16);
+                    const g = Number.parseInt(raw.slice(2, 4), 16);
+                    const b = Number.parseInt(raw.slice(4, 6), 16);
+                    if ([r, g, b].some((n) => Number.isNaN(n))) return null;
+                    return [r, g, b];
+                };
+                const resolveEventColor = (eventColor?: string): [number, number, number] => {
+                    if (!eventColor) return [16, 120, 110];
+                    if (eventColor.startsWith('#')) return hexToRgb(eventColor) || [16, 120, 110];
+                    return colorClassMap[eventColor] || [16, 120, 110];
+                };
+
+                for (let startIdx = 0; startIdx < monthItems.length; startIdx += monthsPerPage) {
+                    if (startIdx > 0) doc.addPage('a4', 'p');
+                    drawHeader();
+                    const pageMonths = monthItems.slice(startIdx, startIdx + monthsPerPage);
+
+                    pageMonths.forEach((item, idxOnPage) => {
+                        const col = idxOnPage % cols;
+                        const row = Math.floor(idxOnPage / cols);
+                        const x = 14 + col * (boxWidth + pageGapX);
+                        const y = pageTop + row * (boxHeight + pageGapY);
+
+                        doc.setDrawColor(201, 162, 39);
+                        doc.setLineWidth(0.2);
+                        doc.roundedRect(x, y, boxWidth, boxHeight, 1.2, 1.2);
+
+                        doc.setFont('helvetica', 'bold');
+                        doc.setFontSize(layoutMode === '1_sheet' ? 9 : layoutMode === '3_sheets' ? 10.6 : 11.4);
+                        doc.setTextColor(36, 85, 72);
+                        doc.text(item.title, x + boxWidth / 2, y + (layoutMode === '4_sheets' ? 5.2 : 4.5), { align: 'center' });
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(layoutMode === '1_sheet' ? 5.2 : layoutMode === '3_sheets' ? 6.6 : 7.6);
+                        doc.setTextColor(150, 125, 55);
+                        doc.text(item.subtitle, x + boxWidth / 2, y + (layoutMode === '4_sheets' ? 8.8 : 7.6), { align: 'center' });
+
+                        const dayNames = ['Ah', 'Sn', 'Sl', 'Rb', 'Km', 'Jm', 'Sb'];
+                        const days: Array<Date | null> = [];
+                        const firstDow = item.startDate.getDay();
+                        for (let i = 0; i < firstDow; i++) days.push(null);
+                        let d = new Date(item.startDate);
+                        while (d <= item.endDate) {
+                            days.push(new Date(d));
+                            d.setDate(d.getDate() + 1);
+                        }
+                        while (days.length % 7 !== 0) days.push(null);
+
+                        const tableBody: string[][] = [];
+                        for (let i = 0; i < days.length; i += 7) {
+                            tableBody.push(
+                                days.slice(i, i + 7).map((dateCell) => {
+                                    if (!dateCell) return '';
+                                    const h = getHijriDate(dateCell, settings.hijriAdjustment || 0);
+                                    const main = item.mode === 'Masehi' ? String(dateCell.getDate()) : String(h.day);
+                                    const sub = item.mode === 'Masehi' ? String(h.day) : String(dateCell.getDate());
+                                    const dayStart = new Date(dateCell);
+                                    dayStart.setHours(0, 0, 0, 0);
+                                    const dayEnd = new Date(dateCell);
+                                    dayEnd.setHours(23, 59, 59, 999);
+                                    const dayEvents = events.filter((e) => {
+                                        const evStart = new Date(e.startDate);
+                                        const evEnd = new Date(e.endDate);
+                                        evStart.setHours(0, 0, 0, 0);
+                                        evEnd.setHours(23, 59, 59, 999);
+                                        return evStart <= dayEnd && evEnd >= dayStart;
+                                    });
+                                    const color = dayEvents.length > 0 ? resolveEventColor(dayEvents[0].color).join(',') : '';
+                                    return `${main}|${sub}|${color}`;
+                                })
+                            );
+                        }
+
+                        const tableStartY = y + (layoutMode === '4_sheets' ? 9.8 : layoutMode === '3_sheets' ? 8.4 : 8.1);
+                        const agendaHeight = layoutMode === '1_sheet' ? 13.5 : layoutMode === '3_sheets' ? 14.5 : 17.5;
+                        const agendaStartY = y + boxHeight - agendaHeight;
+                        const rowsCount = tableBody.length + 1; // include header
+                        const tableAvailable = Math.max(30, agendaStartY - tableStartY - 1);
+                        const minCellH = Math.max(
+                            layoutMode === '1_sheet' ? 4.8 : layoutMode === '3_sheets' ? 5.2 : 5.6,
+                            tableAvailable / rowsCount
+                        );
+
+                        autoTable(doc, {
+                            startY: tableStartY,
+                            margin: { left: x, right: 210 - (x + boxWidth) },
+                            tableWidth: boxWidth,
+                            head: [dayNames],
+                            body: tableBody,
+                            theme: 'grid',
+                            styles: {
+                                fontSize: 6.2,
+                                cellPadding: 0.4,
+                                valign: 'top',
+                                halign: 'left',
+                                textColor: [255, 255, 255],
+                                lineColor: [210, 210, 210],
+                                lineWidth: 0.1,
+                                minCellHeight: minCellH,
+                                overflow: 'hidden',
+                            },
+                            columnStyles: {
+                                0: { cellWidth: boxWidth / 7 },
+                                1: { cellWidth: boxWidth / 7 },
+                                2: { cellWidth: boxWidth / 7 },
+                                3: { cellWidth: boxWidth / 7 },
+                                4: { cellWidth: boxWidth / 7 },
+                                5: { cellWidth: boxWidth / 7 },
+                                6: { cellWidth: boxWidth / 7 },
+                            },
+                            headStyles: {
+                                fillColor: [15, 118, 110],
+                                textColor: [255, 255, 255],
+                                fontStyle: 'bold',
+                                halign: 'center',
+                                valign: 'middle',
+                                fontSize: layoutMode === '1_sheet' ? 6.8 : layoutMode === '3_sheets' ? 7.6 : 8,
+                                minCellHeight: layoutMode === '4_sheets' ? 7.2 : layoutMode === '3_sheets' ? 6.3 : 5.8,
+                                cellPadding: { top: 0, right: 0.2, bottom: 0, left: 0.2 },
+                            },
+                            didParseCell: (data: any) => {
+                                if (data.section === 'head') {
+                                    data.cell._dayLabel = String(data.cell.raw || '');
+                                    data.cell.text = [''];
+                                }
+                            },
+                            didDrawCell: (data: any) => {
+                                if (data.section === 'head') {
+                                    const label = String(data.cell._dayLabel || '');
+                                    if (!label) return;
+                                    doc.setFont('helvetica', 'bold');
+                                    doc.setFontSize(layoutMode === '1_sheet' ? 6.8 : layoutMode === '3_sheets' ? 7.6 : 8);
+                                    doc.setTextColor(255, 255, 255);
+                                    doc.text(label, data.cell.x + data.cell.width / 2, data.cell.y + data.cell.height / 2 + 0.15, {
+                                        align: 'center',
+                                        baseline: 'middle',
+                                    } as any);
+                                    return;
+                                }
+                                if (data.section !== 'body') return;
+                                const raw = String(data.cell.raw || '');
+                                if (!raw || !raw.includes('|')) return;
+                                const [main, sub, colorPayload] = raw.split('|');
+                                if (!main) return;
+                                if (colorPayload) {
+                                    const [r, g, b] = colorPayload.split(',').map((n) => Number(n));
+                                    doc.setTextColor(r || 35, g || 35, b || 35);
+                                } else {
+                                    doc.setTextColor(35, 35, 35);
+                                }
+                                doc.setFont('helvetica', 'bold');
+                                const mainFontSize = layoutMode === '1_sheet' ? 9.4 : layoutMode === '3_sheets' ? 12.2 : 12.6;
+                                doc.setFontSize(mainFontSize);
+                                const mainY = data.cell.y + data.cell.height - 0.8;
+                                doc.text(main, data.cell.x + 0.8, mainY);
+                                if (sub) {
+                                    doc.setTextColor(120, 120, 120);
+                                    doc.setFont('helvetica', 'normal');
+                                    doc.setFontSize(layoutMode === '1_sheet' ? 3.8 : layoutMode === '3_sheets' ? 4.4 : 4.8);
+                                    const textW = doc.getTextWidth(sub);
+                                    doc.text(sub, data.cell.x + data.cell.width - textW - 0.7, data.cell.y + 2.1);
+                                }
+                            },
+                        });
+
+                        const monthEvents = events
+                            .filter((e) => {
+                                const evStart = new Date(e.startDate);
+                                const evEnd = new Date(e.endDate);
+                                evStart.setHours(0, 0, 0, 0);
+                                evEnd.setHours(23, 59, 59, 999);
+                                return evStart <= item.endDate && evEnd >= item.startDate;
+                            })
+                            .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+                        doc.setDrawColor(220, 220, 220);
+                        doc.setLineWidth(0.1);
+                        doc.line(x, agendaStartY - 0.8, x + boxWidth, agendaStartY - 0.8);
+
+                        doc.setFont('helvetica', 'normal');
+                        doc.setFontSize(layoutMode === '1_sheet' ? 4.6 : layoutMode === '3_sheets' ? 5 : 5.6);
+                        doc.setTextColor(65, 65, 65);
+                        if (monthEvents.length === 0) {
+                            doc.text('Belum ada agenda.', x + 0.8, agendaStartY + 1.8);
+                        } else {
+                            const rowHeight = layoutMode === '1_sheet' ? 1.9 : layoutMode === '3_sheets' ? 2.5 : 2.85;
+                            const agendaTop = agendaStartY + 1.6;
+                            const agendaBottom = y + boxHeight - 0.8;
+                            const rowsAvailable = Math.max(1, Math.floor((agendaBottom - agendaTop) / rowHeight));
+                            const useTwoCols = monthEvents.length > (layoutMode === '1_sheet' ? 6 : 3);
+                            const colGap = 1.2;
+                            const colWidth = useTwoCols ? (boxWidth - 2.2 - colGap) / 2 : (boxWidth - 2.2);
+                            const maxEvents = useTwoCols ? rowsAvailable * 2 : rowsAvailable;
+                            const renderEvents = monthEvents.slice(0, maxEvents);
+                            const leftCount = useTwoCols ? Math.ceil(renderEvents.length / 2) : renderEvents.length;
+
+                            renderEvents.forEach((ev, evIdx) => {
+                                const dotColor = resolveEventColor(ev.color);
+                                const isRightCol = useTwoCols && evIdx >= leftCount;
+                                const rowIdx = useTwoCols ? (isRightCol ? evIdx - leftCount : evIdx) : evIdx;
+                                const baseX = useTwoCols
+                                    ? (isRightCol ? x + 1.1 + colWidth + colGap : x + 1.1)
+                                    : x + 1.1;
+                                const lineY = agendaTop + rowIdx * rowHeight;
+
+                                doc.setFillColor(dotColor[0], dotColor[1], dotColor[2]);
+                                doc.circle(baseX, lineY - 0.55, 0.42, 'F');
+                                doc.setTextColor(65, 65, 65);
+                                const line = `${formatEventRange(ev.startDate, ev.endDate)}: ${ev.title}`;
+                                doc.text(line, baseX + 0.9, lineY, {
+                                    maxWidth: colWidth - 1,
+                                });
+                            });
+                        }
+                    });
+
+                    drawFooter();
+                }
+                doc.save(`${exportBaseName}-pdf-tabel.pdf`);
+            } finally {
+                setIsExporting(false);
             }
-            setTimeout(() => setIsExporting(false), 600);
-        }, 1500);
+            return;
+        }
+
+        setTimeout(async () => {
+            try {
+                if (mode === 'pdf') {
+                    await printExportFacade.downloadPdfImage({
+                        elementId: 'calendar-print-area',
+                        fileName: `${exportBaseName}-pdf-gambar`,
+                        paperSize: 'A4',
+                        target: 'report',
+                    });
+                } else if (mode === 'html') {
+                    printExportFacade.downloadHtml({
+                        elementId: 'calendar-print-area',
+                        fileName: `${exportBaseName}-html`,
+                        paperSize: 'A4',
+                        target: 'report',
+                    });
+                } else {
+                    await printExportFacade.printDialog({
+                        elementId: 'calendar-print-area',
+                        fileName: `${exportBaseName}-cetak`,
+                        paperSize: 'A4',
+                        target: 'report',
+                    });
+                }
+            } finally {
+                setTimeout(() => setIsExporting(false), 300);
+            }
+        }, 1200);
     };
 
     const renderCalendarGrid = () => {
@@ -1379,6 +1827,11 @@ const Kalender: React.FC = () => {
                             showKop={printConfig.showKop}
                             customImage={printConfig.customImage}
                             imagePosition={printConfig.imagePosition}
+                            periodLabelMasehi={printConfig.periodLabelMasehi}
+                            periodLabelHijriah={printConfig.periodLabelHijriah}
+                            useAcademicPeriodLabel={printConfig.useAcademicPeriodLabel}
+                            academicHijriStartMonthIndex={printConfig.academicHijriStartMonthIndex}
+                            academicHijriStartYear={printConfig.academicHijriStartYear}
                         />
                     </div>
                 )}
@@ -1401,6 +1854,11 @@ const Kalender: React.FC = () => {
                         showKop={printConfig.showKop}
                         customImage={printConfig.customImage}
                         imagePosition={printConfig.imagePosition}
+                        periodLabelMasehi={printConfig.periodLabelMasehi}
+                        periodLabelHijriah={printConfig.periodLabelHijriah}
+                        useAcademicPeriodLabel={printConfig.useAcademicPeriodLabel}
+                        academicHijriStartMonthIndex={printConfig.academicHijriStartMonthIndex}
+                        academicHijriStartYear={printConfig.academicHijriStartYear}
                     />
                 )}
             </div>

@@ -477,7 +477,8 @@ const AbsensiRekap: React.FC = () => {
     const { santriList, absensiList } = useSantriContext();
     
     const now = new Date();
-    const [bulan, setBulan] = useState(now.getMonth() + 1);
+    const [bulanMulai, setBulanMulai] = useState(now.getMonth() + 1);
+    const [bulanSelesai, setBulanSelesai] = useState(now.getMonth() + 1);
     const [tahun, setTahun] = useState(now.getFullYear());
     const [jenjangId, setJenjangId] = useState<number>(0);
     const [kelasId, setKelasId] = useState<number>(0);
@@ -516,9 +517,22 @@ const AbsensiRekap: React.FC = () => {
     const selectedJenjang = useMemo(() => settings.jenjang.find(j => j.id === selectedKelas?.jenjangId), [settings.jenjang, selectedKelas]);
     
     const santriInRombel = useMemo(() => santriList.filter(s => s.rombelId === rombelId && s.status === 'Aktif').sort((a,b) => a.namaLengkap.localeCompare(b.namaLengkap)), [santriList, rombelId]);
-    const daysInMonth = useMemo(() => new Date(tahun, bulan, 0).getDate(), [tahun, bulan]);
+    const normalizedMonthRange = useMemo(() => {
+        const start = Math.max(1, Math.min(12, bulanMulai));
+        const end = Math.max(1, Math.min(12, bulanSelesai));
+        return start <= end ? { start, end } : { start: end, end: start };
+    }, [bulanMulai, bulanSelesai]);
+    const monthRange = useMemo(() => {
+        const months: number[] = [];
+        for (let m = normalizedMonthRange.start; m <= normalizedMonthRange.end; m++) months.push(m);
+        return months;
+    }, [normalizedMonthRange]);
+    const getPeriodeName = (month: number) =>
+        new Date(tahun, month - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    const previewMonth = monthRange[0] ?? now.getMonth() + 1;
+    const daysInMonth = useMemo(() => new Date(tahun, previewMonth, 0).getDate(), [tahun, previewMonth]);
 
-    const attendanceMatrix = useMemo(() => {
+    const buildAttendanceForMonth = (month: number) => {
         const matrix: Record<number, Record<number, string>> = {};
         const stats: Record<number, { H: number, S: number, I: number, A: number }> = {};
 
@@ -529,7 +543,7 @@ const AbsensiRekap: React.FC = () => {
 
         const records = absensiList.filter(a => {
             const d = new Date(a.tanggal);
-            return a.rombelId === rombelId && d.getMonth() + 1 === bulan && d.getFullYear() === tahun;
+            return a.rombelId === rombelId && d.getMonth() + 1 === month && d.getFullYear() === tahun;
         });
 
         records.forEach(r => {
@@ -543,23 +557,47 @@ const AbsensiRekap: React.FC = () => {
         });
 
         return { matrix, stats };
-    }, [absensiList, rombelId, bulan, tahun, santriInRombel]);
+    };
+
+    const attendanceMatrix = useMemo(() => {
+        return buildAttendanceForMonth(previewMonth);
+    }, [absensiList, rombelId, previewMonth, tahun, santriInRombel]);
 
     // Total Stats for the whole class this month
     const classStats = useMemo(() => {
         const total = { H: 0, S: 0, I: 0, A: 0 };
-        Object.values(attendanceMatrix.stats).forEach(s => {
-            const stat = s as { H: number; S: number; I: number; A: number };
-            total.H += stat.H; total.S += stat.S; total.I += stat.I; total.A += stat.A;
+        monthRange.forEach((month) => {
+            const monthData = buildAttendanceForMonth(month);
+            Object.values(monthData.stats).forEach(s => {
+                const stat = s as { H: number; S: number; I: number; A: number };
+                total.H += stat.H; total.S += stat.S; total.I += stat.I; total.A += stat.A;
+            });
         });
         return total;
-    }, [attendanceMatrix]);
+    }, [monthRange, absensiList, rombelId, tahun, santriInRombel]);
 
-    const handlePrint = () => {
+    const handlePrint = async () => {
         if (isExporting) return;
         setIsExporting(true);
-        window.print();
-        setTimeout(() => setIsExporting(false), 500);
+        const fileName = buildStandardExportFileName('rekap-absensi', [
+            selectedJenjang?.nama || 'semua-marhalah',
+            selectedKelas?.nama || 'semua-kelas',
+            selectedRombel?.nama || 'semua-rombel',
+            monthRange.length > 1
+                ? `bulan-${normalizedMonthRange.start}-${normalizedMonthRange.end}`
+                : `bulan-${previewMonth}`,
+            `tahun-${tahun}`,
+        ]);
+        try {
+            await printExportFacade.printDialog({
+                elementId: 'absensi-rekap-print-area',
+                fileName,
+                paperSize: 'A4',
+                target: 'report',
+            });
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const handleExport = async (format: 'xlsx' | 'pdf' | 'pdfImage') => {
@@ -570,17 +608,19 @@ const AbsensiRekap: React.FC = () => {
             selectedJenjang?.nama || 'semua-marhalah',
             selectedKelas?.nama || 'semua-kelas',
             selectedRombel?.nama || 'semua-rombel',
-            `bulan-${bulan}`,
+            monthRange.length > 1
+                ? `bulan-${normalizedMonthRange.start}-${normalizedMonthRange.end}`
+                : `bulan-${previewMonth}`,
             `tahun-${tahun}`,
         ]);
-        const periodeName = new Date(tahun, bulan - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 
         if (format === 'pdfImage') {
             try {
                 await printExportFacade.downloadPdfImage({
-                    elementId: 'absensi-rekap-export-area',
+                    elementId: 'absensi-rekap-print-area',
                     fileName,
                     paperSize: 'A4',
+                    target: 'report',
                 });
                 showToast('PDF Gambar berhasil diunduh.', 'success');
             } catch (error) {
@@ -600,100 +640,89 @@ const AbsensiRekap: React.FC = () => {
                 ]);
                 const autoTable = autoTableModule.default;
                 const doc = new jsPDF('l', 'mm', 'a4'); // Landscape, mm, A4
-                
-                // --- 1. Header (Kop Standar) ---
-                doc.setFontSize(14);
-                doc.setFont('helvetica', 'bold');
-                doc.text(settings.namaPonpes.toUpperCase(), 148.5, 15, { align: 'center' });
 
-                doc.setFontSize(9);
-                doc.setFont('helvetica', 'normal');
-                doc.text(settings.alamat, 148.5, 20, { align: 'center' });
+                monthRange.forEach((month, pageIdx) => {
+                    if (pageIdx > 0) doc.addPage();
 
-                // Line separator
-                doc.setLineWidth(0.3);
-                doc.line(14, 24, 283, 24);
+                    const monthDays = new Date(tahun, month, 0).getDate();
+                    const monthData = buildAttendanceForMonth(month);
 
-                // --- 2. Title & Metadata ---
-                doc.setFontSize(12);
-                doc.setFont('helvetica', 'bold');
-                doc.text(`REKAPITULASI ABSENSI ${selectedJenjang?.nama?.toUpperCase() || '-'} / ${selectedKelas?.nama?.toUpperCase() || '-'} / ${selectedRombel?.nama?.toUpperCase() || '-'}`, 148.5, 30, { align: 'center' });
+                    doc.setFontSize(14);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(settings.namaPonpes.toUpperCase(), 148.5, 15, { align: 'center' });
 
-                doc.setFontSize(9);
-                doc.setFont('helvetica', 'normal');
-                doc.text(`PERIODE: ${periodeName.toUpperCase()}`, 148.5, 35, { align: 'center' });
+                    doc.setFontSize(9);
+                    doc.setFont('helvetica', 'normal');
+                    doc.text(settings.alamat, 148.5, 20, { align: 'center' });
 
-                // --- 3. Table Structure ---
-                const headRow1: any[] = [
-                    { content: 'No', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
-                    { content: 'Nama Santri', rowSpan: 2, styles: { halign: 'left', valign: 'middle' } }
-                ];
-                
-                const colStyles: any = {
-                    0: { cellWidth: 10, halign: 'center' }, // No
-                    1: { cellWidth: 'auto' }, // Nama
-                };
+                    doc.setLineWidth(0.3);
+                    doc.line(14, 24, 283, 24);
 
-                let colIdx = 2;
-                
-                // Add Date Columns to Header
-                for(let i=1; i<=daysInMonth; i++) {
-                    headRow1.push({ content: i.toString(), styles: { halign: 'center', fontSize: 7 } });
-                    colStyles[colIdx] = { cellWidth: 5, halign: 'center' };
-                    colIdx++;
-                }
-                
-                // Add Summary Columns to Header
-                 headRow1.push({ content: 'S', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [254, 243, 199] } }); // Yellow
-                 colStyles[colIdx] = { cellWidth: 8, halign: 'center' };
-                 colIdx++;
+                    doc.setFontSize(12);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(`REKAPITULASI ABSENSI ${selectedJenjang?.nama?.toUpperCase() || '-'} / ${selectedKelas?.nama?.toUpperCase() || '-'} / ${selectedRombel?.nama?.toUpperCase() || '-'}`, 148.5, 30, { align: 'center' });
 
-                 headRow1.push({ content: 'I', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [219, 234, 254] } }); // Blue
-                 colStyles[colIdx] = { cellWidth: 8, halign: 'center' };
-                 colIdx++;
+                    doc.setFontSize(9);
+                    doc.setFont('helvetica', 'normal');
+                    doc.text(`PERIODE: ${getPeriodeName(month).toUpperCase()}`, 148.5, 35, { align: 'center' });
 
-                 headRow1.push({ content: 'A', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [254, 226, 226] } }); // Red
-                 colStyles[colIdx] = { cellWidth: 8, halign: 'center' };
-                 colIdx++;
-
-                 headRow1.push({ content: 'H', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [220, 252, 231] } }); // Green
-                 colStyles[colIdx] = { cellWidth: 8, halign: 'center' };
-                 colIdx++;
-
-                // Body Data
-                const bodyData = santriInRombel.map((s, idx) => {
-                    const row: any[] = [idx + 1, s.namaLengkap];
-                    // Dates
-                    for(let i=1; i<=daysInMonth; i++) {
-                        row.push(attendanceMatrix.matrix[s.id][i] || '');
+                    const headRow1: any[] = [
+                        { content: 'No', styles: { halign: 'center', valign: 'middle' } },
+                        { content: 'Nama Santri', styles: { halign: 'left', valign: 'middle' } },
+                        { content: 'Tanggal', colSpan: monthDays, styles: { halign: 'center', valign: 'middle' } },
+                        { content: 'S', styles: { halign: 'center', valign: 'middle', fillColor: [254, 243, 199] } },
+                        { content: 'I', styles: { halign: 'center', valign: 'middle', fillColor: [219, 234, 254] } },
+                        { content: 'A', styles: { halign: 'center', valign: 'middle', fillColor: [254, 226, 226] } },
+                        { content: 'H', styles: { halign: 'center', valign: 'middle', fillColor: [220, 252, 231] } },
+                    ];
+                    const headRow2: any[] = ['', ''];
+                    const colStyles: any = {
+                        0: { cellWidth: 10, halign: 'center' },
+                        1: { cellWidth: 'auto' },
+                    };
+                    let colIdx = 2;
+                    for (let i = 1; i <= monthDays; i++) {
+                        headRow2.push({ content: i.toString(), styles: { halign: 'center', fontSize: 7 } });
+                        colStyles[colIdx] = { cellWidth: 5, halign: 'center' };
+                        colIdx++;
                     }
-                    // Stats
-                    row.push(attendanceMatrix.stats[s.id].S);
-                    row.push(attendanceMatrix.stats[s.id].I);
-                    row.push(attendanceMatrix.stats[s.id].A);
-                    row.push(attendanceMatrix.stats[s.id].H);
-                    return row;
-                });
+                    headRow2.push('', '', '', '');
+                    colStyles[colIdx++] = { cellWidth: 8, halign: 'center' };
+                    colStyles[colIdx++] = { cellWidth: 8, halign: 'center' };
+                    colStyles[colIdx++] = { cellWidth: 8, halign: 'center' };
+                    colStyles[colIdx++] = { cellWidth: 8, halign: 'center' };
 
-                // Generate Table
-                autoTable(doc, {
-                    startY: 40,
-                    head: [headRow1],
-                    body: bodyData,
-                    columnStyles: colStyles,
-                    styles: { fontSize: 8, cellPadding: 1, lineWidth: 0.1, lineColor: [0, 0, 0] },
-                    headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
-                    theme: 'grid'
-                });
+                    const bodyData = santriInRombel.map((s, idx) => {
+                        const row: any[] = [idx + 1, s.namaLengkap];
+                        for (let i = 1; i <= monthDays; i++) {
+                            row.push(monthData.matrix[s.id][i] || '');
+                        }
+                        row.push(monthData.stats[s.id].S);
+                        row.push(monthData.stats[s.id].I);
+                        row.push(monthData.stats[s.id].A);
+                        row.push(monthData.stats[s.id].H);
+                        return row;
+                    });
 
-                const pageHeight = doc.internal.pageSize.getHeight();
-                doc.setDrawColor(170, 170, 170);
-                doc.setLineWidth(0.15);
-                doc.line(14, pageHeight - 9, 283, pageHeight - 9);
-                doc.setFontSize(8);
-                doc.setFont('helvetica', 'italic');
-                doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, pageHeight - 5);
-                doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', 283, pageHeight - 5, { align: 'right' });
+                    autoTable(doc, {
+                        startY: 40,
+                        head: [headRow1, headRow2],
+                        body: bodyData,
+                        columnStyles: colStyles,
+                        styles: { fontSize: 8, cellPadding: 1, lineWidth: 0.1, lineColor: [0, 0, 0] },
+                        headStyles: { fillColor: [229, 231, 235], textColor: [0, 0, 0], fontStyle: 'bold' },
+                        theme: 'grid'
+                    });
+
+                    const pageHeight = doc.internal.pageSize.getHeight();
+                    doc.setDrawColor(170, 170, 170);
+                    doc.setLineWidth(0.15);
+                    doc.line(14, pageHeight - 9, 283, pageHeight - 9);
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'italic');
+                    doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, pageHeight - 5);
+                    doc.text('dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id', 283, pageHeight - 5, { align: 'right' });
+                });
 
                 doc.save(`${fileName}.pdf`);
 
@@ -712,24 +741,30 @@ const AbsensiRekap: React.FC = () => {
             // Header
             wsData.push([settings.namaPonpes]);
             wsData.push([`REKAP ABSENSI ${selectedJenjang?.nama || '-'} / ${selectedKelas?.nama || '-'} / ${selectedRombel?.nama || '-'}`]);
-            wsData.push([`PERIODE: ${periodeName}`]);
+            wsData.push([`PERIODE: ${monthRange.length > 1 ? `${getPeriodeName(monthRange[0])} s.d ${getPeriodeName(monthRange[monthRange.length - 1])}` : getPeriodeName(previewMonth)}`]);
             wsData.push([]); // Empty Row
 
-            // Table Header
-            const headerRow1 = ['No', 'Nama Santri'];
-            for(let i=1; i<=daysInMonth; i++) headerRow1.push(i.toString());
-            headerRow1.push('S', 'I', 'A', 'H');
-            wsData.push(headerRow1);
+            monthRange.forEach((month, index) => {
+                const monthDays = new Date(tahun, month, 0).getDate();
+                const monthData = buildAttendanceForMonth(month);
+                wsData.push([`BULAN: ${getPeriodeName(month).toUpperCase()}`]);
 
-            // Table Body
-            santriInRombel.forEach((s, idx) => {
-                const row = [idx + 1, s.namaLengkap];
-                for(let i=1; i<=daysInMonth; i++) row.push(attendanceMatrix.matrix[s.id][i] || '');
-                row.push(attendanceMatrix.stats[s.id].S);
-                row.push(attendanceMatrix.stats[s.id].I);
-                row.push(attendanceMatrix.stats[s.id].A);
-                row.push(attendanceMatrix.stats[s.id].H);
-                wsData.push(row);
+                const headerRow1 = ['No', 'Nama Santri'];
+                for(let i=1; i<=monthDays; i++) headerRow1.push(i.toString());
+                headerRow1.push('S', 'I', 'A', 'H');
+                wsData.push(headerRow1);
+
+                santriInRombel.forEach((s, idx) => {
+                    const row = [idx + 1, s.namaLengkap];
+                    for(let i=1; i<=monthDays; i++) row.push(monthData.matrix[s.id][i] || '');
+                    row.push(monthData.stats[s.id].S);
+                    row.push(monthData.stats[s.id].I);
+                    row.push(monthData.stats[s.id].A);
+                    row.push(monthData.stats[s.id].H);
+                    wsData.push(row);
+                });
+
+                if (index < monthRange.length - 1) wsData.push([]);
             });
             wsData.push([]);
             wsData.push(['dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id']);
@@ -737,8 +772,9 @@ const AbsensiRekap: React.FC = () => {
                 const ws = XLSX.utils.aoa_to_sheet(wsData);
             
             // Adjust col widths
+                const maxDaysInRange = Math.max(...monthRange.map((month) => new Date(tahun, month, 0).getDate()));
                 const wscols = [{wch: 5}, {wch: 30}];
-                for(let i=0; i<daysInMonth; i++) wscols.push({wch: 3}); // Date cols
+                for(let i=0; i<maxDaysInRange; i++) wscols.push({wch: 3}); // Date cols
                 wscols.push({wch: 5}, {wch: 5}, {wch: 5}, {wch: 5}); // Summary cols
                 ws['!cols'] = wscols;
 
@@ -769,10 +805,16 @@ const AbsensiRekap: React.FC = () => {
                         </button>
                     </div>
 
-                    <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-6 gap-3">
+                    <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-7 gap-3">
                         <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Bulan</label>
-                            <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm">
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Bulan Mulai</label>
+                            <select value={bulanMulai} onChange={e => setBulanMulai(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm">
+                                {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Bulan Selesai</label>
+                            <select value={bulanSelesai} onChange={e => setBulanSelesai(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm">
                                 {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>)}
                             </select>
                         </div>
@@ -834,8 +876,14 @@ const AbsensiRekap: React.FC = () => {
                 >
                     <div className="space-y-4">
                         <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Bulan</label>
-                            <select value={bulan} onChange={e => setBulan(Number(e.target.value))} className="w-full border rounded-lg p-3 text-sm">
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Bulan Mulai</label>
+                            <select value={bulanMulai} onChange={e => setBulanMulai(Number(e.target.value))} className="w-full border rounded-lg p-3 text-sm">
+                                {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-app-textMuted">Bulan Selesai</label>
+                            <select value={bulanSelesai} onChange={e => setBulanSelesai(Number(e.target.value))} className="w-full border rounded-lg p-3 text-sm">
                                 {Array.from({length: 12}, (_, i) => <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>)}
                             </select>
                         </div>
@@ -938,45 +986,55 @@ const AbsensiRekap: React.FC = () => {
                 </div>
             </div>
 
-            {/* Hidden Print Area */}
-            <div className="hidden print:block">
-                 <PrintHeader settings={settings} title={`REKAPITULASI ABSENSI ${selectedJenjang?.nama?.toUpperCase() || '-'} / ${selectedKelas?.nama?.toUpperCase() || '-'} / ${selectedRombel?.nama?.toUpperCase() || '-'}`} />
-                 <p className="text-center text-sm mb-4">PERIODE: {new Date(tahun, bulan-1).toLocaleDateString('id-ID', {month: 'long', year: 'numeric'}).toUpperCase()}</p>
-                 <table className="w-full text-xs text-center border-collapse border border-black">
-                        <thead>
-                            <tr>
-                                <th rowSpan={2} className="p-1 border border-black w-8">No</th>
-                                <th rowSpan={2} className="p-1 border border-black text-left w-48">Nama Santri</th>
-                                <th colSpan={daysInMonth} className="p-1 border border-black">Tanggal</th>
-                                <th colSpan={4} className="p-1 border border-black bg-gray-200">Total</th>
-                            </tr>
-                            <tr>
-                                {Array.from({length: daysInMonth}, (_, i) => (
-                                    <th key={i} className="p-0 border border-black w-4 font-normal" style={{fontSize: '8px'}}>{i+1}</th>
-                                ))}
-                                <th className="p-1 border border-black w-6">H</th>
-                                <th className="p-1 border border-black w-6">S</th>
-                                <th className="p-1 border border-black w-6">I</th>
-                                <th className="p-1 border border-black w-6">A</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {santriInRombel.map((s, idx) => (
-                                <tr key={s.id}>
-                                    <td className="p-1 border border-black">{idx+1}</td>
-                                    <td className="p-1 border border-black text-left px-2 font-medium">{s.namaLengkap}</td>
-                                    {Array.from({length: daysInMonth}, (_, i) => (
-                                        <td key={i} className="p-0 border border-black" style={{fontSize: '9px'}}>{attendanceMatrix.matrix[s.id][i+1] || ''}</td>
-                                    ))}
-                                    <td className="p-1 border border-black">{attendanceMatrix.stats[s.id].H}</td>
-                                    <td className="p-1 border border-black">{attendanceMatrix.stats[s.id].S}</td>
-                                    <td className="p-1 border border-black">{attendanceMatrix.stats[s.id].I}</td>
-                                    <td className="p-1 border border-black">{attendanceMatrix.stats[s.id].A}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    <ReportFooter />
+            {/* Export / Print Area */}
+            <div className="hidden">
+                <div id="absensi-rekap-print-area">
+                    {monthRange.map((month, idx) => {
+                        const monthDays = new Date(tahun, month, 0).getDate();
+                        const monthData = buildAttendanceForMonth(month);
+                        return (
+                            <div
+                                key={month}
+                                className={`printable-content-wrapper print-landscape bg-white p-6 ${idx < monthRange.length - 1 ? 'page-break-after' : ''}`}
+                                style={{ width: '29.7cm', minHeight: '21cm' }}
+                            >
+                                <PrintHeader settings={settings} title={`REKAPITULASI ABSENSI ${selectedJenjang?.nama?.toUpperCase() || '-'} / ${selectedKelas?.nama?.toUpperCase() || '-'} / ${selectedRombel?.nama?.toUpperCase() || '-'}`} />
+                                <p className="text-center text-sm mb-4">PERIODE: {getPeriodeName(month).toUpperCase()}</p>
+                                <table className="w-full text-xs text-center border-collapse border border-black">
+                                    <thead>
+                                        <tr>
+                                            <th className="p-1 border border-black w-8">No</th>
+                                            <th className="p-1 border border-black text-left w-48">Nama Santri</th>
+                                            {Array.from({length: monthDays}, (_, i) => (
+                                                <th key={i} className="p-0 border border-black w-4 font-normal" style={{fontSize: '8px'}}>{i+1}</th>
+                                            ))}
+                                            <th className="p-1 border border-black w-6">S</th>
+                                            <th className="p-1 border border-black w-6">I</th>
+                                            <th className="p-1 border border-black w-6">A</th>
+                                            <th className="p-1 border border-black w-6">H</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {santriInRombel.map((s, santriIdx) => (
+                                            <tr key={s.id}>
+                                                <td className="p-1 border border-black">{santriIdx+1}</td>
+                                                <td className="p-1 border border-black text-left px-2 font-medium">{s.namaLengkap}</td>
+                                                {Array.from({length: monthDays}, (_, dayIdx) => (
+                                                    <td key={dayIdx} className="p-0 border border-black" style={{fontSize: '9px'}}>{monthData.matrix[s.id][dayIdx+1] || ''}</td>
+                                                ))}
+                                                <td className="p-1 border border-black">{monthData.stats[s.id].S}</td>
+                                                <td className="p-1 border border-black">{monthData.stats[s.id].I}</td>
+                                                <td className="p-1 border border-black">{monthData.stats[s.id].A}</td>
+                                                <td className="p-1 border border-black">{monthData.stats[s.id].H}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <ReportFooter />
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );

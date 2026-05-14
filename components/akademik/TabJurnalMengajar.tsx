@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { JurnalMengajarRecord } from '../../types';
@@ -21,7 +21,10 @@ export const TabJurnalMengajar: React.FC = () => {
     const [filterJenjangId, setFilterJenjangId] = useState<number>(0);
     const [filterKelasId, setFilterKelasId] = useState<number>(0);
     const [filterRombelId, setFilterRombelId] = useState<number>(0);
+    const [filterMode, setFilterMode] = useState<'pengajar' | 'mapel' | 'ekstra'>('pengajar');
     const [filterGuruId, setFilterGuruId] = useState<number>(0);
+    const [filterMapelId, setFilterMapelId] = useState<number>(0);
+    const [filterEkstra, setFilterEkstra] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
@@ -33,6 +36,46 @@ export const TabJurnalMengajar: React.FC = () => {
     const availableRombel = useMemo(() => (
         filterKelasId ? settings.rombel.filter(r => r.kelasId === filterKelasId) : settings.rombel
     ), [filterKelasId, settings.rombel]);
+    const journalsByScope = useMemo(() => {
+        return jurnalMengajarList.filter(j => {
+            const rombel = settings.rombel.find(r => r.id === j.rombelId);
+            const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+            const matchJenjang = filterJenjangId ? kelas?.jenjangId === filterJenjangId : true;
+            const matchKelas = filterKelasId ? rombel?.kelasId === filterKelasId : true;
+            const matchRombel = filterRombelId ? j.rombelId === filterRombelId : true;
+            return matchJenjang && matchKelas && matchRombel;
+        });
+    }, [jurnalMengajarList, filterJenjangId, filterKelasId, filterRombelId, settings.rombel, settings.kelas]);
+    const activeJenjangIdForMapel = useMemo(() => {
+        if (filterJenjangId) return filterJenjangId;
+        if (filterKelasId) return settings.kelas.find(k => k.id === filterKelasId)?.jenjangId || 0;
+        if (filterRombelId) {
+            const rombel = settings.rombel.find(r => r.id === filterRombelId);
+            return settings.kelas.find(k => k.id === rombel?.kelasId)?.jenjangId || 0;
+        }
+        return 0;
+    }, [filterJenjangId, filterKelasId, filterRombelId, settings.kelas, settings.rombel]);
+    const availableMapelForFilter = useMemo(() => {
+        const source = activeJenjangIdForMapel
+            ? settings.mataPelajaran.filter(m => m.jenjangId === activeJenjangIdForMapel)
+            : settings.mataPelajaran;
+        return source.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+    }, [settings.mataPelajaran, activeJenjangIdForMapel]);
+    const availableEkstraForFilter = useMemo(() => {
+        const values = new Set<string>();
+        journalsByScope.forEach(j => {
+            j.sesiEkstra?.forEach(s => {
+                const name = (s.kegiatan || '').trim();
+                if (name) values.add(name);
+            });
+        });
+        return Array.from(values).sort((a, b) => a.localeCompare(b, 'id'));
+    }, [journalsByScope]);
+    useEffect(() => {
+        if (filterMapelId && !availableMapelForFilter.some(m => m.id === filterMapelId)) {
+            setFilterMapelId(0);
+        }
+    }, [filterMapelId, availableMapelForFilter]);
 
     const filteredJournals = useMemo(() => {
         return jurnalMengajarList.filter(j => {
@@ -43,14 +86,33 @@ export const TabJurnalMengajar: React.FC = () => {
             const matchJenjang = filterJenjangId ? kelas?.jenjangId === filterJenjangId : true;
             const matchKelas = filterKelasId ? rombel?.kelasId === filterKelasId : true;
             const matchRombel = filterRombelId ? j.rombelId === filterRombelId : true;
-            const matchGuru = filterGuruId ? j.guruId === filterGuruId : true;
+            const matchGuru = filterMode === 'pengajar' ? (filterGuruId ? j.guruId === filterGuruId : true) : true;
+            const matchMapel = filterMode === 'mapel' ? (filterMapelId ? j.mataPelajaranId === filterMapelId : true) : true;
+            const matchEkstra = filterMode === 'ekstra'
+                ? (filterEkstra
+                    ? Boolean(j.sesiEkstra?.some(s => (s.kegiatan || '').trim() === filterEkstra))
+                    : true)
+                : true;
             const matchSearch = searchTerm ? 
                 j.kompetensiMateri.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (j.catatanKejadian?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false)
                 : true;
-            return matchDateFrom && matchDateTo && matchJenjang && matchKelas && matchRombel && matchGuru && matchSearch;
+            return matchDateFrom && matchDateTo && matchJenjang && matchKelas && matchRombel && matchGuru && matchMapel && matchEkstra && matchSearch;
         }).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || (a.jamPelajaranIds?.[0] ?? 0) - (b.jamPelajaranIds?.[0] ?? 0));
-    }, [jurnalMengajarList, filterDateFrom, filterDateTo, filterJenjangId, filterKelasId, filterRombelId, filterGuruId, searchTerm, settings.rombel, settings.kelas]);
+    }, [jurnalMengajarList, filterDateFrom, filterDateTo, filterJenjangId, filterKelasId, filterRombelId, filterMode, filterGuruId, filterMapelId, filterEkstra, searchTerm, settings.rombel, settings.kelas]);
+    const groupedJournals = useMemo(() => {
+        const getType = (j: JurnalMengajarRecord): 'kbm' | 'ekstra' | 'campuran' => {
+            if (j.tipeEntri) return j.tipeEntri;
+            const hasMapel = Boolean(j.mataPelajaranId);
+            const hasEkstra = Boolean(j.sesiEkstra?.length);
+            if (hasMapel && hasEkstra) return 'campuran';
+            if (hasEkstra) return 'ekstra';
+            return 'kbm';
+        };
+        const groups: Record<'kbm' | 'ekstra' | 'campuran', JurnalMengajarRecord[]> = { kbm: [], ekstra: [], campuran: [] };
+        filteredJournals.forEach(j => groups[getType(j)].push(j));
+        return groups;
+    }, [filteredJournals]);
 
     const handleDelete = (record: JurnalMengajarRecord) => {
         if (!canDelete) return;
@@ -69,13 +131,21 @@ export const TabJurnalMengajar: React.FC = () => {
     };
 
     const getGuruName = (id: number) => settings.tenagaPengajar.find(t => t.id === id)?.nama ?? 'Tidak Diketahui';
-    const getMapelName = (id: number) => settings.mataPelajaran.find(m => m.id === id)?.nama ?? 'Tidak Diketahui';
+    const getMapelName = (id?: number) => id ? (settings.mataPelajaran.find(m => m.id === id)?.nama ?? 'Tidak Diketahui') : 'Kegiatan Non-Mapel';
     const getRombelName = (id: number) => settings.rombel.find(r => r.id === id)?.nama ?? 'Tidak Diketahui';
     const getSesiEkstraText = (record: JurnalMengajarRecord) =>
         record.sesiEkstra?.map(s => {
             const base = `${s.kegiatan || 'Ekstra'} (${s.waktuMulai || '--:--'}-${s.waktuSelesai || '--:--'})`;
             return s.materi ? `${base} - Materi: ${s.materi}` : base;
         }).join(' | ') || '';
+    const getEkstraPrimaryLabel = (record: JurnalMengajarRecord) => {
+        if (!record.sesiEkstra?.length) return 'Ekstra';
+        if (filterEkstra) {
+            const exact = record.sesiEkstra.find(s => (s.kegiatan || '').trim() === filterEkstra);
+            if (exact?.kegiatan) return exact.kegiatan;
+        }
+        return record.sesiEkstra.map(s => (s.kegiatan || '').trim()).filter(Boolean).join(', ') || 'Ekstra';
+    };
     const getKelasName = (rombelId: number) => {
         const rombel = settings.rombel.find(r => r.id === rombelId);
         return settings.kelas.find(k => k.id === rombel?.kelasId)?.nama ?? '-';
@@ -85,12 +155,42 @@ export const TabJurnalMengajar: React.FC = () => {
         const kelas = settings.kelas.find(k => k.id === rombel?.kelasId);
         return settings.jenjang.find(j => j.id === kelas?.jenjangId)?.nama ?? '-';
     };
+    const getTipeEntri = (record: JurnalMengajarRecord): 'kbm' | 'ekstra' | 'campuran' => {
+        if (record.tipeEntri) return record.tipeEntri;
+        const hasMapel = Boolean(record.mataPelajaranId);
+        const hasEkstra = Boolean(record.sesiEkstra?.length);
+        if (hasMapel && hasEkstra) return 'campuran';
+        if (hasEkstra) return 'ekstra';
+        return 'kbm';
+    };
+    const getTipeLabel = (record: JurnalMengajarRecord) => {
+        const tipe = getTipeEntri(record);
+        return tipe === 'kbm' ? 'KBM' : tipe === 'ekstra' ? 'EKSTRA' : 'CAMPURAN';
+    };
 
     const selectedJenjangLabel = filterJenjangId ? (settings.jenjang.find(j => j.id === filterJenjangId)?.nama || '-') : 'Semua Marhalah';
     const selectedKelasLabel = filterKelasId ? (settings.kelas.find(k => k.id === filterKelasId)?.nama || '-') : 'Semua Kelas';
     const selectedRombelLabel = filterRombelId ? getRombelName(filterRombelId) : 'Semua Rombel';
     const reportTitle = `LAPORAN LOG JURNAL MENGAJAR - ${selectedJenjangLabel} / ${selectedKelasLabel} / ${selectedRombelLabel}`;
     const periodLabel = `${filterDateFrom || '-'} s.d. ${filterDateTo || '-'}`;
+    const modeLabel = filterMode === 'pengajar' ? 'Pengajar' : filterMode === 'mapel' ? 'Mapel' : 'Ekstra';
+    const secondaryFilterLabel =
+        filterMode === 'pengajar'
+            ? (filterGuruId ? getGuruName(filterGuruId) : 'Semua Pengajar')
+            : filterMode === 'mapel'
+                ? (filterMapelId ? getMapelName(filterMapelId) : 'Semua Mapel')
+                : (filterEkstra || 'Semua Kegiatan Ekstra');
+    const compactFilterLabel = `${modeLabel} ${secondaryFilterLabel}`.trim();
+    const primaryColumnLabel = filterMode === 'pengajar' ? 'Pengajar (Mapel)' : filterMode === 'mapel' ? 'Mapel (Pengajar)' : 'Kegiatan Ekstra (Pengajar)';
+    const getPrimaryPresentation = (record: JurnalMengajarRecord) => {
+        if (filterMode === 'pengajar') {
+            return `${getGuruName(record.guruId)} (${getMapelName(record.mataPelajaranId)})`;
+        }
+        if (filterMode === 'mapel') {
+            return `${getMapelName(record.mataPelajaranId)} (${getGuruName(record.guruId)})`;
+        }
+        return `${getEkstraPrimaryLabel(record)} (${getGuruName(record.guruId)})`;
+    };
 
     const handlePrint = () => {
         const rowsHtml = filteredJournals.map((r, idx) => `
@@ -100,8 +200,8 @@ export const TabJurnalMengajar: React.FC = () => {
                 <td>${getJenjangName(r.rombelId)}</td>
                 <td>${getKelasName(r.rombelId)}</td>
                 <td>${getRombelName(r.rombelId)}</td>
-                <td>${getMapelName(r.mataPelajaranId)}</td>
-                <td>${getGuruName(r.guruId)}</td>
+                <td>${getPrimaryPresentation(r)}</td>
+                <td>${getTipeLabel(r)}</td>
                 <td>${(r.jamPelajaranIds?.join(', ') || '-')}</td>
                 <td>${(getSesiEkstraText(r) || '-')}</td>
                 <td>${(r.kompetensiMateri || '-')}</td>
@@ -133,12 +233,12 @@ export const TabJurnalMengajar: React.FC = () => {
                     <div class="kop-address">${settings.alamat}</div>
                     <div class="line"></div>
                     <div class="report-title">${reportTitle}</div>
-                    <div class="meta">Periode: ${periodLabel}</div>
+                    <div class="meta">Periode: ${periodLabel}<br/>${compactFilterLabel}</div>
                     <table>
                         <thead>
                             <tr>
                                 <th>No</th><th>Tanggal</th><th>Marhalah</th><th>Kelas</th><th>Rombel</th>
-                                <th>Mapel</th><th>Guru</th><th>Jam</th><th>Sesi Ekstra</th><th>Materi</th><th>Catatan</th>
+                                <th>${primaryColumnLabel}</th><th>Tipe</th><th>Jam</th><th>Sesi Ekstra</th><th>Materi</th><th>Catatan</th>
                             </tr>
                         </thead>
                         <tbody>${rowsHtml || '<tr><td colspan="11">Tidak ada data.</td></tr>'}</tbody>
@@ -163,8 +263,9 @@ export const TabJurnalMengajar: React.FC = () => {
             const wsData: any[][] = [];
             wsData.push(['LAPORAN LOG JURNAL MENGAJAR']);
             wsData.push([`Periode: ${periodLabel}`]);
+            wsData.push([compactFilterLabel]);
             wsData.push([]);
-            wsData.push(['No', 'Tanggal', 'Marhalah', 'Kelas', 'Rombel', 'Mapel', 'Guru', 'Jam/Sesi', 'Sesi Ekstra', 'Materi', 'Catatan']);
+            wsData.push(['No', 'Tanggal', 'Marhalah', 'Kelas', 'Rombel', primaryColumnLabel, 'Tipe', 'Jam/Sesi', 'Sesi Ekstra', 'Materi', 'Catatan']);
             filteredJournals.forEach((r, idx) => {
                 wsData.push([
                     idx + 1,
@@ -172,8 +273,8 @@ export const TabJurnalMengajar: React.FC = () => {
                     getJenjangName(r.rombelId),
                     getKelasName(r.rombelId),
                     getRombelName(r.rombelId),
-                    getMapelName(r.mataPelajaranId),
-                    getGuruName(r.guruId),
+                    getPrimaryPresentation(r),
+                    getTipeLabel(r),
                     r.jamPelajaranIds?.join(', ') || '',
                     getSesiEkstraText(r),
                     r.kompetensiMateri,
@@ -183,7 +284,7 @@ export const TabJurnalMengajar: React.FC = () => {
             wsData.push([]);
             wsData.push(['dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id']);
             const ws = XLSX.utils.aoa_to_sheet(wsData);
-            ws['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 10 }, { wch: 28 }, { wch: 36 }, { wch: 28 }];
+            ws['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 28 }, { wch: 36 }, { wch: 28 }];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Jurnal');
             XLSX.writeFile(wb, `${buildStandardExportFileName('log-jurnal-mengajar', [selectedJenjangLabel, selectedKelasLabel, selectedRombelLabel, filterDateFrom || 'awal', filterDateTo || 'akhir'])}.xlsx`);
@@ -205,17 +306,18 @@ export const TabJurnalMengajar: React.FC = () => {
             doc.setFontSize(9);
             doc.setFont('helvetica', 'normal');
             doc.text(`Periode: ${periodLabel}`, 148.5, 19, { align: 'center' });
+            doc.text(compactFilterLabel, 148.5, 23, { align: 'center' });
             autoTable(doc, {
-                startY: 24,
-                head: [['No', 'Tanggal', 'Marhalah', 'Kelas', 'Rombel', 'Mapel', 'Guru', 'Jam', 'Sesi Ekstra', 'Materi', 'Catatan']],
+                startY: 27,
+                head: [['No', 'Tanggal', 'Marhalah', 'Kelas', 'Rombel', primaryColumnLabel, 'Tipe', 'Jam', 'Sesi Ekstra', 'Materi', 'Catatan']],
                 body: filteredJournals.map((r, idx) => [
                     idx + 1,
                     r.tanggal,
                     getJenjangName(r.rombelId),
                     getKelasName(r.rombelId),
                     getRombelName(r.rombelId),
-                    getMapelName(r.mataPelajaranId),
-                    getGuruName(r.guruId),
+                    getPrimaryPresentation(r),
+                    getTipeLabel(r),
                     r.jamPelajaranIds?.join(', ') || '',
                     getSesiEkstraText(r),
                     r.kompetensiMateri,
@@ -330,15 +432,55 @@ export const TabJurnalMengajar: React.FC = () => {
                         </select>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Tenaga Pengajar</label>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Mode Filter</label>
                         <select 
-                            value={filterGuruId} 
-                            onChange={e => setFilterGuruId(Number(e.target.value))}
+                            value={filterMode}
+                            onChange={e => {
+                                const mode = e.target.value as 'pengajar' | 'mapel' | 'ekstra';
+                                setFilterMode(mode);
+                                setFilterGuruId(0);
+                                setFilterMapelId(0);
+                                setFilterEkstra('');
+                            }}
                             className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all font-bold"
                         >
-                            <option value={0}>Semua Guru</option>
-                            {settings.tenagaPengajar.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
+                            <option value="pengajar">Pengajar</option>
+                            <option value="mapel">Mapel</option>
+                            <option value="ekstra">Ekstra</option>
                         </select>
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">
+                            {filterMode === 'pengajar' ? 'Pilih Pengajar' : filterMode === 'mapel' ? 'Pilih Mapel' : 'Pilih Kegiatan Ekstra'}
+                        </label>
+                        {filterMode === 'pengajar' ? (
+                            <select
+                                value={filterGuruId}
+                                onChange={e => setFilterGuruId(Number(e.target.value))}
+                                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all font-bold"
+                            >
+                                <option value={0}>Semua Guru</option>
+                                {settings.tenagaPengajar.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
+                            </select>
+                        ) : filterMode === 'mapel' ? (
+                            <select
+                                value={filterMapelId}
+                                onChange={e => setFilterMapelId(Number(e.target.value))}
+                                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all font-bold"
+                            >
+                                <option value={0}>Semua Mapel</option>
+                                {availableMapelForFilter.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                            </select>
+                        ) : (
+                            <select
+                                value={filterEkstra}
+                                onChange={e => setFilterEkstra(e.target.value)}
+                                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all font-bold"
+                            >
+                                <option value="">Semua Kegiatan Ekstra</option>
+                                {availableEkstraForFilter.map(name => <option key={name} value={name}>{name}</option>)}
+                            </select>
+                        )}
                     </div>
                     <div className="md:col-span-1">
                         <label className="block text-[10px] font-bold text-teal-600 uppercase mb-1.5 tracking-widest pl-1">Cari Kompetensi / Materi</label>
@@ -430,15 +572,55 @@ export const TabJurnalMengajar: React.FC = () => {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Pilih Tenaga Pengajar</label>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">Mode Filter</label>
                             <select 
-                                value={filterGuruId} 
-                                onChange={e => setFilterGuruId(Number(e.target.value))}
+                                value={filterMode}
+                                onChange={e => {
+                                    const mode = e.target.value as 'pengajar' | 'mapel' | 'ekstra';
+                                    setFilterMode(mode);
+                                    setFilterGuruId(0);
+                                    setFilterMapelId(0);
+                                    setFilterEkstra('');
+                                }}
                                 className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none"
                             >
-                                <option value={0}>Semua Guru</option>
-                                {settings.tenagaPengajar.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
+                                <option value="pengajar">Pengajar</option>
+                                <option value="mapel">Mapel</option>
+                                <option value="ekstra">Ekstra</option>
                             </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-widest ml-1">
+                                {filterMode === 'pengajar' ? 'Pilih Pengajar' : filterMode === 'mapel' ? 'Pilih Mapel' : 'Pilih Kegiatan Ekstra'}
+                            </label>
+                            {filterMode === 'pengajar' ? (
+                                <select
+                                    value={filterGuruId}
+                                    onChange={e => setFilterGuruId(Number(e.target.value))}
+                                    className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none"
+                                >
+                                    <option value={0}>Semua Guru</option>
+                                    {settings.tenagaPengajar.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
+                                </select>
+                            ) : filterMode === 'mapel' ? (
+                                <select
+                                    value={filterMapelId}
+                                    onChange={e => setFilterMapelId(Number(e.target.value))}
+                                    className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none"
+                                >
+                                    <option value={0}>Semua Mapel</option>
+                                    {availableMapelForFilter.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                                </select>
+                            ) : (
+                                <select
+                                    value={filterEkstra}
+                                    onChange={e => setFilterEkstra(e.target.value)}
+                                    className="w-full border-2 border-white rounded-2xl p-4 text-base font-bold shadow-sm focus:border-teal-500 outline-none"
+                                >
+                                    <option value="">Semua Kegiatan Ekstra</option>
+                                    {availableEkstraForFilter.map(name => <option key={name} value={name}>{name}</option>)}
+                                </select>
+                            )}
                         </div>
                     </div>
 
@@ -455,14 +637,26 @@ export const TabJurnalMengajar: React.FC = () => {
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
                                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase w-32">Waktu / Rombel</th>
-                                <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Mata Pelajaran & Guru</th>
+                                <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">
+                                    {filterMode === 'pengajar' ? 'Pengajar & Mapel' : 'Mapel / Ekstra & Pengajar'}
+                                </th>
                                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Kompetensi / Materi</th>
                                 <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Kejadian / Catatan</th>
                                 {canDelete && <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase w-16 text-center">Aksi</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredJournals.length > 0 ? filteredJournals.map(record => (
+                            {filteredJournals.length > 0 ? (['kbm', 'ekstra', 'campuran'] as const).flatMap((groupKey) => {
+                                const groupRows = groupedJournals[groupKey];
+                                if (!groupRows.length) return [];
+                                const groupLabel = groupKey === 'kbm' ? 'Kelompok KBM' : groupKey === 'ekstra' ? 'Kelompok Ekstra' : 'Kelompok Campuran';
+                                return [
+                                    <tr key={`group-${groupKey}`}>
+                                        <td colSpan={canDelete ? 5 : 4} className="px-4 py-2 bg-gray-50 text-[11px] font-bold text-gray-600 uppercase tracking-wide border-y border-gray-200">
+                                            {groupLabel}
+                                        </td>
+                                    </tr>,
+                                    ...groupRows.map(record => (
                                 <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-4 py-4 align-top">
                                         <div className="text-sm font-bold text-gray-900">{format(new Date(record.tanggal), 'dd MMM yyyy', { locale: id })}</div>
@@ -476,10 +670,28 @@ export const TabJurnalMengajar: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="px-4 py-4 align-top">
-                                        <div className="text-sm font-bold text-gray-800">{getMapelName(record.mataPelajaranId)}</div>
-                                        <div className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
-                                            <i className="bi bi-person-circle"></i> {getGuruName(record.guruId)}
+                                        <div className="mb-2">
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${getTipeEntri(record) === 'ekstra' ? 'bg-purple-50 text-purple-700 border-purple-200' : getTipeEntri(record) === 'campuran' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
+                                                {getTipeLabel(record)}
+                                            </span>
                                         </div>
+                                        {filterMode === 'pengajar' ? (
+                                            <>
+                                                <div className="text-sm font-bold text-gray-800">{getGuruName(record.guruId)}</div>
+                                                <div className="text-xs text-gray-500 mt-1">Mapel: {getMapelName(record.mataPelajaranId)}</div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="text-sm font-bold text-gray-800">
+                                                    {filterMode === 'ekstra' && record.sesiEkstra?.length
+                                                        ? getEkstraPrimaryLabel(record)
+                                                        : getMapelName(record.mataPelajaranId)}
+                                                </div>
+                                                <div className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
+                                                    <i className="bi bi-person-circle"></i> {getGuruName(record.guruId)}
+                                                </div>
+                                            </>
+                                        )}
                                     </td>
                                     <td className="px-4 py-4 align-top">
                                         <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{record.kompetensiMateri}</div>
@@ -516,7 +728,9 @@ export const TabJurnalMengajar: React.FC = () => {
                                         </td>
                                     )}
                                 </tr>
-                            )) : (
+                                    ))
+                                ];
+                            }) : (
                                 <tr>
                                     <td colSpan={canDelete ? 5 : 4} className="px-4 py-12 text-center text-gray-400 italic">
                                         <i className="bi bi-journal-x text-4xl mb-2 block opacity-20"></i>

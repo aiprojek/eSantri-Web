@@ -848,7 +848,8 @@ export interface JurnalMengajarRecord {
     tanggal: string; // YYYY-MM-DD
     rombelId: number;
     guruId: number;
-    mataPelajaranId: number;
+    mataPelajaranId?: number;
+    tipeEntri?: 'kbm' | 'ekstra' | 'campuran';
     jamPelajaranIds?: number[];
     sesiEkstra?: {
         kegiatan: string;

@@ -548,10 +548,14 @@ export const JurnalMengajarTemplate: React.FC<{ santriList: Santri[]; settings: 
                         {recordsToday.length > 0 ? recordsToday.map((r: any) => {
                              const guru = settings.tenagaPengajar.find(t => t.id === r.guruId);
                              const mapel = settings.mataPelajaran.find(m => m.id === r.mataPelajaranId);
+                             const tipe = r.tipeEntri || (r.mataPelajaranId && r.sesiEkstra?.length ? 'campuran' : r.sesiEkstra?.length ? 'ekstra' : 'kbm');
                              return (
                                  <tr key={r.id}>
                                      <td className="border border-black p-2 text-center align-top">{r.jamPelajaranIds?.join(', ')}</td>
-                                     <td className="border border-black p-2 font-semibold align-top">{mapel?.nama}</td>
+                                     <td className="border border-black p-2 font-semibold align-top">
+                                        {mapel?.nama || 'Kegiatan Non-Mapel'}
+                                        <div className="text-[10px] text-gray-600 mt-0.5 uppercase">{tipe}</div>
+                                     </td>
                                      <td className="border border-black p-2 align-top">{guru?.nama}</td>
                                      <td className="border border-black p-2 whitespace-pre-wrap align-top">{r.kompetensiMateri}</td>
                                      <td className="border border-black p-2 whitespace-pre-wrap italic align-top">{r.catatanKejadian || '-'}</td>

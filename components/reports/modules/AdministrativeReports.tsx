@@ -290,7 +290,7 @@ export const KinerjaPengajarTemplate: React.FC<{ settings: PondokSettings; jurna
     const rows = settings.tenagaPengajar.map((guru) => {
         const jurnal = jurnalMengajarList.filter(j => j.guruId === guru.id);
         const rombelCount = new Set(jurnal.map(j => j.rombelId)).size;
-        const mapelCount = new Set(jurnal.map(j => j.mataPelajaranId)).size;
+        const mapelCount = new Set(jurnal.map(j => j.mataPelajaranId).filter((id): id is number => typeof id === 'number')).size;
         const lastDate = jurnal.length > 0 ? jurnal.map(j => j.tanggal).sort().at(-1) : '';
         return {
             guru,

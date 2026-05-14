@@ -46,6 +46,10 @@ const withVisibleClone = async (elementId: string, task: (visibleElementId: stri
 
 export const printExportFacade = {
     async printDialog(ctx: PrintExportContext): Promise<void> {
+        if (ctx.elementId === 'calendar-print-area') {
+            await printVisualPreview(ctx.elementId, resolvePaperSize(ctx.paperSize));
+            return;
+        }
         if (ctx.target === 'sarpras') {
             await printVisualPreview(ctx.elementId, resolvePaperSize(ctx.paperSize));
             return;
@@ -53,6 +57,23 @@ export const printExportFacade = {
         await printPreviewExact(ctx.elementId, `${ctx.fileName}.pdf`);
     },
     async downloadPdfImage(ctx: PrintExportContext): Promise<void> {
+        const source = document.getElementById(ctx.elementId);
+        const isSourceHidden = source
+            ? source.getClientRects().length === 0 ||
+              source.getBoundingClientRect().width === 0 ||
+              source.getBoundingClientRect().height === 0
+            : false;
+
+        if (isSourceHidden) {
+            await withVisibleClone(ctx.elementId, async (visibleElementId) => {
+                await generatePdf(visibleElementId, {
+                    paperSize: resolvePaperSize(ctx.paperSize),
+                    fileName: `${ctx.fileName}.pdf`,
+                });
+            });
+            return;
+        }
+
         if (ctx.target === 'jadwal') {
             await withVisibleClone(ctx.elementId, async (visibleElementId) => {
                 await generatePdf(visibleElementId, {

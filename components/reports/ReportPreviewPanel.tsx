@@ -384,45 +384,45 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
                                 {/* Excel Option (Priority) */}
                                 {canExportToExcel && (
                                     <button onClick={handleDownloadExcel} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 border-b flex items-center gap-2 bg-green-50/50">
-                                        <i className="bi bi-file-earmark-spreadsheet-fill text-green-600"></i> Excel (.xlsx)
+                                        <i className="bi bi-file-earmark-spreadsheet-fill text-green-600"></i> Excel
                                     </button>
                                 )}
-                                
+
                                 {activeReport === ReportType.LaporanKontak && (
-                                    <button onClick={handleDownloadCsv} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 border-b flex items-center gap-2"><i className="bi bi-file-earmark-spreadsheet text-gray-500"></i> CSV (Legacy)</button>
+                                    <button onClick={handleDownloadCsv} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 border-b flex items-center gap-2"><i className="bi bi-file-earmark-spreadsheet text-gray-500"></i> CSV</button>
                                 )}
 
                                 <button onClick={handleDownloadVisualPdf} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2 bg-red-50/40">
-                                    <i className="bi bi-file-earmark-pdf text-red-600"></i> PDF via Cetak (Vector)
+                                    <i className="bi bi-file-earmark-pdf text-red-600"></i> PDF
                                 </button>
 
                                 <button onClick={handleDownloadImagePdf} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2">
-                                    <i className="bi bi-file-earmark-image text-red-500"></i> PDF Gambar (Stabil)
+                                    <i className="bi bi-file-earmark-image text-red-500"></i> PDF Gambar
                                 </button>
-                                
+
                                 <button onClick={handlePrintNative} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 border-b flex items-center gap-2">
-                                    <i className="bi bi-printer text-red-600"></i> Cetak (Sama dgn Preview)
+                                    <i className="bi bi-printer text-red-600"></i> Cetak Langsung
                                 </button>
-                                
+
                                 <button onClick={handleDownloadWord} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 border-b flex items-center gap-2">
-                                    <i className="bi bi-file-earmark-word text-blue-800"></i> Word Document (.doc)
+                                    <i className="bi bi-file-earmark-word text-blue-800"></i> Word Document
                                 </button>
 
                                 {canExportToAutoTable && (
                                     <>
                                         <button onClick={handleDownloadAutoTable} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-teal-50 border-b flex items-center gap-2">
-                                            <i className="bi bi-file-earmark-ruled text-teal-600"></i> PDF Data (AutoTable)
+                                            <i className="bi bi-file-earmark-ruled text-teal-600"></i> PDF Data
                                         </button>
                                         <button onClick={handleDownloadVisualExcel} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 border-b flex items-center gap-2">
-                                            <i className="bi bi-file-earmark-spreadsheet text-green-600"></i> Excel (Tabel Visual)
+                                            <i className="bi bi-file-earmark-spreadsheet text-green-600"></i> Excel Visual
                                         </button>
                                     </>
                                 )}
 
                                 <button onClick={handleDownloadHtml} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 border-b flex items-center gap-2">
-                                    <i className="bi bi-code-slash text-indigo-600"></i> HTML (Offline)
+                                    <i className="bi bi-code-slash text-indigo-600"></i> HTML
                                 </button>
-                                
+
                                 {activeReport === ReportType.KartuSantri && (
                                     <button onClick={() => {
                                         setIsDownloadMenuOpen(false);

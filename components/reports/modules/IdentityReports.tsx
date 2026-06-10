@@ -1,8 +1,57 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Santri, PondokSettings } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
 import { formatDate, toHijri, ReportFooter, SmartAvatar, formatAlamat } from './Common';
+import QRCode from 'qrcode';
+
+// --- UTILITY FOR QR/BARCODE ---
+// Cache for generated QR code data URLs to minimize re-computation
+const qrCodeCache: Record<string, string> = {};
+
+const generateQRCodeDataUrl = async (nis: string, size: number = 100): Promise<string> => {
+    const cacheKey = `${nis}-${size}`;
+    if (qrCodeCache[cacheKey]) {
+        return qrCodeCache[cacheKey];
+    }
+    try {
+        const dataUrl = await QRCode.toDataURL(nis, {
+            width: size,
+            margin: 1,
+            color: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
+        });
+        qrCodeCache[cacheKey] = dataUrl;
+        return dataUrl;
+    } catch (error) {
+        console.error('QR generation failed:', error);
+        return '';
+    }
+};
+
+// Generate barcode-like visual using simple SVG (no external API)
+const generateBarcodeVisual = (nis: string, width: number = 120, height: number = 40): string => {
+    // Simple numeric barcode representation
+    const barcodeHeight = height || 40;
+    const barcodeWidth = width || 120;
+    const barCount = 12; // Fixed bars for visual representation
+    const barWidth = barcodeWidth / barCount;
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${barcodeWidth}" height="${barcodeHeight}">`;
+    svg += `<rect fill="white" width="${barcodeWidth}" height="${barcodeHeight}"/>`;
+    const nisDigits = nis.replace(/\D/g, '').padStart(8, '0').slice(0, 8);
+    for (let i = 0; i < barCount; i++) {
+        const digitIndex = i % nisDigits.length;
+        const digit = parseInt(nisDigits[digitIndex] || '0', 10);
+        const shouldDraw = (digit * (i + 1)) % 3 !== 0;
+        const barHeight = shouldDraw ? barcodeHeight * 0.8 : barcodeHeight * 0.4;
+        const yPos = (barcodeHeight - barHeight) / 2;
+        svg += `<rect x="${i * barWidth + 1}" y="${yPos}" width="${barWidth - 2}" height="${barHeight}" fill="black"/>`;
+    }
+    svg += `</svg>`;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+};
 
 // --- BIODATA ---
 
@@ -91,7 +140,7 @@ export const generateBiodataReports = (data: Santri[], settings: PondokSettings,
 // --- KARTU SANTRI ---
 
 const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
-    const { cardDesign, cardValidUntil, cardFields, cardWidth, cardHeight, cardValidityMode } = options || {};
+    const { cardDesign, cardValidUntil, cardFields, cardWidth, cardHeight, cardValidityMode, cardShowQRCode, cardQRCodeType } = options || {};
     const rombel = settings.rombel.find(r => r.id === santri.rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;

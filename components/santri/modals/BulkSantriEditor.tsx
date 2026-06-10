@@ -46,6 +46,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [anchorCell, setAnchorCell] = useState<GridCellPosition>(null);
     const [activeCell, setActiveCell] = useState<GridCellPosition>(null);
+    const [focusedCell, setFocusedCell] = useState<GridCellPosition>(null);
     const [lastJumpedErrorKey, setLastJumpedErrorKey] = useState<string | null>(null);
     const [isDesktopViewport, setIsDesktopViewport] = useState(
         typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)').matches : true
@@ -1693,11 +1694,51 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                     clearGridSelection();
                                     return;
                                 }
+                                // Arrow key navigation between cells
+                                if (focusedCell && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                                    e.preventDefault();
+                                    // Total navigable columns: 1 (Nama) + 11 (Identitas) + 5 (Akademik) + 6 (Alamat) + 9 (Ayah) + 9 (Ibu) + 7 (Wali) = 48
+                                    // Plus 1 for delete button in add mode = 49
+                                    const totalCols = mode === 'add' ? 49 : 48;
+                                    let nextRow = focusedCell.rowIndex;
+                                    let nextCol = focusedCell.colIndex;
+
+                                    if (e.key === 'ArrowUp') nextRow = Math.max(0, focusedCell.rowIndex - 1);
+                                    if (e.key === 'ArrowDown') nextRow = Math.min(mergedRows.length - 1, focusedCell.rowIndex + 1);
+                                    if (e.key === 'ArrowLeft') nextCol = Math.max(1, focusedCell.colIndex - 1); // Min is 1 (skip No column)
+                                    if (e.key === 'ArrowRight') nextCol = Math.min(totalCols, focusedCell.colIndex + 1);
+
+                                    const cellId = `cell-${nextRow}-${nextCol}`;
+                                    const nextInput = document.getElementById(cellId) as HTMLInputElement;
+                                    if (nextInput) {
+                                        nextInput.focus();
+                                        nextInput.select();
+                                        setFocusedCell({ rowIndex: nextRow, colIndex: nextCol });
+                                    }
+                                    return;
+                                }
+                                // Enter/Tab moves to next row
+                                if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+                                    if (focusedCell) {
+                                        e.preventDefault();
+                                        const nextRow = focusedCell.rowIndex + 1;
+                                        if (nextRow < mergedRows.length) {
+                                            const nextInput = document.getElementById(`cell-${nextRow}-${focusedCell.colIndex}`) as HTMLInputElement;
+                                            if (nextInput) {
+                                                nextInput.focus();
+                                                nextInput.select();
+                                                setFocusedCell({ rowIndex: nextRow, colIndex: focusedCell.colIndex });
+                                            }
+                                        }
+                                    }
+                                    return;
+                                }
                             }}
                             onFocusCapture={(e) => {
                                 const pos = getCellPositionFromEventTarget(e.target as HTMLElement);
                                 if (!pos) return;
                                 setActiveCell(pos);
+                                setFocusedCell(pos);
                             }}
                             onMouseDownCapture={(e) => {
                                 const pos = getCellPositionFromEventTarget(e.target as HTMLElement);
@@ -1820,6 +1861,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                             <td className="px-2 py-2 bg-white group-hover:bg-gray-50 md:sticky md:left-10 border-r md:z-10 md:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                                                 <input
                                                     type="text"
+                                                    id={`cell-${index}-1`}
                                                     value={row.namaLengkap}
                                                     onChange={e => updateRow(row.tempId, 'namaLengkap', e.target.value)}
                                                     className={getCellInputClass(row.tempId, 'namaLengkap', 'w-full border-gray-300 rounded text-sm focus:ring-teal-500 focus:border-teal-500 h-9 px-2')}
@@ -1831,11 +1873,12 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                             </td>
 
                                             {/* Identitas */}
-                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.namaHijrah} onChange={e => updateRow(row.tempId, 'namaHijrah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" id={`cell-${index}-2`} value={row.namaHijrah} onChange={e => updateRow(row.tempId, 'namaHijrah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                              <td className="px-2 py-2 bg-blue-50/10">
                                                 <div className="flex gap-1">
                                                     <input
                                                         type="text"
+                                                        id={`cell-${index}-3`}
                                                         value={row.nis}
                                                         onChange={e => updateRow(row.tempId, 'nis', e.target.value)}
                                                         className={getCellInputClass(row.tempId, 'nis', 'w-full border-gray-300 rounded text-sm h-9 px-2')}
@@ -1855,6 +1898,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                             <td className="px-2 py-2 bg-blue-50/10">
                                                 <input
                                                     type="text"
+                                                    id={`cell-${index}-4`}
                                                     value={row.nik}
                                                     onChange={e => updateRow(row.tempId, 'nik', e.target.value)}
                                                     className={getCellInputClass(row.tempId, 'nik', 'w-full border-gray-300 rounded text-sm h-9 px-2')}
@@ -1863,16 +1907,17 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                                     data-grid-field="nik"
                                                 />
                                             </td>
-                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.nisn} onChange={e => updateRow(row.tempId, 'nisn', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" id={`cell-${index}-5`} value={row.nisn} onChange={e => updateRow(row.tempId, 'nisn', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-blue-50/10">
-                                                <select value={row.jenisKelamin} onChange={e => updateRow(row.tempId, 'jenisKelamin', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-6`} value={row.jenisKelamin} onChange={e => updateRow(row.tempId, 'jenisKelamin', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option>
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.tempatLahir} onChange={e => updateRow(row.tempId, 'tempatLahir', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" id={`cell-${index}-7`} value={row.tempatLahir} onChange={e => updateRow(row.tempId, 'tempatLahir', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-blue-50/10">
                                                 <input
                                                     type="text"
+                                                    id={`cell-${index}-8`}
                                                     placeholder="dd/mm/yyyy"
                                                     value={row.tanggalLahir}
                                                     onChange={e => updateRow(row.tempId, 'tanggalLahir', e.target.value)}
@@ -1883,12 +1928,12 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                                 />
                                             </td>
                                             <td className="px-2 py-2 bg-blue-50/10">
-                                                 <select value={row.kewarganegaraan} onChange={e => updateRow(row.tempId, 'kewarganegaraan', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                 <select id={`cell-${index}-9`} value={row.kewarganegaraan} onChange={e => updateRow(row.tempId, 'kewarganegaraan', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="WNI">WNI</option><option value="WNA">WNA</option><option value="Keturunan">Keturunan</option>
                                                 </select>
                                             </td>
                                             <td className="px-2 py-2 bg-blue-50/10">
-                                                 <select value={row.statusKeluarga} onChange={e => updateRow(row.tempId, 'statusKeluarga', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                 <select id={`cell-${index}-10`} value={row.statusKeluarga} onChange={e => updateRow(row.tempId, 'statusKeluarga', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>
                                                     <option value="Anak Kandung">Anak Kandung</option>
                                                     <option value="Anak Tiri">Anak Tiri</option>
@@ -1897,18 +1942,19 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                                 </select>
                                             </td>
                                             <td className="px-2 py-2 bg-blue-50/10">
-                                                 <select value={row.jenisSantri} onChange={e => updateRow(row.tempId, 'jenisSantri', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                 <select id={`cell-${index}-11`} value={row.jenisSantri} onChange={e => updateRow(row.tempId, 'jenisSantri', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="Mondok - Baru">Mondok - Baru</option>
                                                     <option value="Mondok - Pindahan">Mondok - Pindahan</option>
                                                     <option value="Laju - Baru">Laju - Baru</option>
                                                     <option value="Laju - Pindahan">Laju - Pindahan</option>
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" value={row.berkebutuhanKhusus} onChange={e => updateRow(row.tempId, 'berkebutuhanKhusus', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-blue-50/10"><input type="text" id={`cell-${index}-12`} value={row.berkebutuhanKhusus} onChange={e => updateRow(row.tempId, 'berkebutuhanKhusus', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
 
                                             {/* Akademik */}
                                             <td className="px-2 py-2 bg-green-50/10">
                                                 <select
+                                                    id={`cell-${index}-13`}
                                                     value={row.jenjangId}
                                                     onChange={e => updateRow(row.tempId, 'jenjangId', e.target.value)}
                                                     className={getCellInputClass(row.tempId, 'jenjangId', 'w-full border-gray-300 rounded text-sm h-9 px-1')}
@@ -1921,6 +1967,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                             </td>
                                             <td className="px-2 py-2 bg-green-50/10">
                                                 <select
+                                                    id={`cell-${index}-14`}
                                                     value={row.kelasId}
                                                     onChange={e => updateRow(row.tempId, 'kelasId', e.target.value)}
                                                     disabled={!row.jenjangId}
@@ -1934,6 +1981,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                             </td>
                                             <td className="px-2 py-2 bg-green-50/10">
                                                 <select
+                                                    id={`cell-${index}-15`}
                                                     value={row.rombelId}
                                                     onChange={e => updateRow(row.tempId, 'rombelId', e.target.value)}
                                                     disabled={!row.kelasId}
@@ -1947,6 +1995,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                             </td>
                                             <td className="px-2 py-2 bg-green-50/10">
                                                 <input
+                                                    id={`cell-${index}-16`}
                                                     type="text"
                                                     placeholder="dd/mm/yyyy"
                                                     value={row.tanggalMasuk}
@@ -1959,6 +2008,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                             </td>
                                             <td className="px-2 py-2 bg-green-50/10">
                                                  <select
+                                                    id={`cell-${index}-17`}
                                                     value={row.status}
                                                     onChange={e => updateRow(row.tempId, 'status', e.target.value)}
                                                     className={getCellInputClass(row.tempId, 'status', 'w-full border-gray-300 rounded text-sm h-9 px-1')}
@@ -1971,83 +2021,83 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                             </td>
 
                                             {/* Alamat */}
-                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" value={row.alamat?.detail} onChange={e => updateRow(row.tempId, 'alamat.detail', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" placeholder="Jalan, RT/RW" /></td>
-                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" value={row.alamat?.desaKelurahan} onChange={e => updateRow(row.tempId, 'alamat.desaKelurahan', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" value={row.alamat?.kecamatan} onChange={e => updateRow(row.tempId, 'alamat.kecamatan', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" value={row.alamat?.kabupatenKota} onChange={e => updateRow(row.tempId, 'alamat.kabupatenKota', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" value={row.alamat?.provinsi} onChange={e => updateRow(row.tempId, 'alamat.provinsi', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" value={row.alamat?.kodePos} onChange={e => updateRow(row.tempId, 'alamat.kodePos', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" id={`cell-${index}-18`} value={row.alamat?.detail} onChange={e => updateRow(row.tempId, 'alamat.detail', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" placeholder="Jalan, RT/RW" /></td>
+                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" id={`cell-${index}-19`} value={row.alamat?.desaKelurahan} onChange={e => updateRow(row.tempId, 'alamat.desaKelurahan', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" id={`cell-${index}-20`} value={row.alamat?.kecamatan} onChange={e => updateRow(row.tempId, 'alamat.kecamatan', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" id={`cell-${index}-21`} value={row.alamat?.kabupatenKota} onChange={e => updateRow(row.tempId, 'alamat.kabupatenKota', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" id={`cell-${index}-22`} value={row.alamat?.provinsi} onChange={e => updateRow(row.tempId, 'alamat.provinsi', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-yellow-50/10"><input type="text" id={`cell-${index}-23`} value={row.alamat?.kodePos} onChange={e => updateRow(row.tempId, 'alamat.kodePos', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
 
                                             {/* Data Ayah */}
-                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.namaAyah} onChange={e => updateRow(row.tempId, 'namaAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" id={`cell-${index}-24`} value={row.namaAyah} onChange={e => updateRow(row.tempId, 'namaAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-indigo-50/10">
-                                                <select value={row.statusAyah} onChange={e => updateRow(row.tempId, 'statusAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-25`} value={row.statusAyah} onChange={e => updateRow(row.tempId, 'statusAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{statusHidupOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.tempatLahirAyah} onChange={e => updateRow(row.tempId, 'tempatLahirAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" placeholder="dd/mm/yyyy" value={row.tanggalLahirAyah} onChange={e => updateRow(row.tempId, 'tanggalLahirAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
-                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.nikAyah} onChange={e => updateRow(row.tempId, 'nikAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" id={`cell-${index}-26`} value={row.tempatLahirAyah} onChange={e => updateRow(row.tempId, 'tempatLahirAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" id={`cell-${index}-27`} placeholder="dd/mm/yyyy" value={row.tanggalLahirAyah} onChange={e => updateRow(row.tempId, 'tanggalLahirAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
+                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" id={`cell-${index}-28`} value={row.nikAyah} onChange={e => updateRow(row.tempId, 'nikAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-indigo-50/10">
-                                                <select value={row.pendidikanAyah} onChange={e => updateRow(row.tempId, 'pendidikanAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-29`} value={row.pendidikanAyah} onChange={e => updateRow(row.tempId, 'pendidikanAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{pendidikanOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.pekerjaanAyah} onChange={e => updateRow(row.tempId, 'pekerjaanAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" id={`cell-${index}-30`} value={row.pekerjaanAyah} onChange={e => updateRow(row.tempId, 'pekerjaanAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-indigo-50/10">
-                                                <select value={row.penghasilanAyah} onChange={e => updateRow(row.tempId, 'penghasilanAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-31`} value={row.penghasilanAyah} onChange={e => updateRow(row.tempId, 'penghasilanAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{penghasilanOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" value={row.teleponAyah} onChange={e => updateRow(row.tempId, 'teleponAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-indigo-50/10"><input type="text" id={`cell-${index}-32`} value={row.teleponAyah} onChange={e => updateRow(row.tempId, 'teleponAyah', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
 
                                              {/* Data Ibu */}
-                                             <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.namaIbu} onChange={e => updateRow(row.tempId, 'namaIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                             <td className="px-2 py-2 bg-pink-50/10"><input type="text" id={`cell-${index}-33`} value={row.namaIbu} onChange={e => updateRow(row.tempId, 'namaIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-pink-50/10">
-                                                <select value={row.statusIbu} onChange={e => updateRow(row.tempId, 'statusIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-34`} value={row.statusIbu} onChange={e => updateRow(row.tempId, 'statusIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{statusHidupOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.tempatLahirIbu} onChange={e => updateRow(row.tempId, 'tempatLahirIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
-                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" placeholder="dd/mm/yyyy" value={row.tanggalLahirIbu} onChange={e => updateRow(row.tempId, 'tanggalLahirIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
-                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.nikIbu} onChange={e => updateRow(row.tempId, 'nikIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" id={`cell-${index}-35`} value={row.tempatLahirIbu} onChange={e => updateRow(row.tempId, 'tempatLahirIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" id={`cell-${index}-36`} placeholder="dd/mm/yyyy" value={row.tanggalLahirIbu} onChange={e => updateRow(row.tempId, 'tanggalLahirIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1" /></td>
+                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" id={`cell-${index}-37`} value={row.nikIbu} onChange={e => updateRow(row.tempId, 'nikIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-pink-50/10">
-                                                <select value={row.pendidikanIbu} onChange={e => updateRow(row.tempId, 'pendidikanIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-38`} value={row.pendidikanIbu} onChange={e => updateRow(row.tempId, 'pendidikanIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{pendidikanOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.pekerjaanIbu} onChange={e => updateRow(row.tempId, 'pekerjaanIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" id={`cell-${index}-39`} value={row.pekerjaanIbu} onChange={e => updateRow(row.tempId, 'pekerjaanIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-pink-50/10">
-                                                <select value={row.penghasilanIbu} onChange={e => updateRow(row.tempId, 'penghasilanIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-40`} value={row.penghasilanIbu} onChange={e => updateRow(row.tempId, 'penghasilanIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{penghasilanOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" value={row.teleponIbu} onChange={e => updateRow(row.tempId, 'teleponIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-pink-50/10"><input type="text" id={`cell-${index}-41`} value={row.teleponIbu} onChange={e => updateRow(row.tempId, 'teleponIbu', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
 
                                             {/* Data Wali */}
-                                            <td className="px-2 py-2 bg-gray-100"><input type="text" value={row.namaWali} onChange={e => updateRow(row.tempId, 'namaWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-gray-100"><input type="text" id={`cell-${index}-42`} value={row.namaWali} onChange={e => updateRow(row.tempId, 'namaWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-gray-100">
-                                                <select value={row.statusWali} onChange={e => updateRow(row.tempId, 'statusWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-43`} value={row.statusWali} onChange={e => updateRow(row.tempId, 'statusWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{['Kakek', 'Paman (Saudara Ayah)', 'Saudara Laki-laki Seayah', 'Saudara Laki-laki Kandung', 'Orang Tua Angkat', 'Orang Tua Asuh', 'Orang Tua Tiri', 'Kerabat Mahram Lainnya', 'Lainnya'].map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
                                             <td className="px-2 py-2 bg-gray-100">
-                                                <select value={row.statusHidupWali} onChange={e => updateRow(row.tempId, 'statusHidupWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-44`} value={row.statusHidupWali} onChange={e => updateRow(row.tempId, 'statusHidupWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{statusHidupOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
                                             <td className="px-2 py-2 bg-gray-100">
-                                                <select value={row.pendidikanWali} onChange={e => updateRow(row.tempId, 'pendidikanWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-45`} value={row.pendidikanWali} onChange={e => updateRow(row.tempId, 'pendidikanWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{pendidikanOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-gray-100"><input type="text" value={row.pekerjaanWali} onChange={e => updateRow(row.tempId, 'pekerjaanWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-gray-100"><input type="text" id={`cell-${index}-46`} value={row.pekerjaanWali} onChange={e => updateRow(row.tempId, 'pekerjaanWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
                                             <td className="px-2 py-2 bg-gray-100">
-                                                <select value={row.penghasilanWali} onChange={e => updateRow(row.tempId, 'penghasilanWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
+                                                <select id={`cell-${index}-47`} value={row.penghasilanWali} onChange={e => updateRow(row.tempId, 'penghasilanWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-1">
                                                     <option value="">- Pilih -</option>{penghasilanOptions.map(o => <option key={o} value={o}>{o}</option>)}
                                                 </select>
                                             </td>
-                                            <td className="px-2 py-2 bg-gray-100"><input type="text" value={row.teleponWali} onChange={e => updateRow(row.tempId, 'teleponWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
+                                            <td className="px-2 py-2 bg-gray-100"><input type="text" id={`cell-${index}-48`} value={row.teleponWali} onChange={e => updateRow(row.tempId, 'teleponWali', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" /></td>
 
                                             {mode === 'add' && (
                                                 <td className="px-2 py-2 text-center border-l">

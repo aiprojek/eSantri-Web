@@ -548,6 +548,15 @@ export interface WaTemplate {
     lastModified?: number;
 }
 
+export interface DigitalAsset {
+    id: string;
+    type: 'ttd' | 'stempel' | 'kop';
+    namaPemilik: string;
+    jabatan: string;
+    base64Image: string;
+    lastModified?: number;
+}
+
 export interface PondokSettings {
     id?: number;
     namaYayasan: string;
@@ -809,17 +818,22 @@ export interface RaporRecord {
     jenjangId: number; // Snapshot
     kelasId: number; // Snapshot
     nilai: NilaiMapel[]; // Array of values
-    
+
+    // Tahfizh Data (Dynamic Tags)
+    tahfizhGanjil?: { averagePredikat: string; lastJuz: number; lastSurah: string; catatan: string };
+    tahfizhGenap?: { averagePredikat: string; lastJuz: number; lastSurah: string; catatan: string };
+    juzYangDiujikan?: number;
+
     // Sikap & Absensi (Summary)
     sakit: number;
     izin: number;
     alpha: number;
     kepribadian: { aspek: string; nilai: string }[];
     ekstrakurikuler: { kegiatan: string; nilai: string; keterangan: string }[];
-    
+
     catatanWaliKelas?: string;
     keputusan?: string; // Naik kelas / Lulus
-    
+
     tanggalRapor: string;
     customData?: string; // JSON string for flexible fields from dynamic templates
     lastModified?: number;
@@ -867,7 +881,8 @@ export interface TahfizhRecord {
     id: number;
     santriId: number;
     tanggal: string;
-    tipe: 'Ziyadah' | 'Murojaah' | 'Tasmi\'';
+    tipe: 'Ziyadah' | 'Murojaah' | "Tasmi'" | 'Ujian Hafalan';
+    sesiUjian?: 'Ganjil' | 'Genap' | 'Munaqosyah Khusus'; // Only used when tipe = 'Ujian Hafalan'
     juz: number;
     surah: string;
     ayatAwal: number;

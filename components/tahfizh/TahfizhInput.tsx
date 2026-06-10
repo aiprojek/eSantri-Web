@@ -21,6 +21,7 @@ export const TahfizhInput: React.FC = () => {
     const [filterRombel, setFilterRombel] = useState<number>(0);
 
     const [tipe, setTipe] = useState<TahfizhRecord['tipe']>('Ziyadah');
+    const [sesiUjian, setSesiUjian] = useState<TahfizhRecord['sesiUjian']>('Ganjil');
     const [juz, setJuz] = useState<number>(30); // Default Juz 30
     const [surahIndex, setSurahIndex] = useState<number>(77); // Default An-Naba (Index 77 in 0-based array is 78-AnNaba)
     const [ayatStart, setAyatStart] = useState<number>(1);
@@ -103,13 +104,14 @@ export const TahfizhInput: React.FC = () => {
                 santriId,
                 tanggal: new Date().toISOString().split('T')[0],
                 tipe,
+                sesiUjian: tipe === 'Ujian Hafalan' ? sesiUjian : undefined,
                 juz,
                 surah: currentSurah.name,
                 ayatAwal: ayatStart,
                 ayatAkhir: ayatEnd,
                 predikat,
                 catatan,
-                muhaffizhId: currentUser?.id 
+                muhaffizhId: currentUser?.id
             };
 
             await onSaveTahfizh(newRecord);
@@ -335,14 +337,15 @@ export const TahfizhInput: React.FC = () => {
                     {/* Jenis Setoran */}
                     <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Jenis Setoran</label>
-                        <div className="flex gap-3">
-                            {(['Ziyadah', 'Murojaah', 'Tasmi\''] as const).map(t => (
+                        <div className="flex flex-wrap gap-3">
+                            {(['Ziyadah', 'Murojaah', 'Tasmi\'', 'Ujian Hafalan'] as const).map(t => (
                                 <button
                                     key={t}
                                     onClick={() => setTipe(t)}
-                                    className={`flex-1 py-2.5 rounded-lg text-sm font-bold border transition-all ${
-                                        tipe === t 
-                                        ? 'bg-teal-600 text-white border-teal-600 shadow-md ring-2 ring-teal-200' 
+                                    className={`py-2.5 px-4 rounded-lg text-sm font-bold border transition-all ${
+                                        tipe === t
+                                        ? t === 'Ujian Hafalan' ? 'bg-amber-500 text-white border-amber-500 shadow-md ring-2 ring-amber-200'
+                                        : 'bg-teal-600 text-white border-teal-600 shadow-md ring-2 ring-teal-200'
                                         : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
                                     }`}
                                 >
@@ -350,6 +353,22 @@ export const TahfizhInput: React.FC = () => {
                                 </button>
                             ))}
                         </div>
+
+                        {/* Sesi Ujian - only show when Ujian Hafalan is selected */}
+                        {tipe === 'Ujian Hafalan' && (
+                            <div className="mt-3">
+                                <label className="block text-xs font-medium text-gray.700 mb-1">Sesi Ujian</label>
+                                <select
+                                    value={sesiUjian}
+                                    onChange={(e) => setSesiUjian(e.target.value as TahfizhRecord['sesiUjian'])}
+                                    className="w-full p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm focus:ring-amber-500 focus:border-amber-500"
+                                >
+                                    <option value="Ganjil">Ganjil</option>
+                                    <option value="Genap">Genap</option>
+                                    <option value="Munaqosyah Khusus">Munaqosyah Khusus</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     {/* Detail Hafalan */}

@@ -108,9 +108,12 @@ export const TahfizhReportTemplate: React.FC<TahfizhReportTemplateProps> = ({ sa
                                 <td className="border border-black p-2 text-center">{idx + 1}</td>
                                 <td className="border border-black p-2 text-center">{formatDate(rec.tanggal)}</td>
                                 <td className="border border-black p-2 text-center">
-                                    <span className={`px-1 rounded ${rec.tipe === 'Ziyadah' ? 'bg-green-100' : 'bg-blue-100'}`}>
+                                    <span className={`px-1 rounded ${rec.tipe === 'Ziyadah' ? 'bg-green-100' : rec.tipe === 'Murojaah' ? 'bg-blue-100' : 'bg-amber-100'}`}>
                                         {rec.tipe}
                                     </span>
+                                    {rec.sesiUjian && (
+                                        <span className="block text-[9px] text-gray-500 mt-0.5">{rec.sesiUjian}</span>
+                                    )}
                                 </td>
                                 <td className="border border-black p-2">
                                     <span className="font-semibold">Juz {rec.juz}</span>, {rec.surah} : {rec.ayatAwal}-{rec.ayatAkhir}

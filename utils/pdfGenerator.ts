@@ -356,16 +356,25 @@ export const printVisualPreview = async (elementId: string, paperSize: string): 
 // Method 2: Native Browser Print (Vector PDF)
 // This creates a temporary iframe, copies content + styles, and triggers the browser's print dialog.
 // This allows the user to "Save as PDF" with 100% perfect rendering (Vector text, sharp images).
-export const printToPdfNative = (elementId: string, fileName: string) => {
+interface PrintToPdfNativeOptions {
+    paperSize?: string;
+    orientation?: 'portrait' | 'landscape';
+    margin?: { top: number; right: number; bottom: number; left: number };
+}
+export const printToPdfNative = (elementId: string, fileName: string, options?: PrintToPdfNativeOptions) => {
     const element = document.getElementById(elementId);
     if (!element) return;
-    
+
+    const paperSize = options?.paperSize || 'A4';
+    const orientation = options?.orientation || 'portrait';
+    const margin = options?.margin;
+
     // Detect orientation from the preview content
-    const isLandscape = element.querySelector('.print-landscape') !== null;
-    const orientation = isLandscape ? 'landscape' : 'portrait';
+    const isLandscape = element.querySelector('.print-landscape') !== null || orientation === 'landscape';
+    const actualOrientation = isLandscape ? 'landscape' : 'portrait';
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isCalendarPrint = elementId === 'calendar-print-area';
-    
+
     // Keep outer wrapper id/class so print-specific selectors (e.g. #calendar-print-area) can apply correctly.
     const content = element.outerHTML;
 
@@ -378,7 +387,7 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
     iframe.style.height = '0';
     iframe.style.border = '0';
     document.body.appendChild(iframe);
-    
+
     const doc = iframe.contentWindow?.document;
     if(!doc) return;
 
@@ -387,31 +396,36 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
     document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => {
         styles += node.outerHTML;
     });
-    
+
+    // Build margin string
+    const marginStr = margin
+        ? `${margin.top}cm ${margin.right}cm ${margin.bottom}cm ${margin.left}cm`
+        : '0';
+
     // Add specific print overrides to ensure background colors print and layout is preserved
     styles += `
     <style>
         @media print {
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; -webkit-filter: opacity(1) !important; }
-            @page { margin: 0; size: ${isJadwalPrint ? 'A4 landscape' : `auto ${orientation}`}; }
-            .printable-content-wrapper { 
-                width: auto !important; 
+            @page { margin: ${marginStr}; size: ${paperSize} ${actualOrientation}; }
+            .printable-content-wrapper {
+                width: auto !important;
                 height: auto !important;
                 min-height: initial !important;
-                transform: none !important; 
-                margin: 0 !important; 
+                transform: none !important;
+                margin: 0 !important;
                 padding: 0 !important;
-                box-shadow: none !important; 
+                box-shadow: none !important;
                 overflow: visible !important;
                 display: block !important;
                 background-color: transparent !important;
             }
             /* Hide items tagged with no-print */
             .no-print { display: none !important; }
-            
+
             /* Ensure pages take full sheet and handle breaks */
-            .page-break-after { 
-                page-break-after: always !important; 
+            .page-break-after {
+                page-break-after: always !important;
                 break-after: page !important;
                 margin-top: 0 !important;
                 margin-bottom: 0 !important;
@@ -471,10 +485,10 @@ export const printToPdfNative = (elementId: string, fileName: string) => {
                 min-height: 0 !important;
                 overflow: visible !important;
             }
-            
+
             /* Reset card shadows for cleaner printing */
-            .rounded-lg, .rounded-xl, .shadow-lg, .shadow-md, .shadow-xl { 
-                box-shadow: none !important; 
+            .rounded-lg, .rounded-xl, .shadow-lg, .shadow-md, .shadow-xl {
+                box-shadow: none !important;
                 filter: none !important;
             }
             * { transition: none !important; animation: none !important; }

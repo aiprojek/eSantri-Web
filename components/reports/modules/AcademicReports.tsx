@@ -142,6 +142,37 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                     <p className="text-xs italic">{raporData.catatanWaliKelas || 'Tingkatkan terus prestasimu.'}</p>
                 </div>
 
+                {/* 4B. Dynamic Tags - Tahfizh */}
+                {(raporData.tahfizhGanjil || raporData.tahfizhGenap || raporData.juzYangDiujikan) && (
+                    <div className="mb-4 p-2 border border-black bg-gray-50" style={{ breakInside: 'avoid' }}>
+                        <h4 className="font-bold text-sm underline mb-2">D. PERKEMBANGAN TAHFIZHUL QUR'AN</h4>
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                            {raporData.tahfizhGanjil && (
+                                <div className="border border-gray-300 rounded p-2 bg-white">
+                                    <p className="font-semibold text-teal-700 mb-1">Semester Ganjil</p>
+                                    <p>Predikat Rata-rata: <span className="font-bold">{raporData.tahfizhGanjil.averagePredikat}</span></p>
+                                    <p>Posisi Terakhir: <span className="font-semibold">Juz {raporData.tahfizhGanjil.lastJuz}, {raporData.tahfizhGanjil.lastSurah}</span></p>
+                                    {raporData.tahfizhGanjil.catatan && <p className="italic text-gray-600">Catatan: {raporData.tahfizhGanjil.catatan}</p>}
+                                </div>
+                            )}
+                            {raporData.tahfizhGenap && (
+                                <div className="border border-gray-300 rounded p-2 bg-white">
+                                    <p className="font-semibold text-amber-700 mb-1">Semester Genap</p>
+                                    <p>Predikat Rata-rata: <span className="font-bold">{raporData.tahfizhGenap.averagePredikat}</span></p>
+                                    <p>Posisi Terakhir: <span className="font-semibold">Juz {raporData.tahfizhGenap.lastJuz}, {raporData.tahfizhGenap.lastSurah}</span></p>
+                                    {raporData.tahfizhGenap.catatan && <p className="italic text-gray-600">Catatan: {raporData.tahfizhGenap.catatan}</p>}
+                                </div>
+                            )}
+                            {raporData.juzYangDiujikan && (
+                                <div className="border border-gray-300 rounded p-2 bg-white">
+                                    <p className="font-semibold text-blue-700 mb-1">Juz yang Diujikan</p>
+                                    <p className="text-lg font-bold">Juz {raporData.juzYangDiujikan}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* 5. Keputusan */}
                 {options.semester === 'Genap' && (
                     <div className="mb-6 p-2 border border-black text-center font-bold bg-gray-100" style={{ breakInside: 'avoid' }}>
@@ -283,6 +314,21 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
     let tableRow = (s: Santri, i: number) => <></>;
     let orientation: 'portrait' | 'landscape' = 'portrait';
 
+    // Calculate days in month based on selected month for accurate attendance grid
+    const getDaysInMonth = (year: number, month: number) => {
+        return new Date(year, month, 0).getDate();
+    };
+
+    // Parse month from options.startMonth (format: YYYY-MM)
+    const parseMonthFromOption = (dateStr: string) => {
+        const [year, month] = dateStr.split('-').map(Number);
+        return { year, month };
+    };
+
+    // Calculate days for the attendance grid
+    const { year: startYear, month: startMonth } = parseMonthFromOption(options.startMonth || new Date().toISOString().slice(0, 7));
+    const daysInSelectedMonth = getDaysInMonth(startYear, startMonth);
+
     if (type === 'Absensi') {
         title = `LEMBAR ABSENSI BULAN ${options.attendanceCalendar === 'Masehi' ? new Date(options.startMonth).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }).toUpperCase() : `HIJRIAH`}`;
         orientation = 'landscape';
@@ -291,11 +337,11 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                 <tr>
                     <th rowSpan={2} className="border border-black p-1 w-8">No</th>
                     <th rowSpan={2} className="border border-black p-1 w-48 text-left">Nama Santri</th>
-                    <th colSpan={31} className="border border-black p-1">Tanggal</th>
+                    <th colSpan={daysInSelectedMonth} className="border border-black p-1">Tanggal</th>
                     <th colSpan={3} className="border border-black p-1">Rekap</th>
                 </tr>
                 <tr>
-                    {[...Array(31)].map((_, i) => <th key={i} className="border border-black w-6 text-[8pt]">{i+1}</th>)}
+                    {[...Array(daysInSelectedMonth)].map((_, i) => <th key={i} className="border border-black w-6 text-[8pt]">{i+1}</th>)}
                     <th className="border border-black w-8 bg-gray-100">S</th><th className="border border-black w-8 bg-gray-100">I</th><th className="border border-black w-8 bg-gray-100">A</th>
                 </tr>
             </thead>
@@ -304,7 +350,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             <tr key={s.id} className="h-6">
                 <td className="border border-black">{i+1}</td>
                 <td className="border border-black text-left px-2 truncate max-w-[150px]">{s.namaLengkap} {s.status === 'Hiatus' && <span className="italic text-xs text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>}</td>
-                {[...Array(31)].map((_, idx) => <td key={idx} className="border border-black"></td>)}
+                {[...Array(daysInSelectedMonth)].map((_, idx) => <td key={idx} className="border border-black"></td>)}
                 <td className="border border-black bg-gray-50"></td><td className="border border-black bg-gray-50"></td><td className="border border-black bg-gray-50"></td>
             </tr>
         );
@@ -356,10 +402,46 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             return labels[id] || id;
         };
         const getColumnClass = (id: string) => {
-            if (id === 'no') return 'border border-black p-2 text-center w-8';
-            if (id === 'lp') return 'border border-black p-2 text-center w-10';
-            if (id === 'alamat') return 'border border-black p-2 w-48';
-            return 'border border-black p-2';
+            // Define explicit widths for ALL columns for consistent table layout
+            const baseClass = 'border border-black p-2';
+            const widthMap: Record<string, string> = {
+                no: 'border border-black p-2 text-center w-8',
+                lp: 'border border-black p-2 text-center w-10',
+                nis: 'border border-black p-2 w-20',
+                nisn: 'border border-black p-2 w-20',
+                nik: 'border border-black p-2 w-24',
+                namaLengkap: 'border border-black p-2 w-44',
+                namaHijrah: 'border border-black p-2 w-32',
+                tempatLahir: 'border border-black p-2 w-24',
+                tanggalLahir: 'border border-black p-2 w-28',
+                ttl: 'border border-black p-2 w-44',
+                kewarganegaraan: 'border border-black p-2 w-20',
+                ayah: 'border border-black p-2 w-32',
+                ibu: 'border border-black p-2 w-32',
+                wali: 'border border-black p-2 w-32',
+                telepon: 'border border-black p-2 w-24',
+                teleponAyah: 'border border-black p-2 w-24',
+                teleponIbu: 'border border-black p-2 w-24',
+                teleponWali: 'border border-black p-2 w-24',
+                jenjang: 'border border-black p-2 w-20',
+                kelas: 'border border-black p-2 w-16',
+                rombel: 'border border-black p-2 w-20',
+                status: 'border border-black p-2 w-16',
+                jenisSantri: 'border border-black p-2 w-20',
+                tanggalMasuk: 'border border-black p-2 w-28',
+                alamat: 'border border-black p-2 w-48',
+                desa: 'border border-black p-2 w-24',
+                kecamatan: 'border border-black p-2 w-24',
+                kabupaten: 'border border-black p-2 w-24',
+                provinsi: 'border border-black p-2 w-20',
+                kodePos: 'border border-black p-2 w-16',
+                sekolahAsal: 'border border-black p-2 w-32',
+                anakKe: 'border border-black p-2 w-12',
+                jumlahSaudara: 'border border-black p-2 w-12',
+                tinggiBadan: 'border border-black p-2 w-16',
+                beratBadan: 'border border-black p-2 w-16',
+            };
+            return widthMap[id] || baseClass;
         };
         tableHeader = (
             <thead className="bg-gray-200">
@@ -423,7 +505,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                                 <>
                                     <span className="font-semibold">{valueMap[col]}</span>
                                     {s.status === 'Hiatus' && (
-                                        <span className="italic text-xs font-normal text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>
+                                        <span className="italic text-xs text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block">Hiatus</span>
                                     )}
                                 </>
                             ) : (
@@ -522,7 +604,22 @@ export const JurnalMengajarTemplate: React.FC<{ santriList: Santri[]; settings: 
          });
     }
     
-    const recordsToday = options.jurnalMengajarList?.filter((j: any) => j.rombelId === rombel?.id && j.tanggal === options.jurnalTanggalFilter)?.sort((a: any, b: any) => (a.jamPelajaranIds?.[0] || 0) - (b.jamPelajaranIds?.[0] || 0)) || [];
+    const startDate = options.jurnalTanggalFilter || new Date().toISOString().split('T')[0];
+    const endDate = options.jurnalEndDate || startDate;
+    const selectedMapelId = Number(options.jurnalMapelFilter || 0) || null;
+
+    const filteredRecords = (options.jurnalMengajarList || [])
+        .filter((j: any) => j.rombelId === rombel?.id)
+        .filter((j: any) => j.tanggal >= startDate && j.tanggal <= endDate)
+        .filter((j: any) => selectedMapelId ? j.mataPelajaranId === selectedMapelId : true)
+        .sort((a: any, b: any) => {
+            if (a.tanggal !== b.tanggal) return a.tanggal.localeCompare(b.tanggal);
+            return (a.jamPelajaranIds?.[0] || 0) - (b.jamPelajaranIds?.[0] || 0);
+        });
+
+    const selectedMapelName = selectedMapelId
+        ? settings.mataPelajaran.find(m => m.id === selectedMapelId)?.nama || '-'
+        : 'Semua Mata Pelajaran';
 
 
     return (
@@ -531,7 +628,8 @@ export const JurnalMengajarTemplate: React.FC<{ santriList: Santri[]; settings: 
                  <AcademicHeader settings={settings} title={`JURNAL MENGAJAR (AGENDA KELAS)`} meta={{ jenjang: jenjang?.nama, kelas: kelas?.nama, rombel: rombel?.nama, tahunAjaran: options.tahunAjaran, semester: options.semester }} />
                  
                  <div className="mb-4">
-                     <p className="font-bold">Tanggal: {new Date(options.jurnalTanggalFilter || new Date().toISOString().split('T')[0]).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'})}</p>
+                     <p className="font-bold">Periode: {formatDate(startDate)} s/d {formatDate(endDate)}</p>
+                     <p className="text-xs">Mapel: {selectedMapelName}</p>
                  </div>
 
                  <table className="w-full border-collapse border border-black text-xs text-left">
@@ -545,13 +643,16 @@ export const JurnalMengajarTemplate: React.FC<{ santriList: Santri[]; settings: 
                         </tr>
                     </thead>
                     <tbody>
-                        {recordsToday.length > 0 ? recordsToday.map((r: any) => {
+                        {filteredRecords.length > 0 ? filteredRecords.map((r: any) => {
                              const guru = settings.tenagaPengajar.find(t => t.id === r.guruId);
                              const mapel = settings.mataPelajaran.find(m => m.id === r.mataPelajaranId);
                              const tipe = r.tipeEntri || (r.mataPelajaranId && r.sesiEkstra?.length ? 'campuran' : r.sesiEkstra?.length ? 'ekstra' : 'kbm');
                              return (
                                  <tr key={r.id}>
-                                     <td className="border border-black p-2 text-center align-top">{r.jamPelajaranIds?.join(', ')}</td>
+                                     <td className="border border-black p-2 text-center align-top">
+                                        <div>{r.jamPelajaranIds?.join(', ') || '-'}</div>
+                                        <div className="text-[10px] text-gray-600 mt-1">{formatDate(r.tanggal)}</div>
+                                     </td>
                                      <td className="border border-black p-2 font-semibold align-top">
                                         {mapel?.nama || 'Kegiatan Non-Mapel'}
                                         <div className="text-[10px] text-gray-600 mt-0.5 uppercase">{tipe}</div>
@@ -562,7 +663,7 @@ export const JurnalMengajarTemplate: React.FC<{ santriList: Santri[]; settings: 
                                  </tr>
                              )
                         }) : (
-                            <tr><td colSpan={5} className="border border-black p-4 text-center italic text-gray-500">Tidak ada data jurnal mengajar di tanggal tersebut.</td></tr>
+                            <tr><td colSpan={5} className="border border-black p-4 text-center italic text-gray-500">Tidak ada data jurnal mengajar pada periode/filter ini.</td></tr>
                         )}
                     </tbody>
                  </table>

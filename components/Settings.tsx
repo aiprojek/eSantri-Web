@@ -12,13 +12,15 @@ const TabNis = React.lazy(() => import('./settings/tabs/TabNis').then((module) =
 const TabCloud = React.lazy(() => import('./settings/tabs/TabCloud').then((module) => ({ default: module.TabCloud })));
 const TabBackup = React.lazy(() => import('./settings/tabs/TabBackup').then((module) => ({ default: module.TabBackup })));
 const TabDiagnostik = React.lazy(() => import('./settings/tabs/TabDiagnostik').then((module) => ({ default: module.TabDiagnostik })));
+const TabDigitalAset = React.lazy(() => import('./settings/tabs/TabDigitalAset').then((module) => ({ default: module.TabDigitalAset })));
 
-type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'backup' | 'diagnostik';
+type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'backup' | 'diagnostik' | 'digitalaset';
 
 const SETTINGS_TABS: HeaderTabItem<SettingsTab>[] = [
     { value: 'umum', label: 'Umum', icon: 'bi-info-circle' },
     { value: 'akun', label: 'User & Keamanan', icon: 'bi-shield-lock' },
     { value: 'nis', label: 'Generator NIS', icon: 'bi-123' },
+    { value: 'digitalaset', label: 'Aset Digital', icon: 'bi-image' },
     { value: 'cloud', label: 'Sync Cloud', icon: 'bi-cloud-arrow-up' },
     { value: 'backup', label: 'Backup & Restore', icon: 'bi-hdd-fill' },
     { value: 'diagnostik', label: 'Diagnosa', icon: 'bi-heart-pulse-fill' },
@@ -161,6 +163,7 @@ const Settings: React.FC = () => {
                     {activeTab === 'cloud' && <TabCloud localSettings={localSettings} setLocalSettings={setLocalSettings} onSaveSettings={onSaveSettings} />}
                     {activeTab === 'backup' && <TabBackup localSettings={localSettings} setLocalSettings={setLocalSettings} />}
                     {activeTab === 'diagnostik' && <TabDiagnostik />}
+                    {activeTab === 'digitalaset' && <TabDigitalAset />}
                 </Suspense>
             </div>
             

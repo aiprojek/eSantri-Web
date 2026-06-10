@@ -346,11 +346,12 @@ export const TahfizhProgressTemplate: React.FC<{ settings: PondokSettings; santr
     const rows = santriList.map(s => {
         const rec = tahfizhList.filter(t => t.santriId === s.id);
         const ziyadah = rec.filter(t => t.tipe === 'Ziyadah').length;
+        const ujian = rec.filter(t => t.tipe === 'Ujian Hafalan').length;
         const murojaah = rec.filter(t => t.tipe === 'Murojaah').length;
         const tasmi = rec.filter(t => t.tipe === "Tasmi'").length;
         const lancar = rec.filter(t => t.predikat === 'Sangat Lancar' || t.predikat === 'Lancar').length;
         const persen = rec.length > 0 ? Math.round((lancar / rec.length) * 100) : 0;
-        return { santri: s, total: rec.length, ziyadah, murojaah, tasmi, persen };
+        return { santri: s, total: rec.length, ziyadah, murojaah, tasmi, ujian, persen };
     }).sort((a, b) => b.total - a.total);
 
     return (
@@ -368,6 +369,7 @@ export const TahfizhProgressTemplate: React.FC<{ settings: PondokSettings; santr
                             <th className="p-2 border border-black text-center">Ziyadah</th>
                             <th className="p-2 border border-black text-center">Murojaah</th>
                             <th className="p-2 border border-black text-center">Tasmi'</th>
+                            <th className="p-2 border border-black text-center">Ujian</th>
                             <th className="p-2 border border-black text-center">% Lancar</th>
                         </tr>
                     </thead>
@@ -381,12 +383,13 @@ export const TahfizhProgressTemplate: React.FC<{ settings: PondokSettings; santr
                                 <td className="p-2 border border-black text-center">{row.ziyadah}</td>
                                 <td className="p-2 border border-black text-center">{row.murojaah}</td>
                                 <td className="p-2 border border-black text-center">{row.tasmi}</td>
+                                <td className="p-2 border border-black text-center">{row.ujian}</td>
                                 <td className="p-2 border border-black text-center font-semibold">{row.persen}%</td>
                             </tr>
                         ))}
                         {rows.length === 0 && (
                             <tr>
-                                <td colSpan={8} className="p-4 border border-black text-center italic text-gray-500">Belum ada data tahfizh pada filter ini.</td>
+                                <td colSpan={9} className="p-4 border border-black text-center italic text-gray-500">Belum ada data tahfizh pada filter ini.</td>
                             </tr>
                         )}
                     </tbody>

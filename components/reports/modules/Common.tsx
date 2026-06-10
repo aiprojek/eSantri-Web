@@ -3,6 +3,21 @@ import React from 'react';
 import { Santri } from '../../../types';
 import { getHijriDate } from '../../../utils/formatters';
 
+// --- REPORT DESIGN CONSTANTS ---
+export const REPORT_FONT_SIZE = '10pt';
+export const REPORT_FONT_SIZE_BIODATA = '12pt';
+export const REPORT_FONT_SIZE_FORMULIR = '11pt';
+export const REPORT_LINE_HEIGHT = 1.4;
+
+// --- REUSABLE COMPONENTS ---
+
+// Standardized Hiatus badge for consistent display across all reports
+export const HiatusBadge: React.FC<{ className?: string }> = ({ className = '' }) => (
+    <span className={`italic text-xs text-red-600 print:text-black print:font-bold border-red-200 border rounded px-1 ml-1 scale-75 inline-block ${className}`}>
+        Hiatus
+    </span>
+);
+
 // --- Utility Functions ---
 
 export const lightenColor = (hex: string, percent: number): string => {
@@ -60,8 +75,8 @@ export const formatRupiah = (number: number) => {
 };
 
 // --- Helper for Pagination ---
-export const chunkArray = <T,>(arr: T[], size: number) => 
-    Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+export const chunkArray = <T,>(arr: T[], size: number) =>
+    Array.from({ length: Math.ceil(arr.length / size) }, (_: unknown, i: number) =>
         arr.slice(i * size, i * size + size)
     );
 
@@ -79,6 +94,16 @@ export const formatAlamat = (alamat?: any) => {
 
 // --- Components ---
 
+// Standardized page break helper for table rows
+export const TableRowBreakAvoid: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+    <tr className={className} style={{ breakInside: 'avoid' }}>{children}</tr>
+);
+
+// Standardized break-avoid wrapper for sections
+export const BreakAvoidSection: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+    <div className={className} style={{ breakInside: 'avoid' }}>{children}</div>
+);
+
 export const ReportFooter: React.FC = () => (
     <div
         className="report-signature-footer print-meta border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full"
@@ -91,6 +116,15 @@ export const ReportFooter: React.FC = () => (
             background: 'white',
         }}
     >
+        {/* Print-specific styles injected via class */}
+        <style>{`
+            @media print {
+                .report-signature-footer {
+                    position: relative !important;
+                    margin-top: auto !important;
+                }
+            }
+        `}</style>
         dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
     </div>
 );

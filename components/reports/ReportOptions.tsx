@@ -36,7 +36,7 @@ const SantriSelector: React.FC<{
                         <label className="block text-sm font-medium text-gray-700">Pilih Santri ({filteredSantri.length} hasil)</label>
                         <button onClick={handleToggleAll} className="text-xs font-semibold text-teal-600 hover:underline">{selectedIds.length === filteredSantri.length ? 'Hapus Pilihan' : 'Pilih Semua'}</button>
                     </div>
-                    <div className="max-h-48 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2 border bg-white p-3 rounded-md">
+                    <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-2 border bg-white p-3 rounded-md">
                         {filteredSantri.length > 0 ? filteredSantri.map(santri => (
                           <div key={santri.id} className="flex items-center">
                               <input id={`${radioGroupName}-santri-${santri.id}`} type="checkbox" checked={selectedIds.includes(santri.id)} onChange={() => handleSelection(santri.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
@@ -224,7 +224,6 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         activeReport === ReportType.OperasionalHarian ||
         activeReport === ReportType.EarlyWarningSantri ||
         activeReport === ReportType.KinerjaPengajar ||
-        activeReport === ReportType.TahfizhProgress ||
         activeReport === ReportType.KelasAsramaBermasalah ||
         activeReport === ReportType.CohortSantri ||
         activeReport === ReportType.KepatuhanAdministrasi ||
@@ -237,12 +236,63 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         );
     }
 
+    // Tahfizh Progress - special case with filter options
+    if (activeReport === ReportType.TahfizhProgress) {
+        const tipeOptions = ['Ziyadah', 'Murojaah', "Tasmi'", 'Ujian Hafalan'];
+        const handleTipeChange = (tipe: string) => {
+            if (options.tahfizhTipeFilter.includes(tipe)) {
+                options.setTahfizhTipeFilter(options.tahfizhTipeFilter.filter(t => t !== tipe));
+            } else {
+                options.setTahfizhTipeFilter([...options.tahfizhTipeFilter, tipe]);
+            }
+        };
+        return (
+            <div className="pt-4 border-t space-y-4">
+                <h3 className="text-md font-semibold text-gray-700">Filter Laporan Tahfizh</h3>
+
+                {/* Date Range */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Mulai</label>
+                        <input type="date" value={options.tahfizhStartDate} onChange={e => options.setTahfizhStartDate(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" />
+                    </div>
+                    <div>
+                        <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Selesai</label>
+                        <input type="date" value={options.tahfizhEndDate} onChange={e => options.setTahfizhEndDate(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" />
+                    </div>
+                </div>
+
+                {/* Sector Type Filter */}
+                <div className="border-t pt-4">
+                    <label className="block mb-2 text-sm font-medium text-gray-700">Jenis Setoran yang Ditampilkan</label>
+                    <div className="flex flex-wrap gap-3">
+                        {tipeOptions.map(tipe => (
+                            <div key={tipe} className="flex items-center">
+                                <input
+                                    id={`tahfizh-tipe-${tipe}`}
+                                    type="checkbox"
+                                    checked={options.tahfizhTipeFilter.includes(tipe)}
+                                    onChange={() => handleTipeChange(tipe)}
+                                    className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500"
+                                />
+                                <label htmlFor={`tahfizh-tipe-${tipe}`} className="ml-2 text-sm text-gray-700">{tipe}</label>
+                            </div>
+                        ))}
+                    </div>
+                    {options.tahfizhTipeFilter.length === 0 && (
+                        <p className="text-xs text-red-500 mt-1">Pilih minimal satu jenis setoran.</p>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
     switch (activeReport) {
         case ReportType.LaporanArusKas:
             return (
                 <div className="pt-4 border-t">
                     <h3 className="text-md font-semibold text-gray-700 mb-2">Filter Rentang Tanggal Laporan</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div><label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Mulai</label><input type="date" value={options.kasStartDate} onChange={e => options.setKasStartDate(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                         <div><label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Selesai</label><input type="date" value={options.kasEndDate} onChange={e => options.setKasEndDate(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                     </div>
@@ -266,7 +316,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                 <div className="pt-4 border-t space-y-4">
                      <div>
                         <h3 className="text-md font-semibold text-gray-700 mb-2">Filter Rentang Tanggal</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                             <div><label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Mulai</label><input type="date" value={options.rekeningKoranStartDate} onChange={e => options.setRekeningKoranStartDate(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                             <div><label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Selesai</label><input type="date" value={options.rekeningKoranEndDate} onChange={e => options.setRekeningKoranEndDate(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                         </div>
@@ -280,7 +330,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
 
                         {options.rekeningKoranPrintMode === 'selected' && (
                             <div className="p-4 bg-gray-100 rounded-lg border space-y-3">
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 gap-3">
                                     <input type="text" placeholder="Cari Nama atau NIS..." value={rekeningSearch} onChange={e => setRekeningSearch(e.target.value)} className="sm:col-span-3 bg-white border border-gray-300 rounded-md p-2 text-sm" />
                                     <select value={rekeningJenjang} onChange={e => { setRekeningJenjang(e.target.value); setRekeningKelas(''); }} className="bg-white border p-2 text-sm rounded-md"><option value="">Filter Jenjang</option>{settings.jenjang.map(j=><option key={j.id} value={j.id}>{j.nama}</option>)}</select>
                                     <select value={rekeningKelas} onChange={e => setRekeningKelas(e.target.value)} disabled={!rekeningJenjang} className="bg-white border p-2 text-sm rounded-md disabled:bg-gray-200"><option value="">Filter Kelas</option>{rekeningAvailableKelas.map(k=><option key={k.id} value={k.id}>{k.nama}</option>)}</select>
@@ -292,7 +342,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                                             {santriForRekeningSelector.length > 0 && santriForRekeningSelector.every(s => options.selectedRekeningKoranSantriIds.includes(s.id)) ? 'Hapus Pilihan' : 'Pilih Semua Hasil'}
                                         </button>
                                     </div>
-                                    <div className="max-h-48 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2 border bg-white p-3 rounded-md">
+                                    <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-2 border bg-white p-3 rounded-md">
                                         {santriForRekeningSelector.length > 0 ? santriForRekeningSelector.map(santri => (
                                           <div key={santri.id} className="flex items-center">
                                               <input id={`rekening-santri-${santri.id}`} type="checkbox" checked={options.selectedRekeningKoranSantriIds.includes(santri.id)} onChange={() => handleRekeningSelection(santri.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
@@ -329,14 +379,14 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
             return (
               <div className="pt-4 border-t space-y-4">
                   <h3 className="text-md font-semibold text-gray-700">Opsi Formulir Izin</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
                     <div><label className="block mb-1 text-sm font-medium text-gray-700">Tujuan</label><input type="text" value={options.izinTujuan} onChange={e => options.setIzinTujuan(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: Rumah, Rumah Sakit" /></div>
                     <div><label className="block mb-1 text-sm font-medium text-gray-700">Keperluan</label><input type="text" value={options.izinKeperluan} onChange={e => options.setIzinKeperluan(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: Menjenguk orang tua sakit" /></div>
                     <div><label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Berangkat</label><input type="date" value={options.izinTanggalBerangkat} onChange={e => options.setIzinTanggalBerangkat(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                     <div><label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Kembali</label><input type="date" value={options.izinTanggalKembali} onChange={e => options.setIzinTanggalKembali(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
                     <div className="md:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Nama Penjemput</label><input type="text" value={options.izinPenjemput} onChange={e => options.setIzinPenjemput(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Nama lengkap penjemput" /></div>
                   </div>
-                  <div className="pt-4 border-t"><h4 className="text-md font-semibold text-gray-700 mb-2">Pengaturan Tanda Tangan</h4><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block mb-1 text-sm font-medium text-gray-700">Jabatan Penanda Tangan</label><input type="text" value={options.izinSignatoryTitle} onChange={e => options.setIzinSignatoryTitle(e.target.value)} placeholder="Contoh: Bag. Keamanan" className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div><div><label className="block mb-1 text-sm font-medium text-gray-700">Penanda Tangan (Opsional)</label><select value={options.izinSignatoryId} onChange={e => options.setIzinSignatoryId(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih Penanda Tangan --</option>{settings.tenagaPengajar.map(p => (<option key={p.id} value={p.id.toString()}>{p.nama}</option>))}</select></div></div></div>
+                  <div className="pt-4 border-t"><h4 className="text-md font-semibold text-gray-700 mb-2">Pengaturan Tanda Tangan</h4><div className="grid grid-cols-1 gap-4"><div><label className="block mb-1 text-sm font-medium text-gray-700">Jabatan Penanda Tangan</label><input type="text" value={options.izinSignatoryTitle} onChange={e => options.setIzinSignatoryTitle(e.target.value)} placeholder="Contoh: Bag. Keamanan" className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div><div><label className="block mb-1 text-sm font-medium text-gray-700">Penanda Tangan (Opsional)</label><select value={options.izinSignatoryId} onChange={e => options.setIzinSignatoryId(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih Penanda Tangan --</option>{settings.tenagaPengajar.map(p => (<option key={p.id} value={p.id.toString()}>{p.nama}</option>))}</select></div></div></div>
                   <div className="pt-4 border-t"><h4 className="text-md font-semibold text-gray-700 mb-2">Ketentuan Izin</h4><div><label htmlFor="ketentuan-izin" className="block mb-1 text-sm font-medium text-gray-700">Tulis ketentuan di sini, pisahkan setiap poin dengan baris baru.</label><textarea id="ketentuan-izin" rows={5} value={options.izinKetentuan} onChange={e => options.setIzinKetentuan(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"/></div></div>
                   <SantriSelector title="" printMode={options.izinPrintMode} setPrintMode={options.setIzinPrintMode} selectedIds={options.selectedIzinSantriIds} setSelectedIds={options.setSelectedIzinSantriIds} radioGroupName="izin" filteredSantri={filteredSantri} />
               </div>
@@ -345,13 +395,13 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
              return (
                 <div className="pt-4 border-t space-y-4">
                     <h3 className="text-md font-semibold text-gray-700">Kustomisasi Kartu Santri</h3>
-                    
+
                     {/* Design Selection */}
                     <div>
                         <label className="block mb-2 text-sm font-medium text-gray-700">Pilih Desain Kartu</label>
-                        <select 
-                            value={options.cardDesign} 
-                            onChange={e => handleCardDesignChange(e.target.value)} 
+                        <select
+                            value={options.cardDesign}
+                            onChange={e => handleCardDesignChange(e.target.value)}
                             className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
                         >
                             {cardDesigns.map(design => (
@@ -360,32 +410,33 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                         </select>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Ukuran Kartu - Full width stacked */}
+                    <div className="space-y-3">
                         <div>
                             <label className="block mb-1 text-sm font-medium text-gray-700">Lebar (cm)</label>
-                            <input 
-                                type="number" 
-                                value={options.cardWidth} 
-                                onChange={e => options.setCardWidth(Number(e.target.value))} 
-                                step="0.01" 
-                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                            <input
+                                type="number"
+                                value={options.cardWidth}
+                                onChange={e => options.setCardWidth(Number(e.target.value))}
+                                step="0.01"
+                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
                             />
                         </div>
                         <div>
                             <label className="block mb-1 text-sm font-medium text-gray-700">Tinggi (cm)</label>
-                            <input 
-                                type="number" 
-                                value={options.cardHeight} 
-                                onChange={e => options.setCardHeight(Number(e.target.value))} 
-                                step="0.01" 
-                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
+                            <input
+                                type="number"
+                                value={options.cardHeight}
+                                onChange={e => options.setCardHeight(Number(e.target.value))}
+                                step="0.01"
+                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
                             />
                         </div>
                     </div>
 
                     <div>
                         <label className="block mb-2 text-sm font-medium text-gray-700">Data yang Ditampilkan</label>
-                        <div className="grid grid-cols-2 gap-2 border bg-white p-3 rounded-md">
+                        <div className="grid grid-cols-1 gap-2 border bg-white p-3 rounded-md">
                             {availableCardFields.map(field => (
                                 <div key={field.id} className="flex items-center">
                                     <input 
@@ -404,6 +455,46 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                         <p className="text-xs text-gray-500 mt-1 italic">
                             Catatan: Opsi "Foto Santri" jika tidak dicentang akan menampilkan placeholder (gambar kartun).
                         </p>
+                    </div>
+
+                    {/* QR Code / Barcode Option */}
+                    <div className="border-t pt-4">
+                        <div className="flex items-center mb-2">
+                            <input
+                                type="checkbox"
+                                id="show-qrcode"
+                                checked={options.cardShowQRCode}
+                                onChange={e => options.setCardShowQRCode(e.target.checked)}
+                                className="w-4 h-4 text-teal-600 rounded"
+                            />
+                            <label htmlFor="show-qrcode" className="ml-2 text-sm font-medium text-gray-700">
+                                Tampilkan QR Code / Barcode NIS
+                            </label>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-3">
+                            QR Code/Barcode ini bisa digunakan untuk absensi kelas, pembayaran koprasi, dan tarik tunai.
+                        </p>
+                        {options.cardShowQRCode && (
+                            <div className="space-y-3 pl-6">
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Tipe Kode</label>
+                                    <div className="flex gap-4">
+                                        <div className="flex items-center">
+                                            <input type="radio" id="qr-type-qr" value="qr" checked={options.cardQRCodeType === 'qr'} onChange={() => options.setCardQRCodeType('qr')} className="w-4 h-4 text-teal-600"/>
+                                            <label htmlFor="qr-type-qr" className="ml-2 text-sm">QR Code</label>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <input type="radio" id="qr-type-barcode" value="barcode" checked={options.cardQRCodeType === 'barcode'} onChange={() => options.setCardQRCodeType('barcode')} className="w-4 h-4 text-teal-600"/>
+                                            <label htmlFor="qr-type-barcode" className="ml-2 text-sm">Barcode</label>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <input type="radio" id="qr-type-both" value="both" checked={options.cardQRCodeType === 'both'} onChange={() => options.setCardQRCodeType('both')} className="w-4 h-4 text-teal-600"/>
+                                            <label htmlFor="qr-type-both" className="ml-2 text-sm">Keduanya</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Masa Berlaku Config */}
@@ -460,22 +551,22 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                                         placeholder="Masukkan setiap poin pada baris baru. Gunakan {NamaPonpes} untuk memunculkan nama."
                                     />
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="mt-3 space-y-3">
                                     <div>
                                         <label className="block mb-1 text-xs font-medium text-gray-700">Jabatan Penanda Tangan (Belakang)</label>
-                                        <input 
-                                            type="text" 
-                                            value={options.cardSignatoryTitle} 
-                                            onChange={e => options.setCardSignatoryTitle(e.target.value)} 
-                                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
-                                            placeholder="Contoh: Mudir Marhalah" 
+                                        <input
+                                            type="text"
+                                            value={options.cardSignatoryTitle}
+                                            onChange={e => options.setCardSignatoryTitle(e.target.value)}
+                                            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                            placeholder="Contoh: Mudir Marhalah"
                                         />
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-xs font-medium text-gray-700">Penanda Tangan (Belakang)</label>
-                                        <select 
-                                            value={options.cardSignatoryId} 
-                                            onChange={e => options.setCardSignatoryId(e.target.value)} 
+                                        <select
+                                            value={options.cardSignatoryId}
+                                            onChange={e => options.setCardSignatoryId(e.target.value)}
                                             className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
                                         >
                                             <option value="">-- Pengasuh Utama --</option>
@@ -495,90 +586,242 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         case ReportType.LabelSantri:
             return (
                 <div className="pt-4 border-t space-y-4">
-                    <h3 className="text-md font-semibold text-gray-700">Kustomisasi Label</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                       <div><label className="block mb-1 text-sm font-medium text-gray-700">Lebar Label (cm)</label><input type="number" value={options.labelWidth} onChange={e => options.setLabelWidth(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" step="0.1" /></div>
-                       <div><label className="block mb-1 text-sm font-medium text-gray-700">Tinggi Label (cm)</label><input type="number" value={options.labelHeight} onChange={e => options.setLabelHeight(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" step="0.1" /></div>
-                       <div><label className="block mb-1 text-sm font-medium text-gray-700">Ukuran Font (pt)</label><input type="number" value={options.labelFontSize} onChange={e => options.setLabelFontSize(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
+                    <h4 className="text-sm font-semibold text-gray-700">Kustomisasi Label</h4>
+
+                    {/* Ukuran Label */}
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Lebar Label (cm)</label>
+                            <input type="number" value={options.labelWidth} onChange={e => options.setLabelWidth(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" step="0.1" />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Tinggi Label (cm)</label>
+                            <input type="number" value={options.labelHeight} onChange={e => options.setLabelHeight(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" step="0.1" />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Ukuran Font (pt)</label>
+                            <input type="number" value={options.labelFontSize} onChange={e => options.setLabelFontSize(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" />
+                        </div>
                     </div>
-                     <div><label className="block mb-2 text-sm font-medium text-gray-700">Data yang Ditampilkan</label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border bg-white p-3 rounded-md">{availableLabelFields.map(field => (<div key={field.id} className="flex items-center"><input id={`field-${field.id}`} type="checkbox" checked={options.labelFields.includes(field.id)} onChange={() => handleLabelFieldChange(field.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" /><label htmlFor={`field-${field.id}`} className="ml-2 text-sm text-gray-700">{field.label}</label></div>))}</div></div>
-                    <SantriSelector title="" printMode={options.labelPrintMode} setPrintMode={options.setLabelPrintMode} selectedIds={options.selectedLabelSantriIds} setSelectedIds={options.setSelectedLabelSantriIds} radioGroupName="label" filteredSantri={filteredSantri} />
+
+                    {/* Data yang Ditampilkan */}
+                    <div className="border-t pt-4">
+                        <label className="block mb-2 text-sm font-medium text-gray-700">Data yang Ditampilkan</label>
+                        <div className="max-h-40 overflow-y-auto border bg-white p-3 rounded-md">
+                            {availableLabelFields.map(field => (
+                                <div key={field.id} className="flex items-center py-1">
+                                    <input id={`field-${field.id}`} type="checkbox" checked={options.labelFields.includes(field.id)} onChange={() => handleLabelFieldChange(field.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
+                                    <label htmlFor={`field-${field.id}`} className="ml-2 text-sm text-gray-700">{field.label}</label>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Santri yang Akan Dicetak */}
+                    <div className="border-t pt-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Santri yang Akan Dicetak</h4>
+                        <div className="max-h-48 overflow-y-auto border bg-white p-3 rounded-md">
+                            {filteredSantri.length > 0 ? filteredSantri.map(santri => (
+                                <div key={santri.id} className="flex items-center py-1">
+                                    <input
+                                        id={`label-santri-${santri.id}`}
+                                        type="checkbox"
+                                        checked={options.selectedLabelSantriIds.includes(santri.id)}
+                                        onChange={() => {
+                                            if (options.selectedLabelSantriIds.includes(santri.id)) {
+                                                options.setSelectedLabelSantriIds(options.selectedLabelSantriIds.filter(id => id !== santri.id));
+                                            } else {
+                                                options.setSelectedLabelSantriIds([...options.selectedLabelSantriIds, santri.id]);
+                                            }
+                                        }}
+                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500"
+                                    />
+                                    <label htmlFor={`label-santri-${santri.id}`} className="ml-2 text-sm text-gray-700">{santri.namaLengkap}</label>
+                                </div>
+                            )) : <p className="text-sm text-gray-400 text-center">Tidak ada santri.</p>}
+                        </div>
+                    </div>
                 </div>
             );
         case ReportType.LembarNilai:
             return (
                 <div className="pt-4 border-t space-y-4">
-                  <div>
-                    <div className="flex justify-between items-center mb-2"><label className="block text-sm font-medium text-gray-700">Pilih Mata Pelajaran (Jenjang: {selectedJenjangId ? settings.jenjang.find(j=>j.id === parseInt(selectedJenjangId))?.nama : 'Semua'})</label><div className="space-x-2"><button onClick={() => options.setSelectedMapelIds(availableMapel.map(m => m.id))} className="text-xs font-semibold text-teal-600 hover:underline">Pilih Semua</button><button onClick={() => options.setSelectedMapelIds([])} className="text-xs font-semibold text-gray-500 hover:underline">Hapus Semua</button></div></div>
-                    <div className="max-h-32 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 border bg-white p-3 rounded-md">
-                      {availableMapel.length > 0 ? availableMapel.map(mapel => (<div key={mapel.id} className="flex items-center"><input id={`mapel-${mapel.id}`} type="checkbox" checked={options.selectedMapelIds.includes(mapel.id)} onChange={() => handleMapelSelection(mapel.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" /><label htmlFor={`mapel-${mapel.id}`} className="ml-2 text-sm text-gray-700">{mapel.nama}</label></div>)) : <p className="text-sm text-gray-400 col-span-full text-center">Pilih jenjang spesifik untuk melihat mata pelajaran.</p>}
+                  <div className="rounded-lg border bg-white p-4">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">1. Filter Guru Pengajar</h4>
+                    <select
+                        value={options.nilaiGuruFilter || ''}
+                        onChange={e => options.setNilaiGuruFilter(e.target.value ? Number(e.target.value) : null)}
+                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                    >
+                        <option value="">Semua Guru</option>
+                        {settings.tenagaPengajar.map(guru => (
+                            <option key={guru.id} value={guru.id}>{guru.nama}</option>
+                        ))}
+                    </select>
+                    {options.nilaiGuruFilter && (
+                        <p className="text-xs text-teal-600 mt-1">
+                            ✓ Filter aktif: menampilkan mapel yang diajar oleh guru terpilih
+                        </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border bg-white p-4">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                        2. Pengaturan Daftar Mata Pelajaran
+                    </h4>
+                    <p className="text-xs text-gray-500 mb-2">
+                        Mata Pelajaran (Jenjang: {selectedJenjangId ? settings.jenjang.find(j=>j.id === parseInt(selectedJenjangId))?.nama : 'Semua'})
+                    </p>
+                    <h5 className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                        Daftar Mata Pelajaran
+                    </h5>
+                    <div className="flex justify-end mb-2">
+                        <div className="space-x-2">
+                            <button onClick={() => options.setSelectedMapelIds(availableMapel.map(m => m.id))} className="text-xs font-semibold text-teal-600 hover:underline">Pilih Semua</button>
+                            <button onClick={() => options.setSelectedMapelIds([])} className="text-xs font-semibold text-gray-500 hover:underline">Hapus Semua</button>
+                        </div>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto border bg-white p-3 rounded-md">
+                      {availableMapel.length > 0 ? availableMapel.map(mapel => (
+                              <div key={mapel.id} className="flex items-center py-1">
+                                  <input id={`mapel-${mapel.id}`} type="checkbox"
+                                      checked={options.selectedMapelIds.includes(mapel.id)}
+                                      onChange={() => handleMapelSelection(mapel.id)}
+                                      className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500"
+                                  />
+                                  <label htmlFor={`mapel-${mapel.id}`} className="ml-2 text-sm text-gray-700">
+                                      {mapel.nama}
+                                  </label>
+                              </div>
+                          )) : <p className="text-sm text-gray-400 text-center">Pilih jenjang spesifik untuk melihat mata pelajaran.</p>}
                     </div>
                   </div>
-                   <div className="pt-4 border-t">
-                        <h4 className="text-md font-semibold text-gray-700 mb-2">Pengaturan Laporan</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Semester</label>
-                                <select value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
-                                    <option value="Ganjil">Ganjil</option>
-                                    <option value="Genap">Genap</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
-                                <AcademicYearSelect />
-                            </div>
+
+                  <div className="rounded-lg border bg-white p-4">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">3. Pengaturan Laporan</h4>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Semester</label>
+                            <select value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                <option value="Ganjil">Ganjil</option>
+                                <option value="Genap">Genap</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
+                            <AcademicYearSelect />
                         </div>
                     </div>
-                   <div className="pt-4 border-t">
-                        <h4 className="text-md font-semibold text-gray-700 mb-2">Struktur Kolom Nilai</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Jumlah Kolom Nilai TP</label>
-                                <input type="number" value={options.nilaiTpCount} onChange={e => options.setNilaiTpCount(Number(e.target.value))} min="1" max="10" className="bg-white border border-gray-300 text-sm rounded-lg w-full p-2.5" />
-                            </div>
-                            <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Jumlah Kolom Nilai SM</label>
-                                <input type="number" value={options.nilaiSmCount} onChange={e => options.setNilaiSmCount(Number(e.target.value))} min="1" max="5" className="bg-white border border-gray-300 text-sm rounded-lg w-full p-2.5" />
-                            </div>
-                            <div className="flex items-end">
-                                <div className="flex items-center">
-                                    <input type="checkbox" id="show-nts" checked={options.showNilaiTengahSemester} onChange={e => options.setShowNilaiTengahSemester(e.target.checked)} className="w-4 h-4 text-teal-600 rounded" />
-                                    <label htmlFor="show-nts" className="ml-2 text-sm font-medium text-gray-700">Sertakan Kolom Tengah Semester (STS)</label>
-                                </div>
-                            </div>
+                  </div>
+
+                  <div className="rounded-lg border bg-white p-4">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">4. Pengaturan Struktur Kolom Nilai</h4>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Jumlah Kolom Nilai TP (Tujuan Pembelajaran)</label>
+                            <input type="number" value={options.nilaiTpCount} onChange={e => options.setNilaiTpCount(Number(e.target.value))} min="1" max="10" className="bg-white border border-gray-300 text-sm rounded-lg w-full p-2.5" />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Jumlah Kolom Nilai SM (Sumatif Materi)</label>
+                            <input type="number" value={options.nilaiSmCount} onChange={e => options.setNilaiSmCount(Number(e.target.value))} min="1" max="5" className="bg-white border border-gray-300 text-sm rounded-lg w-full p-2.5" />
+                        </div>
+                        <div className="flex items-center">
+                            <input type="checkbox" id="show-nts" checked={options.showNilaiTengahSemester} onChange={e => options.setShowNilaiTengahSemester(e.target.checked)} className="w-4 h-4 text-teal-600 rounded" />
+                            <label htmlFor="show-nts" className="ml-2 text-sm font-medium text-gray-700">Sertakan Kolom Tengah Semester (STS)</label>
                         </div>
                     </div>
-                   <div>
-                        <label className="block mb-2 text-sm font-medium text-gray-700">Opsi Panduan Penilaian</label>
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <div className="flex items-center">
-                                <input type="radio" id="g-show" value="show" checked={options.guidanceOption === 'show'} onChange={e => options.setGuidanceOption(e.target.value as any)} className="w-4 h-4 text-teal-600"/>
-                                <label htmlFor="g-show" className="ml-2 text-sm">Tampilkan di halaman terpisah</label>
-                            </div>
-                            <div className="flex items-center">
-                                <input type="radio" id="g-hide" value="hide" checked={options.guidanceOption === 'hide'} onChange={e => options.setGuidanceOption(e.target.value as any)} className="w-4 h-4 text-teal-600"/>
-                                <label htmlFor="g-hide" className="ml-2 text-sm">Jangan tampilkan</label>
-                            </div>
+                  </div>
+
+                  <div className="rounded-lg border bg-white p-4">
+                    <label className="block mb-2 text-sm font-semibold text-gray-700">5. Opsi Panduan Penilaian</label>
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center">
+                            <input type="radio" id="g-show" value="show" checked={options.guidanceOption === 'show'} onChange={e => options.setGuidanceOption(e.target.value as any)} className="w-4 h-4 text-teal-600"/>
+                            <label htmlFor="g-show" className="ml-2 text-sm">Tampilkan di halaman terpisah</label>
+                        </div>
+                        <div className="flex items-center">
+                            <input type="radio" id="g-hide" value="hide" checked={options.guidanceOption === 'hide'} onChange={e => options.setGuidanceOption(e.target.value as any)} className="w-4 h-4 text-teal-600"/>
+                            <label htmlFor="g-hide" className="ml-2 text-sm">Jangan tampilkan</label>
                         </div>
                     </div>
+                  </div>
                 </div>
             );
         case ReportType.LembarAbsensi:
             return (
                 <div className="pt-4 border-t space-y-4">
-                    <div>
-                        <h4 className="text-md font-semibold text-gray-700 mb-2">Periode Absensi</h4>
-                        <div className="w-full grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div><label className="block mb-2 text-sm font-medium text-gray-700">Jenis Kalender</label><div className="flex gap-4"><div className="flex items-center"><input type="radio" id="masehi" value="Masehi" checked={options.attendanceCalendar === 'Masehi'} onChange={e => options.setAttendanceCalendar(e.target.value as any)} className="w-4 h-4 text-teal-600"/><label htmlFor="masehi" className="ml-2">Masehi</label></div><div className="flex items-center"><input type="radio" id="hijriah" value="Hijriah" checked={options.attendanceCalendar === 'Hijriah'} onChange={e => options.setAttendanceCalendar(e.target.value as any)} className="w-4 h-4 text-teal-600"/><label htmlFor="hijriah" className="ml-2">Hijriah</label></div></div></div>
-                            {options.attendanceCalendar === 'Masehi' ? (<><div className="md:col-span-1"><label htmlFor="startMonth" className="block mb-1 text-sm font-medium text-gray-700">Bulan Mulai</label><input type="month" id="startMonth" value={options.startMonth} onChange={e => options.setStartMonth(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div><div className="md:col-span-1"><label htmlFor="endMonth" className="block mb-1 text-sm font-medium text-gray-700">Bulan Selesai</label><input type="month" id="endMonth" value={options.endMonth} onChange={e => options.setEndMonth(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div></>) : (<><div className="grid grid-cols-2 gap-2"><div><label className="block mb-1 text-sm font-medium text-gray-700">Bulan Mulai</label><select value={options.hijriStartMonth} onChange={e => options.setHijriStartMonth(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">{hijriMonths.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}</select></div><div><label className="block mb-1 text-sm font-medium text-gray-700">Tahun</label><input type="number" value={options.hijriStartYear} onChange={e => options.setHijriStartYear(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"/></div></div><div className="grid grid-cols-2 gap-2"><div><label className="block mb-1 text-sm font-medium text-gray-700">Bulan Selesai</label><select value={options.hijriEndMonth} onChange={e => options.setHijriEndMonth(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">{hijriMonths.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}</select></div><div><label className="block mb-1 text-sm font-medium text-gray-700">Tahun</label><input type="number" value={options.hijriEndYear} onChange={e => options.setHijriEndYear(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"/></div></div></>)}
+                    <div className="rounded-lg border bg-white p-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">1. Periode Absensi</h4>
+
+                        <div className="mb-4">
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Jenis Kalender</label>
+                            <div className="flex gap-4">
+                                <div className="flex items-center">
+                                    <input type="radio" id="masehi" value="Masehi" checked={options.attendanceCalendar === 'Masehi'} onChange={e => options.setAttendanceCalendar(e.target.value as any)} className="w-4 h-4 text-teal-600"/>
+                                    <label htmlFor="masehi" className="ml-2 text-sm">Masehi</label>
+                                </div>
+                                <div className="flex items-center">
+                                    <input type="radio" id="hijriah" value="Hijriah" checked={options.attendanceCalendar === 'Hijriah'} onChange={e => options.setAttendanceCalendar(e.target.value as any)} className="w-4 h-4 text-teal-600"/>
+                                    <label htmlFor="hijriah" className="ml-2 text-sm">Hijriah</label>
+                                </div>
+                            </div>
                         </div>
+
+                        {options.attendanceCalendar === 'Masehi' ? (
+                            <div className="space-y-3">
+                                <div>
+                                    <label htmlFor="startMonth" className="block mb-1 text-sm font-medium text-gray-700">Bulan Mulai</label>
+                                    <input type="month" id="startMonth" value={options.startMonth} onChange={e => options.setStartMonth(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" />
+                                </div>
+                                <div>
+                                    <label htmlFor="endMonth" className="block mb-1 text-sm font-medium text-gray-700">Bulan Selesai</label>
+                                    <input type="month" id="endMonth" value={options.endMonth} onChange={e => options.setEndMonth(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="grid grid-cols-1 gap-3">
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Bulan Mulai</label>
+                                        <select value={options.hijriStartMonth} onChange={e => options.setHijriStartMonth(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                            {hijriMonths.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Tahun</label>
+                                        <input type="number" value={options.hijriStartYear} onChange={e => options.setHijriStartYear(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"/>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Bulan Selesai</label>
+                                        <select value={options.hijriEndMonth} onChange={e => options.setHijriEndMonth(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                            {hijriMonths.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Tahun</label>
+                                        <input type="number" value={options.hijriEndYear} onChange={e => options.setHijriEndYear(Number(e.target.value))} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"/>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <div className="pt-4 border-t">
-                        <h4 className="text-md font-semibold text-gray-700 mb-2">Informasi Tambahan</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><label htmlFor="semester-absensi" className="block mb-1 text-sm font-medium text-gray-700">Semester</label><select id="semester-absensi" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select></div>
-                            <div><label htmlFor="tahun-ajaran-absensi" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label><AcademicYearSelect id="tahun-ajaran-absensi" /></div>
+
+                    <div className="rounded-lg border bg-white p-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">2. Informasi Tambahan</h4>
+                        <div className="space-y-3">
+                            <div>
+                                <label htmlFor="semester-absensi" className="block mb-1 text-sm font-medium text-gray-700">Semester</label>
+                                <select id="semester-absensi" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                    <option value="Ganjil">Ganjil</option>
+                                    <option value="Genap">Genap</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="tahun-ajaran-absensi" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
+                                <AcademicYearSelect id="tahun-ajaran-absensi" />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -586,11 +829,11 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         case ReportType.DaftarRombel:
             return (
                 <div className="pt-4 border-t space-y-4">
-                    <h3 className="text-md font-semibold text-gray-700">Kolom yang Ditampilkan</h3>
+                    <h4 className="text-sm font-semibold text-gray-700">Kolom yang Ditampilkan</h4>
                     <p className="text-xs text-gray-500">Default mengikuti format laporan saat ini. Minimal pilih 1 kolom selain nomor.</p>
-                    <div className="space-y-2">
+                    <div className="max-h-64 overflow-y-auto border bg-white p-3 rounded-md space-y-1">
                         {daftarRombelColumns.map((col) => (
-                            <label key={col.id} className="flex items-center rounded-md border border-gray-200 bg-white p-2 text-sm text-gray-700">
+                            <label key={col.id} className="flex items-center rounded-md border border-gray-200 bg-gray-50 p-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={options.rombelVisibleColumns.includes(col.id)}
@@ -611,45 +854,78 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                         <label htmlFor="agenda-kedatangan" className="block mb-1 text-sm font-medium text-gray-700">Keterangan Agenda</label>
                         <input type="text" id="agenda-kedatangan" value={options.agendaKedatangan} onChange={e => options.setAgendaKedatangan(e.target.value)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" placeholder="Contoh: Libur Idul Fitri 1446 H" />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="semester-kedatangan" className="block mb-1 text-sm font-medium text-gray-700">Semester</label>
-                            <select id="semester-kedatangan" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
-                                <option value="Ganjil">Ganjil</option>
-                                <option value="Genap">Genap</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="tahun-ajaran-kedatangan" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
-                            <AcademicYearSelect id="tahun-ajaran-kedatangan" />
-                        </div>
+                    <div>
+                        <label htmlFor="semester-kedatangan" className="block mb-1 text-sm font-medium text-gray-700">Semester</label>
+                        <select id="semester-kedatangan" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                            <option value="Ganjil">Ganjil</option>
+                            <option value="Genap">Genap</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="tahun-ajaran-kedatangan" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
+                        <AcademicYearSelect id="tahun-ajaran-kedatangan" />
                     </div>
                 </div>
             );
         case ReportType.JurnalMengajar:
             return (
                 <div className="pt-4 border-t space-y-4">
-                    <h3 className="text-md font-semibold text-gray-700">Filter Jurnal Mengajar</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Jurnal</label>
-                            <input 
-                                type="date" 
-                                value={options.jurnalTanggalFilter} 
-                                onChange={e => options.setJurnalTanggalFilter(e.target.value)} 
-                                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" 
-                            />
+                    <div className="rounded-lg border bg-white p-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">1. Pengaturan Filter Laporan</h4>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Filter Mata Pelajaran</label>
+                                <select
+                                    value={options.jurnalMapelFilter || ''}
+                                    onChange={e => options.setJurnalMapelFilter(e.target.value ? Number(e.target.value) : null)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                >
+                                    <option value="">Semua Mata Pelajaran</option>
+                                    {settings.mataPelajaran.map(mapel => (
+                                        <option key={mapel.id} value={mapel.id}>{mapel.nama}</option>
+                                    ))}
+                                </select>
+                                {options.jurnalMapelFilter && (
+                                    <p className="text-xs text-teal-600 mt-1">
+                                        ✓ Menampilkan laporan hanya untuk: {settings.mataPelajaran.find(m => m.id === options.jurnalMapelFilter)?.nama}
+                                    </p>
+                                )}
+                            </div>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Mulai</label>
+                                <input
+                                    type="date"
+                                    value={options.jurnalTanggalFilter}
+                                    onChange={e => options.setJurnalTanggalFilter(e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                />
+                            </div>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Selesai</label>
+                                <input
+                                    type="date"
+                                    value={options.jurnalEndDate}
+                                    onChange={e => options.setJurnalEndDate(e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label className="block mb-1 text-sm font-medium text-gray-700">Semester</label>
-                            <select value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
-                                <option value="Ganjil">Ganjil</option>
-                                <option value="Genap">Genap</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
-                            <AcademicYearSelect />
+                    </div>
+
+                    <div className="rounded-lg border bg-white p-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">2. Periode Akademik</h4>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Semester</label>
+                                <select value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                    <option value="Ganjil">Ganjil</option>
+                                    <option value="Genap">Genap</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
+                                <AcademicYearSelect />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -660,7 +936,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
             return (
                 <div className="pt-4 border-t space-y-4">
                     <h3 className="text-md font-semibold text-gray-700">Filter {isHealth ? 'Rekap Kesehatan' : 'Rekap Konseling'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div>
                             <label className="block mb-1 text-sm font-medium text-gray-700">Dari Tanggal</label>
                             <input 
@@ -687,7 +963,7 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
              return (
                 <div className="pt-4 border-t">
                     <h3 className="text-md font-semibold text-gray-700">Opsi {activeReport === ReportType.LembarRapor ? 'Lembar Rapor' : 'Rapor Lengkap'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div><label htmlFor="semester" className="block mb-1 text-sm font-medium text-gray-700">Semester</label><select id="semester" value={options.semester} onChange={e => options.setSemester(e.target.value as any)} className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="Ganjil">Ganjil</option><option value="Genap">Genap</option></select></div>
                         <div><label htmlFor="tahun-ajaran" className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label><AcademicYearSelect id="tahun-ajaran" /></div>
                     </div>

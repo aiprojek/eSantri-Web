@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang, Warehouse, StockTransfer } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang, Warehouse, StockTransfer, DigitalAsset } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -47,10 +47,11 @@ export class ESantriDatabase extends Dexie {
   pembayaranHutang!: Table<PembayaranHutang, number>;
   warehouses!: Table<Warehouse, number>;
   stockTransfers!: Table<StockTransfer, number>;
+  digitalAssets!: Table<DigitalAsset, string>;
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(49).stores({ // Bump version
+    (this as any).version(50).stores({ // Bump version
       santri: '++id, nis, namaLengkap, kamarId, lastModified',
       settings: '++id, lastModified',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status, lastModified',
@@ -90,7 +91,8 @@ export class ESantriDatabase extends Dexie {
       suppliers: '++id, nama, lastModified',
       pembayaranHutang: '++id, transaksiId, tanggal, lastModified',
       warehouses: '++id, nama, kode, isDefault, lastModified',
-      stockTransfers: '++id, tanggal, produkId, dariWarehouseId, keWarehouseId, lastModified'
+      stockTransfers: '++id, tanggal, produkId, dariWarehouseId, keWarehouseId, lastModified',
+      digitalAssets: 'id, type, lastModified'
     })
 .upgrade(async (tx: any) => {
        // Migration logic if needed

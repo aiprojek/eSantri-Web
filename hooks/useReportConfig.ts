@@ -54,7 +54,7 @@ export const useReportConfig = (
     
     // Card Configs
     const [cardDesign, setCardDesign] = useState<string>('classic'); // 'classic', 'modern', 'vertical', 'dark', 'ceria'
-    const [cardTheme, setCardTheme] = useState<string>(predefinedCardThemes['Biru']); 
+    const [cardTheme, setCardTheme] = useState<string>(predefinedCardThemes['Biru']);
     const [cardValidityMode, setCardValidityMode] = useState<'date' | 'forever' | 'none'>('date');
     const [cardValidUntil, setCardValidUntil] = useState<string>('2028-07-31');
     const [cardFields, setCardFields] = useState<string[]>(['foto', 'namaLengkap', 'nis', 'jenjang', 'rombel', 'ttl', 'alamat', 'ayahWali']);
@@ -65,6 +65,8 @@ export const useReportConfig = (
     const [selectedCardSantriIds, setSelectedCardSantriIds] = useState<number[]>([]);
     const [cardSignatoryTitle, setCardSignatoryTitle] = useState<string>('Mudir Marhalah');
     const [cardSignatoryId, setCardSignatoryId] = useState<string>('');
+    const [cardShowQRCode, setCardShowQRCode] = useState<boolean>(false);
+    const [cardQRCodeType, setCardQRCodeType] = useState<'qr' | 'barcode' | 'both'>('qr');
     
     const defaultCardRules = `Kartu ini adalah tanda pengenal resmi santri {NamaPonpes}.
 Santri wajib membawa kartu ini selama berada di lingkungan pesantren atau saat mengikuti kegiatan resmi.
@@ -100,6 +102,9 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
     const [nilaiSmCount, setNilaiSmCount] = useState<number>(2);
     const [showNilaiTengahSemester, setShowNilaiTengahSemester] = useState<boolean>(true);
     const [jurnalTanggalFilter, setJurnalTanggalFilter] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [jurnalEndDate, setJurnalEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [jurnalMapelFilter, setJurnalMapelFilter] = useState<number | null>(null);
+    const [nilaiGuruFilter, setNilaiGuruFilter] = useState<number | null>(null);
     const [kesehatanStartDate, setKesehatanStartDate] = useState<string>(mutasiStartDate);
     const [kesehatanEndDate, setKesehatanEndDate] = useState<string>(mutasiEndDate);
     const [bkStartDate, setBkStartDate] = useState<string>(mutasiStartDate);
@@ -107,6 +112,9 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
     const [rombelVisibleColumns, setRombelVisibleColumns] = useState<string[]>([
         'no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat'
     ]);
+    const [tahfizhStartDate, setTahfizhStartDate] = useState<string>(mutasiStartDate);
+    const [tahfizhEndDate, setTahfizhEndDate] = useState<string>(mutasiEndDate);
+    const [tahfizhTipeFilter, setTahfizhTipeFilter] = useState<string[]>(['Ziyadah', 'Murojaah', "Tasmi'", 'Ujian Hafalan']);
 
 
     const isFinancialReport = activeReport === ReportType.LaporanArusKas || activeReport === ReportType.RekeningKoranSantri;
@@ -127,6 +135,8 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
         setCardValidityMode('date');
         setCardSignatoryTitle('Mudir Marhalah');
         setCardSignatoryId('');
+        setCardShowQRCode(false);
+        setCardQRCodeType('qr');
         setUseHijriDate(false);
         setHijriDateMode('auto');
         setManualHijriDate('');
@@ -147,6 +157,9 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
         setNilaiSmCount(2);
         setShowNilaiTengahSemester(true);
         setGuidanceOption('show');
+        setJurnalEndDate(new Date().toISOString().split('T')[0]);
+        setJurnalMapelFilter(null);
+        setNilaiGuruFilter(null);
         setCardFields(['foto', 'namaLengkap', 'nis', 'jenjang', 'rombel', 'ttl', 'alamat', 'ayahWali']);
         setCardWidth(8.56);
         setCardHeight(5.398);
@@ -248,6 +261,8 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             selectedCardSantriIds, setSelectedCardSantriIds,
             cardSignatoryTitle, setCardSignatoryTitle,
             cardSignatoryId, setCardSignatoryId,
+            cardShowQRCode, setCardShowQRCode,
+            cardQRCodeType, setCardQRCodeType,
             agendaKedatangan, setAgendaKedatangan,
             semester, setSemester,
             tahunAjaran, setTahunAjaran,
@@ -272,11 +287,17 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             nilaiSmCount, setNilaiSmCount,
             showNilaiTengahSemester, setShowNilaiTengahSemester,
             jurnalTanggalFilter, setJurnalTanggalFilter,
+            jurnalEndDate, setJurnalEndDate,
+            jurnalMapelFilter, setJurnalMapelFilter,
+            nilaiGuruFilter, setNilaiGuruFilter,
             kesehatanStartDate, setKesehatanStartDate,
             kesehatanEndDate, setKesehatanEndDate,
             bkStartDate, setBkStartDate,
             bkEndDate, setBkEndDate,
             rombelVisibleColumns, setRombelVisibleColumns,
+            tahfizhStartDate, setTahfizhStartDate,
+            tahfizhEndDate, setTahfizhEndDate,
+            tahfizhTipeFilter, setTahfizhTipeFilter,
         }
     };
 };

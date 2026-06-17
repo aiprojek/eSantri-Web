@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Buku, Santri } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
@@ -40,6 +40,8 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
     // Kartu Anggota State
     const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
     const [cardTheme, setCardTheme] = useState<'classic' | 'modern' | 'bold' | 'dark' | 'ceria' | 'vertical'>('classic');
+    // Card display mode: photo only, QR only, or both
+    const [cardDisplayMode, setCardDisplayMode] = useState<'photo' | 'qr' | 'both'>('both');
     const [filterJenjang, setFilterJenjang] = useState('');
     const [searchSantri, setSearchSantri] = useState('');
 
@@ -104,6 +106,19 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
     };
 
     const currentPaper = getPaperDimensions();
+    const cardGapCm = 0.25;
+    const slipGapCm = 0.35;
+    const labelGapCm = 0.15;
+    const effectiveZoomScale = smartZoomScale * manualZoom;
+    const cmToPx = 96 / 2.54;
+    const paperOrientationClass = orientation === 'landscape' ? 'print-landscape' : 'print-portrait';
+    const [previewContentHeight, setPreviewContentHeight] = useState(currentPaper.h * cmToPx);
+
+    const updateMargin = (position: keyof typeof margin, rawValue: string) => {
+        const parsed = Number(rawValue);
+        const value = Number.isFinite(parsed) ? Math.max(0, Math.min(5, parsed)) : 0;
+        setMargin(current => ({ ...current, [position]: value }));
+    };
 
     const paginateItems = <T,>(items: T[], perPage: number): T[][] => {
         if (perPage <= 0) return [items];
@@ -125,35 +140,35 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
 
     const kartuPages = useMemo(() => {
         if (selectedSantri.length === 0) return [];
-        const itemW = cardTheme === 'vertical' ? 5.398 : 8.56;
-        const itemH = cardTheme === 'vertical' ? 8.56 : 5.398;
-        const gap = 0.25;
+        const baseW = cardTheme === 'vertical' ? 5.398 : 8.56;
+        const baseH = cardTheme === 'vertical' ? 8.56 : 5.398;
+        const backsideGapCm = 0.04;
+        const itemW = backsideLayout === 'side-by-side' ? (baseW * 2) + backsideGapCm : baseW;
+        const itemH = backsideLayout === 'separate' ? (baseH * 2) + backsideGapCm : baseH;
         const usableW = Math.max(1, currentPaper.w - (margin.left + margin.right));
         const usableH = Math.max(1, currentPaper.h - (margin.top + margin.bottom));
-        const cols = Math.max(1, Math.floor((usableW + gap) / (itemW + gap)));
-        const rows = Math.max(1, Math.floor((usableH + gap) / (itemH + gap)));
+        const cols = Math.max(1, Math.floor((usableW + cardGapCm) / (itemW + cardGapCm)));
+        const rows = Math.max(1, Math.floor((usableH + cardGapCm) / (itemH + cardGapCm)));
         return paginateItems(selectedSantri, cols * rows);
-    }, [selectedSantri, cardTheme, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom]);
+    }, [selectedSantri, cardTheme, backsideLayout, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom, cardGapCm]);
 
     const slipPages = useMemo(() => {
         if (selectedBuku.length === 0) return [];
-        const gap = 0.35;
         const usableW = Math.max(1, currentPaper.w - (margin.left + margin.right));
         const usableH = Math.max(1, currentPaper.h - (margin.top + margin.bottom));
-        const cols = Math.max(1, Math.floor((usableW + gap) / (slipSize.w + gap)));
-        const rows = Math.max(1, Math.floor((usableH + gap) / (slipSize.h + gap)));
+        const cols = Math.max(1, Math.floor((usableW + slipGapCm) / (slipSize.w + slipGapCm)));
+        const rows = Math.max(1, Math.floor((usableH + slipGapCm) / (slipSize.h + slipGapCm)));
         return paginateItems(selectedBuku, cols * rows);
-    }, [selectedBuku, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom, slipSize.w, slipSize.h]);
+    }, [selectedBuku, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom, slipSize.w, slipSize.h, slipGapCm]);
 
     const labelPages = useMemo(() => {
         if (selectedBuku.length === 0) return [];
-        const gap = 0.15;
         const usableW = Math.max(1, currentPaper.w - (margin.left + margin.right));
         const usableH = Math.max(1, currentPaper.h - (margin.top + margin.bottom));
-        const cols = Math.max(1, Math.floor((usableW + gap) / (labelSize.w + gap)));
-        const rows = Math.max(1, Math.floor((usableH + gap) / (labelSize.h + gap)));
+        const cols = Math.max(1, Math.floor((usableW + labelGapCm) / (labelSize.w + labelGapCm)));
+        const rows = Math.max(1, Math.floor((usableH + labelGapCm) / (labelSize.h + labelGapCm)));
         return paginateItems(selectedBuku, cols * rows);
-    }, [selectedBuku, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom, labelSize.w, labelSize.h]);
+    }, [selectedBuku, currentPaper.w, currentPaper.h, margin.left, margin.right, margin.top, margin.bottom, labelSize.w, labelSize.h, labelGapCm]);
 
     const handlePrint = (elementId: string, filename: string) => {
         if (isProcessingPrint) return;
@@ -187,13 +202,30 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
     <style>
         @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: system-ui, sans-serif; padding: 20px; }
-        .print-page { width: ${currentPaper.w}cm; min-height: ${currentPaper.h}cm; padding: ${margin.top}cm ${margin.right}cm ${margin.bottom}cm ${margin.left}cm; background: white; }
-        @media print { .page-break { page-break-after: always; } }
+        html, body { margin: 0; padding: 0; background: #e5e7eb; }
+        body { font-family: system-ui, sans-serif; }
+        #${elementId} { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px 0; }
+        .perpus-print-page {
+            width: ${currentPaper.w}cm;
+            height: ${currentPaper.h}cm;
+            padding: ${margin.top}cm ${margin.right}cm ${margin.bottom}cm ${margin.left}cm;
+            box-sizing: border-box;
+            overflow: hidden;
+            background: white;
+        }
+        @media print {
+            @page { size: ${currentPaper.w}cm ${currentPaper.h}cm; margin: 0; }
+            html, body { background: white; }
+            #${elementId} { display: block; padding: 0; }
+            .perpus-print-page { margin: 0; box-shadow: none !important; break-inside: avoid; }
+            .page-break-after { page-break-after: always; break-after: page; }
+        }
     </style>
 </head>
 <body>
-    ${element.innerHTML}
+    <div id="${elementId}">
+        ${element.innerHTML}
+    </div>
 </body>
 </html>`;
 
@@ -221,14 +253,18 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
 
         const calculateZoom = () => {
             if (previewContainerRef.current && contentWrapperRef.current) {
+                setPreviewContentHeight(contentWrapperRef.current.scrollHeight);
                 if (!fitToWidth) {
                     setSmartZoomScale(1);
                     return;
                 }
-                const containerW = previewContainerRef.current.clientWidth;
+                const containerStyle = window.getComputedStyle(previewContainerRef.current);
+                const horizontalPadding = parseFloat(containerStyle.paddingLeft) + parseFloat(containerStyle.paddingRight);
+                const containerW = previewContainerRef.current.clientWidth - horizontalPadding;
                 const contentW = contentWrapperRef.current.scrollWidth;
-                if (contentW > containerW - 40) {
-                    setSmartZoomScale((containerW - 40) / contentW);
+                const availableW = Math.max(1, containerW - 8);
+                if (contentW > availableW) {
+                    setSmartZoomScale(availableW / contentW);
                 } else {
                     setSmartZoomScale(1);
                 }
@@ -246,7 +282,26 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
             window.removeEventListener('resize', updateViewportMode);
             window.removeEventListener('resize', calculateZoom);
         };
-    }, [fitToWidth, isPreviewMode, activeTab, selectedSantriIds.length, selectedBukuIds.length, cardTheme, paperSize, orientation]);
+    }, [
+        fitToWidth,
+        isPreviewMode,
+        activeTab,
+        selectedSantriIds.length,
+        selectedBukuIds.length,
+        cardTheme,
+        cardDisplayMode,
+        backsideLayout,
+        paperSize,
+        orientation,
+        margin.top,
+        margin.right,
+        margin.bottom,
+        margin.left,
+        slipSize.w,
+        slipSize.h,
+        labelSize.w,
+        labelSize.h
+    ]);
 
     // Determine if preview has content to show controls
     const hasPreviewContent = (activeTab === 'kartu' && isPreviewMode && kartuPages.length > 0)
@@ -267,9 +322,9 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
 
                 {/* PAGE & MARGIN CONFIGURATION */}
                 <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
-                     <h4 className="text-xs font-bold text-gray-600 uppercase flex items-center gap-2"><i className="bi bi-printer"></i> Konfigurasi Kertas</h4>
+                    <h4 className="text-xs font-bold text-gray-600 uppercase flex items-center gap-2"><i className="bi bi-printer"></i> Konfigurasi Kertas</h4>
 
-                     <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                         <div>
                             <label className="block text-[10px] text-gray-500 mb-1">Ukuran Kertas</label>
                             <select value={paperSize} onChange={e => setPaperSize(e.target.value as any)} className="w-full border rounded p-1 text-xs">
@@ -285,19 +340,27 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                                 <option value="landscape">Landscape (Miring)</option>
                             </select>
                         </div>
-                     </div>
+                    </div>
 
-                     <div className="border-t border-gray-200 pt-2">
-                         <label className="block text-[10px] font-bold text-gray-500 mb-2">Margin Halaman (cm)</label>
-                         <div className="grid grid-cols-4 gap-1">
-                             {['top', 'bottom', 'left', 'right'].map(pos => (
-                                 <div key={pos}>
-                                     <label className="block text-[9px] text-gray-400 capitalize text-center">{pos}</label>
-                                     <input type="number" step="0.1" value={(margin as any)[pos]} onChange={e => setMargin({...margin, [pos]: Number(e.target.value)})} className="w-full border rounded p-1 text-xs text-center" />
-                                 </div>
-                             ))}
-                         </div>
-                     </div>
+                    <div className="border-t border-gray-200 pt-2">
+                        <label className="block text-[10px] font-bold text-gray-500 mb-2">Margin Halaman (cm)</label>
+                        <div className="grid grid-cols-4 gap-1">
+                            {(['top', 'bottom', 'left', 'right'] as const).map(pos => (
+                                <div key={pos}>
+                                    <label className="block text-[9px] text-gray-400 capitalize text-center">{pos}</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="5"
+                                        step="0.1"
+                                        value={margin[pos]}
+                                        onChange={e => updateMargin(pos, e.target.value)}
+                                        className="w-full border rounded p-1 text-xs text-center"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
 
                 {/* ITEM SIZE CONFIGURATION (Context Sensitive) */}
@@ -305,8 +368,8 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <h4 className="text-xs font-bold text-blue-700 uppercase mb-2">Ukuran Slip (cm)</h4>
                         <div className="grid grid-cols-2 gap-2">
-                             <div><label className="block text-[10px] text-blue-600">Lebar (W)</label><input type="number" step="0.1" value={slipSize.w} onChange={e => setSlipSize({...slipSize, w: Number(e.target.value)})} className="w-full border rounded p-1 text-xs text-center" /></div>
-                             <div><label className="block text-[10px] text-blue-600">Tinggi (H)</label><input type="number" step="0.1" value={slipSize.h} onChange={e => setSlipSize({...slipSize, h: Number(e.target.value)})} className="w-full border rounded p-1 text-xs text-center" /></div>
+                            <div><label className="block text-[10px] text-blue-600">Lebar (W)</label><input type="number" step="0.1" value={slipSize.w} onChange={e => setSlipSize({ ...slipSize, w: Number(e.target.value) })} className="w-full border rounded p-1 text-xs text-center" /></div>
+                            <div><label className="block text-[10px] text-blue-600">Tinggi (H)</label><input type="number" step="0.1" value={slipSize.h} onChange={e => setSlipSize({ ...slipSize, h: Number(e.target.value) })} className="w-full border rounded p-1 text-xs text-center" /></div>
                         </div>
                     </div>
                 )}
@@ -314,8 +377,8 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                     <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                         <h4 className="text-xs font-bold text-green-700 uppercase mb-2">Ukuran Label (cm)</h4>
                         <div className="grid grid-cols-2 gap-2">
-                             <div><label className="block text-[10px] text-green-600">Lebar (W)</label><input type="number" step="0.1" value={labelSize.w} onChange={e => setLabelSize({...labelSize, w: Number(e.target.value)})} className="w-full border rounded p-1 text-xs text-center" /></div>
-                             <div><label className="block text-[10px] text-green-600">Tinggi (H)</label><input type="number" step="0.1" value={labelSize.h} onChange={e => setLabelSize({...labelSize, h: Number(e.target.value)})} className="w-full border rounded p-1 text-xs text-center" /></div>
+                            <div><label className="block text-[10px] text-green-600">Lebar (W)</label><input type="number" step="0.1" value={labelSize.w} onChange={e => setLabelSize({ ...labelSize, w: Number(e.target.value) })} className="w-full border rounded p-1 text-xs text-center" /></div>
+                            <div><label className="block text-[10px] text-green-600">Tinggi (H)</label><input type="number" step="0.1" value={labelSize.h} onChange={e => setLabelSize({ ...labelSize, h: Number(e.target.value) })} className="w-full border rounded p-1 text-xs text-center" /></div>
                         </div>
                     </div>
                 )}
@@ -336,8 +399,21 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                         </div>
 
                         {/* Backside Layout Option (matching KartuSantri) */}
-                        <div className="border rounded p-3 bg-gray-50">
-                            <label className="block text-xs font-medium text-gray-700 mb-2">Layout Sisi Belakang Kartu</label>
+                        <div className="border rounded p-3 bg-gray-50 space-y-3">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-2">Tampilan Kartu</label>
+                                <select
+                                    value={cardDisplayMode}
+                                    onChange={e => setCardDisplayMode(e.target.value as 'photo' | 'qr' | 'both')}
+                                    className="w-full border rounded p-2 text-xs"
+                                >
+                                    <option value="photo">Tampilkan foto saja</option>
+                                    <option value="qr">Tampilkan QR saja</option>
+                                    <option value="both">Tampilkan foto dan QR</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-2">Layout Sisi Belakang Kartu</label>
                             <select
                                 value={backsideLayout}
                                 onChange={e => setBacksideLayout(e.target.value as any)}
@@ -350,6 +426,7 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                             <p className="text-[10px] text-gray-500 italic mb-2">
                                 Opsi Bersebelahan cocok untuk cetak manual & laminating. Opsi Halaman Terpisah merender sisi belakang di lembar kertas berikutnya.
                             </p>
+                            </div>
 
                             {backsideLayout !== 'none' && (
                                 <div className="mt-2 space-y-2">
@@ -414,7 +491,7 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                             <label className="block text-xs font-bold text-gray-500 mb-1">Cari Buku</label>
                             <input value={searchBuku} onChange={e => setSearchBuku(e.target.value)} className="w-full border rounded p-2 text-sm" placeholder="Judul / Kode..." />
                         </div>
-                         <div className="border rounded max-h-60 overflow-y-auto p-2 bg-gray-50">
+                        <div className="border rounded max-h-60 overflow-y-auto p-2 bg-gray-50">
                             <div className="flex justify-between mb-2 text-xs">
                                 <span className="font-bold">Pilih Buku</span>
                                 <button onClick={handleSelectAllBuku} className="text-blue-600">All</button>
@@ -495,129 +572,151 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                 </div>
 
                 {/* Scrollable Preview Area - zoom applied to content wrapper, NOT to scroll area */}
-                <div ref={previewContainerRef} className={`flex-grow overflow-auto p-3 sm:p-8 flex ${fitToWidth ? 'justify-center' : 'justify-start'} items-start bg-gray-200/50 backdrop-blur-sm`}>
+                <div ref={previewContainerRef} className="flex-grow overflow-auto p-3 sm:p-8 bg-gray-200/50 backdrop-blur-sm">
+                    <div
+                        className="relative transition-[width,height] duration-200"
+                        style={{
+                            width: `${currentPaper.w * cmToPx * effectiveZoomScale}px`,
+                            height: `${previewContentHeight * effectiveZoomScale}px`,
+                            marginInline: 'auto'
+                        }}
+                    >
                     <div
                         ref={contentWrapperRef}
-                        className="printable-content-wrapper origin-top transition-transform duration-200 w-full"
-                        style={{ transform: `scale(${smartZoomScale * manualZoom})` }}
+                        className="absolute left-0 top-0 origin-top-left transition-transform duration-200"
+                        style={{
+                            width: `${currentPaper.w}cm`,
+                            transform: `scale(${effectiveZoomScale})`
+                        }}
                     >
-                    {activeTab === 'kartu' && (
-                        <>
-                            {!isPreviewMode ? (
+                        {activeTab === 'kartu' && (
+                            <>
+                                {!isPreviewMode ? (
+                                    <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl min-h-[400px] w-full flex flex-col items-center justify-center text-gray-400">
+                                        <i className="bi bi-eye text-6xl mb-4 opacity-50"></i>
+                                        <p className="text-lg font-medium">Area Pratinjau</p>
+                                        <p className="text-sm">Pilih santri dan klik "Tampilkan Preview Kartu"</p>
+                                    </div>
+                                ) : kartuPages.length > 0 ? (
+                                    <div id="preview-kartu" className="flex flex-col items-center gap-6">
+                                        {kartuPages.map((pageItems, pageIndex) => (
+                                            <div
+                                                key={`kartu-page-${pageIndex}`}
+                                                className={`perpus-print-page ${paperOrientationClass} bg-white shadow-lg rounded-md ${pageIndex < kartuPages.length - 1 ? 'page-break-after' : ''}`}
+                                                style={{
+                                                    width: `${currentPaper.w}cm`,
+                                                    height: `${currentPaper.h}cm`,
+                                                    paddingTop: `${margin.top}cm`,
+                                                    paddingRight: `${margin.right}cm`,
+                                                    paddingBottom: `${margin.bottom}cm`,
+                                                    paddingLeft: `${margin.left}cm`,
+                                                    boxSizing: 'border-box',
+                                                    overflow: 'hidden'
+                                                }}
+                                            >
+                                                <div
+                                                    className="flex flex-wrap justify-center content-start"
+                                                    style={{ gap: `${cardGapCm}cm` }}
+                                                >
+                                                    {pageItems.map((santri) => (
+                                                        <div key={santri.id} className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
+                                                            <KartuPerpusTemplate
+                                                                santri={santri}
+                                                                settings={settings}
+                                                                theme={cardTheme as any}
+                                                                backsideRules={backsideRules}
+                                                                backsideLayout={backsideLayout}
+                                                                displayMode={cardDisplayMode}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center text-gray-400 py-12 w-full">
+                                        <i className="bi bi-inbox text-5xl mb-3 block"></i>
+                                        <p>Tidak ada Kartu untuk ditampilkan</p>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {activeTab === 'slip' && (
+                            selectedBukuIds.length === 0 ? (
                                 <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl min-h-[400px] w-full flex flex-col items-center justify-center text-gray-400">
-                                    <i className="bi bi-eye text-6xl mb-4 opacity-50"></i>
-                                    <p className="text-lg font-medium">Area Pratinjau</p>
-                                    <p className="text-sm">Pilih santri dan klik "Tampilkan Preview Kartu"</p>
+                                    <i className="bi bi-file-earmark-text text-6xl mb-4 opacity-50"></i>
+                                    <p className="text-lg font-medium">Pratinjau Slip Buku</p>
+                                    <p className="text-sm">Pilih buku dan klik "Cetak Slip"</p>
                                 </div>
-                            ) : kartuPages.length > 0 ? (
-                                <div id="preview-kartu" className="space-y-6">
-                                    {kartuPages.map((pageItems, pageIndex) => (
+                            ) : slipPages.length > 0 ? (
+                                <div id="preview-slip" className="flex flex-col items-center gap-6">
+                                    {slipPages.map((pageItems, pageIndex) => (
                                         <div
-                                            key={`kartu-page-${pageIndex}`}
-                                            className={`bg-white shadow-lg printable-content-wrapper rounded-md ${pageIndex < kartuPages.length - 1 ? 'page-break-after' : ''}`}
+                                            key={`slip-page-${pageIndex}`}
+                                            className={`perpus-print-page ${paperOrientationClass} bg-white shadow-lg rounded-md ${pageIndex < slipPages.length - 1 ? 'page-break-after' : ''}`}
                                             style={{
                                                 width: `${currentPaper.w}cm`,
-                                                minHeight: `${currentPaper.h}cm`,
+                                                height: `${currentPaper.h}cm`,
                                                 paddingTop: `${margin.top}cm`,
                                                 paddingRight: `${margin.right}cm`,
                                                 paddingBottom: `${margin.bottom}cm`,
-                                                paddingLeft: `${margin.left}cm`
+                                                paddingLeft: `${margin.left}cm`,
+                                                boxSizing: 'border-box',
+                                                overflow: 'hidden'
                                             }}
                                         >
-                                            <div className="flex flex-wrap gap-2 justify-center content-start">
-                                                {pageItems.map((santri) => (
-                                                    <div key={santri.id} className="break-inside-avoid mb-2" style={{ pageBreakInside: 'avoid' }}>
-                                                        <KartuPerpusTemplate
-                                                            Santosri={santri}
-                                                            settings={settings}
-                                                            theme={cardTheme as any}
-                                                            backsideRules={backsideRules}
-                                                            backsideLayout={backsideLayout}
-                                                        />
+                                            <div className="flex flex-wrap justify-start content-start" style={{ gap: `${slipGapCm}cm` }}>
+                                                {pageItems.map((buku) => (
+                                                    <div key={buku.id} className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
+                                                        <SlipBukuTemplate buku={buku} settings={settings} width={slipSize.w} height={slipSize.h} />
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                            ) : (
-                                <div className="text-center text-gray-400 py-12 w-full">
-                                    <i className="bi bi-inbox text-5xl mb-3 block"></i>
-                                    <p>Tidak ada Kartu untuk ditampilkan</p>
-                                </div>
-                            )}
-                        </>
-                    )}
+                            ) : null
+                        )}
 
-                    {activeTab === 'slip' && (
-                        selectedBukuIds.length === 0 ? (
-                            <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl min-h-[400px] w-full flex flex-col items-center justify-center text-gray-400">
-                                <i className="bi bi-file-earmark-text text-6xl mb-4 opacity-50"></i>
-                                <p className="text-lg font-medium">Pratinjau Slip Buku</p>
-                                <p className="text-sm">Pilih buku dan klik "Cetak Slip"</p>
-                            </div>
-                        ) : slipPages.length > 0 ? (
-                        <div id="preview-slip" className="space-y-6">
-                            {slipPages.map((pageItems, pageIndex) => (
-                                <div
-                                    key={`slip-page-${pageIndex}`}
-                                    className={`bg-white shadow-lg printable-content-wrapper rounded-md ${pageIndex < slipPages.length - 1 ? 'page-break-after' : ''}`}
-                                    style={{
-                                        width: `${currentPaper.w}cm`,
-                                        minHeight: `${currentPaper.h}cm`,
-                                        paddingTop: `${margin.top}cm`,
-                                        paddingRight: `${margin.right}cm`,
-                                        paddingBottom: `${margin.bottom}cm`,
-                                        paddingLeft: `${margin.left}cm`
-                                    }}
-                                >
-                                    <div className="flex flex-wrap gap-4 justify-start content-start">
-                                        {pageItems.map((buku) => (
-                                            <div key={buku.id} className="break-inside-avoid mb-2" style={{ pageBreakInside: 'avoid' }}>
-                                                <SlipBukuTemplate buku={buku} settings={settings} width={slipSize.w} height={slipSize.h} />
-                                            </div>
-                                        ))}
-                                    </div>
+                        {activeTab === 'label' && (
+                            selectedBukuIds.length === 0 ? (
+                                <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl min-h-[400px] w-full flex flex-col items-center justify-center text-gray-400">
+                                    <i className="bi bi-tags text-6xl mb-4 opacity-50"></i>
+                                    <p className="text-lg font-medium">Pratinjau Label Buku</p>
+                                    <p className="text-sm">Pilih buku dan klik "Cetak Label"</p>
                                 </div>
-                            ))}
-                        </div>
-                        ) : null
-                    )}
-
-                    {activeTab === 'label' && (
-                        selectedBukuIds.length === 0 ? (
-                            <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl min-h-[400px] w-full flex flex-col items-center justify-center text-gray-400">
-                                <i className="bi bi-tags text-6xl mb-4 opacity-50"></i>
-                                <p className="text-lg font-medium">Pratinjau Label Buku</p>
-                                <p className="text-sm">Pilih buku dan klik "Cetak Label"</p>
-                            </div>
-                        ) : labelPages.length > 0 ? (
-                        <div id="preview-label" className="space-y-6">
-                            {labelPages.map((pageItems, pageIndex) => (
-                                <div
-                                    key={`label-page-${pageIndex}`}
-                                    className={`bg-white shadow-lg printable-content-wrapper rounded-md ${pageIndex < labelPages.length - 1 ? 'page-break-after' : ''}`}
-                                    style={{
-                                        width: `${currentPaper.w}cm`,
-                                        minHeight: `${currentPaper.h}cm`,
-                                        paddingTop: `${margin.top}cm`,
-                                        paddingRight: `${margin.right}cm`,
-                                        paddingBottom: `${margin.bottom}cm`,
-                                        paddingLeft: `${margin.left}cm`
-                                    }}
-                                >
-                                    <div className="flex flex-wrap gap-1 justify-start content-start">
-                                        {pageItems.map((buku) => (
-                                            <div key={buku.id} className="break-inside-avoid mb-1" style={{ pageBreakInside: 'avoid' }}>
-                                                <LabelBukuTemplate buku={buku} settings={settings} width={labelSize.w} height={labelSize.h} />
+                            ) : labelPages.length > 0 ? (
+                                <div id="preview-label" className="flex flex-col items-center gap-6">
+                                    {labelPages.map((pageItems, pageIndex) => (
+                                        <div
+                                            key={`label-page-${pageIndex}`}
+                                            className={`perpus-print-page ${paperOrientationClass} bg-white shadow-lg rounded-md ${pageIndex < labelPages.length - 1 ? 'page-break-after' : ''}`}
+                                            style={{
+                                                width: `${currentPaper.w}cm`,
+                                                height: `${currentPaper.h}cm`,
+                                                paddingTop: `${margin.top}cm`,
+                                                paddingRight: `${margin.right}cm`,
+                                                paddingBottom: `${margin.bottom}cm`,
+                                                paddingLeft: `${margin.left}cm`,
+                                                boxSizing: 'border-box',
+                                                overflow: 'hidden'
+                                            }}
+                                        >
+                                            <div className="flex flex-wrap justify-start content-start" style={{ gap: `${labelGapCm}cm` }}>
+                                                {pageItems.map((buku) => (
+                                                    <div key={buku.id} className="break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
+                                                        <LabelBukuTemplate buku={buku} settings={settings} width={labelSize.w} height={labelSize.h} />
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                        ) : null
-                    )}
+                            ) : null
+                        )}
+                    </div>
                     </div>
                 </div>
             </div>

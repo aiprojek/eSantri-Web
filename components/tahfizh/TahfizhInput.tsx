@@ -337,19 +337,26 @@ export const TahfizhInput: React.FC = () => {
                     {/* Jenis Setoran */}
                     <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Jenis Setoran</label>
-                        <div className="flex flex-wrap gap-3">
-                            {(['Ziyadah', 'Murojaah', 'Tasmi\'', 'Ujian Hafalan'] as const).map(t => (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {([
+                                { value: 'Ziyadah', icon: 'bi-plus-circle' },
+                                { value: 'Murojaah', icon: 'bi-arrow-repeat' },
+                                { value: "Tasmi'", icon: 'bi-volume-up' },
+                                { value: 'Ujian Hafalan', icon: 'bi-award' }
+                            ] as const).map(({ value, icon }) => (
                                 <button
-                                    key={t}
-                                    onClick={() => setTipe(t)}
-                                    className={`py-2.5 px-4 rounded-lg text-sm font-bold border transition-all ${
-                                        tipe === t
-                                        ? t === 'Ujian Hafalan' ? 'bg-amber-500 text-white border-amber-500 shadow-md ring-2 ring-amber-200'
+                                    key={value}
+                                    type="button"
+                                    onClick={() => setTipe(value)}
+                                    className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center text-xs font-bold transition-all sm:text-sm ${
+                                        tipe === value
+                                        ? value === 'Ujian Hafalan' ? 'bg-amber-500 text-white border-amber-500 shadow-md ring-2 ring-amber-200'
                                         : 'bg-teal-600 text-white border-teal-600 shadow-md ring-2 ring-teal-200'
                                         : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
                                     }`}
                                 >
-                                    {t}
+                                    <i className={`bi ${icon}`}></i>
+                                    <span>{value}</span>
                                 </button>
                             ))}
                         </div>
@@ -357,7 +364,7 @@ export const TahfizhInput: React.FC = () => {
                         {/* Sesi Ujian - only show when Ujian Hafalan is selected */}
                         {tipe === 'Ujian Hafalan' && (
                             <div className="mt-3">
-                                <label className="block text-xs font-medium text-gray.700 mb-1">Sesi Ujian</label>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Sesi Ujian</label>
                                 <select
                                     value={sesiUjian}
                                     onChange={(e) => setSesiUjian(e.target.value as TahfizhRecord['sesiUjian'])}

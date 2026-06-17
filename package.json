@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@types/uuid": "^9.0.8",
+    "@zxing/browser": "^0.2.0",
     "bootstrap-icons": "^1.11.3",
     "date-fns": "^3.3.1",
     "dexie": "^4.0.7",

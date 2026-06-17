@@ -374,6 +374,16 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     const actualOrientation = isLandscape ? 'landscape' : 'portrait';
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isCalendarPrint = elementId === 'calendar-print-area';
+    const isPerpusPrint = ['preview-kartu', 'preview-slip', 'preview-label'].includes(elementId);
+    const paperDimensions: Record<string, [number, number]> = {
+        A4: [21, 29.7],
+        F4: [21.5, 33],
+        Legal: [21.6, 35.6],
+        Letter: [21.59, 27.94]
+    };
+    const [portraitWidth, portraitHeight] = paperDimensions[paperSize] || paperDimensions.A4;
+    const pageWidth = actualOrientation === 'landscape' ? portraitHeight : portraitWidth;
+    const pageHeight = actualOrientation === 'landscape' ? portraitWidth : portraitHeight;
 
     // Keep outer wrapper id/class so print-specific selectors (e.g. #calendar-print-area) can apply correctly.
     const content = element.outerHTML;
@@ -398,7 +408,9 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     });
 
     // Build margin string
-    const marginStr = margin
+    const marginStr = isPerpusPrint
+        ? '0'
+        : margin
         ? `${margin.top}cm ${margin.right}cm ${margin.bottom}cm ${margin.left}cm`
         : '0';
 
@@ -407,7 +419,7 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     <style>
         @media print {
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; -webkit-filter: opacity(1) !important; }
-            @page { margin: ${marginStr}; size: ${paperSize} ${actualOrientation}; }
+            @page { margin: ${marginStr}; size: ${pageWidth}cm ${pageHeight}cm; }
             .printable-content-wrapper {
                 width: auto !important;
                 height: auto !important;
@@ -484,6 +496,32 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 flex: 1 1 auto !important;
                 min-height: 0 !important;
                 overflow: visible !important;
+            }
+            #preview-kartu,
+            #preview-slip,
+            #preview-label {
+                display: block !important;
+                width: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                transform: none !important;
+            }
+            #preview-kartu .perpus-print-page,
+            #preview-slip .perpus-print-page,
+            #preview-label .perpus-print-page {
+                margin: 0 !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid-page !important;
+            }
+            #preview-kartu .perpus-print-page:last-child,
+            #preview-slip .perpus-print-page:last-child,
+            #preview-label .perpus-print-page:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
             }
 
             /* Reset card shadows for cleaner printing */

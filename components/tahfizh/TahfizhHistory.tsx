@@ -5,6 +5,13 @@ import { useSantriContext } from '../../contexts/SantriContext';
 import { Santri } from '../../types';
 import { TahfizhDetailModal } from './TahfizhDetailModal';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
+import { TahfizhReportTemplate } from './TahfizhReportTemplate';
+import { TahfizhExamReportTemplate } from './TahfizhExamReportTemplate';
+import { printExportFacade } from '../../utils/printExportFacade';
+import { buildStandardExportFileName } from '../../utils/exportFileName';
+
+type BatchReportType = 'perkembangan' | 'ujian';
+type ExportAction = 'print' | 'pdf-image' | 'pdf-table' | 'excel' | 'html';
 
 export const TahfizhHistory: React.FC = () => {
     const { settings, showToast } = useAppContext();
@@ -16,6 +23,12 @@ export const TahfizhHistory: React.FC = () => {
     const [kelasId, setKelasId] = useState<number>(0);
     const [rombelId, setRombelId] = useState<number>(0);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+    const currentDate = new Date();
+    const [startDate, setStartDate] = useState(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().split('T')[0]);
+    const [endDate, setEndDate] = useState(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().split('T')[0]);
+    const [batchReportType, setBatchReportType] = useState<BatchReportType>('perkembangan');
+    const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     // Modal State
     const [selectedSantri, setSelectedSantri] = useState<Santri | null>(null);
@@ -48,10 +61,24 @@ export const TahfizhHistory: React.FC = () => {
     }, [santriList, search, jenjangId, kelasId, rombelId]);
 
     const filteredSantriIds = useMemo(() => new Set(filteredSantri.map(s => s.id)), [filteredSantri]);
-    const filteredRecords = useMemo(
-        () => tahfizhList.filter(record => filteredSantriIds.has(record.santriId)),
-        [tahfizhList, filteredSantriIds]
+    const filteredRecords = useMemo(() => tahfizhList.filter(record => {
+        if (!filteredSantriIds.has(record.santriId)) return false;
+        return record.tanggal >= startDate && record.tanggal <= endDate;
+    }), [tahfizhList, filteredSantriIds, startDate, endDate]);
+    const examRecords = useMemo(
+        () => filteredRecords.filter(record => record.tipe === 'Ujian Hafalan'),
+        [filteredRecords]
     );
+    const batchSantri = useMemo(
+        () => filteredSantri.filter(santri => filteredRecords.some(record => record.santriId === santri.id)),
+        [filteredSantri, filteredRecords]
+    );
+    const filterLabel = useMemo(() => {
+        const jenjang = settings.jenjang.find(item => item.id === jenjangId)?.nama;
+        const kelas = settings.kelas.find(item => item.id === kelasId)?.nama;
+        const rombel = settings.rombel.find(item => item.id === rombelId)?.nama;
+        return [jenjang || 'Semua Jenjang', kelas || 'Semua Kelas', rombel || 'Semua Rombel'].join(' / ');
+    }, [jenjangId, kelasId, rombelId, settings.jenjang, settings.kelas, settings.rombel]);
 
     const getLatestRecord = (santriId: number) => {
         const records = santriRecordsMap.get(santriId);
@@ -80,25 +107,26 @@ export const TahfizhHistory: React.FC = () => {
             showToast('Tidak ada data untuk diekspor.', 'info');
             return;
         }
-        const rows = new Map<number, { rombel: string; total: number; ziyadah: number; murojaah: number; tasmi: number }>();
+        const rows = new Map<number, { rombel: string; total: number; ziyadah: number; murojaah: number; tasmi: number; ujian: number }>();
         filteredRecords.forEach(record => {
             const santri = santriList.find(s => s.id === record.santriId);
             const rombelIdFromSantri = santri?.rombelId || 0;
             const rombelName = settings.rombel.find(r => r.id === rombelIdFromSantri)?.nama || 'Tanpa Rombel';
             if (!rows.has(rombelIdFromSantri)) {
-                rows.set(rombelIdFromSantri, { rombel: rombelName, total: 0, ziyadah: 0, murojaah: 0, tasmi: 0 });
+                rows.set(rombelIdFromSantri, { rombel: rombelName, total: 0, ziyadah: 0, murojaah: 0, tasmi: 0, ujian: 0 });
             }
             const entry = rows.get(rombelIdFromSantri)!;
             entry.total += 1;
             if (record.tipe === 'Ziyadah') entry.ziyadah += 1;
             if (record.tipe === 'Murojaah') entry.murojaah += 1;
             if (record.tipe === "Tasmi'") entry.tasmi += 1;
+            if (record.tipe === 'Ujian Hafalan') entry.ujian += 1;
         });
 
-        const csvRows: string[][] = [['Rombel', 'Total Setoran', 'Ziyadah', 'Murojaah', "Tasmi'"]];
+        const csvRows: string[][] = [['Rombel', 'Total Setoran', 'Ziyadah', 'Murojaah', "Tasmi'", 'Ujian Hafalan']];
         Array.from(rows.values())
             .sort((a, b) => a.rombel.localeCompare(b.rombel))
-            .forEach(item => csvRows.push([item.rombel, item.total, item.ziyadah, item.murojaah, item.tasmi].map(String)));
+            .forEach(item => csvRows.push([item.rombel, item.total, item.ziyadah, item.murojaah, item.tasmi, item.ujian].map(String)));
         triggerCsvDownload(`rekap-tahfizh-per-rombel-${new Date().toISOString().slice(0, 10)}.csv`, csvRows);
         showToast('Rekap tahfizh per rombel berhasil diekspor.', 'success');
     };
@@ -108,26 +136,72 @@ export const TahfizhHistory: React.FC = () => {
             showToast('Tidak ada data untuk diekspor.', 'info');
             return;
         }
-        const rows = new Map<number, { nama: string; total: number; ziyadah: number; murojaah: number; tasmi: number }>();
+        const rows = new Map<number, { nama: string; total: number; ziyadah: number; murojaah: number; tasmi: number; ujian: number }>();
         filteredRecords.forEach(record => {
             const muhaffizhId = record.muhaffizhId || 0;
             const muhaffizhName = settings.tenagaPengajar.find(t => t.id === muhaffizhId)?.nama || 'Tidak Diisi';
             if (!rows.has(muhaffizhId)) {
-                rows.set(muhaffizhId, { nama: muhaffizhName, total: 0, ziyadah: 0, murojaah: 0, tasmi: 0 });
+                rows.set(muhaffizhId, { nama: muhaffizhName, total: 0, ziyadah: 0, murojaah: 0, tasmi: 0, ujian: 0 });
             }
             const entry = rows.get(muhaffizhId)!;
             entry.total += 1;
             if (record.tipe === 'Ziyadah') entry.ziyadah += 1;
             if (record.tipe === 'Murojaah') entry.murojaah += 1;
             if (record.tipe === "Tasmi'") entry.tasmi += 1;
+            if (record.tipe === 'Ujian Hafalan') entry.ujian += 1;
         });
 
-        const csvRows: string[][] = [['Muhaffizh', 'Total Setoran', 'Ziyadah', 'Murojaah', "Tasmi'"]];
+        const csvRows: string[][] = [['Muhaffizh', 'Total Setoran', 'Ziyadah', 'Murojaah', "Tasmi'", 'Ujian Hafalan']];
         Array.from(rows.values())
             .sort((a, b) => a.nama.localeCompare(b.nama))
-            .forEach(item => csvRows.push([item.nama, item.total, item.ziyadah, item.murojaah, item.tasmi].map(String)));
+            .forEach(item => csvRows.push([item.nama, item.total, item.ziyadah, item.murojaah, item.tasmi, item.ujian].map(String)));
         triggerCsvDownload(`rekap-tahfizh-per-muhaffizh-${new Date().toISOString().slice(0, 10)}.csv`, csvRows);
         showToast('Rekap tahfizh per muhaffizh berhasil diekspor.', 'success');
+    };
+
+    const runBatchExport = async (action: ExportAction) => {
+        if (startDate > endDate) {
+            showToast('Tanggal awal tidak boleh melewati tanggal akhir.', 'error');
+            return;
+        }
+        const availableCount = batchReportType === 'ujian' ? examRecords.length : batchSantri.length;
+        if (availableCount === 0) {
+            showToast(
+                batchReportType === 'ujian'
+                    ? 'Tidak ada data ujian pada periode dan filter ini.'
+                    : 'Tidak ada laporan perkembangan pada periode dan filter ini.',
+                'info'
+            );
+            return;
+        }
+
+        const elementId = batchReportType === 'ujian' ? 'tahfizh-exam-batch-report' : 'tahfizh-progress-batch-report';
+        const fileName = buildStandardExportFileName(
+            batchReportType === 'ujian' ? 'rekap-ujian-tahfizh' : 'laporan-perkembangan-tahfizh',
+            [filterLabel, startDate, endDate]
+        );
+
+        setIsExporting(true);
+        setIsActionMenuOpen(false);
+        try {
+            if (action === 'print') {
+                await printExportFacade.printDialog({ elementId, fileName, paperSize: 'A4', target: 'report' });
+            } else if (action === 'pdf-image') {
+                await printExportFacade.downloadPdfImage({ elementId, fileName, paperSize: 'A4', target: 'report' });
+            } else if (action === 'pdf-table') {
+                await printExportFacade.downloadPdfAutoTable({ elementId, fileName, paperSize: 'A4', target: 'report' });
+            } else if (action === 'excel') {
+                await printExportFacade.downloadExcelVisual({ elementId, fileName, paperSize: 'A4', target: 'report' });
+            } else {
+                printExportFacade.downloadHtml({ elementId, fileName, paperSize: 'A4', target: 'report' });
+            }
+            showToast('Laporan Tahfizh berhasil diproses.', 'success');
+        } catch (error) {
+            console.error(error);
+            showToast('Gagal memproses laporan Tahfizh.', 'error');
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     return (
@@ -199,6 +273,59 @@ export const TahfizhHistory: React.FC = () => {
                     >
                         <i className="bi bi-filetype-csv"></i> Ekspor Rekap Muhaffizh
                     </button>
+                </div>
+            </div>
+
+            <div className="mb-6 rounded-2xl border border-teal-100 bg-white p-4 shadow-sm">
+                <div className="mb-4 flex flex-col gap-1">
+                    <h3 className="font-bold text-gray-800">Aksi Laporan Massal</h3>
+                    <p className="text-xs text-gray-500">Hasil mengikuti filter santri dan periode yang dipilih.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <div>
+                        <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-400">Jenis Laporan</label>
+                        <select value={batchReportType} onChange={event => setBatchReportType(event.target.value as BatchReportType)} className="w-full rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-sm font-semibold">
+                            <option value="perkembangan">Laporan Perkembangan per Santri</option>
+                            <option value="ujian">Rekap Ujian Hafalan</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-400">Dari Tanggal</label>
+                        <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-sm" />
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-400">Sampai Tanggal</label>
+                        <input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="w-full rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-sm" />
+                    </div>
+                    <div className="relative">
+                        <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-400">Cetak / Export</label>
+                        <button
+                            type="button"
+                            disabled={isExporting}
+                            onClick={() => setIsActionMenuOpen(open => !open)}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
+                        >
+                            <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-printer'}`}></i>
+                            {isExporting ? 'Memproses...' : `Aksi (${batchReportType === 'ujian' ? examRecords.length : batchSantri.length})`}
+                            <i className="bi bi-chevron-down text-xs"></i>
+                        </button>
+                        {isActionMenuOpen && (
+                            <div className="absolute right-0 top-full z-40 mt-1 w-full min-w-52 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-xl">
+                                <button onClick={() => runBatchExport('print')} className="w-full px-4 py-2.5 text-left text-sm hover:bg-teal-50"><i className="bi bi-printer mr-2 text-teal-600"></i>Preview & Cetak</button>
+                                <button onClick={() => runBatchExport('pdf-image')} className="w-full px-4 py-2.5 text-left text-sm hover:bg-red-50"><i className="bi bi-file-earmark-pdf mr-2 text-red-600"></i>PDF Visual</button>
+                                <button onClick={() => runBatchExport('pdf-table')} className="w-full px-4 py-2.5 text-left text-sm hover:bg-red-50"><i className="bi bi-table mr-2 text-red-600"></i>PDF Tabel</button>
+                                <button onClick={() => runBatchExport('excel')} className="w-full px-4 py-2.5 text-left text-sm hover:bg-emerald-50"><i className="bi bi-file-earmark-excel mr-2 text-emerald-600"></i>Excel</button>
+                                <button onClick={() => runBatchExport('html')} className="w-full px-4 py-2.5 text-left text-sm hover:bg-blue-50"><i className="bi bi-code-slash mr-2 text-blue-600"></i>HTML</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                    <span className="font-semibold">{filterLabel}</span>
+                    <span className="mx-2 text-gray-300">|</span>
+                    {batchReportType === 'ujian'
+                        ? `${examRecords.length} catatan ujian`
+                        : `${batchSantri.length} santri dengan setoran pada periode ini`}
                 </div>
             </div>
 
@@ -291,7 +418,15 @@ export const TahfizhHistory: React.FC = () => {
                                 {latest ? (
                                     <div>
                                         <div className="flex items-center justify-between mb-1">
-                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${latest.tipe === 'Ziyadah' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                                latest.tipe === 'Ziyadah'
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : latest.tipe === 'Murojaah'
+                                                        ? 'bg-blue-100 text-blue-700'
+                                                        : latest.tipe === 'Ujian Hafalan'
+                                                            ? 'bg-amber-100 text-amber-700'
+                                                            : 'bg-purple-100 text-purple-700'
+                                            }`}>
                                                 {latest.tipe}
                                             </span>
                                             <span className="text-[10px] text-gray-400">
@@ -331,6 +466,33 @@ export const TahfizhHistory: React.FC = () => {
                     records={santriRecordsMap.get(selectedSantri.id) || []} 
                 />
             )}
+
+            <div className="fixed left-[-100000px] top-0 w-[21cm] bg-white" aria-hidden="true">
+                <div id="tahfizh-progress-batch-report">
+                    {batchSantri.map((santri, index) => (
+                        <div key={santri.id}>
+                            <TahfizhReportTemplate
+                                santri={santri}
+                                records={santriRecordsMap.get(santri.id) || []}
+                                settings={settings}
+                                startDate={startDate}
+                                endDate={endDate}
+                                pageBreakAfter={index < batchSantri.length - 1}
+                            />
+                        </div>
+                    ))}
+                </div>
+                <div id="tahfizh-exam-batch-report">
+                    <TahfizhExamReportTemplate
+                        records={examRecords}
+                        santriList={filteredSantri}
+                        settings={settings}
+                        startDate={startDate}
+                        endDate={endDate}
+                        filterLabel={filterLabel}
+                    />
+                </div>
+            </div>
         </div>
     );
 };

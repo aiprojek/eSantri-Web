@@ -10,9 +10,10 @@ interface TahfizhReportTemplateProps {
     settings: PondokSettings;
     startDate: string;
     endDate: string;
+    pageBreakAfter?: boolean;
 }
 
-export const TahfizhReportTemplate: React.FC<TahfizhReportTemplateProps> = ({ santri, records, settings, startDate, endDate }) => {
+export const TahfizhReportTemplate: React.FC<TahfizhReportTemplateProps> = ({ santri, records, settings, startDate, endDate, pageBreakAfter = false }) => {
     // Filter records based on date range
     const filteredRecords = records.filter(r => {
         const d = new Date(r.tanggal);
@@ -22,6 +23,8 @@ export const TahfizhReportTemplate: React.FC<TahfizhReportTemplateProps> = ({ sa
     // Statistics
     const totalZiyadah = filteredRecords.filter(r => r.tipe === 'Ziyadah').length;
     const totalMurojaah = filteredRecords.filter(r => r.tipe === 'Murojaah').length;
+    const totalTasmi = filteredRecords.filter(r => r.tipe === "Tasmi'").length;
+    const totalUjian = filteredRecords.filter(r => r.tipe === 'Ujian Hafalan').length;
     
     // Get Last Ziyadah for "Capaian Terakhir"
     const lastZiyadah = [...records] // Use all records for absolute progress, not just filtered
@@ -34,7 +37,7 @@ export const TahfizhReportTemplate: React.FC<TahfizhReportTemplateProps> = ({ sa
     const musyrif = settings.tenagaPengajar.find(t => t.id === rombel?.waliKelasId); // Assuming Wali Kelas or specialized Musyrif
 
     return (
-        <div className="font-sans text-black p-8 bg-white flex flex-col h-full justify-between printable-content-wrapper" style={{ width: '21cm', minHeight: '29.7cm' }}>
+        <div className={`font-sans text-black p-8 bg-white flex flex-col h-full justify-between printable-content-wrapper print-portrait ${pageBreakAfter ? 'page-break-after' : ''}`} style={{ width: '21cm', minHeight: '29.7cm' }}>
             <div>
                 <PrintHeader settings={settings} title="LAPORAN PERKEMBANGAN TAHFIZHUL QUR'AN" />
                 
@@ -71,14 +74,22 @@ export const TahfizhReportTemplate: React.FC<TahfizhReportTemplateProps> = ({ sa
                 {/* Ringkasan Capaian */}
                 <div className="mb-6 p-4 border border-black rounded-lg bg-gray-50/50">
                     <h4 className="font-bold text-sm border-b border-black pb-2 mb-2 uppercase">Ringkasan Capaian</h4>
-                    <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="grid grid-cols-5 gap-3 text-center text-sm">
                         <div>
-                            <p className="text-gray-600 text-xs">Total Setoran Ziyadah</p>
+                            <p className="text-gray-600 text-xs">Ziyadah</p>
                             <p className="font-bold text-lg">{totalZiyadah} <span className="text-xs font-normal">kali</span></p>
                         </div>
                         <div>
-                            <p className="text-gray-600 text-xs">Total Setoran Murojaah</p>
+                            <p className="text-gray-600 text-xs">Murojaah</p>
                             <p className="font-bold text-lg">{totalMurojaah} <span className="text-xs font-normal">kali</span></p>
+                        </div>
+                        <div>
+                            <p className="text-gray-600 text-xs">Tasmi'</p>
+                            <p className="font-bold text-lg">{totalTasmi} <span className="text-xs font-normal">kali</span></p>
+                        </div>
+                        <div>
+                            <p className="text-gray-600 text-xs">Ujian</p>
+                            <p className="font-bold text-lg">{totalUjian} <span className="text-xs font-normal">kali</span></p>
                         </div>
                         <div>
                             <p className="text-gray-600 text-xs">Posisi Hafalan Terakhir</p>

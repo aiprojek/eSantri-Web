@@ -4,29 +4,31 @@ import { SmartAvatar } from '../../reports/modules/Common';
 import QRCode from 'qrcode';
 
 interface KartuPerpusTemplateProps {
-    Santosri: Santri;
+    santri: Santri;
     settings: PondokSettings;
     theme: 'classic' | 'modern' | 'bold' | 'dark' | 'ceria' | 'vertical';
     backsideRules?: string;
     backsideLayout?: 'none' | 'side-by-side' | 'separate';
+    displayMode?: 'photo' | 'qr' | 'both';
 }
 
 export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
-    Santosri,
+    santri,
     settings,
     theme,
     backsideRules = '',
-    backsideLayout = 'none'
+    backsideLayout = 'none',
+    displayMode = 'both'
 }) => {
     const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
     useEffect(() => {
-        QRCode.toDataURL(Santosri.nis, {
+        QRCode.toDataURL(santri.nis, {
             width: 256,
             margin: 1,
             color: { dark: '#000000', light: '#ffffff' }
         }).then(setQrDataUrl).catch(() => setQrDataUrl(''));
-    }, [Santosri.nis]);
+    }, [santri.nis]);
 
     const cardStyle: React.CSSProperties = {
         width: theme === 'vertical' ? '5.398cm' : '8.56cm',
@@ -38,7 +40,7 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
         boxSizing: 'border-box'
     };
 
-    const rombel = settings.rombel.find(r => r.id === Santosri.rombelId);
+    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
 
@@ -89,7 +91,6 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
         return t as 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria';
     };
 
-    // Inline QR badge (small QR overlaid on photo section)
     const QrBadge = ({ size = '1cm', rounded = 'rounded-md' }: { size?: string; rounded?: string }) => (
         qrDataUrl ? (
             <div className={`bg-white p-0.5 ${rounded} shadow-md border border-gray-200 overflow-hidden`}>
@@ -97,6 +98,59 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
             </div>
         ) : null
     );
+
+    const renderAvatarSection = ({
+        width = '2cm',
+        height = '2cm',
+        avatarVariant = getAvatarVariant(theme),
+        avatarClassName = '',
+        shapeClassName = 'rounded-lg',
+        qrSize = '0.8cm',
+        qrRounded = 'rounded-md',
+        qrOnlyContainerClassName = 'bg-slate-800'
+    }: {
+        width?: string;
+        height?: string;
+        avatarVariant?: 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria';
+        avatarClassName?: string;
+        shapeClassName?: string;
+        qrSize?: string;
+        qrRounded?: string;
+        qrOnlyContainerClassName?: string;
+    } = {}) => {
+        const frameStyle = { width, height };
+
+        if (displayMode === 'photo') {
+            return (
+                <div className={`${shapeClassName} overflow-hidden shadow-lg`} style={frameStyle}>
+                    <SmartAvatar santri={santri} variant={avatarVariant} className={`w-full h-full object-cover ${avatarClassName}`.trim()} />
+                </div>
+            );
+        }
+
+        if (displayMode === 'qr') {
+            return (
+                <div
+                    className={`flex items-center justify-center ${shapeClassName} overflow-hidden shadow-lg ${qrOnlyContainerClassName}`}
+                    style={frameStyle}
+                >
+                    <QrBadge size={`calc(${width} - 0.45cm)`} rounded={qrRounded} />
+                </div>
+            );
+        }
+
+        return (
+            <div className="relative flex items-center justify-center" style={frameStyle}>
+                <div className={`${shapeClassName} overflow-hidden shadow-lg w-full h-full`}>
+                    <SmartAvatar santri={santri} variant={avatarVariant} className={`w-full h-full object-cover ${avatarClassName}`.trim()} />
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5">
+                    <QrBadge size={qrSize} rounded={qrRounded} />
+                </div>
+            </div>
+        );
+    };
+
 
     // Backside content component with app credit
     const BacksideCard = () => (
@@ -131,7 +185,7 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
         return (
             <div className={backsideLayout === 'side-by-side' ? 'flex gap-0.5' : 'flex flex-col gap-0.5'}>
                 <div className="rounded-xl overflow-hidden relative flex flex-col text-white border-4 border-double border-[#D4AF37]"
-                     style={{ ...cardStyle, backgroundColor: '#1B4D3E', borderColor: '#D4AF37' }}>
+                    style={{ ...cardStyle, backgroundColor: '#1B4D3E', borderColor: '#D4AF37' }}>
                     <div className="flex justify-between items-center px-2 py-1.5 border-b border-[#D4AF37]/30 bg-black/20 h-[25%]">
                         <div className="w-10 h-full flex items-center justify-center">
                             {settings.logoYayasanUrl && <img src={settings.logoYayasanUrl} alt="Logo Yayasan" className="max-h-full max-w-full object-contain" />}
@@ -146,19 +200,21 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                     </div>
                     <div className="flex p-2 gap-2 flex-grow relative overflow-hidden">
                         <div className="w-[35%] flex items-center justify-center relative">
-                            <div className="rounded-lg overflow-hidden shadow-lg">
-                                <SmartAvatar santri={Santosri} variant="classic" className="object-cover" />
-                            </div>
-                            <div className="absolute -bottom-0.5 -right-0.5">
-                                <QrBadge size="0.9cm" rounded="rounded-md" />
-                            </div>
+                            {renderAvatarSection({
+                                width: '2cm',
+                                height: '2cm',
+                                avatarVariant: 'classic',
+                                shapeClassName: 'rounded-lg',
+                                qrSize: '0.9cm',
+                                qrRounded: 'rounded-md'
+                            })}
                         </div>
                         <div className="flex-grow text-[7pt] space-y-0.5 z-10 flex flex-col justify-center">
-                            <div className="font-bold text-[#D4AF37] text-[10pt] border-b border-[#D4AF37]/30 pb-0.5 mb-1 truncate">{Santosri.namaLengkap}</div>
-                            <div className="grid grid-cols-[35px_1fr]"><span>NIS</span><span>: {Santosri.nis}</span></div>
+                            <div className="font-bold text-[#D4AF37] text-[10pt] border-b border-[#D4AF37]/30 pb-0.5 mb-1 truncate">{santri.namaLengkap}</div>
+                            <div className="grid grid-cols-[35px_1fr]"><span>NIS</span><span>: {santri.nis}</span></div>
                             <div className="grid grid-cols-[35px_1fr]"><span>Jenjang</span><span>: {jenjangKelas}</span></div>
                             <div className="grid grid-cols-[35px_1fr]"><span>Rombel</span><span>: {rombelNama}</span></div>
-                            <div className="grid grid-cols-[35px_1fr] items-start"><span>Alamat</span><span className="leading-tight line-clamp-2">: {Santosri.alamat.kabupatenKota}</span></div>
+                            <div className="grid grid-cols-[35px_1fr] items-start"><span>Alamat</span><span className="leading-tight line-clamp-2">: {santri.alamat.kabupatenKota}</span></div>
                         </div>
                         <div className="absolute right-[-20px] bottom-[-20px] text-[#D4AF37] opacity-10 text-[80pt] pointer-events-none">
                             <i className="bi bi-book-half"></i>
@@ -183,20 +239,22 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                     </div>
                     <div className="flex justify-between items-start p-3 z-10 relative flex-grow overflow-hidden">
                         <div className="w-[30%] flex items-center justify-center relative">
-                            <div className="rounded-lg overflow-hidden shadow-lg">
-                                <SmartAvatar santri={Santosri} variant="modern" className="object-cover" />
-                            </div>
-                            <div className="absolute -bottom-0.5 -right-0.5">
-                                <QrBadge size="0.9cm" rounded="rounded-md" />
-                            </div>
+                            {renderAvatarSection({
+                                width: '2cm',
+                                height: '2cm',
+                                avatarVariant: 'modern',
+                                shapeClassName: 'rounded-lg',
+                                qrSize: '0.9cm',
+                                qrRounded: 'rounded-md'
+                            })}
                         </div>
                         <div className="text-right flex-grow pl-2 pt-1 flex flex-col items-end">
-                            <div className="text-[10pt] font-bold text-blue-900 leading-tight truncate w-full">{Santosri.namaLengkap}</div>
-                            <div className="text-[8pt] font-mono text-blue-600 bg-blue-50 inline-block px-1 rounded mt-1">{Santosri.nis}</div>
+                            <div className="text-[10pt] font-bold text-blue-900 leading-tight truncate w-full">{santri.namaLengkap}</div>
+                            <div className="text-[8pt] font-mono text-blue-600 bg-blue-50 inline-block px-1 rounded mt-1">{santri.nis}</div>
                             <div className="mt-2 text-[6.5pt] space-y-0.5 text-gray-600">
                                 <div className="flex justify-end gap-1"><span className="font-semibold">Jenjang:</span> {jenjangKelas}</div>
                                 <div className="flex justify-end gap-1"><span className="font-semibold">Rombel:</span> {rombelNama}</div>
-                                <div className="flex justify-end gap-1 text-right"><span className="font-semibold">Alamat:</span> <span className="truncate max-w-[100px]">{Santosri.alamat.kabupatenKota}</span></div>
+                                <div className="flex justify-end gap-1 text-right"><span className="font-semibold">Alamat:</span> <span className="truncate max-w-[100px]">{santri.alamat.kabupatenKota}</span></div>
                             </div>
                         </div>
                     </div>
@@ -218,21 +276,23 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                         <div className="text-[8pt] font-bold mt-0.5">{settings.namaPonpes}</div>
                     </div>
                     <div className="z-10 mt-3 relative">
-                        <div className="rounded-lg overflow-hidden shadow-lg border-2 border-white">
-                            <SmartAvatar santri={Santosri} variant="vertical" className="w-[2.2cm] h-[2.8cm] bg-gray-100 object-cover" />
-                        </div>
-                        <div className="absolute -bottom-1 -right-1">
-                            <QrBadge size="0.8cm" rounded="rounded" />
-                        </div>
+                        {renderAvatarSection({
+                            width: '2.2cm',
+                            height: '2.8cm',
+                            avatarVariant: 'vertical',
+                            shapeClassName: 'rounded-lg border-2 border-white',
+                            qrSize: '0.8cm',
+                            qrRounded: 'rounded'
+                        })}
                     </div>
                     <div className="z-10 mt-4 px-2 w-full flex-grow flex flex-col items-center overflow-hidden">
-                        <div className="text-[9pt] font-bold text-gray-800 leading-tight w-full truncate">{Santosri.namaLengkap}</div>
-                        <div className="text-[7pt] text-red-600 font-medium mt-0.5 mb-2">{Santosri.nis}</div>
+                        <div className="text-[9pt] font-bold text-gray-800 leading-tight w-full truncate">{santri.namaLengkap}</div>
+                        <div className="text-[7pt] text-red-600 font-medium mt-0.5 mb-2">{santri.nis}</div>
                         <div className="w-full border-t border-gray-200 my-1"></div>
                         <div className="text-[6.5pt] text-gray-600 space-y-0.5 w-full text-left px-3">
                             <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Kelas</span><span>: {jenjangKelas}</span></div>
                             <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Rombel</span><span>: {rombelNama}</span></div>
-                            <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Alamat</span><span className="truncate">: {Santosri.alamat.kabupatenKota}</span></div>
+                            <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Alamat</span><span className="truncate">: {santri.alamat.kabupatenKota}</span></div>
                         </div>
                     </div>
                     <div className="w-full bg-gray-800 text-white text-[5pt] py-1 absolute bottom-0">Kartu Anggota Perpustakaan</div>
@@ -253,16 +313,18 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                     </div>
                     <div className="flex p-3 gap-3 items-center h-full">
                         <div className="w-[35%] flex items-center justify-center relative">
-                            <div className="rounded-lg overflow-hidden shadow-lg">
-                                <SmartAvatar santri={Santosri} variant="modern" className="object-cover" />
-                            </div>
-                            <div className="absolute -bottom-0.5 -right-0.5">
-                                <QrBadge size="0.9cm" rounded="rounded-md" />
-                            </div>
+                            {renderAvatarSection({
+                                width: '2cm',
+                                height: '2cm',
+                                avatarVariant: 'modern',
+                                shapeClassName: 'rounded-lg',
+                                qrSize: '0.9cm',
+                                qrRounded: 'rounded-md'
+                            })}
                         </div>
                         <div className="flex-grow space-y-1">
-                            <div className="text-[12pt] font-black leading-none uppercase">{Santosri.namaLengkap}</div>
-                            <div className="text-[9pt] font-mono bg-black text-white inline-block px-1">{Santosri.nis}</div>
+                            <div className="text-[12pt] font-black leading-none uppercase">{santri.namaLengkap}</div>
+                            <div className="text-[9pt] font-mono bg-black text-white inline-block px-1">{santri.nis}</div>
                             <div className="text-[7pt] font-bold mt-2 border-t-2 border-black pt-1">{settings.namaPonpes}</div>
                             <div className="text-[6pt]">{rombelNama} - {jenjang?.nama}</div>
                         </div>
@@ -295,25 +357,23 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                         </div>
                     </div>
                     <div className="flex p-3 gap-3 z-10 flex-grow overflow-hidden">
-                        <div className="w-[30%] flex flex-col gap-2">
-                            <div className="rounded-lg overflow-hidden border border-slate-600 bg-slate-800">
-                                <SmartAvatar santri={Santosri} variant="dark" className="w-[2cm] h-[2cm] object-cover" />
-                            </div>
+                        <div className="w-[30%] flex flex-col gap-2 relative">
+                            {renderAvatarSection()}
                             <div className="text-center">
-                                <div className="text-[9pt] font-mono font-bold text-teal-400">{Santosri.nis}</div>
+                                <div className="text-[9pt] font-mono font-bold text-teal-400">{santri.nis}</div>
                                 <div className="text-[5pt] text-slate-500 uppercase tracking-widest">ID Anggota</div>
                             </div>
                         </div>
                         <div className="flex-grow space-y-1">
                             <div className="mb-2">
                                 <div className="text-[5pt] text-slate-500 uppercase">Nama Lengkap</div>
-                                <div className="text-[8pt] font-bold leading-tight truncate">{Santosri.namaLengkap}</div>
+                                <div className="text-[8pt] font-bold leading-tight truncate">{santri.namaLengkap}</div>
                             </div>
                             <div className="grid grid-cols-2 gap-1">
                                 <div><div className="text-[5pt] text-slate-500 uppercase">Jenjang</div><div className="text-[6.5pt]">{jenjangKelas}</div></div>
                                 <div><div className="text-[5pt] text-slate-500 uppercase">Rombel</div><div className="text-[6.5pt]">{rombelNama}</div></div>
                             </div>
-                            <div><div className="text-[5pt] text-slate-500 uppercase">Alamat</div><div className="text-[6.5pt] leading-tight line-clamp-2">{Santosri.alamat.kabupatenKota}</div></div>
+                            <div><div className="text-[5pt] text-slate-500 uppercase">Alamat</div><div className="text-[6.5pt] leading-tight line-clamp-2">{santri.alamat.kabupatenKota}</div></div>
                         </div>
                     </div>
                 </div>
@@ -336,21 +396,27 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                     <div className="relative mt-1">
                         <div className="absolute inset-0 bg-teal-400 rounded-full transform translate-x-1 translate-y-1"></div>
                         <div className="relative">
-                            <SmartAvatar santri={Santosri} variant="ceria" className="w-[2cm] h-[2cm] rounded-full border-2 border-white bg-teal-200 relative z-10 object-cover" />
-                        </div>
-                        <div className="absolute -bottom-1 -right-1 z-20">
-                            <QrBadge size="0.8cm" rounded="rounded-md" />
+                            {renderAvatarSection({
+                                width: '2cm',
+                                height: '2cm',
+                                avatarVariant: 'ceria',
+                                avatarClassName: 'bg-teal-200',
+                                shapeClassName: 'rounded-full border-2 border-white',
+                                qrSize: '0.8cm',
+                                qrRounded: 'rounded-md',
+                                qrOnlyContainerClassName: 'bg-teal-200'
+                            })}
                         </div>
                     </div>
                     <div className="flex-grow pl-2 z-10 relative">
                         <div className="mb-2 border-b border-orange-200 pb-1">
                             <div className="text-[5pt] text-orange-400 uppercase tracking-wide">Nama Lengkap</div>
-                            <div className="text-[9pt] font-bold text-teal-800 leading-tight truncate">{Santosri.namaLengkap}</div>
+                            <div className="text-[9pt] font-bold text-teal-800 leading-tight truncate">{santri.namaLengkap}</div>
                         </div>
                         <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[6.5pt]">
-                            <div><div className="text-[5pt] text-orange-400 uppercase">NIS</div><div className="font-mono text-orange-700 bg-white/50 inline-block px-1 rounded font-bold">{Santosri.nis}</div></div>
+                            <div><div className="text-[5pt] text-orange-400 uppercase">NIS</div><div className="font-mono text-orange-700 bg-white/50 inline-block px-1 rounded font-bold">{santri.nis}</div></div>
                             <div><div className="text-[5pt] text-orange-400 uppercase">Kelas</div><div className="text-teal-700 font-bold leading-tight">{rombelNama}</div></div>
-                            <div className="col-span-2"><div className="text-[5pt] text-orange-400 uppercase">Alamat</div><div className="text-teal-700 font-bold truncate">{Santosri.alamat.kabupatenKota}</div></div>
+                            <div className="col-span-2"><div className="text-[5pt] text-orange-400 uppercase">Alamat</div><div className="text-teal-700 font-bold truncate">{santri.alamat.kabupatenKota}</div></div>
                         </div>
                     </div>
                 </div>

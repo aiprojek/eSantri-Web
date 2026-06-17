@@ -51,6 +51,7 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
             case 'Ziyadah': return 'bg-green-100 text-green-700 border-green-200';
             case 'Murojaah': return 'bg-blue-100 text-blue-700 border-blue-200';
             case "Tasmi'": return 'bg-purple-100 text-purple-700 border-purple-200';
+            case 'Ujian Hafalan': return 'bg-amber-100 text-amber-700 border-amber-200';
             default: return 'bg-gray-100 text-gray-700';
         }
     };
@@ -114,7 +115,13 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                 <div key={rec.id} className="relative group">
                                     {/* Dot */}
                                     <div className={`absolute -left-[31px] top-1 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
-                                        rec.tipe === 'Ziyadah' ? 'bg-green-500' : rec.tipe === 'Murojaah' ? 'bg-blue-500' : 'bg-purple-500'
+                                        rec.tipe === 'Ziyadah'
+                                            ? 'bg-green-500'
+                                            : rec.tipe === 'Murojaah'
+                                                ? 'bg-blue-500'
+                                                : rec.tipe === 'Ujian Hafalan'
+                                                    ? 'bg-amber-500'
+                                                    : 'bg-purple-500'
                                     }`}></div>
                                     
                                     {/* Card */}
@@ -124,6 +131,11 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getTypeColor(rec.tipe)}`}>
                                                     {rec.tipe}
                                                 </span>
+                                                {rec.sesiUjian && (
+                                                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                                        {rec.sesiUjian}
+                                                    </span>
+                                                )}
                                                 <span className="text-xs text-gray-500 flex items-center">
                                                     <i className="bi bi-calendar-event mr-1"></i>
                                                     {new Date(rec.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}

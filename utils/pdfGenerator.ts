@@ -449,6 +449,16 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 page-break-inside: auto !important;
                 break-inside: auto !important;
             }
+            .report-signature-footer {
+                position: relative !important;
+                left: auto !important;
+                right: auto !important;
+                bottom: auto !important;
+                margin-top: auto !important;
+                padding-top: 0.25cm !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
             #calendar-print-area {
                 width: 21cm !important;
                 margin: 0 auto !important;

@@ -1,0 +1,21 @@
+{
+  "name": "eSantri Web",
+  "short_name": "eSantri Web",
+  "description": "Sistem Manajemen Pondok Pesantren Modern, Gratis dan Open Source. Aman, Cepat, Offline-First & Cloud Sync.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ]
+}

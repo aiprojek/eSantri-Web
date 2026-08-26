@@ -230,6 +230,7 @@ export const TabGeneratorFormulir: React.FC = () => {
     const [genRombelId, setGenRombelId] = useState(0);
     const [genSemester, setGenSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [genTahunAjaran, setGenTahunAjaran] = useState(defaultAcademicYear);
+    const [genRankingScope, setGenRankingScope] = useState<'rombel' | 'kelas' | 'jenjang' | 'global'>('rombel');
     
     const filteredTemplates = useMemo(() => {
         const rombel = genRombelId ? settings.rombel.find(r => r.id === genRombelId) : null;
@@ -284,10 +285,40 @@ export const TabGeneratorFormulir: React.FC = () => {
     const availableKelas = useMemo(() => genJenjangId ? settings.kelas.filter(k => k.jenjangId === genJenjangId) : [], [genJenjangId, settings.kelas]);
     const availableRombel = useMemo(() => genKelasId ? settings.rombel.filter(r => r.kelasId === genKelasId) : [], [genKelasId, settings.rombel]);
 
+    // Live preview of active students matching current selection
+    const targetSantriList = useMemo(() => {
+        const activeList = santriList.filter(s => !s.deleted && (s.status || '').trim().toLowerCase() === 'aktif');
+        if (genRombelId > 0) {
+            return activeList.filter(s => Number(s.rombelId) === Number(genRombelId));
+        }
+        if (genKelasId > 0) {
+            return activeList.filter(s => {
+                if (Number(s.kelasId) === Number(genKelasId)) return true;
+                const sRombel = settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
+                return sRombel && Number(sRombel.kelasId) === Number(genKelasId);
+            });
+        }
+        if (genJenjangId > 0) {
+            return activeList.filter(s => {
+                if (Number(s.jenjangId) === Number(genJenjangId)) return true;
+                const sKelas = settings.kelas.find(k => Number(k.id) === Number(s.kelasId));
+                if (sKelas && Number(sKelas.jenjangId) === Number(genJenjangId)) return true;
+                const sRombel = settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
+                const sRombelKelas = sRombel ? settings.kelas.find(k => Number(k.id) === Number(sRombel.kelasId)) : null;
+                return sRombelKelas && Number(sRombelKelas.jenjangId) === Number(genJenjangId);
+            });
+        }
+        return [];
+    }, [santriList, genRombelId, genKelasId, genJenjangId, settings.rombel, settings.kelas]);
+
     const handleGenerate = () => {
-        // Validasi: Rombel harus dipilih ATAU (Jenjang dipilih AND Rombel = 0 yang berarti "Semua")
-        if (!genTemplateId || (!genRombelId && !genJenjangId)) {
-            showToast('Pilih template dan target (Jenjang/Rombel) terlebih dahulu', 'error');
+        // Validasi: Rombel harus dipilih ATAU (Jenjang/Kelas dipilih)
+        if (!genTemplateId || (!genRombelId && !genKelasId && !genJenjangId)) {
+            showToast('Pilih template dan target (Jenjang/Kelas/Rombel) terlebih dahulu', 'error');
+            return;
+        }
+        if (targetSantriList.length === 0) {
+            showToast('Tidak ada santri aktif pada target yang dipilih', 'error');
             return;
         }
         const tpl = templates.find(t => t.id === genTemplateId);
@@ -296,13 +327,15 @@ export const TabGeneratorFormulir: React.FC = () => {
         try {
             const html = generateRaporFormHtml(santriList, settings, {
                 rombelId: genRombelId,
+                kelasId: genKelasId,
                 jenjangId: genJenjangId,
                 semester: genSemester,
                 tahunAjaran: genTahunAjaran,
                 template: tpl,
                 submissionMethod,
                 googleScriptUrl,
-                waDestination 
+                waDestination,
+                rankingScope: genRankingScope 
             });
             const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
@@ -310,14 +343,15 @@ export const TabGeneratorFormulir: React.FC = () => {
             a.href = url;
             
             const targetJenjang = genJenjangId > 0 ? settings.jenjang.find(j => j.id === genJenjangId)?.nama : 'semua-marhalah';
-            const targetRombel = genRombelId > 0 ? settings.rombel.find(r => r.id === genRombelId)?.nama : 'semua-rombel';
-            const filename = buildStandardExportFileName('form-nilai', [targetJenjang, targetRombel, genSemester, genTahunAjaran]);
+            const targetKelas = genKelasId > 0 ? settings.kelas.find(k => k.id === genKelasId)?.nama : '';
+            const targetRombel = genRombelId > 0 ? settings.rombel.find(r => r.id === genRombelId)?.nama : (genKelasId > 0 ? 'semua-rombel-kelas' : 'semua-rombel-jenjang');
+            const filename = buildStandardExportFileName('form-nilai', [targetJenjang, targetKelas, targetRombel, genSemester, genTahunAjaran].filter(Boolean));
             a.download = `${filename}.html`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showToast('Formulir berhasil diunduh.', 'success');
+            showToast(`Formulir berhasil diunduh (${targetSantriList.length} santri aktif).`, 'success');
         } catch (e) {
             showAlert('Gagal Generate', (e as Error).message);
         }
@@ -406,6 +440,72 @@ export const TabGeneratorFormulir: React.FC = () => {
                                 <option value="Genap">Genap</option>
                             </select>
                         </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-gray-100">
+                        <label className="block text-xs font-bold text-indigo-700 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5"><i className="bi bi-trophy-fill text-amber-500"></i> Cakupan Perhitungan Ranking:</span>
+                            <span className="text-[10px] text-gray-400 font-normal">Rumus RANK()</span>
+                        </label>
+                        <select 
+                            value={genRankingScope} 
+                            onChange={e => setGenRankingScope(e.target.value as any)} 
+                            className="w-full border-2 border-indigo-100 bg-indigo-50/40 rounded-lg p-2.5 text-xs font-bold text-indigo-950 focus:border-indigo-500 outline-none"
+                        >
+                            <option value="rombel">📦 Per Rombel (Rekomendasi - Juara 1,2,3 dihitung terpisah tiap rombel)</option>
+                            <option value="kelas">🏫 Per Tingkat Kelas (Paralel - 7A dan 7B digabung, tidak campur kelas lain)</option>
+                            <option value="jenjang">🎓 Per Jenjang (Paralel seluruh santri dalam 1 jenjang)</option>
+                            <option value="global">🌐 Global (Seluruh santri dalam file formulir)</option>
+                        </select>
+                        <p className="text-[10px] text-gray-500 mt-1">
+                            {genRankingScope === 'rombel' && "✅ Setiap Rombel/Kelas memiliki peringkat juara 1, 2, 3 masing-masing secara independen."}
+                            {genRankingScope === 'kelas' && "✅ Santri dengan tingkat kelas yang sama diranking paralel bersama (misal Kelas 1A + 1B, tidak tercampur Kelas 2 atau 3)."}
+                            {genRankingScope === 'jenjang' && "✅ Santri diranking paralel satu marhalah/jenjang."}
+                            {genRankingScope === 'global' && "✅ Semua santri dalam formulir diranking dalam satu kelompok besar."}
+                        </p>
+                    </div>
+
+                    {/* LIVE SANTRI COUNT PREVIEW */}
+                    <div className={`mt-4 p-3.5 rounded-xl border ${targetSantriList.length > 0 ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900' : 'bg-amber-50/70 border-amber-200 text-amber-900'}`}>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <i className={`bi ${targetSantriList.length > 0 ? 'bi-check-circle-fill text-emerald-600' : 'bi-exclamation-triangle-fill text-amber-600'} text-base`}></i>
+                                <div>
+                                    <span className="text-xs font-bold block">
+                                        Target Santri: <span className="underline font-black">{targetSantriList.length} Santri Aktif</span>
+                                    </span>
+                                    <span className="text-[10px] opacity-80">
+                                        {genRombelId > 0 
+                                            ? `Rombel: ${settings.rombel.find(r => r.id === genRombelId)?.nama || ''}` 
+                                            : genKelasId > 0 
+                                                ? `Kelas: ${settings.kelas.find(k => k.id === genKelasId)?.nama || ''} (Semua Rombel)` 
+                                                : genJenjangId > 0 
+                                                    ? `Jenjang: ${settings.jenjang.find(j => j.id === genJenjangId)?.nama || ''} (Gabungan Seluruh Kelas)`
+                                                    : 'Silakan tentukan Jenjang / Kelas / Rombel'}
+                                    </span>
+                                </div>
+                            </div>
+                            {targetSantriList.length > 0 && (
+                                <span className="px-2.5 py-1 bg-white/80 border rounded-lg text-xs font-bold shadow-2xs">
+                                    {targetSantriList.length} Santri
+                                </span>
+                            )}
+                        </div>
+                        {targetSantriList.length > 0 && (
+                            <details className="mt-2 pt-2 border-t border-emerald-200/60 text-[11px]">
+                                <summary className="cursor-pointer font-semibold text-emerald-800 hover:underline">
+                                    Lihat daftar {targetSantriList.length} nama santri yang akan di-generate
+                                </summary>
+                                <div className="mt-1.5 max-h-32 overflow-y-auto space-y-1 bg-white/70 p-2 rounded-lg border border-emerald-100">
+                                    {targetSantriList.map((s, idx) => (
+                                        <div key={s.id} className="flex items-center justify-between text-[10px] text-gray-700">
+                                            <span>{idx + 1}. <strong>{s.namaLengkap}</strong></span>
+                                            <span className="font-mono text-gray-400">NIS: {s.nis || '-'}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </details>
+                        )}
                     </div>
                 </div>
             </div>

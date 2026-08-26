@@ -1,22 +1,45 @@
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from "./lazyClientLibs";
 
 const getUnifiedPreviewPrintStyles = () => `
-    .printable-content-wrapper {
-        background-color: white;
-        margin: 0 auto;
+    /* Screen Display: Realistic Paper Sheet View (Offline HTML Viewer) */
+    @media screen {
+        body {
+            background-color: #f1f5f9;
+            margin: 0;
+            padding: 20px 0 40px 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #1e293b;
+        }
+        #print-root {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+        .printable-content-wrapper,
+        .print-portrait,
+        .print-landscape,
+        .page-break-after,
+        .break-after-page {
+            background-color: #ffffff !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+            border-radius: 4px !important;
+            margin: 0 auto 24px auto !important;
+            box-sizing: border-box !important;
+            position: relative !important;
+        }
+        .print-portrait {
+            width: 210mm !important;
+            min-height: 297mm !important;
+            max-width: 210mm !important;
+        }
+        .print-landscape {
+            width: 297mm !important;
+            min-height: 210mm !important;
+            max-width: 297mm !important;
+        }
     }
-    .printable-content-wrapper > div {
-        page-break-after: auto !important;
-        break-after: auto !important;
-    }
-    .page-break-after {
-        page-break-after: always;
-        break-after: page;
-    }
-    .page-break-after:last-child {
-        page-break-after: auto !important;
-        break-after: auto !important;
-    }
+
     .report-signature-footer {
         position: relative !important;
         left: auto !important;
@@ -119,52 +142,98 @@ const getUnifiedPreviewPrintStyles = () => `
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
     }
-        @media print {
-            html, body {
-                margin: 0 !important;
-                padding: 0 !important;
-                background: #fff !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-            }
-            .no-print { display: none !important; }
+
+    /* Strict Media Print Formatting for Physical & PDF Output */
+    @media print {
+        @page {
+            size: auto;
+            margin: 0;
+        }
+        @page portrait {
+            size: A4 portrait;
+            margin: 0;
+        }
+        @page landscape {
+            size: A4 landscape;
+            margin: 0;
+        }
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            width: 100% !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .no-print {
+            display: none !important;
+        }
+        #print-root {
+            display: block !important;
+            gap: 0 !important;
+        }
         .print-portrait {
             page: portrait;
-            width: auto !important;
+            width: 100% !important;
+            max-width: 210mm !important;
             min-height: 0 !important;
+            height: auto !important;
             margin: 0 auto !important;
             box-sizing: border-box !important;
-            page-break-after: auto !important;
-            break-after: auto !important;
             overflow: visible !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
         }
         .print-landscape {
             page: landscape;
-            width: auto !important;
+            width: 100% !important;
+            max-width: 297mm !important;
             min-height: 0 !important;
+            height: auto !important;
             margin: 0 auto !important;
             box-sizing: border-box !important;
-            page-break-after: auto !important;
-            break-after: auto !important;
             overflow: visible !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
         }
         .printable-content-wrapper {
             box-shadow: none !important;
             border-radius: 0 !important;
             transform: none !important;
+            height: auto !important;
             overflow: visible !important;
         }
-        .page-break-after {
-            margin: 0 !important;
+        .page-break-after,
+        .break-after-page {
+            margin: 0 auto !important;
             box-shadow: none !important;
             border: none !important;
             page-break-after: always !important;
             break-after: page !important;
         }
-        table { page-break-inside: auto !important; break-inside: auto !important; }
-        thead { display: table-header-group !important; }
-        tfoot { display: table-footer-group !important; }
-        tr, td, th { page-break-inside: avoid !important; break-inside: avoid !important; }
+        .page-break-after:last-child,
+        .break-after-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+        }
+        table {
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+        }
+        thead {
+            display: table-header-group !important;
+        }
+        tfoot {
+            display: table-footer-group !important;
+        }
+        tr, td, th {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
         #jadwal-print-area .printable-content-wrapper,
         #jadwal-print-area .page-break-after {
             width: 100% !important;
@@ -258,20 +327,21 @@ const buildUnifiedHtmlDocument = (
     const rootElementId = options?.elementId ?? 'print-root';
     const isCalendarPrint = rootElementId === 'calendar-print-area';
 
-    return `
-<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${fileName}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500;600;700&family=Scheherazade+New:wght@400;700&family=Lateef:wght@400;700&display=swap" rel="stylesheet">
     ${styles}
     <style>
-        body { background-color: #f3f4f6; padding: 2rem; }
         ${getUnifiedPreviewPrintStyles()}
         @media print {
-            @page portrait { size: A4 portrait; margin: 10mm; }
-            @page landscape { size: A4 landscape; margin: 10mm; }
+            @page portrait { size: A4 portrait; margin: 0; }
+            @page landscape { size: A4 landscape; margin: 0; }
             .print-portrait { page: portrait; }
             .print-landscape { page: landscape; }
             ${isJadwalPrint ? '@page { margin: 6mm; size: A4 landscape; }' : ''}
@@ -318,12 +388,26 @@ const buildUnifiedHtmlDocument = (
 </head>
 <body>
     ${showToolbar ? `
-    <div class="no-print" style="max-width: 29.7cm; margin: 0 auto 1rem; display: flex; justify-content: space-between; align-items: center; background: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <div>
-            <h1 style="margin:0; font-size: 1.25rem; font-weight: bold; color: #1f2937;">${fileName}</h1>
-            <p style="margin:0; font-size: 0.875rem; color: #6b7280;">Laporan eSantri - Offline Viewer</p>
+    <div class="no-print" style="position: sticky; top: 0; z-index: 9999; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid #e2e8f0; padding: 12px 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 24px;">
+        <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="background: #0f766e; color: white; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px;">
+                    📄
+                </div>
+                <div>
+                    <h1 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">${fileName}</h1>
+                    <p style="margin: 0; font-size: 12px; color: #64748b;">Format Lembar Kerja Standar A4 • eSantri Digital Document Viewer</p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 11px; color: #475569; background: #f1f5f9; padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                    💡 Tips: Pada dialog cetak, pilih <b>Layout: Otomatis/Portrait</b>, <b>Paper: A4</b> & <b>Margins: None/Default</b>
+                </span>
+                <button onclick="window.print()" style="background: #0f766e; hover:background: #115e59; color: white; border: none; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(15, 118, 110, 0.2);">
+                    <span>🖨️</span> Cetak / Simpan PDF
+                </button>
+            </div>
         </div>
-        <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; cursor: pointer; font-weight: 500;">Cetak / Simpan PDF</button>
     </div>
     ` : ''}
     <div id="${rootElementId}">
@@ -447,6 +531,13 @@ export const exportToAutoTable = async (elementId: string, fileName: string) => 
     if (!element) return;
 
     const detectAutoOrientation = (): 'p' | 'l' => {
+        // Cek eksplisit class .print-landscape atau .print-portrait
+        const hasLandscapeClass = element.classList.contains('print-landscape') || element.querySelector('.print-landscape') !== null;
+        const hasPortraitClass = element.classList.contains('print-portrait') || element.querySelector('.print-portrait') !== null;
+
+        if (hasLandscapeClass && !hasPortraitClass) return 'l';
+        if (hasPortraitClass && !hasLandscapeClass) return 'p';
+
         const pages = element.querySelectorAll('.print-portrait, .print-landscape, .page-break-after');
         let maxEstimatedWidth = 0;
 

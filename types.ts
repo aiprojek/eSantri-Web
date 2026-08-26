@@ -189,6 +189,9 @@ export interface Santri {
     alamatSekolahAsal?: string;
     
     kamarId?: number;
+    halaqahId?: number;
+    targetJuz?: number;
+    telepon?: string;
 
     riwayatStatus?: RiwayatStatus[];
     prestasi?: Prestasi[];
@@ -298,6 +301,16 @@ export interface Kamar {
     gedungId: number;
     kapasitas: number;
     musyrifId?: number;
+}
+
+export interface KelompokHalaqah {
+    id: number;
+    nama: string;
+    muhaffizhId?: number; // TenagaPengajar ID
+    targetJuz?: number;
+    lokasi?: string;
+    keterangan?: string;
+    santriIds?: number[];
 }
 
 export interface NisJenjangConfig {
@@ -569,6 +582,7 @@ export interface PondokSettings {
     website: string;
     logoYayasanUrl?: string;
     logoPonpesUrl?: string;
+    stempelPonpesUrl?: string;
     
     mudirAamId?: number;
     
@@ -581,6 +595,7 @@ export interface PondokSettings {
     biaya: Biaya[];
     gedungAsrama: GedungAsrama[];
     kamar: Kamar[];
+    kelompokHalaqah?: KelompokHalaqah[];
     
     multiUserMode: boolean;
     nisSettings: NisSettings;
@@ -602,6 +617,17 @@ export interface PondokSettings {
 
     hijriAdjustment: number;
     
+    // Dokumen Rapor & Syahadah Default (Universal)
+    tanggalRaporDefault?: string;
+    tempatRaporDefault?: string;
+    formatTanggalRaporDefault?: 'masehi' | 'hijriah_masehi' | 'hijriah';
+    manualHijriRaporDefault?: string;
+
+    tanggalSyahadahDefault?: string;
+    tempatSyahadahDefault?: string;
+    formatTanggalSyahadahDefault?: 'masehi' | 'hijriah_masehi' | 'hijriah';
+    manualHijriSyahadahDefault?: string;
+
     lastModified?: number;
 }
 
@@ -877,6 +903,17 @@ export interface JurnalMengajarRecord {
     lastModified?: number;
 }
 
+export interface KelompokHalaqah {
+    id: number;
+    nama: string;
+    muhaffizhId?: number;
+    targetJuz?: number;
+    lokasi?: string;
+    keterangan?: string;
+    santriIds?: number[];
+    lastModified?: number;
+}
+
 export interface TahfizhRecord {
     id: number;
     santriId: number;
@@ -889,7 +926,21 @@ export interface TahfizhRecord {
     ayatAkhir: number;
     predikat: 'Sangat Lancar' | 'Lancar' | 'Kurang Lancar' | 'Belum Lulus';
     catatan?: string;
+    
+    // Fitur Catat Teguran & Kesalahan
+    jumlahTeguran?: number;      // Frekuensi teguran / tawaqquf / peringatan
+    jumlahKesalahan?: number;    // Frekuensi kesalahan fatal / tajwid / makhraj / khatha'
+    kategoriKesalahan?: {
+        tajwid?: number;         // Salah hukum tajwid
+        makhraj?: number;        // Salah makhraj / sifat huruf
+        kelancaran?: number;     // Tawaqquf / macet / ragu
+        terlewat?: number;       // Ayat terlewat / tertukar
+    };
+    rincianKesalahan?: string;   // Catatan spesifik ayat atau koreksi teguran & kesalahan
+
     muhaffizhId?: number;
+    halaqahId?: number;
+    nilaiAngka?: number; // 0 - 100
     lastModified?: number;
 }
 

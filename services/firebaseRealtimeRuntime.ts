@@ -22,7 +22,7 @@ const TABLES_TO_SYNC = [
     'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
     'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules', 'users',
     'auditLogs', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang',
-    'warehouses', 'stockTransfers', 'settings'
+    'warehouses', 'stockTransfers', 'digitalAssets', 'settings'
 ];
 
 let unsubscribers: (() => void)[] = [];

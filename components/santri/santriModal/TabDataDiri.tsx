@@ -124,7 +124,33 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
           </div>
             <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">Jenis Kelamin</label>
-              <select {...register('jenisKelamin')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+              <select 
+                  {...register('jenisKelamin')} 
+                  onChange={(e) => {
+                      const newGender = e.target.value;
+                      setValue('jenisKelamin', newGender as any, { shouldDirty: true });
+                      const currentKelasId = getValues('kelasId');
+                      if (currentKelasId) {
+                          const rombelsInKelas = settings.rombel.filter(r => r.kelasId === currentKelasId);
+                          const isPutri = newGender === 'Perempuan' || newGender.toLowerCase().startsWith('p');
+                          let matchingRombel = undefined;
+                          if (rombelsInKelas.length === 1) {
+                              matchingRombel = rombelsInKelas[0];
+                          } else if (rombelsInKelas.length > 1) {
+                              if (isPutri) {
+                                  matchingRombel = rombelsInKelas.find(r => /putri|banat|akhwat|pi|\(p\)|_p| b$/i.test(r.nama)) || rombelsInKelas[0];
+                              } else {
+                                  matchingRombel = rombelsInKelas.find(r => /putra|banin|ikhwan|pa|\(l\)|_l| a$/i.test(r.nama)) || rombelsInKelas[0];
+                              }
+                          }
+                          if (matchingRombel) {
+                              setValue('rombelId', matchingRombel.id, { shouldDirty: true });
+                              trigger('rombelId');
+                          }
+                      }
+                  }}
+                  className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+              >
                   <option value="Laki-laki">Laki-laki</option>
                   <option value="Perempuan">Perempuan</option>
               </select>
@@ -213,9 +239,24 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
                           const newJenjangId = parseInt(e.target.value, 10);
                           setValue('jenjangId', newJenjangId, { shouldDirty: true });
                           const firstKelasInJenjang = settings.kelas.find(k => k.jenjangId === newJenjangId);
-                          setValue('kelasId', firstKelasInJenjang?.id || 0, { shouldDirty: true });
-                          const firstRombelInKelas = firstKelasInJenjang ? settings.rombel.find(r => r.kelasId === firstKelasInJenjang.id) : undefined;
-                          setValue('rombelId', firstRombelInKelas?.id || 0, { shouldDirty: true });
+                          const newKelasId = firstKelasInJenjang?.id || 0;
+                          setValue('kelasId', newKelasId, { shouldDirty: true });
+                          
+                          const rombelsInKelas = settings.rombel.filter(r => r.kelasId === newKelasId);
+                          const gender = getValues('jenisKelamin') || '';
+                          const isPutri = gender === 'Perempuan' || gender.toLowerCase().startsWith('p');
+                          
+                          let matchingRombel = undefined;
+                          if (rombelsInKelas.length === 1) {
+                              matchingRombel = rombelsInKelas[0];
+                          } else if (rombelsInKelas.length > 1) {
+                              if (isPutri) {
+                                  matchingRombel = rombelsInKelas.find(r => /putri|banat|akhwat|pi|\(p\)|_p| b$/i.test(r.nama)) || rombelsInKelas[0];
+                              } else {
+                                  matchingRombel = rombelsInKelas.find(r => /putra|banin|ikhwan|pa|\(l\)|_l| a$/i.test(r.nama)) || rombelsInKelas[0];
+                              }
+                          }
+                          setValue('rombelId', matchingRombel?.id || 0, { shouldDirty: true });
                           trigger(['jenjangId', 'kelasId', 'rombelId']);
                       }}
                       className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.jenjangId ? 'border-red-500' : 'border-gray-300'}`}
@@ -235,8 +276,23 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
                       onChange={(e) => {
                           const newKelasId = parseInt(e.target.value, 10);
                           setValue('kelasId', newKelasId, { shouldDirty: true });
-                          const firstRombelInKelas = settings.rombel.find(r => r.kelasId === newKelasId);
-                          setValue('rombelId', firstRombelInKelas?.id || 0, { shouldDirty: true });
+                          
+                          const rombelsInKelas = settings.rombel.filter(r => r.kelasId === newKelasId);
+                          const gender = getValues('jenisKelamin') || '';
+                          const isPutri = gender === 'Perempuan' || gender.toLowerCase().startsWith('p');
+                          
+                          let matchingRombel = undefined;
+                          if (rombelsInKelas.length === 1) {
+                              matchingRombel = rombelsInKelas[0];
+                          } else if (rombelsInKelas.length > 1) {
+                              if (isPutri) {
+                                  matchingRombel = rombelsInKelas.find(r => /putri|banat|akhwat|pi|\(p\)|_p| b$/i.test(r.nama));
+                              } else {
+                                  matchingRombel = rombelsInKelas.find(r => /putra|banin|ikhwan|pa|\(l\)|_l| a$/i.test(r.nama));
+                              }
+                          }
+                          
+                          setValue('rombelId', matchingRombel?.id || 0, { shouldDirty: true });
                           trigger(['kelasId', 'rombelId']);
                       }}
                       disabled={!watchJenjangId}
@@ -262,6 +318,49 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
                   </select>
                   <FormError error={errors.rombelId} />
               </div>
+          </div>
+          <div className="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4 mt-4">
+              <div>
+                  <label className="block mb-1 text-sm font-medium text-teal-800">Kelompok Halaqah Tahfizh</label>
+                  <select 
+                      {...register('halaqahId', { valueAsNumber: true })}
+                      className="bg-teal-50/50 border border-teal-200 text-gray-900 text-sm rounded-lg w-full p-2.5 font-semibold"
+                  >
+                      <option value={0}>-- Belum Ditentukan --</option>
+                      {(settings.kelompokHalaqah || []).map(h => <option key={h.id} value={h.id}>{h.nama}</option>)}
+                  </select>
+              </div>
+              <div>
+                  <label className="block mb-1 text-sm font-medium text-teal-800">Target Hafalan (Juz)</label>
+                  <input 
+                      type="number"
+                      min={1}
+                      max={30}
+                      {...register('targetJuz', { valueAsNumber: true })}
+                      placeholder="cth: 30 atau 5"
+                      className="bg-teal-50/50 border border-teal-200 text-gray-900 text-sm rounded-lg w-full p-2.5 font-semibold"
+                  />
+              </div>
+          </div>
+        </FormSection>
+        <FormSection title="Sekolah Asal">
+          <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Nama Sekolah Asal</label>
+              <input 
+                  type="text" 
+                  {...register('sekolahAsal')} 
+                  placeholder="Contoh: SD Negeri 1 / MTs Negeri..." 
+                  className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" 
+              />
+          </div>
+          <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Alamat Sekolah Asal</label>
+              <input 
+                  type="text" 
+                  {...register('alamatSekolahAsal')} 
+                  placeholder="Contoh: Jl. Pramuka No. 12, Kab. Banyumas" 
+                  className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5" 
+              />
           </div>
         </FormSection>
       </div>

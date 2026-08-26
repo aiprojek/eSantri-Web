@@ -37,6 +37,51 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "namaLengkap", "status"]
+    },
+    "DigitalAsset": {
+      "title": "DigitalAsset",
+      "description": "Berkas & Aset Digital (foto santri, dokumen, sertifikat, berkas)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileType": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "category": { "type": "string" },
+        "relatedId": { "type": "string" },
+        "syncStatus": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "fileName", "fileType", "category", "lastModified"]
+    },
+    "TahfizhRecord": {
+      "title": "TahfizhRecord",
+      "description": "Catatan setoran ziyadah, murojaah, ujian hafalan, dan evaluasi tahfizh santri",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "santriId": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "tipe": { "type": "string" },
+        "juz": { "type": "number" },
+        "surahAwal": { "type": "string" },
+        "ayatAwal": { "type": "number" },
+        "surahAkhir": { "type": "string" },
+        "ayatAkhir": { "type": "number" },
+        "nilai": { "type": "number" },
+        "kelancaran": { "type": "number" },
+        "tajwid": { "type": "number" },
+        "makhraj": { "type": "number" },
+        "adab": { "type": "number" },
+        "jumlahTeguran": { "type": "number" },
+        "jumlahKesalahan": { "type": "number" },
+        "muhaffizhId": { "type": "number" },
+        "halaqahId": { "type": "string" },
+        "catatan": { "type": "string" },
+        "statusMutqin": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "santriId", "tanggal", "tipe", "lastModified"]
     }
   },
   "firestore": {
@@ -51,6 +96,14 @@
     "tenants/{tenantId}/pendaftar": {
       "schema": "Pendaftar",
       "description": "Koleksi data pendaftar PSB per tenant"
+    },
+    "tenants/{tenantId}/digitalAssets": {
+      "schema": "DigitalAsset",
+      "description": "Koleksi berkas & aset digital per tenant"
+    },
+    "tenants/{tenantId}/tahfizh": {
+      "schema": "TahfizhRecord",
+      "description": "Koleksi catatan tahfizh & ujian santri per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

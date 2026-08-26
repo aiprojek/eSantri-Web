@@ -60,12 +60,18 @@ const manualChunks = (id: string) => {
 
 export default defineConfig(({ mode }) => {
   const isTauriMode = mode === 'tauri-production';
+  const now = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const buildTimestamp = `${pad(now.getDate())}${pad(now.getMonth() + 1)}${now.getFullYear()}.${pad(now.getHours())}${pad(now.getMinutes())}`;
 
   return {
     plugins: [react()],
     clearScreen: false,
+    define: {
+      __APP_VERSION__: JSON.stringify(buildTimestamp),
+    },
     server: {
-      port: 5173,
+      port: 3000,
       host: '0.0.0.0',
       strictPort: true,
     },

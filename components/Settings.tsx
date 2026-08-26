@@ -27,9 +27,10 @@ const SETTINGS_TABS: HeaderTabItem<SettingsTab>[] = [
 ];
 
 const Settings: React.FC = () => {
-    const { settings, onSaveSettings, showConfirmation, showToast } = useAppContext();
+    const { settings, onSaveSettings, showConfirmation, showToast, isSampleDataDetected, onDeleteSampleData } = useAppContext();
     const [localSettings, setLocalSettings] = useState<PondokSettings>(settings);
     const [isSaving, setIsSaving] = useState(false);
+    const [isDeletingSample, setIsDeletingSample] = useState(false);
     const [activeTab, setActiveTab] = useState<SettingsTab>('umum');
 
     useEffect(() => {
@@ -146,6 +147,26 @@ const Settings: React.FC = () => {
         );
     };
 
+    const handleDeleteSampleData = () => {
+        showConfirmation(
+            'Hapus Seluruh Data Sampel?',
+            'Tindakan ini akan mengosongkan data santri simulasi, tagihan contoh, kas simulasi, dan catatan mutaba\'ah agar aplikasi siap digunakan untuk data asli pondok Anda. Apakah Anda yakin?',
+            async () => {
+                setIsDeletingSample(true);
+                try {
+                    await onDeleteSampleData();
+                    showToast('Semua data sampel berhasil dihapus. Aplikasi kini bersih!', 'success');
+                } catch (error) {
+                    console.error('Failed to delete sample data:', error);
+                    showToast('Gagal menghapus data sampel.', 'error');
+                } finally {
+                    setIsDeletingSample(false);
+                }
+            },
+            { confirmText: 'Ya, Hapus Data Sampel', confirmColor: 'red' }
+        );
+    };
+
     return (
         <div className="space-y-6">
             <PageHeader
@@ -154,6 +175,48 @@ const Settings: React.FC = () => {
                 description="Kelola konfigurasi pondok, akun, generator NIS, portal, cloud sync, backup, dan diagnostik dari panel terpusat."
                 tabs={<HeaderTabs tabs={SETTINGS_TABS} value={activeTab} onChange={setActiveTab} />}
             />
+
+            {/* Warning Banner Data Sampel */}
+            {isSampleDataDetected && (
+                <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 via-amber-50/80 to-yellow-50 p-4 sm:p-5 shadow-sm animate-fade-in">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3.5">
+                            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 border border-amber-200/60 shadow-xs">
+                                <i className="bi bi-exclamation-triangle-fill text-lg"></i>
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-bold text-amber-950 flex items-center gap-2">
+                                    Peringatan: Data Simulasi / Sampel Masih Aktif
+                                    <span className="px-2 py-0.5 text-[11px] font-semibold bg-amber-200/80 text-amber-900 rounded-full">Mode Demo</span>
+                                </h4>
+                                <p className="text-xs text-amber-800 mt-1 leading-relaxed max-w-3xl">
+                                    Aplikasi saat ini memuat data contoh (Pondok Pesantren Al-Ikhlas, santri contoh, tagihan, dan mutaba'ah). 
+                                    Jika Anda siap memasukkan data riil pondok Anda, bersihkan data sampel atau kelola opsi reset di menu <strong>Backup & Restore</strong>.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0 self-end sm:self-center">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('backup')}
+                                className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-white border border-amber-200 text-amber-900 hover:bg-amber-100/60 transition-colors shadow-2xs"
+                            >
+                                <i className="bi bi-arrow-repeat mr-1.5"></i>
+                                Menu Reset Data
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDeleteSampleData}
+                                disabled={isDeletingSample}
+                                className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-amber-600 hover:bg-amber-700 text-white transition-colors shadow-2xs disabled:opacity-50 inline-flex items-center gap-1.5"
+                            >
+                                <i className="bi bi-trash3"></i>
+                                <span>{isDeletingSample ? 'Membersihkan...' : 'Bersihkan Data Sampel'}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="space-y-6">
                 <Suspense fallback={<LoadingFallback />}>

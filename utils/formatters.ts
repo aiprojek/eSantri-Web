@@ -59,6 +59,51 @@ export const getHijriDate = (date: Date, adjustment: number = 0) => {
     }
 };
 
+export type DateFormatMode = 'masehi' | 'hijriah_masehi' | 'hijriah';
+
+export interface FormatTanggalDokumenOptions {
+    formatMode?: DateFormatMode;
+    hijriAdjustment?: number;
+    manualHijri?: string;
+}
+
+export const formatTanggalDokumen = (
+    dateString?: string | Date,
+    options?: FormatTanggalDokumenOptions
+): string => {
+    if (!dateString) return '';
+    try {
+        const date = typeof dateString === 'string' ? parseISO(dateString) : dateString;
+        if (!isValid(date)) return '';
+
+        const masehiStr = format(date, 'd MMMM yyyy', { locale: id });
+        const formatMode = options?.formatMode || 'masehi';
+
+        if (formatMode === 'masehi') {
+            return masehiStr;
+        }
+
+        const hijriInfo = getHijriDate(date, options?.hijriAdjustment || 0);
+        const hijriStr = options?.manualHijri?.trim()
+            || (hijriInfo.full ? `${hijriInfo.full} H` : '');
+
+        if (formatMode === 'hijriah') {
+            return hijriStr || masehiStr;
+        }
+
+        if (formatMode === 'hijriah_masehi') {
+            if (hijriStr) {
+                return `${hijriStr} / ${masehiStr} M`;
+            }
+            return masehiStr;
+        }
+
+        return masehiStr;
+    } catch (e) {
+        return '';
+    }
+};
+
 // Helper untuk mencari tanggal 1 bulan Hijriah dari sebuah tanggal referensi
 export const findStartOfHijriMonth = (referenceDate: Date, adjustment: number = 0): Date => {
     let d = new Date(referenceDate);
@@ -114,3 +159,16 @@ export const formatBytes = (bytes: number, decimals = 2) => {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
+
+export const isSantriPutra = (santri?: { jenisKelamin?: string } | string | null): boolean => {
+    const raw = typeof santri === 'string' ? santri : santri?.jenisKelamin;
+    const g = String(raw || '').trim().toLowerCase();
+    return g === 'laki-laki' || g === 'l' || g === 'putra' || g === 'pria' || g.startsWith('lak');
+};
+
+export const isSantriPutri = (santri?: { jenisKelamin?: string } | string | null): boolean => {
+    const raw = typeof santri === 'string' ? santri : santri?.jenisKelamin;
+    const g = String(raw || '').trim().toLowerCase();
+    return g === 'perempuan' || g === 'p' || g === 'putri' || g === 'wanita' || g.startsWith('perem');
+};
+

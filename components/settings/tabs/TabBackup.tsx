@@ -181,7 +181,9 @@ const HealthDashboard: React.FC = () => {
 };
 
 export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSettings }) => {
-    const { downloadBackup, showConfirmation, showToast, showAlert } = useAppContext();
+    const { downloadBackup, showConfirmation, showToast, showAlert, onDeleteSampleData, onResetToSampleData, isSampleDataDetected } = useAppContext();
+    const [isResetting, setIsResetting] = useState(false);
+    const [isDeletingSample, setIsDeletingSample] = useState(false);
     const restoreInputRef = useRef<HTMLInputElement>(null);
 
     const handleBackupConfigChange = (frequency: BackupFrequency) => {
@@ -192,6 +194,48 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                 frequency
             }
         }));
+    };
+
+    const handleDeleteSampleData = () => {
+        showConfirmation(
+            'Hapus Seluruh Data Sampel?',
+            'Tindakan ini akan mengosongkan data santri simulasi, tagihan, kas, absensi, dan mutaba\'ah agar aplikasi bersih dan siap diisi data riil pondok Anda. Pengaturan dasar pondok akan dipertahankan. Lanjutkan?',
+            async () => {
+                setIsDeletingSample(true);
+                try {
+                    await onDeleteSampleData();
+                    showToast('Data sampel berhasil dibersihkan! Aplikasi siap diisi data pondok asli.', 'success');
+                    setTimeout(() => window.location.reload(), 1200);
+                } catch (error) {
+                    console.error('Failed to delete sample data:', error);
+                    showToast('Gagal menghapus data sampel.', 'error');
+                } finally {
+                    setIsDeletingSample(false);
+                }
+            },
+            { confirmText: 'Ya, Bersihkan Data Sampel', confirmColor: 'red' }
+        );
+    };
+
+    const handleResetToSampleData = () => {
+        showConfirmation(
+            'Kembalikan ke Data Awal / Sampel Bawaan?',
+            'PERINGATAN: Tindakan ini akan MENGHAPUS SEMUA DATA saat ini dan MEMULIHKAN KEMBALI data simulasi bawaan aplikasi (Pondok Pesantren Al-Ikhlas, santri contoh, kelas, dan akun demo). Fitur ini sangat cocok untuk demonstrasi atau pelatihan staf. Apakah Anda yakin?',
+            async () => {
+                setIsResetting(true);
+                try {
+                    await onResetToSampleData();
+                    showToast('Database berhasil di-reset ke data awal sampel! Memuat ulang aplikasi...', 'success');
+                    setTimeout(() => window.location.reload(), 1500);
+                } catch (error) {
+                    console.error('Failed to reset database:', error);
+                    showToast('Gagal mereset database ke data awal.', 'error');
+                } finally {
+                    setIsResetting(false);
+                }
+            },
+            { confirmText: 'Ya, Reset ke Data Awal', confirmColor: 'red' }
+        );
     };
 
     const handleRestoreHandler = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -298,38 +342,108 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
     };
 
     return (
-        <SectionCard
-            title="Cadangkan & Pulihkan Data Lokal"
-            description="Kelola backup manual, jadwal pengingat backup, dan restore data dari file JSON."
-            contentClassName="space-y-6 p-6"
-        >
-            
-            <HealthDashboard />
+        <div className="space-y-6">
+            <SectionCard
+                title="Cadangkan & Pulihkan Data Lokal"
+                description="Kelola backup manual, jadwal pengingat backup, dan restore data dari file JSON."
+                contentClassName="space-y-6 p-6"
+            >
+                <HealthDashboard />
 
-             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div>
-                    <h3 className="text-lg font-semibold text-slate-800">Cadangkan Data (Manual)</h3>
-                    <p className="mb-4 mt-1 text-sm text-slate-600">Simpan salinan semua data santri dan pengaturan ke dalam satu file JSON di komputer Anda.</p>
-                    <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-3">
-                        <h4 className="mb-2 text-sm font-semibold text-yellow-800">Pengingat Backup Otomatis</h4>
-                        <div className="flex flex-wrap gap-2">
-                            {[{ value: 'daily', label: 'Setiap Hari' }, { value: 'weekly', label: 'Setiap Minggu' }, { value: 'never', label: 'Matikan' }].map(opt => (
-                                <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded border bg-white px-3 py-1.5 hover:bg-gray-50">
-                                    <input type="radio" name="backupFreq" value={opt.value} checked={localSettings.backupConfig?.frequency === opt.value} onChange={() => handleBackupConfigChange(opt.value as any)} className="text-teal-600 focus:ring-teal-500"/>
-                                    <span className="text-sm text-gray-700">{opt.label}</span>
-                                </label>
-                            ))}
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <div>
+                        <h3 className="text-lg font-semibold text-slate-800">Cadangkan Data (Manual)</h3>
+                        <p className="mb-4 mt-1 text-sm text-slate-600">Simpan salinan semua data santri dan pengaturan ke dalam satu file JSON di komputer Anda.</p>
+                        <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-3">
+                            <h4 className="mb-2 text-sm font-semibold text-yellow-800">Pengingat Backup Otomatis</h4>
+                            <div className="flex flex-wrap gap-2">
+                                {[{ value: 'daily', label: 'Setiap Hari' }, { value: 'weekly', label: 'Setiap Minggu' }, { value: 'never', label: 'Matikan' }].map(opt => (
+                                    <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded border bg-white px-3 py-1.5 hover:bg-gray-50">
+                                        <input type="radio" name="backupFreq" value={opt.value} checked={localSettings.backupConfig?.frequency === opt.value} onChange={() => handleBackupConfigChange(opt.value as any)} className="text-teal-600 focus:ring-teal-500"/>
+                                        <span className="text-sm text-gray-700">{opt.label}</span>
+                                    </label>
+                                ))}
+                            </div>
                         </div>
+                        <button onClick={downloadBackup} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 sm:w-auto"><i className="bi bi-download"></i><span>Unduh Cadangan Data</span></button>
                     </div>
-                    <button onClick={downloadBackup} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 sm:w-auto"><i className="bi bi-download"></i><span>Unduh Cadangan Data</span></button>
+                    <div>
+                        <h3 className="text-lg font-semibold text-slate-800">Pulihkan Data (Manual)</h3>
+                        <p className="mb-4 mt-1 text-sm text-slate-600">Pulihkan data dari file cadangan JSON. Tindakan ini tidak dapat dibatalkan.</p>
+                        <input type="file" accept=".json" onChange={handleRestoreHandler} ref={restoreInputRef} id="restore-input" className="hidden" />
+                        <label htmlFor="restore-input" className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 sm:w-auto"><i className="bi bi-upload"></i><span>Pilih File Cadangan</span></label>
+                    </div>
                 </div>
-                 <div>
-                    <h3 className="text-lg font-semibold text-slate-800">Pulihkan Data (Manual)</h3>
-                    <p className="mb-4 mt-1 text-sm text-slate-600">Pulihkan data dari file cadangan JSON. Tindakan ini tidak dapat dibatalkan.</p>
-                    <input type="file" accept=".json" onChange={handleRestoreHandler} ref={restoreInputRef} id="restore-input" className="hidden" />
-                    <label htmlFor="restore-input" className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 sm:w-auto"><i className="bi bi-upload"></i><span>Pilih File Cadangan</span></label>
+            </SectionCard>
+
+            {/* Zona Pengelolaan Data Awal & Reset */}
+            <SectionCard
+                title="Zona Reset & Pengelolaan Data Sampel"
+                description="Opsi pembersihan data simulasi awal serta pemulihan ulang ke data sampel bawaan untuk pengujian atau demonstrasi."
+                contentClassName="space-y-6 p-6"
+            >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Kartu 1: Bersihkan Data Sampel */}
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-5 flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center gap-2.5 mb-2">
+                                <span className="p-2 rounded-lg bg-amber-100 text-amber-700">
+                                    <i className="bi bi-trash3-fill"></i>
+                                </span>
+                                <h4 className="font-bold text-slate-800">Bersihkan Seluruh Data Sampel</h4>
+                            </div>
+                            <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                                Mengosongkan data transaksi, santri simulasi, tagihan contoh, kas simulasi, dan catatan mutaba'ah. 
+                                Pengaturan pondok tetap dipertahankan sehingga Anda dapat langsung menginputkan data riil santri & staf pondok.
+                            </p>
+                            {isSampleDataDetected && (
+                                <div className="mb-3 text-[11px] font-medium text-amber-800 flex items-center gap-1.5">
+                                    <i className="bi bi-info-circle-fill"></i>
+                                    <span>Status: Data sampel saat ini masih terdeteksi aktif.</span>
+                                </div>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleDeleteSampleData}
+                            disabled={isDeletingSample}
+                            className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
+                        >
+                            <i className="bi bi-eraser-fill"></i>
+                            <span>{isDeletingSample ? 'Membersihkan...' : 'Hapus Semua Data Sampel'}</span>
+                        </button>
+                    </div>
+
+                    {/* Kartu 2: Reset ke Data Awal / Sampel (Factory Reset) */}
+                    <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-5 flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center gap-2.5 mb-2">
+                                <span className="p-2 rounded-lg bg-rose-100 text-rose-700">
+                                    <i className="bi bi-arrow-counterclockwise"></i>
+                                </span>
+                                <h4 className="font-bold text-slate-800">Reset ke Data Awal / Sampel Bawaan</h4>
+                            </div>
+                            <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                                Mengembalikan seluruh database ke kondisi awal aplikasi (Pondok Pesantren Al-Ikhlas, santri contoh, kelas, halaqah, dan akun demo).
+                                Sangat bermanfaat saat Anda selesai melakukan pengujian atau ingin mengadakan pelatihan untuk staf pengajar.
+                            </p>
+                            <div className="mb-3 text-[11px] font-medium text-rose-700 flex items-center gap-1.5">
+                                <i className="bi bi-exclamation-octagon-fill"></i>
+                                <span>Perhatian: Seluruh perubahan data saat ini akan digantikan data demo awal.</span>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleResetToSampleData}
+                            disabled={isResetting}
+                            className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 text-xs font-semibold shadow-sm transition-colors disabled:opacity-50"
+                        >
+                            <i className="bi bi-arrow-repeat"></i>
+                            <span>{isResetting ? 'Mereset Database...' : 'Reset ke Data Awal (Demo Sampel)'}</span>
+                        </button>
+                    </div>
                 </div>
-            </div>
-        </SectionCard>
+            </SectionCard>
+        </div>
     );
 };

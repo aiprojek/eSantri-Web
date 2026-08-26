@@ -4,24 +4,41 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporLengkapTemplate } from '../reports/modules/AcademicReports';
 import { printToPdfNative } from '../../utils/pdfGenerator';
-import { Santri, RaporTemplate, RaporRecord } from '../../types';
+import { Santri, RaporTemplate, RaporRecord, DigitalAsset } from '../../types';
 import { PrintHeader } from '../common/PrintHeader';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { getRaporRecordsByPeriod } from '../../services/academicQueries';
+import { resolveRaporText, isMediaTag, getMediaTagImageSrc } from '../../utils/raporPlaceholderResolver';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db';
 
 // --- HELPER COMPONENT: DYNAMIC RENDERER ---
-const DynamicRaporPreview: React.FC<{ template: RaporTemplate, santri: Santri, record: RaporRecord | null, settings: any }> = ({ template, santri, record, settings }) => {
+const DynamicRaporPreview: React.FC<{ 
+    template: RaporTemplate, 
+    santri: Santri, 
+    record: RaporRecord | null, 
+    settings: any, 
+    digitalAssets?: DigitalAsset[],
+    tanggalRapor?: string,
+    tempatRapor?: string 
+}> = ({ template, santri, record, settings, digitalAssets = [], tanggalRapor, tempatRapor }) => {
     const customData = record?.customData ? JSON.parse(record.customData) : {};
-    
-    // Simple placeholder replacement logic (reused concept)
-    const replacePlaceholders = (text: string) => {
-        let res = text;
-        res = res.replace(/\$NAMA/g, santri.namaLengkap).replace(/\$NISN/g, santri.nisn || '-').replace(/\$NIS/g, santri.nis);
-        res = res.replace(/\$KELAS/g, settings.kelas.find((k: any) => k.id === santri.kelasId)?.nama || '');
-        res = res.replace(/\$ROMBEL/g, settings.rombel.find((r: any) => r.id === santri.rombelId)?.nama || '');
-        res = res.replace(/\$TAHUN_AJAR/g, record?.tahunAjaran || '-').replace(/\$SEMESTER/g, record?.semester || '-');
-        return res;
+    const effectiveDate = record?.tanggalRapor 
+        ? new Date(record.tanggalRapor) 
+        : (tanggalRapor ? new Date(tanggalRapor) : (settings?.tanggalRaporDefault ? new Date(settings.tanggalRaporDefault) : new Date()));
+        
+    const effectiveSettings = {
+        ...settings,
+        tempatRaporDefault: tempatRapor?.trim() || settings?.tempatRaporDefault
+    };
+
+    const resolveContext = {
+        santri,
+        settings: effectiveSettings,
+        record,
+        digitalAssets,
+        targetDate: effectiveDate
     };
 
     return (
@@ -40,12 +57,33 @@ const DynamicRaporPreview: React.FC<{ template: RaporTemplate, santri: Santri, r
                         <tr key={rIdx}>
                             {row.map((cell, cIdx) => {
                                 if (cell.hidden) return null;
-                                let content = cell.value;
+                                let renderedContent: React.ReactNode = cell.value;
                                 
                                 if (cell.type === 'data') {
-                                    content = replacePlaceholders(cell.value);
+                                    if (isMediaTag(cell.value)) {
+                                        const imgSrc = getMediaTagImageSrc(cell.value, resolveContext);
+                                        if (imgSrc) {
+                                            const isStempel = cell.value.includes('STEMPEL');
+                                            const isTtd = cell.value.includes('TTD');
+                                            renderedContent = (
+                                                <div className="flex items-center justify-center p-1">
+                                                    <img 
+                                                        src={imgSrc} 
+                                                        alt={cell.value} 
+                                                        className={`object-contain ${isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`} 
+                                                    />
+                                                </div>
+                                            );
+                                        } else {
+                                            renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
+                                        }
+                                    } else {
+                                        renderedContent = resolveRaporText(cell.value, resolveContext);
+                                    }
                                 } else if ((cell.type === 'input' || cell.type === 'formula' || cell.type === 'dropdown') && cell.key) {
-                                    content = customData[cell.key] || '';
+                                    renderedContent = customData[cell.key] || '';
+                                } else if (cell.type === 'label') {
+                                    renderedContent = resolveRaporText(cell.value, resolveContext);
                                 }
 
                                 // Apply borders
@@ -64,7 +102,7 @@ const DynamicRaporPreview: React.FC<{ template: RaporTemplate, santri: Santri, r
 
                                 return (
                                     <td key={cIdx} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={borderStyle}>
-                                        {content}
+                                        {renderedContent}
                                     </td>
                                 );
                             })}
@@ -77,8 +115,9 @@ const DynamicRaporPreview: React.FC<{ template: RaporTemplate, santri: Santri, r
 };
 
 export const TabCetakRapor: React.FC = () => {
-    const { settings } = useAppContext();
+    const { settings, onUpdateSettings, showToast } = useAppContext();
     const { santriList } = useSantriContext();
+    const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
     const {
         filterTahun,
         setFilterTahun,
@@ -91,6 +130,36 @@ export const TabCetakRapor: React.FC = () => {
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [printRombel, setPrintRombel] = useState('');
     const [selectedTemplateId, setSelectedTemplateId] = useState(''); // Empty = Standard K13
+    
+    // Universal / Custom Issuance Date & Place
+    const [tanggalRapor, setTanggalRapor] = useState(settings.tanggalRaporDefault || new Date().toISOString().split('T')[0]);
+    const [tempatRapor, setTempatRapor] = useState(settings.tempatRaporDefault || '');
+    const [isSavingUniversalDate, setIsSavingUniversalDate] = useState(false);
+
+    useEffect(() => {
+        if (settings.tanggalRaporDefault && !tanggalRapor) {
+            setTanggalRapor(settings.tanggalRaporDefault);
+        }
+        if (settings.tempatRaporDefault && !tempatRapor) {
+            setTempatRapor(settings.tempatRaporDefault);
+        }
+    }, [settings.tanggalRaporDefault, settings.tempatRaporDefault]);
+
+    const handleSaveUniversalDate = async () => {
+        try {
+            setIsSavingUniversalDate(true);
+            await onUpdateSettings({
+                ...settings,
+                tanggalRaporDefault: tanggalRapor,
+                tempatRaporDefault: tempatRapor.trim()
+            });
+            showToast('Tanggal & Tempat Rapor berhasil disimpan sebagai default universal untuk semua santri!', 'success');
+        } catch (error) {
+            showToast('Gagal menyimpan default tanggal: ' + String(error), 'error');
+        } finally {
+            setIsSavingUniversalDate(false);
+        }
+    };
     
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isBatchPrinting, setIsBatchPrinting] = useState(false);
@@ -248,7 +317,7 @@ export const TabCetakRapor: React.FC = () => {
                 </div>
                 
                 {/* Desktop View Filter Bar */}
-                <div className="hidden md:grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                <div className="hidden md:grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                      <div className="flex flex-col">
                         <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-widest pl-1">Tahun Ajaran</label>
                         {availableYears.length > 0 ? (
@@ -290,6 +359,45 @@ export const TabCetakRapor: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Universal Document Date & Place Setting Bar */}
+                <div className="mb-6 p-3 sm:p-4 bg-gradient-to-r from-teal-50/70 to-emerald-50/40 rounded-xl border border-teal-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 text-teal-800 font-bold text-xs shrink-0">
+                            <i className="bi bi-calendar-check text-base text-teal-600"></i>
+                            <span>Titimangsa Rapor:</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="text"
+                                value={tempatRapor}
+                                onChange={e => setTempatRapor(e.target.value)}
+                                placeholder="Kota (Contoh: Banyumas)"
+                                className="border border-teal-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500 w-36 sm:w-44"
+                                title="Kota / Tempat Ditetapkannya Rapor"
+                            />
+                            <span className="text-gray-400 font-bold">,</span>
+                            <input 
+                                type="date"
+                                value={tanggalRapor}
+                                onChange={e => setTanggalRapor(e.target.value)}
+                                className="border border-teal-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                title="Tanggal Diresmikan / Dikeluarkannya Rapor (Universal)"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                        <button
+                            onClick={handleSaveUniversalDate}
+                            disabled={isSavingUniversalDate}
+                            title="Simpan tanggal & tempat ini sebagai default universal untuk semua santri"
+                            className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                        >
+                            {isSavingUniversalDate ? <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span> : <i className="bi bi-floppy"></i>}
+                            <span>Jadikan Default Universal</span>
+                        </button>
+                    </div>
+                </div>
+
                 {/* Mobile Filter Drawer */}
                 <MobileFilterDrawer 
                     isOpen={isFilterDrawerOpen} 
@@ -313,6 +421,39 @@ export const TabCetakRapor: React.FC = () => {
                                     <option value="Genap">Genap</option>
                                 </select>
                             </div>
+                        </div>
+
+                        {/* Mobile Titimangsa */}
+                        <div className="bg-teal-50/60 p-4 rounded-2xl border border-teal-100 space-y-3">
+                            <h4 className="text-xs font-black text-teal-800 uppercase tracking-widest flex items-center gap-2">
+                                <i className="bi bi-calendar-check"></i> Titimangsa Rapor (Universal)
+                            </h4>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tempat / Kota</label>
+                                <input 
+                                    type="text"
+                                    value={tempatRapor}
+                                    onChange={e => setTempatRapor(e.target.value)}
+                                    placeholder="Contoh: Banyumas"
+                                    className="w-full border rounded-xl p-2.5 text-sm font-semibold bg-white outline-none focus:ring-2 focus:ring-teal-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Tanggal Diresmikan</label>
+                                <input 
+                                    type="date"
+                                    value={tanggalRapor}
+                                    onChange={e => setTanggalRapor(e.target.value)}
+                                    className="w-full border rounded-xl p-2.5 text-sm font-semibold bg-white outline-none focus:ring-2 focus:ring-teal-500"
+                                />
+                            </div>
+                            <button
+                                onClick={handleSaveUniversalDate}
+                                disabled={isSavingUniversalDate}
+                                className="w-full bg-teal-600 text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
+                            >
+                                <i className="bi bi-floppy"></i> Simpan Sebagai Default Universal
+                            </button>
                         </div>
 
                         <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
@@ -392,10 +533,10 @@ export const TabCetakRapor: React.FC = () => {
                         <div className="flex-grow overflow-auto bg-gray-200 p-8 flex justify-center">
                             <div id="rapor-preview-container">
                                 {selectedTemplate ? (
-                                    <DynamicRaporPreview template={selectedTemplate} santri={previewSantri} record={previewRecord} settings={settings} />
+                                    <DynamicRaporPreview template={selectedTemplate} santri={previewSantri} record={previewRecord} settings={settings} digitalAssets={digitalAssets} tanggalRapor={tanggalRapor} tempatRapor={tempatRapor} />
                                 ) : (
                                     <div className="bg-white shadow-lg p-8 printable-content-wrapper" style={{ width: '21cm', minHeight: '29.7cm', padding: '2cm' }}>
-                                        <RaporLengkapTemplate santri={previewSantri} settings={settings} options={{ tahunAjaran: filterTahun, semester: filterSemester }} />
+                                        <RaporLengkapTemplate santri={previewSantri} settings={settings} options={{ tahunAjaran: filterTahun, semester: filterSemester, tanggalRapor, tempatRapor }} />
                                     </div>
                                 )}
                             </div>
@@ -419,10 +560,10 @@ export const TabCetakRapor: React.FC = () => {
                                 {batchData.map((item, idx) => (
                                     <div key={item.santri.id} className={idx < batchData.length - 1 ? 'break-after-page' : ''}>
                                         {selectedTemplate ? (
-                                            <DynamicRaporPreview template={selectedTemplate} santri={item.santri} record={item.record} settings={settings} />
+                                            <DynamicRaporPreview template={selectedTemplate} santri={item.santri} record={item.record} settings={settings} digitalAssets={digitalAssets} tanggalRapor={tanggalRapor} tempatRapor={tempatRapor} />
                                         ) : (
                                             <div className="bg-white shadow-lg p-8 printable-content-wrapper" style={{ width: '21cm', minHeight: '29.7cm', padding: '2cm' }}>
-                                                <RaporLengkapTemplate santri={item.santri} settings={settings} options={{ tahunAjaran: filterTahun, semester: filterSemester }} />
+                                                <RaporLengkapTemplate santri={item.santri} settings={settings} options={{ tahunAjaran: filterTahun, semester: filterSemester, tanggalRapor, tempatRapor }} />
                                             </div>
                                         )}
                                         {/* Page Break for Printing */}

@@ -1,10 +1,10 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
 import { SuratTemplate, ArsipSurat, AuditLog, PondokSettings } from './types';
 import { db } from './db';
 import { logActivity as logActivityHelper } from './services/logService';
-import { initialSantri } from './data/mock';
+import { initialSantri, initialSettings } from './data/mock';
 import { loadSyncService } from './utils/lazyCloudServices';
 
 // Import New Contexts
@@ -59,6 +59,8 @@ interface AppContextType {
   onSaveArsipSurat: (surat: Omit<ArsipSurat, 'id'>) => Promise<void>;
   onDeleteArsipSurat: (id: number) => Promise<void>;
   onDeleteSampleData: () => Promise<void>;
+  onResetToSampleData: () => Promise<void>;
+  isSampleDataDetected: boolean;
   triggerManualSync: (action: 'up' | 'down' | 'admin_publish', silent?: boolean) => Promise<void>;
   pendingChanges: number;
 }
@@ -290,7 +292,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => { const id = generateUniqueId(); const withTs = addTimestamp({ ...surat, id }); await db.arsipSurat.put(withTs as ArsipSurat); await logActivity('arsipSurat', 'INSERT', id.toString()); triggerAutoSync(); };
     const onDeleteArsipSurat = async (id: number) => { const item = arsipSuratList.find(a => a.id === id); if(!item) return; const deletedItem = { ...item, deleted: true, lastModified: Date.now() }; await db.arsipSurat.put(deletedItem); await logActivity('arsipSurat', 'DELETE', id.toString()); triggerAutoSync(); };
 
-    // Sample Data
+    // Sample Data Detection & Reset
+    const isSampleDataDetected = useMemo(() => {
+        const isMarkedDeleted = typeof window !== 'undefined' && localStorage.getItem('eSantriSampleDataDeleted') === 'true';
+        if (isMarkedDeleted) return false;
+
+        // Cek apakah santriList mengandung nama santri sample awal
+        const sampleNames = ['Ahmad Fauzi', 'Fatima Azzahra', 'Muhammad Rizky', 'Siti Aisyah', 'Umar Faruq'];
+        const hasSampleSantri = santriCtx.santriList?.some(s => sampleNames.includes(s.namaLengkap));
+        const hasDefaultPonpes = sets.settings?.namaPonpes === 'Pondok Pesantren Al-Ikhlas';
+
+        return Boolean(hasSampleSantri || hasDefaultPonpes);
+    }, [santriCtx.santriList, sets.settings?.namaPonpes]);
+
     const onDeleteSampleData = async () => { 
         await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, async () => { 
             await db.santri.clear(); await db.tagihan.clear(); await db.pembayaran.clear(); 
@@ -308,8 +322,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await db.riwayatStok.clear();
             await db.keuanganKoperasi.clear();
             await db.pendingOrders.clear();
-        }); 
+        });
+        localStorage.setItem('eSantriSampleDataDeleted', 'true');
         triggerAutoSync(); 
+    };
+
+    const onResetToSampleData = async () => {
+        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, async () => {
+            // Bersihkan semua tabel
+            await db.santri.clear(); await db.tagihan.clear(); await db.pembayaran.clear(); 
+            await db.saldoSantri.clear(); await db.transaksiSaldo.clear(); await db.transaksiKas.clear(); 
+            await db.auditLogs.clear(); await db.absensi.clear(); 
+            await db.tahfizh.clear(); await db.kesehatanRecords.clear(); await db.bkSessions.clear(); await db.bukuTamu.clear();
+            await db.buku.clear(); await db.sirkulasi.clear(); await db.inventaris.clear(); await db.calendarEvents.clear();
+            await db.jadwalPelajaran.clear(); await db.arsipJadwal.clear(); await db.pendaftar.clear(); await db.raporRecords.clear();
+            await db.payrollRecords.clear(); await db.piketSchedules.clear();
+            await db.produkKoperasi.clear(); await db.transaksiKoperasi.clear();
+            await db.riwayatStok.clear(); await db.keuanganKoperasi.clear();
+            await db.pendingOrders.clear();
+            await db.settings.clear();
+
+            // Isi ulang dengan initial settings dan initial santri
+            await db.settings.put(initialSettings);
+            await db.santri.bulkAdd(initialSantri);
+        });
+
+        localStorage.removeItem('eSantriSampleDataDeleted');
+        triggerAutoSync();
     };
 
     return (
@@ -326,7 +365,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Local
             suratTemplates, arsipSuratList, syncStatus, pendingChanges,
             onSaveSuratTemplate, onDeleteSuratTemplate, onSaveArsipSurat, onDeleteArsipSurat,
-            onDeleteSampleData, triggerManualSync
+            onDeleteSampleData, onResetToSampleData, isSampleDataDetected, triggerManualSync
         }}>
             {children}
         </AppContext.Provider>

@@ -78,6 +78,8 @@ export const exportSantriToExcel = async (data: Santri[], settings: PondokSettin
             'Kelas': kelas?.nama || '-',
             'Rombel': rombel?.nama || '-',
             'Status': s.status,
+            'Sekolah Asal': s.sekolahAsal || '-',
+            'Alamat Sekolah Asal': s.alamatSekolahAsal || '-',
             'Nama Ayah': s.namaAyah,
             'Tempat Lahir Ayah': s.tempatLahirAyah || '-',
             'Tgl Lahir Ayah': formatExcelDate(s.tanggalLahirAyah),

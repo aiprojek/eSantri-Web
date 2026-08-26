@@ -4,6 +4,7 @@ import { AiConfig, PondokSettings, TenagaPengajar, Jenjang } from '../../../type
 import { compressImage } from '../../../utils/imageOptimizer';
 import { SectionCard } from '../../common/SectionCard';
 import { useAppContext } from '../../../AppContext';
+import { formatTanggalDokumen, DateFormatMode } from '../../../utils/formatters';
 
 interface TabUmumProps {
     localSettings: PondokSettings;
@@ -157,20 +158,28 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
             const cacheName = 'esantri-web-local-v3';
             const cache = await caches.open(cacheName);
             
-            const urls = [
+            const baseUrls = [
                 '/',
                 '/index.html',
                 '/manifest.json',
                 '/icon.svg',
+                '/icon.png',
                 '/logo.svg',
                 '/sw.js'
             ];
 
-            const total = urls.length;
+            // Auto-discover loaded scripts, stylesheets and icons in DOM
+            const docScripts = Array.from(document.querySelectorAll('script[src]')).map(el => (el as HTMLScriptElement).src);
+            const docStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(el => (el as HTMLLinkElement).href);
+            const docIcons = Array.from(document.querySelectorAll('link[rel*="icon"]')).map(el => (el as HTMLLinkElement).href);
+
+            const allUrls = Array.from(new Set([...baseUrls, ...docScripts, ...docStyles, ...docIcons])).filter(Boolean);
+
+            const total = allUrls.length;
             let count = 0;
 
             // Fetch one by one to update progress
-            for (const url of urls) {
+            for (const url of allUrls) {
                 try {
                     await cache.add(url);
                 } catch (err) {
@@ -181,10 +190,10 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
             }
 
             setIsOfflineReady(true);
-            alert("Aset inti aplikasi berhasil diunduh. Untuk offline penuh, buka aplikasi sekali dalam mode build/preview agar semua aset bundle lokal ikut tercache.");
+            showToast("Semua aset aplikasi berhasil diunduh. Aplikasi kini siap digunakan secara offline penuh.", "success");
         } catch (error) {
             console.error("Download assets failed", error);
-            alert("Gagal mengunduh aset. Pastikan internet lancar.");
+            showToast("Gagal mengunduh aset offline. Pastikan koneksi internet stabil.", "error");
         } finally {
             setIsDownloadingAssets(false);
             setDownloadProgress(0);
@@ -549,7 +558,7 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                         </div>
                     </div>
 
-                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t mt-6">
+                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t mt-6">
                         <LogoUploader 
                             label="Logo Yayasan"
                             logoUrl={localSettings.logoYayasanUrl}
@@ -560,6 +569,151 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                             logoUrl={localSettings.logoPonpesUrl}
                             onLogoChange={(url) => handleInputChange('logoPonpesUrl', url)}
                         />
+                        <LogoUploader 
+                            label="Stempel Resmi Pondok"
+                            logoUrl={localSettings.stempelPonpesUrl}
+                            onLogoChange={(url) => handleInputChange('stempelPonpesUrl', url)}
+                        />
+                    </div>
+                </div>
+            </SectionCard>
+
+            <SectionCard
+                title="Titimangsa Dokumen (Rapor & Syahadah)"
+                description="Atur tempat, tanggal, dan format default (Masehi / Hijriah) untuk penerbitan rapor dan syahadah agar berlaku universal ke seluruh santri."
+                contentClassName="space-y-6 p-6"
+            >
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Default Titimangsa Rapor */}
+                    <div className="p-4 rounded-xl border border-teal-200 bg-teal-50/40 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h4 className="font-bold text-sm text-teal-900 flex items-center gap-2">
+                                <i className="bi bi-file-earmark-text text-teal-600"></i>
+                                Default Titimangsa Rapor
+                            </h4>
+                            <span className="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full uppercase">Universal</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Tempat / Kota</label>
+                                <input
+                                    type="text"
+                                    value={localSettings.tempatRaporDefault || ''}
+                                    onChange={(e) => handleInputChange('tempatRaporDefault', e.target.value)}
+                                    placeholder="Contoh: Banyumas"
+                                    className="app-input block w-full p-2 text-xs"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Tanggal Diresmikan</label>
+                                <input
+                                    type="date"
+                                    value={localSettings.tanggalRaporDefault || ''}
+                                    onChange={(e) => handleInputChange('tanggalRaporDefault', e.target.value)}
+                                    className="app-input block w-full p-2 text-xs"
+                                />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Format Tanggal Rapor</label>
+                                <select
+                                    value={localSettings.formatTanggalRaporDefault || 'masehi'}
+                                    onChange={(e) => handleInputChange('formatTanggalRaporDefault', e.target.value as DateFormatMode)}
+                                    className="app-select block w-full p-2 text-xs"
+                                >
+                                    <option value="masehi">📅 Masehi Saja (Contoh: 15 Maret 2026)</option>
+                                    <option value="hijriah_masehi">🌙 Masehi & Hijriah (Contoh: 15 Maret 2026 / 26 Ramadhan 1447 H)</option>
+                                    <option value="hijriah">🕌 Hijriah Saja (Contoh: 26 Ramadhan 1447 H)</option>
+                                </select>
+                            </div>
+                            {localSettings.formatTanggalRaporDefault !== 'masehi' && (
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Teks Hijriah Manual (Opsional):</label>
+                                    <input
+                                        type="text"
+                                        value={localSettings.manualHijriRaporDefault || ''}
+                                        onChange={(e) => handleInputChange('manualHijriRaporDefault', e.target.value)}
+                                        placeholder="Kosongkan untuk otomatis konversi kalender Hijriah"
+                                        className="app-input block w-full p-2 text-xs placeholder:text-gray-400"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        <div className="text-xs bg-white p-2.5 rounded-lg border border-teal-200 text-gray-700 flex items-center justify-between flex-wrap gap-2">
+                            <span className="font-semibold text-gray-500">Hasil Render Titimangsa:</span>
+                            <span className="font-bold text-teal-800">
+                                {localSettings.tempatRaporDefault || 'Pondok'}, {formatTanggalDokumen(localSettings.tanggalRaporDefault || new Date().toISOString().split('T')[0], {
+                                    formatMode: localSettings.formatTanggalRaporDefault || 'masehi',
+                                    hijriAdjustment: localSettings.hijriAdjustment || 0,
+                                    manualHijri: localSettings.manualHijriRaporDefault
+                                })}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Default Titimangsa Syahadah */}
+                    <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h4 className="font-bold text-sm text-amber-950 flex items-center gap-2">
+                                <i className="bi bi-award text-amber-600"></i>
+                                Default Titimangsa Syahadah
+                            </h4>
+                            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full uppercase">Universal</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Tempat / Kota Penetapan</label>
+                                <input
+                                    type="text"
+                                    value={localSettings.tempatSyahadahDefault || ''}
+                                    onChange={(e) => handleInputChange('tempatSyahadahDefault', e.target.value)}
+                                    placeholder="Contoh: Banyumas"
+                                    className="app-input block w-full p-2 text-xs"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Tanggal Diresmikan</label>
+                                <input
+                                    type="date"
+                                    value={localSettings.tanggalSyahadahDefault || ''}
+                                    onChange={(e) => handleInputChange('tanggalSyahadahDefault', e.target.value)}
+                                    className="app-input block w-full p-2 text-xs"
+                                />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Format Tanggal Syahadah</label>
+                                <select
+                                    value={localSettings.formatTanggalSyahadahDefault || 'masehi'}
+                                    onChange={(e) => handleInputChange('formatTanggalSyahadahDefault', e.target.value as DateFormatMode)}
+                                    className="app-select block w-full p-2 text-xs"
+                                >
+                                    <option value="masehi">📅 Masehi Saja (Contoh: 15 Maret 2026)</option>
+                                    <option value="hijriah_masehi">🌙 Masehi & Hijriah (Contoh: 15 Maret 2026 / 26 Ramadhan 1447 H)</option>
+                                    <option value="hijriah">🕌 Hijriah Saja (Contoh: 26 Ramadhan 1447 H)</option>
+                                </select>
+                            </div>
+                            {localSettings.formatTanggalSyahadahDefault !== 'masehi' && (
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Teks Hijriah Manual (Opsional):</label>
+                                    <input
+                                        type="text"
+                                        value={localSettings.manualHijriSyahadahDefault || ''}
+                                        onChange={(e) => handleInputChange('manualHijriSyahadahDefault', e.target.value)}
+                                        placeholder="Kosongkan untuk otomatis konversi kalender Hijriah"
+                                        className="app-input block w-full p-2 text-xs placeholder:text-gray-400"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        <div className="text-xs bg-white p-2.5 rounded-lg border border-amber-200 text-gray-700 flex items-center justify-between flex-wrap gap-2">
+                            <span className="font-semibold text-gray-500">Hasil Render Titimangsa:</span>
+                            <span className="font-bold text-amber-900">
+                                {localSettings.tempatSyahadahDefault || 'Pesantren'}, {formatTanggalDokumen(localSettings.tanggalSyahadahDefault || new Date().toISOString().split('T')[0], {
+                                    formatMode: localSettings.formatTanggalSyahadahDefault || 'masehi',
+                                    hijriAdjustment: localSettings.hijriAdjustment || 0,
+                                    manualHijri: localSettings.manualHijriSyahadahDefault
+                                })}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </SectionCard>

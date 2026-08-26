@@ -90,6 +90,11 @@ export const initialSettings: PondokSettings = {
         { id: 3, nama: 'Kamar 201', gedungId: 2, kapasitas: 12, musyrifId: 3 },
         { id: 4, nama: 'Kamar 202', gedungId: 2, kapasitas: 12, musyrifId: 3 }
     ],
+    kelompokHalaqah: [
+        { id: 1, nama: 'Halaqah Ula (Ust. Hasan)', muhaffizhId: 2, targetJuz: 30, lokasi: 'Masjid Utama', keterangan: 'Fokus Juz 30 & Tahsin' },
+        { id: 2, nama: 'Halaqah Wustha (Ust. Zulkifli)', muhaffizhId: 4, targetJuz: 29, lokasi: 'Serambi Timur', keterangan: 'Fokus Juz 29 & 28' },
+        { id: 3, nama: 'Halaqah Banat (Ustdz. Fatimah)', muhaffizhId: 3, targetJuz: 30, lokasi: 'Musholla Putri', keterangan: 'Fokus Juz 30 & Ziyadah' }
+    ],
     multiUserMode: false,
     nisSettings: {
         useIndependentSettings: false,
@@ -199,7 +204,15 @@ export const initialSettings: PondokSettings = {
     suratTagihanPenutup: 'Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerjasamanya kami ucapkan terima kasih.\n\nWassalamu\'alaikum Wr. Wb.',
     suratTagihanCatatan: 'Mohon dibayarkan sebelum tanggal 10 bulan berjalan.',
     pesanWaTunggakan: 'Assalamu\'alaikum Wr. Wb.\n\nYth. Wali Santri {NAMA_SANTRI},\n\nKami informasikan bahwa terdapat tunggakan administrasi sebesar *{JUMLAH_TUNGGAKAN}*.\nMohon segera melakukan pembayaran.\n\nTerima kasih.\n{NAMA_PONPES}',
-    hijriAdjustment: 0
+    hijriAdjustment: 0,
+    tanggalRaporDefault: '',
+    tempatRaporDefault: '',
+    formatTanggalRaporDefault: 'masehi',
+    manualHijriRaporDefault: '',
+    tanggalSyahadahDefault: '',
+    tempatSyahadahDefault: '',
+    formatTanggalSyahadahDefault: 'masehi',
+    manualHijriSyahadahDefault: ''
 };
 
 export const initialSantri: Santri[] = [

@@ -309,7 +309,7 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
         'jurnalMengajar', 'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 
         'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 
         'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang',
-        'warehouses', 'stockTransfers'
+        'warehouses', 'stockTransfers', 'digitalAssets'
     ];
 
     for (const table of tablesToSync) {
@@ -416,7 +416,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
         'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules',
         'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'warehouses', 'stockTransfers',
-        'settings', 'users', 'auditLogs'
+        'digitalAssets', 'settings', 'users', 'auditLogs'
     ];
 
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
@@ -552,7 +552,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         'suratTemplates', 'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi', 'jurnalMengajar',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
         'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules',
-        'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'warehouses', 'stockTransfers', 'settings'
+        'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'warehouses', 'stockTransfers', 'digitalAssets', 'settings'
     ];
 
     if (resolvedConflicts) {
@@ -667,7 +667,7 @@ export const getPendingChangesCount = async (config: CloudSyncConfig) => {
         'jurnalMengajar', 'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 
         'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 
         'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang',
-        'warehouses', 'stockTransfers'
+        'warehouses', 'stockTransfers', 'digitalAssets'
     ];
 
     let total = 0;
@@ -721,6 +721,7 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         pembayaranHutang: await db.pembayaranHutang.toArray(),
         warehouses: await db.warehouses.toArray(),
         stockTransfers: await db.stockTransfers.toArray(),
+        digitalAssets: await db.digitalAssets.toArray(),
         settings: await db.settings.toArray()
     };
 

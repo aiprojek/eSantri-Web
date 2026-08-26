@@ -69,6 +69,8 @@ export const SantriModal: React.FC<SantriModalProps> = ({
                 kelasId: 0,
                 rombelId: 0,
                 tanggalMasuk: new Date().toISOString().split('T')[0],
+                sekolahAsal: '',
+                alamatSekolahAsal: '',
             } as unknown as Santri);
             originalStatusRef.current = 'Aktif';
         }

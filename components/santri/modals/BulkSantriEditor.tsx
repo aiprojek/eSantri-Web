@@ -282,6 +282,11 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         kabupatenkota: 'alamat.kabupatenKota',
         provinsi: 'alamat.provinsi',
         kodepos: 'alamat.kodePos',
+        sekolahasal: 'sekolahAsal',
+        asalsekolah: 'sekolahAsal',
+        namasekolahasal: 'sekolahAsal',
+        alamatsekolahasal: 'alamatSekolahAsal',
+        alamatsekolah: 'alamatSekolahAsal',
         namaayah: 'namaAyah',
         statusayah: 'statusAyah',
         tempatlahirayah: 'tempatLahirAyah',
@@ -381,14 +386,27 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
 
     const findIdByNameOrId = (
         value: unknown,
-        source: Array<{ id: number; nama: string }>
+        source: Array<{ id: number; nama: string }>,
+        gender?: string
     ): number => {
         const raw = String(value ?? '').trim();
         if (!raw) return 0;
         const asId = Number(raw);
         if (Number.isInteger(asId) && source.some(item => item.id === asId)) return asId;
         const byName = source.find(item => item.nama.toLowerCase() === raw.toLowerCase());
-        return byName?.id || 0;
+        if (byName) return byName.id;
+        
+        // Smart partial matching with gender awareness
+        const partials = source.filter(item => item.nama.toLowerCase().includes(raw.toLowerCase()) || raw.toLowerCase().includes(item.nama.toLowerCase()));
+        if (partials.length === 1) return partials[0].id;
+        if (partials.length > 1 && gender) {
+            const isPutri = gender === 'Perempuan' || gender.toLowerCase().startsWith('p');
+            const match = isPutri
+                ? partials.find(r => /putri|banat|akhwat|pi|\(p\)|_p| b$/i.test(r.nama))
+                : partials.find(r => /putra|banin|ikhwan|pa|\(l\)|_l| a$/i.test(r.nama));
+            if (match) return match.id;
+        }
+        return 0;
     };
 
     const mapImportedObjectsToRows = (data: any[]): EditableRow[] => {
@@ -405,12 +423,14 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
             const nama = String(normalizedRow.namaLengkap || '').trim();
             if (!nama) return null;
 
+            const rawGender = String(normalizedRow.jenisKelamin || '').trim().toLowerCase();
+            const genderVal: 'Laki-laki' | 'Perempuan' = rawGender.startsWith('p') || rawGender === 'f' || rawGender === 'female' ? 'Perempuan' : 'Laki-laki';
+
             const jenjangId = findIdByNameOrId(normalizedRow.jenjangId, settings.jenjang);
             const kelasSource = jenjangId ? settings.kelas.filter(k => k.jenjangId === jenjangId) : settings.kelas;
             const kelasId = findIdByNameOrId(normalizedRow.kelasId, kelasSource);
             const rombelSource = kelasId ? settings.rombel.filter(r => r.kelasId === kelasId) : settings.rombel;
-            const rombelId = findIdByNameOrId(normalizedRow.rombelId, rombelSource);
-            const rawGender = String(normalizedRow.jenisKelamin || '').trim().toLowerCase();
+            const rombelId = findIdByNameOrId(normalizedRow.rombelId, rombelSource, genderVal);
 
             return {
                 ...empty,
@@ -419,7 +439,7 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                 nis: String(normalizedRow.nis || ''),
                 nik: String(normalizedRow.nik || ''),
                 nisn: String(normalizedRow.nisn || ''),
-                jenisKelamin: rawGender.startsWith('p') || rawGender === 'f' ? 'Perempuan' : 'Laki-laki',
+                jenisKelamin: genderVal,
                 tempatLahir: String(normalizedRow.tempatLahir || ''),
                 tanggalLahir: toDisplayDateFromImport(normalizedRow.tanggalLahir),
                 tanggalMasuk: toDisplayDateFromImport(normalizedRow.tanggalMasuk) || empty.tanggalMasuk,
@@ -465,6 +485,8 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                 pekerjaanWali: String(normalizedRow.pekerjaanWali || ''),
                 penghasilanWali: String(normalizedRow.penghasilanWali || ''),
                 teleponWali: String(normalizedRow.teleponWali || ''),
+                sekolahAsal: String(normalizedRow.sekolahAsal || ''),
+                alamatSekolahAsal: String(normalizedRow.alamatSekolahAsal || ''),
             } as EditableRow;
         }).filter(Boolean) as EditableRow[];
     };
@@ -630,7 +652,9 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
         tanggalLahirWali: '',
         
         anakKe: undefined,
-        jumlahSaudara: undefined
+        jumlahSaudara: undefined,
+        sekolahAsal: '',
+        alamatSekolahAsal: ''
     });
 
     const handleAddRow = () => {
@@ -1806,6 +1830,10 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                         </button>
                                     </th>
 
+                                    {/* Sekolah Asal */}
+                                    <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[180px] bg-teal-50/30">Sekolah Asal</th>
+                                    <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[200px] bg-teal-50/30">Alamat Sekolah Asal</th>
+
                                     {/* Alamat */}
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[250px] bg-yellow-50/30">Jalan / Detail</th>
                                     <th className="px-2 py-2 text-left font-medium text-gray-500 min-w-[140px] bg-yellow-50/30">Desa/Kel</th>
@@ -2019,6 +2047,10 @@ export const BulkSantriEditor: React.FC<BulkSantriEditorProps> = ({ isOpen, onCl
                                                     <option value="Aktif">Aktif</option><option value="Hiatus">Hiatus</option><option value="Lulus">Lulus</option><option value="Keluar/Pindah">Keluar</option>
                                                 </select>
                                             </td>
+
+                                            {/* Sekolah Asal */}
+                                            <td className="px-2 py-2 bg-teal-50/10"><input type="text" value={row.sekolahAsal || ''} onChange={e => updateRow(row.tempId, 'sekolahAsal', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" placeholder="Nama Sekolah Asal" /></td>
+                                            <td className="px-2 py-2 bg-teal-50/10"><input type="text" value={row.alamatSekolahAsal || ''} onChange={e => updateRow(row.tempId, 'alamatSekolahAsal', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" placeholder="Alamat Sekolah Asal" /></td>
 
                                             {/* Alamat */}
                                             <td className="px-2 py-2 bg-yellow-50/10"><input type="text" id={`cell-${index}-18`} value={row.alamat?.detail} onChange={e => updateRow(row.tempId, 'alamat.detail', e.target.value)} className="w-full border-gray-300 rounded text-sm h-9 px-2" placeholder="Jalan, RT/RW" /></td>

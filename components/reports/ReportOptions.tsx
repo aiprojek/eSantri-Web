@@ -540,18 +540,121 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                         </p>
                         
                         {options.cardBacksideLayout !== 'none' && (
-                            <div className="mt-3 space-y-4">
+                            <div className="mt-3 space-y-4 rounded-lg bg-gray-50 border border-gray-200 p-3">
+                                {/* Header / Title */}
                                 <div>
-                                    <label className="block mb-1 text-xs font-medium text-gray-700">Tata Tertib / Ketentuan Singkat (Sisi Belakang)</label>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="block text-xs font-semibold text-gray-800">
+                                            Tata Tertib / Ketentuan Singkat (Sisi Belakang)
+                                        </label>
+                                        <span className="text-[10px] text-gray-500">
+                                            {(options.cardRules || '').split('\n').filter((l: string) => l.trim() !== '').length} Butir • {(options.cardRules || '').length} Karakter
+                                        </span>
+                                    </div>
+
+                                    {/* Hint Box */}
+                                    <div className="bg-blue-50 border border-blue-200 rounded-md p-2.5 mb-2 text-xs text-blue-900 flex items-start gap-2">
+                                        <i className="bi bi-info-circle text-blue-600 text-sm shrink-0 mt-0.5"></i>
+                                        <div className="space-y-0.5 text-[11px] leading-relaxed">
+                                            <p className="font-semibold text-blue-950">💡 Petunjuk Penulisan:</p>
+                                            <p>• Tekan <kbd className="px-1 py-0.5 bg-white border border-blue-300 rounded text-[10px] font-mono shadow-xs">Enter</kbd> untuk membuat nomor butir aturan baru secara otomatis (1, 2, 3...).</p>
+                                            <p>• Gunakan tag <code className="bg-white px-1 py-0.5 border border-blue-300 rounded font-mono text-[10px] text-blue-700">{`{NamaPonpes}`}</code> agar otomatis digantikan dengan nama pondok saat dicetak.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Toolbox Toolbar */}
+                                    <div className="flex flex-wrap items-center gap-1.5 mb-1.5 p-1.5 bg-white border border-gray-200 rounded-md">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const current = options.cardRules || '';
+                                                const addition = current ? `\nSantri wajib mematuhi seluruh peraturan pesantren.` : `Santri wajib mematuhi seluruh peraturan pesantren.`;
+                                                options.setCardRules(current + addition);
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-[11px] font-medium transition-colors"
+                                            title="Tambah butir baru di baris bawah"
+                                        >
+                                            <i className="bi bi-plus-lg text-teal-600"></i>
+                                            + Butir Baru
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const current = options.cardRules || '';
+                                                options.setCardRules(current + ' {NamaPonpes}');
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[11px] font-medium transition-colors"
+                                            title="Sisipkan tag nama pondok"
+                                        >
+                                            <i className="bi bi-stars text-blue-600"></i>
+                                            + {'{NamaPonpes}'}
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const defaultTemplate = `Kartu ini adalah tanda pengenal resmi santri {NamaPonpes}.\nSantri wajib membawa kartu ini selama berada di lingkungan pesantren atau saat mengikuti kegiatan resmi.\nKartu ini tidak boleh dipindahtangankan kepada orang lain.\nApabila kartu ini hilang atau rusak, santri wajib segera melapor kepada pengurus kesantrian untuk proses penggantian.\nKartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaan, layanan kesehatan, dan transaksi koperasi.`;
+                                                options.setCardRules(defaultTemplate);
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-[11px] font-medium transition-colors ml-auto"
+                                            title="Kembalikan ke susunan teks bawaan"
+                                        >
+                                            <i className="bi bi-arrow-counterclockwise text-gray-500"></i>
+                                            Reset Standar
+                                        </button>
+                                    </div>
+
+                                    {/* Textarea */}
                                     <textarea 
                                         value={options.cardRules} 
                                         onChange={e => options.setCardRules(e.target.value)} 
-                                        rows={5}
-                                        className="bg-white border border-gray-300 text-gray-900 text-xs rounded-lg w-full p-2.5"
-                                        placeholder="Masukkan setiap poin pada baris baru. Gunakan {NamaPonpes} untuk memunculkan nama."
+                                        rows={6}
+                                        className="bg-white border border-gray-300 text-gray-900 text-xs rounded-lg w-full p-2.5 focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                        placeholder="Masukkan setiap poin pada baris baru (tekan Enter). Gunakan {NamaPonpes} untuk memunculkan nama pondok."
                                     />
                                 </div>
-                                <div className="mt-3 space-y-3">
+
+                                {/* Typography & Color Customization Toolbox */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-200">
+                                    <div>
+                                        <label className="flex items-center gap-1 text-[11px] font-medium text-gray-700 mb-1">
+                                            <i className="bi bi-fonts text-gray-500"></i>
+                                            Ukuran Font Teks Tata Tertib
+                                        </label>
+                                        <select
+                                            value={options.cardRulesFontSize || 'auto'}
+                                            onChange={e => options.setCardRulesFontSize(e.target.value as any)}
+                                            className="bg-white border border-gray-300 text-gray-800 text-xs rounded-md w-full p-2"
+                                        >
+                                            <option value="auto">Otomatis (Menyesuaikan panjang teks)</option>
+                                            <option value="small">Kecil (4pt - Muat banyak butir)</option>
+                                            <option value="normal">Sedang (4.8pt - Standar)</option>
+                                            <option value="large">Besar (5.5pt - Tulisan ringkas)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="flex items-center gap-1 text-[11px] font-medium text-gray-700 mb-1">
+                                            <i className="bi bi-palette text-gray-500"></i>
+                                            Warna Teks Khusus (Opsional)
+                                        </label>
+                                        <select
+                                            value={options.cardRulesCustomColor || ''}
+                                            onChange={e => options.setCardRulesCustomColor(e.target.value)}
+                                            className="bg-white border border-gray-300 text-gray-800 text-xs rounded-md w-full p-2"
+                                        >
+                                            <option value="">Ikuti Tema Kartu (Default)</option>
+                                            <option value="#111827">Hitam Pekat (#111827)</option>
+                                            <option value="#065f46">Hijau Islami (#065f46)</option>
+                                            <option value="#1e3a8a">Biru Navy (#1e3a8a)</option>
+                                            <option value="#831843">Merah Marun (#831843)</option>
+                                            <option value="#d97706">Emas / Kuning (#d97706)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 pt-2 border-t border-gray-200">
                                     <div>
                                         <label className="block mb-1 text-xs font-medium text-gray-700">Jabatan Penanda Tangan (Belakang)</label>
                                         <input

@@ -113,8 +113,8 @@ export const SlipGajiTemplate: React.FC<{ record: PayrollRecord, settings: Pondo
                 </div>
             </div>
             
-            <div className="mt-2 text-[8pt] text-gray-400 text-center italic">
-                Slip ini sah dicetak dari sistem eSantri Web.
+            <div className="mt-4 pt-2 border-t border-gray-300 text-[8pt] text-gray-500 text-center italic">
+                dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
             </div>
         </div>
     );

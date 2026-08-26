@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Santri, PondokSettings, RaporRecord } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
 import { ReportFooter, chunkArray, formatDate, formatAlamat } from './Common';
+import { formatTanggalDokumen } from '../../../utils/formatters';
 import { db } from '../../../db';
 import { formatAcademicYearDisplay } from '../../../utils/academicYear';
 
@@ -181,52 +182,215 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                 )}
 
                 {/* Tanda Tangan */}
-                <div className="flex justify-between items-end mt-4 px-4 text-xs" style={{ breakInside: 'avoid' }}>
-                    <div className="text-center w-40">
-                        <p>Mengetahui,</p>
-                        <p>Orang Tua / Wali</p>
-                        <div className="h-16"></div>
-                        <p className="border-b border-black">.........................</p>
-                    </div>
-                    <div className="text-center w-40">
-                        <p>Mudir Marhalah</p>
-                        <div className="h-16"></div>
-                        <p className="font-bold underline">{mudir?.nama || '.........................'}</p>
-                    </div>
-                    <div className="text-center w-40">
-                        <p>Sumpiuh, {formatDate(new Date().toISOString())}</p>
-                        <p>Wali Kelas</p>
-                        <div className="h-16"></div>
-                        <p className="font-bold underline">{waliKelas?.nama || '.........................'}</p>
-                    </div>
-                </div>
+                {(() => {
+                    const tempatRapor = options?.tempatRapor || settings?.tempatRaporDefault?.trim() || (settings?.alamat ? (settings.alamat.includes(',') ? settings.alamat.split(',')[0].trim() : 'Pesantren') : 'Pesantren');
+                    const tanggalRaw = options?.tanggalRapor || (raporData as any)?.tanggalRapor || settings?.tanggalRaporDefault || new Date().toISOString();
+                    const formatMode = options?.formatMode || settings?.formatTanggalRaporDefault || 'masehi';
+                    const manualHijri = options?.manualHijri || settings?.manualHijriRaporDefault || '';
+                    const tanggalDisplay = formatTanggalDokumen(tanggalRaw, {
+                        formatMode,
+                        hijriAdjustment: settings?.hijriAdjustment || 0,
+                        manualHijri
+                    });
+
+                    return (
+                        <div className="flex justify-between items-end mt-4 px-4 text-xs" style={{ breakInside: 'avoid' }}>
+                            <div className="text-center w-40">
+                                <p>Mengetahui,</p>
+                                <p>Orang Tua / Wali</p>
+                                <div className="h-16"></div>
+                                <p className="border-b border-black">.........................</p>
+                            </div>
+                            <div className="text-center w-40">
+                                <p>Mudir Marhalah</p>
+                                <div className="h-16"></div>
+                                <p className="font-bold underline">{mudir?.nama || '.........................'}</p>
+                            </div>
+                            <div className="text-center w-44">
+                                <p>{tempatRapor}, {tanggalDisplay}</p>
+                                <p>Wali Kelas</p>
+                                <div className="h-16"></div>
+                                <p className="font-bold underline">{waliKelas?.nama || '.........................'}</p>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
             <ReportFooter />
         </div>
     );
 };
 
-export const PanduanPenilaianTemplate: React.FC = () => (
-    <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
+export const PanduanPenilaianTemplate: React.FC<{ settings?: PondokSettings; options?: any }> = ({ settings, options }) => (
+    <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '9pt', lineHeight: '1.35' }}>
         <div>
-            <h3 className="font-bold text-xl mb-6 text-center">Panduan Penilaian</h3>
-            <div className="columns-2 gap-8 text-justify">
-                <div className="break-inside-avoid mb-4">
-                    <h4 className="font-bold text-base mb-2">A. Deskripsi Kolom Penilaian</h4>
-                    <ul className="list-disc list-outside pl-5 space-y-1 text-sm">
-                        <li><strong className="font-semibold">TP (Tujuan Pembelajaran):</strong> Nilai sumatif lingkup materi.</li>
-                        <li><strong className="font-semibold">SAS (Sumatif Akhir Semester):</strong> Penilaian akhir semester.</li>
-                    </ul>
+            {/* Header */}
+            {settings && (
+                <PrintHeader 
+                    settings={settings} 
+                    title="PANDUAN & PETUNJUK TEKNIS PENGISIAN LEMBAR PENILAIAN AKADEMIK" 
+                />
+            )}
+            {!settings && (
+                <div className="text-center mb-3 pb-2 border-b border-black">
+                    <h3 className="font-bold text-base uppercase">PANDUAN & PETUNJUK TEKNIS PENGISIAN LEMBAR PENILAIAN AKADEMIK</h3>
                 </div>
-                <div className="break-inside-avoid">
-                    <h4 className="font-bold text-base mb-2">B. Skala Penilaian</h4>
-                    <table className="text-sm">
-                        <tbody>
-                            <tr><td className="font-semibold pr-4">A</td><td>90 - 100</td></tr>
-                            <tr><td className="font-semibold pr-4">B</td><td>80 - 89</td></tr>
-                            <tr><td className="font-semibold pr-4">C</td><td>70 - 79</td></tr>
-                        </tbody>
-                    </table>
+            )}
+
+            {options?.tahunAjaran && (
+                <div className="text-xs font-semibold mb-3 bg-gray-100 p-2 rounded border border-gray-300 flex justify-between">
+                    <span>Tahun Ajaran: {settings ? formatAcademicYearDisplay(settings, options.tahunAjaran) : options.tahunAjaran}</span>
+                    <span>Semester: {options.semester || '-'}</span>
+                    <span>Standar KKM: 70</span>
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4 text-left">
+                {/* Kolom Kiri: Glosarium & Rumus Perhitungan */}
+                <div className="space-y-3">
+                    {/* Bagian A: Glosarium Kolom */}
+                    <div className="border border-black p-2.5 rounded bg-white">
+                        <h4 className="font-bold text-xs uppercase mb-1.5 border-b border-black pb-0.5 text-teal-800">
+                            A. Glosarium & Penjelasan Kolom Penilaian
+                        </h4>
+                        <table className="w-full text-[8.5pt] border-collapse">
+                            <tbody>
+                                <tr className="border-b border-gray-200">
+                                    <td className="font-bold w-20 py-1 align-top text-gray-800">TP 1, 2, ...</td>
+                                    <td className="py-1"><strong>Tujuan Pembelajaran:</strong> Nilai formatif/sumatif per topik bahasan (tugas, kuis harian, setoran materi).</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="font-bold py-1 align-top text-gray-800">Rerata TP</td>
+                                    <td className="py-1">Rata-rata dari seluruh nilai TP yang dilaksanakan: <em>(TP₁ + TP₂ + ... + TPₙ) ÷ n</em>.</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="font-bold py-1 align-top text-gray-800">SM 1, 2, ...</td>
+                                    <td className="py-1"><strong>Sumatif Materi:</strong> Nilai ulangan bab / evaluasi modul yang diujikan secara tertulis atau lisan.</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="font-bold py-1 align-top text-gray-800">Rerata SM</td>
+                                    <td className="py-1">Rata-rata dari seluruh nilai Sumatif Materi: <em>(SM₁ + SM₂ + ... + SMₙ) ÷ n</em>.</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="font-bold py-1 align-top text-gray-800">STS</td>
+                                    <td className="py-1"><strong>Sumatif Tengah Semester:</strong> Penilaian paruh semester untuk mengukur capaian tengah periode.</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="font-bold py-1 align-top text-gray-800">SAS</td>
+                                    <td className="py-1"><strong>Sumatif Akhir Semester:</strong> Ujian komprehensif pada akhir semester (PAS / PAT).</td>
+                                </tr>
+                                <tr>
+                                    <td className="font-bold py-1 align-top text-gray-800">NA</td>
+                                    <td className="py-1"><strong>Nilai Akhir Rapor:</strong> Akumulasi nilai berbobot yang dimasukkan ke dalam buku Rapor.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Bagian B: Rumus Pembobotan NA */}
+                    <div className="border border-black p-2.5 rounded bg-gray-50">
+                        <h4 className="font-bold text-xs uppercase mb-1.5 border-b border-black pb-0.5 text-teal-800">
+                            B. Rumus Formulasi Nilai Akhir (NA) & Total Bobot
+                        </h4>
+                        <div className="space-y-2 text-[8.5pt]">
+                            <div>
+                                <p className="font-semibold text-gray-900">1. Skema Dengan STS (Sumatif Tengah Semester):</p>
+                                <div className="bg-white p-1.5 border border-gray-300 font-mono text-center text-[8.5pt] font-bold my-1 text-slate-800">
+                                    NA = [(2 × Rerata TP) + (2 × Rerata SM) + (1 × STS) + (1 × SAS)] ÷ 6
+                                </div>
+                                <p className="text-[7.5pt] text-gray-600 italic">
+                                    *Pembagi 6 berasal dari total bobot: 2 (TP) + 2 (SM) + 1 (STS) + 1 (SAS) = 6.
+                                </p>
+                            </div>
+                            <div>
+                                <p className="font-semibold text-gray-900">2. Skema Tanpa STS (Jika STS Tidak Diadakan):</p>
+                                <div className="bg-white p-1.5 border border-gray-300 font-mono text-center text-[8.5pt] font-bold my-1 text-slate-800">
+                                    NA = [(2 × Rerata TP) + (2 × Rerata SM) + (2 × SAS)] ÷ 6
+                                </div>
+                                <p className="text-[7.5pt] text-gray-600 italic">
+                                    *Pembagi 6 berasal dari total bobot: 2 (TP) + 2 (SM) + 2 (SAS) = 6.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Kolom Kanan: Contoh Simulasi, Skala Nilai & Juknis */}
+                <div className="space-y-3">
+                    {/* Bagian C: Contoh Simulasi Perhitungan Riil */}
+                    <div className="border border-black p-2.5 rounded bg-white">
+                        <h4 className="font-bold text-xs uppercase mb-1.5 border-b border-black pb-0.5 text-teal-800">
+                            C. Contoh Simulasi Perhitungan Riil
+                        </h4>
+                        <div className="text-[8.5pt] space-y-1">
+                            <p className="font-semibold">Nama Santri: <em>Ahmad Fauzan (Kelas VII-A)</em></p>
+                            <ul className="list-disc list-inside text-gray-700 space-y-0.5 pl-1">
+                                <li>Nilai TP: TP1 = 85, TP2 = 80, TP3 = 90 &rarr; <strong>Rerata TP = 85</strong></li>
+                                <li>Nilai SM: SM1 = 80, SM2 = 90 &rarr; <strong>Rerata SM = 85</strong></li>
+                                <li>Nilai STS = <strong>80</strong>, Nilai SAS = <strong>90</strong></li>
+                            </ul>
+                            <div className="bg-teal-50 border border-teal-200 p-1.5 rounded mt-1 font-mono text-[8.5pt]">
+                                NA = [(2×85) + (2×85) + (1×80) + (1×90)] ÷ 6<br />
+                                NA = [170 + 170 + 80 + 90] ÷ 6 = 510 ÷ 6 = <strong className="text-teal-900 text-[9pt]">85.0 (Predikat B / Baik)</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Bagian D: Skala Predikat & KKM */}
+                    <div className="border border-black p-2.5 rounded bg-white">
+                        <h4 className="font-bold text-xs uppercase mb-1.5 border-b border-black pb-0.5 text-teal-800">
+                            D. Standar Skala Predikat & KKM (Acuan KKM: 70)
+                        </h4>
+                        <table className="w-full text-center text-[8.5pt] border-collapse border border-black">
+                            <thead className="bg-gray-100 font-bold">
+                                <tr>
+                                    <th className="border border-black p-1 w-20">Rentang Nilai</th>
+                                    <th className="border border-black p-1 w-14">Predikat</th>
+                                    <th className="border border-black p-1 w-24">Istilah Pesantren</th>
+                                    <th className="border border-black p-1 text-left px-2">Keterangan Capaian</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td className="border border-black p-1 font-bold">90 – 100</td>
+                                    <td className="border border-black p-1 font-bold text-teal-700">A</td>
+                                    <td className="border border-black p-1">Mumtaz</td>
+                                    <td className="border border-black p-1 text-left px-2">Sangat Baik (Menguasai seluruh capaian)</td>
+                                </tr>
+                                <tr>
+                                    <td className="border border-black p-1 font-bold">80 – 89</td>
+                                    <td className="border border-black p-1 font-bold text-blue-700">B</td>
+                                    <td className="border border-black p-1">Jayyid Jiddan</td>
+                                    <td className="border border-black p-1 text-left px-2">Baik (Memenuhi seluruh kompetensi)</td>
+                                </tr>
+                                <tr>
+                                    <td className="border border-black p-1 font-bold">70 – 79</td>
+                                    <td className="border border-black p-1 font-bold text-amber-700">C</td>
+                                    <td className="border border-black p-1">Jayyid</td>
+                                    <td className="border border-black p-1 text-left px-2">Cukup (Tuntas batas KKM minimal)</td>
+                                </tr>
+                                <tr className="bg-rose-50">
+                                    <td className="border border-black p-1 font-bold text-rose-700">&lt; 70</td>
+                                    <td className="border border-black p-1 font-bold text-rose-700">D</td>
+                                    <td className="border border-black p-1">Maqbul / Rosib</td>
+                                    <td className="border border-black p-1 text-left px-2 text-rose-800">Belum Tuntas (Wajib Bimbingan Remedial)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Bagian E: Petunjuk Teknis Guru */}
+                    <div className="border border-black p-2 rounded bg-gray-50 text-[8pt]">
+                        <h4 className="font-bold text-[8.5pt] uppercase mb-1 text-slate-800">
+                            E. Petunjuk Teknis & Tata Tertib Pengisian Guru:
+                        </h4>
+                        <ol className="list-decimal list-inside space-y-0.5 text-gray-700">
+                            <li>Isi skor rentang <strong>0 – 100</strong> tanpa desimal (pembulatan &ge; 0.5 ke atas).</li>
+                            <li>Bagi santri dengan nilai di bawah KKM (&lt; 70), berikan program <strong>Remedial</strong> sebelum mengisi kolom NA. Nilai maksimal remedial adalah KKM (70).</li>
+                            <li>Bagi santri <em>Hiatus / Izin Khusus</em>, kolom nilai dikosongkan sementara dan dikoordinasikan ke Wali Kelas.</li>
+                            <li>Lembar nilai yang sudah ditandatangani diserahkan ke Bagian Kurikulum untuk penginputan sistem rapor eSantri.</li>
+                        </ol>
+                    </div>
                 </div>
             </div>
         </div>
@@ -296,7 +460,7 @@ export const generateNilaiReports = (data: Santri[], settings: PondokSettings, o
     });
 
     if (options.guidanceOption === 'show' && mapelList.length > 0) {
-        previews.push({ content: <PanduanPenilaianTemplate />, orientation: 'landscape' });
+        previews.push({ content: <PanduanPenilaianTemplate settings={settings} options={options} />, orientation: 'landscape' });
     }
 
     return previews;

@@ -4,39 +4,53 @@ import { Santri, PondokSettings, RiwayatStatus, GedungAsrama, AbsensiRecord, Jur
 import { PrintHeader } from '../../common/PrintHeader';
 import { ReportFooter, formatDate, formatRupiah, formatAlamat } from './Common';
 import { getDefaultAcademicYear } from '../../../utils/academicYear';
+import { isSantriPutra, isSantriPutri } from '../../../utils/formatters';
 
 // --- DASHBOARD SUMMARY ---
 export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings: PondokSettings }> = ({ santriList, settings }) => {
     const totalSantri = santriList.length;
-    const totalPutra = santriList.filter(s => s.jenisKelamin === 'Laki-laki').length;
-    const totalPutri = totalSantri - totalPutra;
+    const activeSantri = santriList.filter(s => s.status === 'Aktif');
+    const activeTotal = activeSantri.length;
+    const activePutra = activeSantri.filter(s => isSantriPutra(s)).length;
+    const activePutri = activeSantri.filter(s => isSantriPutri(s)).length;
+
+    const totalPutra = santriList.filter(s => isSantriPutra(s)).length;
+    const totalPutri = santriList.filter(s => isSantriPutri(s)).length;
     const statusCounts = santriList.reduce((acc, santri) => { acc[santri.status] = (acc[santri.status] || 0) + 1; return acc; }, {} as Record<Santri['status'], number>);
     
-    // Calculate detailed breakdown
+    // Calculate detailed breakdown based on active santri (with total fallback)
     const jenjangBreakdown = settings.jenjang.map(jenjang => {
-        const santriInJenjang = santriList.filter(s => s.jenjangId === jenjang.id);
-        const kelasBreakdown = settings.kelas.filter(k => k.jenjangId === jenjang.id).map(kelas => {
-            const santriInKelas = santriInJenjang.filter(s => s.kelasId === kelas.id);
-            const rombels = settings.rombel.filter(r => r.kelasId === kelas.id).map(rombel => {
-                 const santriInRombel = santriInKelas.filter(s => s.rombelId === rombel.id);
+        const santriInJenjang = santriList.filter(s => Number(s.jenjangId) === Number(jenjang.id));
+        const activeInJenjang = santriInJenjang.filter(s => s.status === 'Aktif');
+        const kelasBreakdown = settings.kelas.filter(k => Number(k.jenjangId) === Number(jenjang.id)).map(kelas => {
+            const santriInKelas = santriInJenjang.filter(s => Number(s.kelasId) === Number(kelas.id));
+            const activeInKelas = santriInKelas.filter(s => s.status === 'Aktif');
+            const rombels = settings.rombel.filter(r => Number(r.kelasId) === Number(kelas.id)).map(rombel => {
+                 const santriInRombel = santriInKelas.filter(s => Number(s.rombelId) === Number(rombel.id));
+                 const activeInRombel = santriInRombel.filter(s => s.status === 'Aktif');
                  return {
                      nama: rombel.nama,
                      total: santriInRombel.length,
-                     putra: santriInRombel.filter(s => s.jenisKelamin === 'Laki-laki').length,
-                     putri: santriInRombel.filter(s => s.jenisKelamin === 'Perempuan').length
+                     active: activeInRombel.length,
+                     putra: santriInRombel.filter(s => isSantriPutra(s)).length,
+                     putri: santriInRombel.filter(s => isSantriPutri(s)).length,
+                     putraActive: activeInRombel.filter(s => isSantriPutra(s)).length,
+                     putriActive: activeInRombel.filter(s => isSantriPutri(s)).length,
                  };
             });
             return { 
                 nama: kelas.nama, 
                 total: santriInKelas.length,
+                active: activeInKelas.length,
                 rombels
             };
         });
         return { 
             nama: jenjang.nama, 
             total: santriInJenjang.length, 
-            putra: santriInJenjang.filter(s => s.jenisKelamin === 'Laki-laki').length,
-            putri: santriInJenjang.filter(s => s.jenisKelamin === 'Perempuan').length,
+            active: activeInJenjang.length,
+            putra: santriInJenjang.filter(s => isSantriPutra(s)).length,
+            putri: santriInJenjang.filter(s => isSantriPutri(s)).length,
             kelasBreakdown 
         };
     });
@@ -47,50 +61,83 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
                 <PrintHeader settings={settings} title="Laporan Ringkas Dashboard Utama" />
                 <p className="print-meta text-center text-sm mb-4">Dicetak pada: {formatDate(new Date().toISOString())}</p>
                 
-                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Utama</h4>
-                <table className="w-full text-sm border-collapse border border-black mb-6">
-                    <thead className="bg-gray-100">
-                        <tr>
-                            <th className="p-2 border border-black text-left">Ringkasan</th>
-                            <th className="p-2 border border-black text-right">Nilai</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td className="p-2 border border-black">Total Santri</td><td className="p-2 border border-black text-right font-bold">{totalSantri}</td></tr>
-                        <tr><td className="p-2 border border-black">Santri Putra</td><td className="p-2 border border-black text-right font-bold">{totalPutra}</td></tr>
-                        <tr><td className="p-2 border border-black">Santri Putri</td><td className="p-2 border border-black text-right font-bold">{totalPutri}</td></tr>
-                    </tbody>
-                </table>
+                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Statistik Populasi Santri</h4>
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                    <table className="w-full text-sm border-collapse border border-black">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th colSpan={2} className="p-2 border border-black text-left font-bold text-teal-800">Santri Aktif (Operasional)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td className="p-2 border border-black">Total Santri Aktif</td><td className="p-2 border border-black text-right font-bold text-teal-700">{activeTotal}</td></tr>
+                            <tr><td className="p-2 border border-black">Santri Putra (Aktif)</td><td className="p-2 border border-black text-right font-semibold">{activePutra}</td></tr>
+                            <tr><td className="p-2 border border-black">Santri Putri (Aktif)</td><td className="p-2 border border-black text-right font-semibold">{activePutri}</td></tr>
+                        </tbody>
+                    </table>
+
+                    <table className="w-full text-sm border-collapse border border-black">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th colSpan={2} className="p-2 border border-black text-left font-bold">Total Terdaftar (Historis)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td className="p-2 border border-black">Total Database Santri</td><td className="p-2 border border-black text-right font-bold">{totalSantri}</td></tr>
+                            <tr><td className="p-2 border border-black">Total Putra Historis</td><td className="p-2 border border-black text-right">{totalPutra}</td></tr>
+                            <tr><td className="p-2 border border-black">Total Putri Historis</td><td className="p-2 border border-black text-right">{totalPutri}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
 
                 <div className="grid grid-cols-2 gap-6 mb-6" style={{ breakInside: 'avoid' }}>
                     <div>
                         <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Komposisi Status</h4>
-                        <table className="w-full text-sm">
-                            <tbody>{(['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah'] as Santri['status'][]).map(s => (<tr key={s}><td className="py-1 font-medium">{s}</td><td className="py-1 text-right">{statusCounts[s] || 0}</td></tr>))}</tbody>
+                        <table className="w-full text-sm border-collapse border border-gray-300">
+                            <thead>
+                                <tr className="bg-gray-50 text-xs">
+                                    <th className="p-1.5 border border-gray-300 text-left">Status</th>
+                                    <th className="p-1.5 border border-gray-300 text-right">Jumlah</th>
+                                    <th className="p-1.5 border border-gray-300 text-right">Persentase</th>
+                                </tr>
+                            </thead>
+                            <tbody>{(['Aktif', 'Hiatus', 'Lulus', 'Keluar/Pindah'] as Santri['status'][]).map(s => {
+                                const count = statusCounts[s] || 0;
+                                const pct = totalSantri > 0 ? ((count / totalSantri) * 100).toFixed(1) : '0';
+                                return (
+                                    <tr key={s}>
+                                        <td className="p-1.5 border border-gray-300 font-medium">{s}</td>
+                                        <td className="p-1.5 border border-gray-300 text-right font-semibold">{count}</td>
+                                        <td className="p-1.5 border border-gray-300 text-right text-gray-600">{pct}%</td>
+                                    </tr>
+                                );
+                            })}</tbody>
                         </table>
                     </div>
                     <div>
-                        <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Struktur Pendidikan</h4>
-                        <table className="w-full text-sm">
+                        <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Struktur Lembaga</h4>
+                        <table className="w-full text-sm border-collapse border border-gray-300">
                             <tbody>
-                                <tr><td className="py-1 font-medium">Jumlah Jenjang</td><td className="py-1 text-right">{settings.jenjang.length}</td></tr>
-                                <tr><td className="py-1 font-medium">Jumlah Kelas</td><td className="py-1 text-right">{settings.kelas.length}</td></tr>
-                                <tr><td className="py-1 font-medium">Jumlah Rombel</td><td className="py-1 text-right">{settings.rombel.length}</td></tr>
+                                <tr><td className="p-1.5 border border-gray-300 font-medium">Jumlah Jenjang Pendidikan</td><td className="p-1.5 border border-gray-300 text-right font-semibold">{settings.jenjang.length}</td></tr>
+                                <tr><td className="p-1.5 border border-gray-300 font-medium">Jumlah Tingkat Kelas</td><td className="p-1.5 border border-gray-300 text-right font-semibold">{settings.kelas.length}</td></tr>
+                                <tr><td className="p-1.5 border border-gray-300 font-medium">Jumlah Rombel Belajar</td><td className="p-1.5 border border-gray-300 text-right font-semibold">{settings.rombel.length}</td></tr>
+                                <tr><td className="p-1.5 border border-gray-300 font-medium">Gedung Asrama</td><td className="p-1.5 border border-gray-300 text-right font-semibold">{settings.gedungAsrama?.length || 0}</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Detail Distribusi Santri</h4>
+                <h4 className="font-bold text-lg mb-2 border-b-2 border-black pb-1">Detail Distribusi Santri per Rombel</h4>
                 <table className="w-full text-xs border-collapse border border-black">
                     <thead className="bg-gray-100">
                         <tr>
                             <th className="p-2 border border-black text-left">Jenjang</th>
                             <th className="p-2 border border-black text-left">Kelas</th>
                             <th className="p-2 border border-black text-left">Rombel</th>
-                            <th className="p-2 border border-black text-right">Total</th>
+                            <th className="p-2 border border-black text-right">Santri Aktif</th>
                             <th className="p-2 border border-black text-right">Putra</th>
                             <th className="p-2 border border-black text-right">Putri</th>
+                            <th className="p-2 border border-black text-right">Total Historis</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -100,9 +147,10 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
                                     <tr key={`jenjang-${j.nama}`}>
                                         <td className="p-2 border border-black font-semibold">{j.nama}</td>
                                         <td className="p-2 border border-black italic text-gray-500" colSpan={2}>Belum ada data kelas/rombel</td>
-                                        <td className="p-2 border border-black text-right font-semibold">{j.total}</td>
+                                        <td className="p-2 border border-black text-right font-semibold text-teal-700">{j.active}</td>
                                         <td className="p-2 border border-black text-right">{j.putra}</td>
                                         <td className="p-2 border border-black text-right">{j.putri}</td>
+                                        <td className="p-2 border border-black text-right text-gray-500">{j.total}</td>
                                     </tr>
                                 );
                             }
@@ -114,9 +162,10 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
                                             <td className="p-2 border border-black font-semibold">{j.nama}</td>
                                             <td className="p-2 border border-black">{k.nama}</td>
                                             <td className="p-2 border border-black italic text-gray-500">Belum ada rombel</td>
-                                            <td className="p-2 border border-black text-right">{k.total}</td>
+                                            <td className="p-2 border border-black text-right font-semibold text-teal-700">{k.active}</td>
                                             <td className="p-2 border border-black text-right">-</td>
                                             <td className="p-2 border border-black text-right">-</td>
+                                            <td className="p-2 border border-black text-right text-gray-500">{k.total}</td>
                                         </tr>
                                     );
                                 }
@@ -126,9 +175,10 @@ export const DashboardSummaryTemplate: React.FC<{ santriList: Santri[], settings
                                         <td className="p-2 border border-black font-semibold">{j.nama}</td>
                                         <td className="p-2 border border-black">{k.nama}</td>
                                         <td className="p-2 border border-black">{r.nama}</td>
-                                        <td className="p-2 border border-black text-right">{r.total}</td>
-                                        <td className="p-2 border border-black text-right">{r.putra}</td>
-                                        <td className="p-2 border border-black text-right">{r.putri}</td>
+                                        <td className="p-2 border border-black text-right font-bold text-teal-700">{r.active}</td>
+                                        <td className="p-2 border border-black text-right">{r.putraActive}</td>
+                                        <td className="p-2 border border-black text-right">{r.putriActive}</td>
+                                        <td className="p-2 border border-black text-right text-gray-500">{r.total}</td>
                                     </tr>
                                 ));
                             });

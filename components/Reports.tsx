@@ -8,6 +8,7 @@ import { useReportGenerator } from '../hooks/useReportGenerator';
 import { useReportConfig } from '../hooks/useReportConfig';
 import { PageHeader } from './common/PageHeader';
 import { formatAcademicYearDisplay, getAcademicYearOptions, getDefaultAcademicYear } from '../utils/academicYear';
+import { isSantriPutra, isSantriPutri } from '../utils/formatters';
 const ReportSelectionHome = lazy(() =>
   import('./reports/ReportSelectionHome').then((module) => ({ default: module.ReportSelectionHome }))
 );
@@ -77,11 +78,11 @@ const Reports: React.FC = () => {
       if (hideInactive) return false;
 
       return (
-        (!filters.jenjangId || s.jenjangId === parseInt(filters.jenjangId)) &&
-        (!filters.kelasId || s.kelasId === parseInt(filters.kelasId)) &&
-        (!filters.rombelId || s.rombelId === parseInt(filters.rombelId)) &&
+        (!filters.jenjangId || Number(s.jenjangId) === parseInt(filters.jenjangId, 10)) &&
+        (!filters.kelasId || Number(s.kelasId) === parseInt(filters.kelasId, 10)) &&
+        (!filters.rombelId || Number(s.rombelId) === parseInt(filters.rombelId, 10)) &&
         (!filters.status || s.status === filters.status) &&
-        (!filters.gender || s.jenisKelamin === filters.gender) &&
+        (!filters.gender || (filters.gender === 'Laki-laki' ? isSantriPutra(s) : isSantriPutri(s))) &&
         (!filters.provinsi || s.alamat.provinsi?.toLowerCase().includes(filters.provinsi.toLowerCase()))
       );
     });

@@ -48,7 +48,7 @@ export const TabTentang: React.FC = () => {
                     <img src="/icon.svg" alt="Logo eSantri Web" className="mx-auto mb-3 h-16 w-16 rounded-xl shadow-sm" />
                     <h2 className="text-2xl font-bold text-teal-800">eSantri Web</h2>
                     <p className="mt-2 text-base text-teal-700 max-w-xl mx-auto">
-                        Sistem Manajemen Pondok Pesantren Modern & Gratis. <br/>
+                        Sistem Manajemen Pondok Pesantren Modern, Gratis dan Open Source. <br/>
                         Aman, Cepat, Offline-First & Cloud Sync.
                     </p>
                 </div>

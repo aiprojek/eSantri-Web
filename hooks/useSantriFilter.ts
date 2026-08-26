@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Santri, PondokSettings } from '../types';
+import { isSantriPutra, isSantriPutri } from '../utils/formatters';
 
 interface Filters {
   search: string;
@@ -44,11 +45,11 @@ export const useSantriFilter = (santriList: Santri[], filters: Filters, setFilte
 
       return (
         (nameMatch || nisMatch || nikMatch) &&
-        (!filters.jenjang || s.jenjangId === parseInt(filters.jenjang)) &&
-        (!filters.kelas || s.kelasId === parseInt(filters.kelas)) &&
-        (!filters.rombel || s.rombelId === parseInt(filters.rombel)) &&
+        (!filters.jenjang || Number(s.jenjangId) === parseInt(filters.jenjang, 10)) &&
+        (!filters.kelas || Number(s.kelasId) === parseInt(filters.kelas, 10)) &&
+        (!filters.rombel || Number(s.rombelId) === parseInt(filters.rombel, 10)) &&
         (!filters.status || s.status === filters.status) &&
-        (!filters.gender || s.jenisKelamin === filters.gender) &&
+        (!filters.gender || (filters.gender === 'Laki-laki' ? isSantriPutra(s) : isSantriPutri(s))) &&
         provinsiMatch &&
         kabupatenMatch &&
         kecamatanMatch

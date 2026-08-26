@@ -31,24 +31,68 @@ const generateQRCodeDataUrl = async (nis: string, size: number = 100): Promise<s
     }
 };
 
-// Generate barcode-like visual using simple SVG (no external API)
+// Generate standard Code 128 Barcode as crisp SVG (standard, fully scannable by physical scanners & smartphone apps)
+const CODE128_PATTERNS = [
+    "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213", // 0-9
+    "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132", // 10-19
+    "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211", // 20-29
+    "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313", // 30-39
+    "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331", // 40-49
+    "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111", // 50-59
+    "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214", // 60-69
+    "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111", // 70-79
+    "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141", // 80-89
+    "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141", // 90-99
+    "114131", "311141", "411131", "211412", "211214", "211232", "2331112" // 100-106 (104=StartB, 106=Stop)
+];
+
 const generateBarcodeVisual = (nis: string, width: number = 120, height: number = 40): string => {
-    // Simple numeric barcode representation
-    const barcodeHeight = height || 40;
-    const barcodeWidth = width || 120;
-    const barCount = 12; // Fixed bars for visual representation
-    const barWidth = barcodeWidth / barCount;
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${barcodeWidth}" height="${barcodeHeight}">`;
-    svg += `<rect fill="white" width="${barcodeWidth}" height="${barcodeHeight}"/>`;
-    const nisDigits = nis.replace(/\D/g, '').padStart(8, '0').slice(0, 8);
-    for (let i = 0; i < barCount; i++) {
-        const digitIndex = i % nisDigits.length;
-        const digit = parseInt(nisDigits[digitIndex] || '0', 10);
-        const shouldDraw = (digit * (i + 1)) % 3 !== 0;
-        const barHeight = shouldDraw ? barcodeHeight * 0.8 : barcodeHeight * 0.4;
-        const yPos = (barcodeHeight - barHeight) / 2;
-        svg += `<rect x="${i * barWidth + 1}" y="${yPos}" width="${barWidth - 2}" height="${barHeight}" fill="black"/>`;
+    const rawText = String(nis || '').trim() || '000000';
+    // Use Code 128 Set B (standard ASCII 32-126)
+    const startCode = 104; // Start B
+    let checksum = startCode;
+    const patternCodes: number[] = [startCode];
+
+    for (let i = 0; i < rawText.length; i++) {
+        const charCode = rawText.charCodeAt(i);
+        const code = (charCode >= 32 && charCode <= 126) ? (charCode - 32) : 0;
+        patternCodes.push(code);
+        checksum += code * (i + 1);
     }
+
+    const checkDigit = checksum % 103;
+    patternCodes.push(checkDigit);
+    patternCodes.push(106); // Stop code
+
+    // Convert patterns into continuous sequence of bar and space modules
+    const moduleSequence: number[] = [];
+    patternCodes.forEach(code => {
+        const pattern = CODE128_PATTERNS[code] || CODE128_PATTERNS[0];
+        for (let j = 0; j < pattern.length; j++) {
+            moduleSequence.push(parseInt(pattern[j], 10));
+        }
+    });
+
+    const totalModules = moduleSequence.reduce((sum, val) => sum + val, 0);
+    const quietZoneModules = 10;
+    const grandTotalModules = totalModules + (quietZoneModules * 2);
+    const moduleWidth = width / grandTotalModules;
+
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">`;
+    svg += `<rect width="${width}" height="${height}" fill="white"/>`;
+
+    let currentX = quietZoneModules * moduleWidth;
+    let isBar = true;
+
+    for (let i = 0; i < moduleSequence.length; i++) {
+        const w = moduleSequence[i] * moduleWidth;
+        if (isBar) {
+            svg += `<rect x="${currentX.toFixed(2)}" y="2" width="${w.toFixed(2)}" height="${height - 4}" fill="black"/>`;
+        }
+        currentX += w;
+        isBar = !isBar;
+    }
+
     svg += `</svg>`;
     return `data:image/svg+xml;base64,${btoa(svg)}`;
 };
@@ -177,6 +221,16 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
         boxSizing: 'border-box',
     };
 
+    // Dynamic Title Font Sizing without ellipsis
+    const yayasanLength = (settings.namaYayasan || '').length;
+    const ponpesLength = (settings.namaPonpes || '').length;
+    const classicYayasanSize = yayasanLength > 35 ? 'text-[5.5pt]' : yayasanLength > 22 ? 'text-[6.2pt]' : 'text-[7pt]';
+    const classicPonpesSize = ponpesLength > 35 ? 'text-[6.8pt]' : ponpesLength > 22 ? 'text-[7.8pt]' : 'text-[9pt]';
+    const modernPonpesSize = ponpesLength > 35 ? 'text-[7pt]' : ponpesLength > 22 ? 'text-[8pt]' : 'text-[9pt]';
+    const verticalPonpesSize = ponpesLength > 35 ? 'text-[6.5pt]' : ponpesLength > 22 ? 'text-[7.2pt]' : 'text-[8pt]';
+    const darkPonpesSize = ponpesLength > 35 ? 'text-[6pt]' : ponpesLength > 22 ? 'text-[6.5pt]' : 'text-[7pt]';
+    const ceriaPonpesSize = ponpesLength > 35 ? 'text-[6.8pt]' : ponpesLength > 22 ? 'text-[7.5pt]' : 'text-[8pt]';
+
     // --- Design 1: Classic Traditional ---
     if (cardDesign === 'classic') {
         return (
@@ -188,8 +242,8 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                         {settings.logoYayasanUrl && <img src={settings.logoYayasanUrl} alt="Logo Yayasan" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />}
                     </div>
                     <div className="text-center flex-grow px-1">
-                        <div className="text-[7pt] font-bold uppercase tracking-wider text-[#D4AF37] line-clamp-1">{settings.namaYayasan}</div>
-                        <div className="text-[9pt] font-bold leading-tight line-clamp-1">{settings.namaPonpes}</div>
+                        <div className={`${classicYayasanSize} font-bold uppercase tracking-wider text-[#D4AF37] leading-tight break-words`}>{settings.namaYayasan}</div>
+                        <div className={`${classicPonpesSize} font-bold leading-tight break-words`}>{settings.namaPonpes}</div>
                     </div>
                     {/* Right Logo (Ponpes) */}
                     <div className="w-10 h-full flex items-center justify-center">
@@ -241,9 +295,9 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 }}></div>
                 
                 {/* Header Section (Moved to Top) */}
-                <div className="bg-blue-600/10 p-2 border-b border-blue-100 text-center z-10 relative">
-                     <div className="text-[6pt] font-light text-gray-500 uppercase tracking-widest">{settings.namaYayasan}</div>
-                     <div className="text-[9pt] font-bold text-blue-900 leading-none mt-0.5">{settings.namaPonpes}</div>
+                <div className="bg-blue-600/10 p-1.5 border-b border-blue-100 text-center z-10 relative">
+                     <div className="text-[5.8pt] font-light text-gray-500 uppercase tracking-widest leading-tight">{settings.namaYayasan}</div>
+                     <div className={`${modernPonpesSize} font-bold text-blue-900 leading-tight mt-0.5 break-words`}>{settings.namaPonpes}</div>
                 </div>
 
                 {/* Body Section: Photo and Data */}
@@ -285,9 +339,9 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                  style={{ ...cardStyle, printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' } as any}>
                 <div className="w-[150%] h-24 bg-red-700 absolute top-0 left-[-25%] rounded-b-[50%] z-0"></div>
                 
-                <div className="z-10 mt-3 text-white">
-                    <div className="text-[6pt] opacity-80 uppercase tracking-widest">KARTU SANTRI</div>
-                    <div className="text-[8pt] font-bold mt-0.5">{settings.namaPonpes}</div>
+                <div className="z-10 mt-3 text-white px-2">
+                    <div className="text-[5.5pt] opacity-80 uppercase tracking-widest">KARTU SANTRI</div>
+                    <div className={`${verticalPonpesSize} font-bold mt-0.5 leading-tight break-words`}>{settings.namaPonpes}</div>
                 </div>
 
                 <div className="z-10 mt-3 relative">
@@ -333,8 +387,8 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                             </div>
                         )}
                         <div>
-                            <div className="text-[8pt] font-normal text-teal-400">Kartu Santri</div>
-                            <div className="text-[7pt] font-bold tracking-wide uppercase leading-none">{settings.namaPonpes}</div>
+                            <div className="text-[7.5pt] font-normal text-teal-400">Kartu Santri</div>
+                            <div className={`${darkPonpesSize} font-bold tracking-wide uppercase leading-tight break-words`}>{settings.namaPonpes}</div>
                         </div>
                     </div>
                 </div>
@@ -380,8 +434,8 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 <div className="bg-orange-400 p-2 text-center text-white relative overflow-hidden">
                     <div className="absolute w-4 h-4 bg-white rounded-full opacity-20 top-1 left-2"></div>
                     <div className="absolute w-6 h-6 bg-white rounded-full opacity-20 bottom-[-10px] right-4"></div>
-                    <div className="text-[8pt] font-normal mb-0.5 relative z-10">Kartu Santri</div>
-                    <div className="text-[8pt] font-bold relative z-10 leading-none">{settings.namaPonpes}</div>
+                    <div className="text-[7.5pt] font-normal mb-0.5 relative z-10">Kartu Santri</div>
+                    <div className={`${ceriaPonpesSize} font-bold relative z-10 leading-tight break-words`}>{settings.namaPonpes}</div>
                 </div>
 
                 <div className="flex p-2 gap-3 items-start flex-grow pl-4 overflow-hidden">
@@ -432,8 +486,8 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     {settings.logoYayasanUrl && <img src={settings.logoYayasanUrl} alt="Logo" className="max-h-full max-w-full object-contain" />}
                 </div>
                 <div className="text-center flex-grow">
-                    <div className="text-[7pt] font-bold uppercase tracking-wider text-[#D4AF37]">{settings.namaYayasan}</div>
-                    <div className="text-[9pt] font-bold leading-tight">{settings.namaPonpes}</div>
+                    <div className={`${classicYayasanSize} font-bold uppercase tracking-wider text-[#D4AF37] leading-tight break-words`}>{settings.namaYayasan}</div>
+                    <div className={`${classicPonpesSize} font-bold leading-tight break-words`}>{settings.namaPonpes}</div>
                 </div>
                 <div className="w-10 h-full flex items-center justify-center">
                     {settings.logoPonpesUrl && <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" />}
@@ -460,79 +514,530 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     );
 };
 
-const KartuSantriBackTemplate: React.FC<{ settings: PondokSettings; options: any }> = ({ settings, options }) => {
-    const { cardWidth, cardHeight, cardRules } = options || {};
+// --- QR CODE & BARCODE COMPONENTS FOR CARDS ---
+const CardQRCodeView: React.FC<{ value: string; size?: number; className?: string; isDark?: boolean }> = ({ value, size = 42, className, isDark = false }) => {
+    const [dataUrl, setDataUrl] = useState<string>('');
+
+    useEffect(() => {
+        let active = true;
+        generateQRCodeDataUrl(value, size * 2).then(url => {
+            if (active) setDataUrl(url);
+        });
+        return () => { active = false; };
+    }, [value, size]);
+
+    if (!dataUrl) {
+        return <div className={`animate-pulse rounded bg-gray-200/40 ${className}`} style={{ width: size, height: size }} />;
+    }
+
+    return (
+        <div className={`p-0.5 rounded bg-white shadow-sm flex items-center justify-center shrink-0 ${isDark ? 'border border-slate-600' : 'border border-gray-200'} ${className}`}>
+            <img src={dataUrl} alt={`QR-${value}`} className="object-contain" style={{ width: size, height: size }} referrerPolicy="no-referrer" />
+        </div>
+    );
+};
+
+const CardBarcodeView: React.FC<{ value: string; width?: number; height?: number; className?: string; isDark?: boolean }> = ({ value, width = 85, height = 22, className, isDark = false }) => {
+    const src = generateBarcodeVisual(value, width, height);
+    return (
+        <div className={`p-0.5 rounded bg-white shadow-sm flex items-center justify-center shrink-0 ${isDark ? 'border border-slate-600' : 'border border-gray-200'} ${className}`}>
+            <img src={src} alt={`Barcode-${value}`} className="object-contain" style={{ width, height }} referrerPolicy="no-referrer" />
+        </div>
+    );
+};
+
+const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
+    const { 
+        cardDesign = 'classic', 
+        cardWidth = 8.56, 
+        cardHeight = 5.4, 
+        cardRules, 
+        cardRulesFontSize = 'auto',
+        cardRulesCustomColor = '',
+        cardSignatoryTitle, 
+        cardSignatoryId, 
+        cardShowQRCode, 
+        cardQRCodeType 
+    } = options || {};
     
     // Replace placeholder with actual name safely
     const finalRulesText = cardRules?.replace(/{NamaPonpes}/gi, settings.namaPonpes || 'Pondok Pesantren') || '';
     const rulesList = finalRulesText.split('\n').filter((r: string) => r.trim() !== '');
     
-    // Character count heuristic for auto-scaling text
+    // Character count heuristic or user preference for text sizing
     const totalChars = finalRulesText.length;
-    let contentTextSize = 'text-[6pt]';
-    let footerTextSize = 'text-[5pt]';
-    let headerTextSize = 'text-[7pt]';
+    let contentTextSize = 'text-[5.5pt]';
+    let footerTextSize = 'text-[4.5pt]';
+    let headerTextSize = 'text-[6.5pt]';
     
-    if (totalChars > 400) {
+    if (cardRulesFontSize === 'small') {
         contentTextSize = 'text-[4pt]';
-        footerTextSize = 'text-[4pt]';
-        headerTextSize = 'text-[5pt]';
-    } else if (totalChars > 250) {
-        contentTextSize = 'text-[5pt]';
+        footerTextSize = 'text-[3.8pt]';
+        headerTextSize = 'text-[5.2pt]';
+    } else if (cardRulesFontSize === 'normal') {
+        contentTextSize = 'text-[4.8pt]';
+        footerTextSize = 'text-[4.2pt]';
+        headerTextSize = 'text-[5.8pt]';
+    } else if (cardRulesFontSize === 'large') {
+        contentTextSize = 'text-[5.5pt]';
         footerTextSize = 'text-[4.5pt]';
-        headerTextSize = 'text-[6pt]';
+        headerTextSize = 'text-[6.5pt]';
+    } else {
+        // Auto sizing based on length
+        if (totalChars > 350) {
+            contentTextSize = 'text-[4pt]';
+            footerTextSize = 'text-[3.8pt]';
+            headerTextSize = 'text-[5pt]';
+        } else if (totalChars > 220) {
+            contentTextSize = 'text-[4.8pt]';
+            footerTextSize = 'text-[4.2pt]';
+            headerTextSize = 'text-[5.8pt]';
+        }
     }
+
+    const customTextColorStyle = cardRulesCustomColor ? { color: cardRulesCustomColor } : undefined;
+
+    const signatoryName = cardSignatoryId 
+        ? (settings.tenagaPengajar || []).find((p: any) => p.id.toString() === cardSignatoryId)?.nama || 'Pengasuh / Pimpinan' 
+        : 'Pengasuh / Pimpinan';
 
     const cardStyle: React.CSSProperties = {
         width: `${cardWidth}cm`,
         height: `${cardHeight}cm`,
         flexShrink: 0,
         boxSizing: 'border-box',
-    };
+        printColorAdjust: 'exact',
+        WebkitPrintColorAdjust: 'exact'
+    } as any;
 
-    return (
-        <div className="rounded-xl overflow-hidden relative flex flex-col text-gray-800 border-2 border-gray-300 bg-white" 
-             style={{ ...cardStyle }}>
-            
-            {/* Faded Background Logo */}
-            {settings.logoYayasanUrl && (
-                <div className="absolute inset-0 flex items-center justify-center opacity-[0.08] pointer-events-none p-4">
-                    <img src={settings.logoYayasanUrl} alt="Logo" className="max-w-full max-h-full object-contain filter grayscale" />
+    const nisValue = santri?.nis || (santri?.id ? `SAN${santri.id}` : '');
+    const showCode = Boolean(cardShowQRCode && (santri?.nis || santri?.id));
+
+    // ==========================================
+    // DESIGN 1: CLASSIC TRADITIONAL (Hijau & Emas)
+    // ==========================================
+    if (cardDesign === 'classic') {
+        return (
+            <div 
+                className="rounded-xl overflow-hidden relative flex flex-col text-white border-4 border-double border-[#D4AF37]" 
+                style={{ ...cardStyle, backgroundColor: '#1B4D3E', borderColor: '#D4AF37' }}
+            >
+                {/* Background Watermark Logo */}
+                {(settings.logoYayasanUrl || settings.logoPonpesUrl) && (
+                    <div className="absolute inset-0 flex items-center justify-center opacity-[0.07] pointer-events-none p-4">
+                        <img 
+                            src={settings.logoYayasanUrl || settings.logoPonpesUrl} 
+                            alt="Watermark Logo" 
+                            className="max-w-full max-h-full object-contain filter brightness-200" 
+                            referrerPolicy="no-referrer"
+                        />
+                    </div>
+                )}
+
+                {/* Header (Centered) */}
+                <div className="flex justify-center items-center px-2.5 py-1 border-b border-[#D4AF37]/30 bg-black/25 shrink-0 z-10 text-center">
+                    <div className={`${headerTextSize} font-bold uppercase tracking-wider text-[#D4AF37]`}>
+                        Tata Tertib dan Ketentuan Kartu Santri
+                    </div>
                 </div>
-            )}
 
-            <div className={`text-center bg-gray-100 py-1.5 border-b border-gray-200 z-10 shrink-0`}>
-                <div className={`${headerTextSize} font-bold uppercase tracking-wider text-teal-800`}>Tata Tertib & Ketentuan</div>
+                {/* Content: Rules & Quote */}
+                <div 
+                    className={`p-2 flex-grow ${contentTextSize} leading-snug relative z-10 flex flex-col justify-between overflow-hidden text-white/90`}
+                    style={customTextColorStyle}
+                >
+                    <ol className="list-decimal pl-3 space-y-0.5">
+                        {rulesList.map((rule: string, i: number) => (
+                            <li key={i} className="pl-0.5">{rule.trim()}</li>
+                        ))}
+                    </ol>
+
+                    <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 border-t border-[#D4AF37]/20">
+                        {totalChars <= 280 ? (
+                            <div className="italic text-[#D4AF37]/90 font-serif text-[4.8pt] text-left leading-tight">
+                                "Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain."
+                            </div>
+                        ) : <div />}
+
+                        <div className="flex flex-col items-end shrink-0">
+                            {showCode && (
+                                <div className="flex items-center gap-1 mb-0.5">
+                                    {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
+                                        <CardQRCodeView value={nisValue} size={26} />
+                                    )}
+                                    {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
+                                        <CardBarcodeView value={nisValue} width={62} height={16} />
+                                    )}
+                                </div>
+                            )}
+                            {nisValue && (
+                                <div className="font-mono text-[4.8pt] text-[#D4AF37] font-bold tracking-wider">
+                                    S: {santri?.nis || nisValue}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Signatory & Footer */}
+                <div className={`py-1 px-2.5 border-t border-[#D4AF37]/30 flex justify-between items-end bg-black/25 shrink-0 z-10 ${footerTextSize}`}>
+                    <div className="text-white/70 pb-0.5 leading-tight text-[4.2pt]">
+                        <div className="text-[#D4AF37] font-semibold">{settings.namaPonpes}</div>
+                        <div>Dicetak: {formatDate(new Date().toISOString())}</div>
+                        <div className="text-white/50 text-[3.6pt] mt-0.5 tracking-tight font-sans">dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</div>
+                    </div>
+                    <div className="text-center min-w-[2.6cm]">
+                        <div className="text-[4.5pt] text-[#D4AF37] mb-0.5 leading-none">{cardSignatoryTitle || 'Mengetahui,'}</div>
+                        <div className="h-2"></div>
+                        <div className="border-b border-[#D4AF37]/70 w-full mb-0.5"></div>
+                        <div className="font-bold text-[5pt] text-white leading-none truncate">{signatoryName}</div>
+                    </div>
+                </div>
+
+                {/* Bottom Gold Strip */}
+                <div className="bg-[#D4AF37] text-[#1B4D3E] text-[3.8pt] text-center py-0.2 font-bold tracking-wider uppercase shrink-0">
+                    Kartu Tanda Santri Resmi
+                </div>
             </div>
-            
-            <div className={`p-2 flex-grow ${contentTextSize} leading-tight relative z-10 flex flex-col justify-center`}>
+        );
+    }
+
+    // ==========================================
+    // DESIGN 2: MODERN TECH (Biru & Putih Geometris)
+    // ==========================================
+    else if (cardDesign === 'modern') {
+        return (
+            <div 
+                className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border border-blue-200 shadow-sm" 
+                style={cardStyle}
+            >
+                {/* Background Decor matching Modern front */}
+                <div className="absolute inset-0 z-0 pointer-events-none" style={{ 
+                    background: 'linear-gradient(110deg, #2563eb 0%, #2563eb 8%, transparent 8.2%)' 
+                }}></div>
+                <div className="absolute inset-0 z-0 pointer-events-none" style={{ 
+                    background: 'linear-gradient(110deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.08) 35%, transparent 35.2%)' 
+                }}></div>
+
+                {/* Header (Centered) */}
+                <div className="bg-blue-600/10 px-2.5 py-1 border-b border-blue-100 flex justify-center items-center z-10 relative shrink-0 text-center">
+                    <div className={`${headerTextSize} font-bold text-blue-900 uppercase tracking-wider`}>
+                        Tata Tertib dan Ketentuan Kartu Santri
+                    </div>
+                </div>
+
+                {/* Content: Rules */}
+                <div 
+                    className={`p-2 flex-grow ${contentTextSize} leading-snug relative z-10 flex flex-col justify-between overflow-hidden text-gray-700`}
+                    style={customTextColorStyle}
+                >
+                    <ol className="list-decimal pl-3 space-y-0.5">
+                        {rulesList.map((rule: string, i: number) => (
+                            <li key={i} className="pl-0.5">{rule.trim()}</li>
+                        ))}
+                    </ol>
+
+                    <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 border-t border-blue-100">
+                        {totalChars <= 280 ? (
+                            <div className="italic text-blue-700/80 text-[4.8pt] leading-tight">
+                                "Menuntut ilmu adalah kewajiban bagi setiap muslim."
+                            </div>
+                        ) : <div />}
+
+                        <div className="flex flex-col items-end shrink-0">
+                            {showCode && (
+                                <div className="flex items-center gap-1 mb-0.5">
+                                    {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
+                                        <CardQRCodeView value={nisValue} size={26} />
+                                    )}
+                                    {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
+                                        <CardBarcodeView value={nisValue} width={62} height={16} />
+                                    )}
+                                </div>
+                            )}
+                            {nisValue && (
+                                <div className="font-mono text-[4.8pt] text-blue-800 font-bold bg-blue-50/80 px-1 rounded border border-blue-200/60 tracking-wider">
+                                    S: {santri?.nis || nisValue}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Signatory & Footer */}
+                <div className={`py-1 px-3 border-t border-blue-100 flex justify-between items-end bg-blue-50/80 shrink-0 z-10 ${footerTextSize}`}>
+                    <div className="text-gray-500 pb-0.5 leading-tight text-[4.2pt]">
+                        <div className="text-blue-900 font-semibold">{settings.namaPonpes}</div>
+                        <div>Dicetak: {formatDate(new Date().toISOString())}</div>
+                        <div className="text-gray-400 text-[3.6pt] mt-0.5 tracking-tight font-sans">dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</div>
+                    </div>
+                    <div className="text-center min-w-[2.6cm]">
+                        <div className="text-[4.5pt] text-blue-800 mb-0.5 leading-none">{cardSignatoryTitle || 'Mengetahui,'}</div>
+                        <div className="h-2"></div>
+                        <div className="border-b border-blue-300 w-full mb-0.5"></div>
+                        <div className="font-bold text-[5pt] text-blue-950 leading-none truncate">{signatoryName}</div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ==========================================
+    // DESIGN 3: VERTICAL ID (Merah & Putih Portrait)
+    // ==========================================
+    else if (cardDesign === 'vertical') {
+        return (
+            <div 
+                className="rounded-lg overflow-hidden relative flex flex-col bg-white text-gray-800 border border-gray-200 shadow-sm items-center text-center" 
+                style={cardStyle}
+            >
+                {/* Top curved red banner */}
+                <div className="w-[140%] h-11 bg-red-700 absolute top-0 left-[-20%] rounded-b-[45%] z-0 shadow-2xs"></div>
+                
+                {/* Header (Centered) */}
+                <div className="z-10 pt-1.5 px-2 text-white shrink-0 w-full text-center">
+                    <div className={`${headerTextSize} font-bold uppercase tracking-wider leading-tight text-center`}>
+                        Tata Tertib dan Ketentuan Kartu Santri
+                    </div>
+                </div>
+
+                {/* Content: Positioned safely below the entire red curve with generous margin */}
+                <div 
+                    className={`z-10 mt-10 px-3.5 w-full flex-grow flex flex-col justify-between overflow-hidden text-left ${contentTextSize} leading-snug text-gray-700`}
+                    style={customTextColorStyle}
+                >
+                    <ol className="list-decimal pl-3 space-y-0.5">
+                        {rulesList.map((rule: string, i: number) => (
+                            <li key={i} className="pl-0.5">{rule.trim()}</li>
+                        ))}
+                    </ol>
+
+                    <div className="mt-1 pt-1 border-t border-gray-100 flex flex-col items-center shrink-0">
+                        {totalChars <= 250 && (
+                            <div className="italic text-red-700/80 text-[4.5pt] text-center mb-0.5 leading-tight">
+                                "Disiplin dan adab adalah kunci keberkahan ilmu."
+                            </div>
+                        )}
+
+                        {showCode && (
+                            <div className="flex justify-center gap-1 my-0.5">
+                                {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
+                                    <CardQRCodeView value={nisValue} size={24} />
+                                )}
+                                {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
+                                    <CardBarcodeView value={nisValue} width={58} height={15} />
+                                )}
+                            </div>
+                        )}
+
+                        {nisValue && (
+                            <div className="font-mono text-[4.8pt] text-red-700 font-bold bg-red-50 px-1.5 py-0.5 rounded border border-red-200/80 mt-0.5 tracking-wider">
+                                S: {santri?.nis || nisValue}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Signatory and date */}
+                <div className="w-full px-3 py-1 z-10 shrink-0 text-center border-t border-gray-100 bg-gray-50/90">
+                    <div className="text-[4.5pt] text-gray-600 mb-0.5 leading-none">{cardSignatoryTitle || 'Mengetahui,'}</div>
+                    <div className="border-b border-gray-300 w-24 mx-auto my-0.5"></div>
+                    <div className="font-bold text-[5pt] text-gray-900 leading-none truncate">{signatoryName}</div>
+                    <div className="text-[3.8pt] text-gray-400 mt-0.5">Dicetak: {formatDate(new Date().toISOString())}</div>
+                </div>
+
+                {/* Bottom dark strip with app credit */}
+                <div className="w-full bg-gray-800 text-gray-300 text-[3.6pt] py-0.5 shrink-0 uppercase tracking-tight text-center">
+                    dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id
+                </div>
+            </div>
+        );
+    }
+
+    // ==========================================
+    // DESIGN 4: DARK PREMIUM (Slate & Teal Glow)
+    // ==========================================
+    else if (cardDesign === 'dark') {
+        return (
+            <div 
+                className="rounded-xl overflow-hidden relative flex flex-col bg-slate-900 text-white border border-slate-700" 
+                style={cardStyle}
+            >
+                {/* Ambient glow effects matching Dark front */}
+                <div className="absolute top-0 right-0 w-28 h-28 bg-teal-500 rounded-full blur-[35px] opacity-20 -mr-8 -mt-8 pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500 rounded-full blur-[30px] opacity-20 -ml-8 -mb-8 pointer-events-none"></div>
+
+                {/* Header (Centered) */}
+                <div className="flex items-center justify-center px-3 py-1 border-b border-slate-800 z-10 shrink-0 bg-slate-950/40 text-center">
+                    <div className={`${headerTextSize} font-bold text-teal-400 uppercase tracking-wide`}>
+                        Tata Tertib dan Ketentuan Kartu Santri
+                    </div>
+                </div>
+
+                {/* Content: Rules */}
+                <div 
+                    className={`p-2 flex-grow ${contentTextSize} leading-snug relative z-10 flex flex-col justify-between overflow-hidden text-slate-300`}
+                    style={customTextColorStyle}
+                >
+                    <ol className="list-decimal pl-3 space-y-0.5">
+                        {rulesList.map((rule: string, i: number) => (
+                            <li key={i} className="pl-0.5">{rule.trim()}</li>
+                        ))}
+                    </ol>
+
+                    <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 border-t border-slate-800">
+                        {totalChars <= 280 ? (
+                            <div className="italic text-teal-300/80 font-serif text-[4.8pt] leading-tight">
+                                "Adab dan akhlak mulia mendahului ketinggian ilmu."
+                            </div>
+                        ) : <div />}
+
+                        <div className="flex flex-col items-end shrink-0">
+                            {showCode && (
+                                <div className="flex items-center gap-1 mb-0.5">
+                                    {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
+                                        <CardQRCodeView value={nisValue} size={26} isDark />
+                                    )}
+                                    {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
+                                        <CardBarcodeView value={nisValue} width={62} height={16} isDark />
+                                    )}
+                                </div>
+                            )}
+                            {nisValue && (
+                                <div className="font-mono text-[4.8pt] text-teal-400 font-bold tracking-wider">
+                                    S: {santri?.nis || nisValue}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Signatory & Footer */}
+                <div className={`py-1 px-3 border-t border-slate-800 flex justify-between items-end bg-slate-950/80 shrink-0 z-10 ${footerTextSize}`}>
+                    <div className="text-slate-400 pb-0.5 leading-tight text-[4.2pt]">
+                        <div className="text-teal-400 font-semibold">{settings.namaPonpes}</div>
+                        <div>Dicetak: {formatDate(new Date().toISOString())}</div>
+                        <div className="text-slate-500 text-[3.6pt] mt-0.5 tracking-tight font-sans">dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</div>
+                    </div>
+                    <div className="text-center min-w-[2.6cm]">
+                        <div className="text-[4.5pt] text-slate-400 mb-0.5 leading-none">{cardSignatoryTitle || 'Mengetahui,'}</div>
+                        <div className="h-2"></div>
+                        <div className="border-b border-slate-600 w-full mb-0.5"></div>
+                        <div className="font-bold text-[5pt] text-teal-300 leading-none truncate">{signatoryName}</div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ==========================================
+    // DESIGN 5: CERIA / TPQ (Oranye & Tosca Playful)
+    // ==========================================
+    else if (cardDesign === 'ceria') {
+        return (
+            <div 
+                className="rounded-2xl overflow-hidden relative flex flex-col bg-orange-50 text-orange-950 border-2 border-orange-200" 
+                style={cardStyle}
+            >
+                {/* Header (Centered, clean) */}
+                <div className="bg-orange-400 px-2.5 py-1 flex justify-center items-center text-white relative overflow-hidden shrink-0 text-center">
+                    <div className="absolute w-3 h-3 bg-white rounded-full opacity-20 top-0.5 left-2"></div>
+                    <div className="absolute w-5 h-5 bg-white rounded-full opacity-20 bottom-[-6px] right-3"></div>
+                    <div className={`${headerTextSize} font-bold leading-tight uppercase tracking-wider relative z-10`}>
+                        Tata Tertib dan Ketentuan Kartu Santri
+                    </div>
+                </div>
+
+                {/* Content: Rules */}
+                <div 
+                    className={`p-2 flex-grow ${contentTextSize} leading-snug relative z-10 flex flex-col justify-between overflow-hidden text-teal-900`}
+                    style={customTextColorStyle}
+                >
+                    <ol className="list-decimal pl-3 space-y-0.5">
+                        {rulesList.map((rule: string, i: number) => (
+                            <li key={i} className="pl-0.5">{rule.trim()}</li>
+                        ))}
+                    </ol>
+
+                    <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 border-t border-orange-200">
+                        {totalChars <= 280 ? (
+                            <div className="italic text-teal-700 font-medium text-[4.8pt] leading-tight">
+                                "Rajin mengaji, santun berbudi, berbakti pada orang tua & guru."
+                            </div>
+                        ) : <div />}
+
+                        <div className="flex flex-col items-end shrink-0">
+                            {showCode && (
+                                <div className="flex items-center gap-1 mb-0.5">
+                                    {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
+                                        <CardQRCodeView value={nisValue} size={26} />
+                                    )}
+                                    {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
+                                        <CardBarcodeView value={nisValue} width={62} height={16} />
+                                    )}
+                                </div>
+                            )}
+                            {nisValue && (
+                                <div className="font-mono text-[4.8pt] text-orange-700 font-bold bg-orange-100/80 px-1 rounded border border-orange-200 tracking-wider">
+                                    S: {santri?.nis || nisValue}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Signatory & Footer */}
+                <div className={`py-1 px-3 border-t border-orange-200 flex justify-between items-end bg-teal-50 shrink-0 z-10 ${footerTextSize}`}>
+                    <div className="text-teal-700/80 pb-0.5 leading-tight text-[4.2pt]">
+                        <div className="text-teal-950 font-bold">{settings.namaPonpes}</div>
+                        <div>Dicetak: {formatDate(new Date().toISOString())}</div>
+                        <div className="text-teal-600/70 text-[3.6pt] mt-0.5 tracking-tight font-sans">dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</div>
+                    </div>
+                    <div className="text-center min-w-[2.6cm]">
+                        <div className="text-[4.5pt] text-teal-800 mb-0.5 leading-none">{cardSignatoryTitle || 'Mengetahui,'}</div>
+                        <div className="h-2"></div>
+                        <div className="border-b border-teal-300 w-full mb-0.5"></div>
+                        <div className="font-bold text-[5pt] text-teal-950 leading-none truncate">{signatoryName}</div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Default Fallback to Classic
+    return (
+        <div 
+            className="rounded-xl overflow-hidden relative flex flex-col text-white border-4 border-double border-[#D4AF37]" 
+            style={{ ...cardStyle, backgroundColor: '#1B4D3E', borderColor: '#D4AF37' }}
+        >
+            <div className="text-center px-2 py-1 border-b border-[#D4AF37]/30 bg-black/25">
+                <div className={`${headerTextSize} font-bold uppercase tracking-wider text-[#D4AF37]`}>Tata Tertib & Ketentuan</div>
+            </div>
+            <div className={`p-2 flex-grow ${contentTextSize} leading-snug text-white/90 flex flex-col justify-between`} style={customTextColorStyle}>
                 <ol className="list-decimal pl-3 space-y-0.5">
                     {rulesList.map((rule: string, i: number) => (
                         <li key={i}>{rule.trim()}</li>
                     ))}
                 </ol>
-
-                {totalChars <= 300 && (
-                    <div className="mt-2 text-center italic text-[#1B4D3E]/80 font-medium">
-                        "Sebaik-baik manusia adalah yang paling bermanfaat."
-                    </div>
-                )}
-            </div>
-
-            <div className={`py-1.5 px-3 mb-[2px] border-t border-gray-100 flex justify-between items-end bg-gray-50/90 shrink-0 ${footerTextSize}`}>
-                <div className="text-gray-500 pb-0.5 leading-tight">
-                    <div>Dicetak: {new Date().toLocaleDateString('id-ID')}</div>
-                    <div>Sistem eSantri by AI Projek</div>
-                    <div>aiprojek01.my.id</div>
+                <div className="flex justify-between items-center mt-1 pt-0.5 border-t border-[#D4AF37]/20">
+                    <div className="text-[4.2pt] italic text-[#D4AF37]">"Disiplin & Berakhlakul Karimah"</div>
+                    {nisValue && (
+                        <div className="font-mono text-[4.8pt] text-[#D4AF37] font-bold tracking-wider">
+                            S: {santri?.nis || nisValue}
+                        </div>
+                    )}
                 </div>
-                <div className="text-center w-[35%]">
-                    <div className="mb-3">{options.cardSignatoryTitle || 'Mengetahui,'}</div>
-                    <div className="border-b border-gray-500 w-full mb-0.5"></div>
-                    <div className="font-bold">
-                        {options.cardSignatoryId 
-                            ? (settings.tenagaPengajar || []).find((p: any) => p.id.toString() === options.cardSignatoryId)?.nama || 'Pengasuh / Pimpinan' 
-                            : 'Pengasuh / Pimpinan'}
-                    </div>
+            </div>
+            <div className="py-1 px-2.5 border-t border-[#D4AF37]/30 flex justify-between items-end bg-black/25">
+                <div className="text-white/70 text-[4.2pt]">
+                    <div>{settings.namaPonpes}</div>
+                    <div>Dicetak: {formatDate(new Date().toISOString())}</div>
+                    <div className="text-white/50 text-[3.6pt] mt-0.5 tracking-tight font-sans">dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</div>
+                </div>
+                <div className="text-center min-w-[2.5cm]">
+                    <div className="text-[4.5pt] text-[#D4AF37]">{cardSignatoryTitle || 'Mengetahui,'}</div>
+                    <div className="border-b border-[#D4AF37]/70 w-full my-0.5"></div>
+                    <div className="font-bold text-[5pt] text-white">{signatoryName}</div>
                 </div>
             </div>
         </div>
@@ -589,11 +1094,11 @@ export const generateCardReports = (data: Santri[], settings: PondokSettings, op
         return (
             <div key={`${santri.id}-${mode}`} className={`relative flex ${isSideBySide ? 'flex-row' : ''}`} style={{ breakInside: 'avoid', width: `${logicalCardWidth}cm`, height: `${options.cardHeight}cm` }}>
                 {mode === 'front' && <KartuSantriTemplate santri={santri} settings={settings} options={options} />}
-                {mode === 'back' && <KartuSantriBackTemplate settings={settings} options={options} />}
+                {mode === 'back' && <KartuSantriBackTemplate santri={santri} settings={settings} options={options} />}
                 {mode === 'both' && (
                     <>
                         <KartuSantriTemplate santri={santri} settings={settings} options={options} />
-                        <KartuSantriBackTemplate settings={settings} options={options} />
+                        <KartuSantriBackTemplate santri={santri} settings={settings} options={options} />
                     </>
                 )}
                 
@@ -607,9 +1112,6 @@ export const generateCardReports = (data: Santri[], settings: PondokSettings, op
                 {isSideBySide && (
                     <div className="absolute inset-y-0 left-1/2 border-l border-dashed border-gray-300 transform -translate-x-1/2 z-20"></div>
                 )}
-
-                {/* Label for helper in preview */}
-                <div className="absolute top-[0.1cm] right-[0.1cm] bg-white/70 backdrop-blur-sm text-[5pt] px-1 no-print rounded z-30">S: {santri.nis}</div>
             </div>
         )
     };

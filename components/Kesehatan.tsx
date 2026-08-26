@@ -52,7 +52,7 @@ const SuratSakitTemplate: React.FC<{ record: KesehatanRecord; santri: Santri; se
             </div>
             
             <div className="mt-auto pt-4 border-t border-gray-400 text-center text-[8pt] text-gray-500 italic">
-                Dokumen ini dicetak otomatis oleh sistem eSantri Web.
+                dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
             </div>
         </div>
     );

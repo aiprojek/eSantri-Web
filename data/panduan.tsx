@@ -21,35 +21,97 @@ export const panduanData: PanduanSectionData[] = [
         id: 'setup',
         badge: 0,
         badgeColor: 'purple',
-        title: 'Persiapan & Keamanan Sistem',
+        title: 'Persiapan, Multi-Admin & Sinkronisasi Sistem',
         steps: [
             {
-                title: 'Pemberitahuan Penting: Konsep & Rekomendasi',
+                title: 'Pemberitahuan Penting: Konsep & 2 Model Sinkronisasi Multi-Admin',
                 content: (
                     <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500 text-sm text-gray-700 space-y-3">
                         <p>
-                            <strong>Asal Usul & Evolusi:</strong> Aplikasi ini awalnya didesain untuk penggunaan <em>Admin Sentris</em> (terpusat pada satu komputer). 
-                            Namun, kami telah menghadirkan dua opsi sinkronisasi modern:
+                            <strong>Pilihan Arsitektur Multi-Admin:</strong> Aplikasi ini mendukung operasional offline-first dengan dua pilihan mode sinkronisasi multi-admin:
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="bg-white p-3 rounded border border-yellow-200 shadow-sm">
-                                <h4 className="font-bold text-teal-700 text-xs uppercase mb-1">Opsi 1: Firebase (Realtime)</h4>
-                                <p className="text-[11px]">Data tersinkronisasi secara otomatis dan instan antar perangkat. Sangat cocok untuk kolaborasi tim secara langsung tanpa perlu kirim/terima manual.</p>
+                            <div className="bg-white p-3 rounded-lg border border-yellow-200 shadow-2xs">
+                                <h4 className="font-bold text-teal-800 text-xs uppercase mb-1 flex items-center gap-1.5">
+                                    <i className="bi bi-fire text-amber-600"></i> Mode 1: Firebase Realtime
+                                </h4>
+                                <p className="text-[11px] text-gray-600">Data tersinkronisasi otomatis dan instan antar perangkat saat terhubung internet. Sangat praktis untuk kolaborasi harian tanpa perlu kirim/gabung file manual.</p>
                             </div>
-                            <div className="bg-white p-3 rounded border border-yellow-200 shadow-sm">
-                                <h4 className="font-bold text-teal-700 text-xs uppercase mb-1">Opsi 2: Cloud Sync (Hub & Spoke)</h4>
-                                <p className="text-[11px]">Menggunakan Dropbox/WebDAV. Cocok untuk backup berkala atau jika Anda ingin kontrol penuh atas file database di cloud storage Anda sendiri.</p>
+                            <div className="bg-white p-3 rounded-lg border border-yellow-200 shadow-2xs">
+                                <h4 className="font-bold text-teal-800 text-xs uppercase mb-1 flex items-center gap-1.5">
+                                    <i className="bi bi-diagram-3-fill text-indigo-600"></i> Mode 2: Hub & Spoke (Dropbox / WebDAV)
+                                </h4>
+                                <p className="text-[11px] text-gray-600">Pola Admin Utama (Hub) dan Staf/Guru (Spoke). Staf mengirim paket data perubahan, dan Admin Utama bertindak sebagai pengepul untuk menggabungkan ke Master.</p>
                             </div>
                         </div>
-                        <div className="border-t border-yellow-200 pt-2">
-                            <strong>Saran Penggunaan:</strong>
-                            <ul className="list-disc pl-5 mt-1 space-y-1">
-                                <li>
-                                    <strong>Pahami Alurnya Dulu:</strong> Sebelum penerapan penuh di pondok, sangat disarankan untuk mencoba aplikasi ini dalam <strong>tim kecil</strong> (misal: 1 Admin + 1 Guru) untuk memahami cara kerja sinkronisasi yang dipilih.
-                                </li>
-                                <li>
-                                    <strong>Gunakan Fitur Kolaborasi:</strong> Untuk menunjang pekerjaan Admin agar tidak menumpuk, sangat disarankan mengaktifkan fitur <strong>Multi-User</strong> dan dukungan <strong>Firebase Realtime</strong>. Biarkan Guru/Musyrif mengisi data (Absensi/Tahfizh) dari perangkat mereka sendiri secara real-time.
-                                </li>
+                    </div>
+                )
+            },
+            {
+                title: '⚡ PANDUAN WAJIB: Alur Kerja Multi-Admin Hub & Spoke (Dropbox / WebDAV)',
+                color: 'indigo',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="bg-indigo-50 p-3.5 rounded-lg border border-indigo-200 text-xs text-indigo-950 space-y-2">
+                            <h5 className="font-bold flex items-center gap-1.5 text-indigo-900">
+                                <i className="bi bi-arrow-repeat text-indigo-600"></i> SOP Wajib Operasional Hub & Spoke (Pencegah Timpa Data)
+                            </h5>
+                            <p className="text-gray-700">
+                                Dalam model <strong>Hub & Spoke</strong>, satu komputer bertindak sebagai <strong>Admin Pusat (Hub)</strong> dan perangkat staf/guru sebagai <strong>Cabang (Spoke)</strong>. Agar tidak terjadi bentrok atau kehilangan data, patuhi urutan 4 langkah wajib berikut:
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-indigo-800 flex items-center gap-1">
+                                    <span className="w-5 h-5 bg-indigo-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">1</span>
+                                    Staf / Guru Mengirim Data (Spoke)
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    Setelah selesai menginput setoran Tahfizh, Absensi, atau Nilai di laptop/HP masing-masing, Staf mengklik tombol <strong>"Kirim Perubahan ke Admin"</strong> di bar atas/menu Sinkronisasi. Data terkompresi otomatis terunggah ke folder Cloud (Dropbox/WebDAV).
+                                </p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-indigo-800 flex items-center gap-1">
+                                    <span className="w-5 h-5 bg-indigo-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">2</span>
+                                    Admin Pusat Menggabung (Hub Merge)
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    Admin Utama membuka menu <strong>Pusat Sinkronisasi &gt; Inbox Perubahan Staff</strong> &gt; Klik <strong>"Segarkan"</strong> &gt; Klik <strong>"Gabung"</strong> pada berkas kiriman staf. Sistem memadukan data baru dengan aman (Last-Write-Wins).
+                                </p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-lg border border-amber-200 bg-amber-50/50 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-amber-900 flex items-center gap-1">
+                                    <span className="w-5 h-5 bg-amber-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">3</span>
+                                    Admin Publikasikan Master (WAJIB)
+                                </h6>
+                                <p className="text-[11px] text-gray-700 font-medium">
+                                    Setelah seluruh berkas staf selesai digabungkan, Admin Utama <strong>WAJIB menekan tombol "Publikasikan Master"</strong>. Tindakan ini memperbarui berkas database induk di Cloud agar siap diambil oleh seluruh staf.
+                                </p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-lg border border-teal-200 bg-teal-50/50 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-teal-900 flex items-center gap-1">
+                                    <span className="w-5 h-5 bg-teal-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">4</span>
+                                    Staf Mengambil Master Terbaru
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    Sebelum memulai aktivitas menginput di hari baru, Staf menekan tombol <strong>"Ambil Data Master"</strong> (atau "Update dari Cloud") agar data di perangkat mereka sinkron dengan hasil olahan Admin Pusat.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-1">
+                            <strong className="flex items-center gap-1 font-bold"><i className="bi bi-exclamation-triangle-fill text-red-600"></i> Peringatan Resolusi Konflik Data:</strong>
+                            <p>
+                                Jika Admin dan Staf mengubah santri atau transaksi yang sama secara bersamaan, jendela <strong>Resolusi Konflik</strong> akan otomatis muncul saat tombol Gabung diklik. Admin dapat memilih:
+                            </p>
+                            <ul className="list-disc pl-5 mt-1 space-y-0.5 text-gray-700">
+                                <li><strong>Versi Lokal (Admin):</strong> Mempertahankan nilai yang ada di komputer Admin.</li>
+                                <li><strong>Versi Staff:</strong> Menggunakan perubahan yang diajukan oleh staf.</li>
+                                <li><strong>Mix & Match:</strong> Memilih bagian data tertentu per baris atribut sebelum disimpan.</li>
                             </ul>
                         </div>
                     </div>
@@ -197,45 +259,119 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'datamaster',
-        badge: 'UPDATE',
+        badge: 'LENGKAP',
         badgeColor: 'teal',
-        title: 'Data Master',
+        title: 'Data Master & Struktur Lembaga',
         steps: [
             {
-                title: 'Panduan Penggunaan Data Master',
+                title: 'Ikhtisar & Struktur Inti Data Master',
                 content: (
-                    <div className="bg-teal-50 p-4 rounded-lg border-l-4 border-teal-500 text-sm text-gray-700">
-                        <ul className="list-disc pl-5 space-y-1">
-                            <li><strong>Indikator Perubahan Belum Disimpan</strong> membantu operator mengetahui kapan data benar-benar perlu disimpan.</li>
-                            <li><strong>Tahun Ajaran</strong> tersedia dalam tampilan mobile yang lebih nyaman (mode kartu/accordion), sementara desktop tetap memakai tabel penuh.</li>
-                            <li><strong>Mata Pelajaran</strong> mendukung multi entri untuk <em>Modul/Kitab</em>, <em>Link Unduh</em>, dan <em>Link Beli</em>.</li>
-                            <li>Kompatibilitas tetap dijaga: data lama (single field) tetap bisa dibaca normal.</li>
+                    <div className="bg-teal-50 p-4 rounded-lg border-l-4 border-teal-500 text-sm text-gray-700 space-y-3">
+                        <p>
+                            <strong>Data Master</strong> adalah pondasi operasional seluruh modul di eSantri Web (Santri, Absensi, Jadwal, Nilai, Rapor, hingga Keuangan). 
+                            Pastikan data master dikonfigurasi secara urut dan lengkap sebelum memulai aktivitas harian.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs">
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-diagram-3-fill text-teal-600"></i> 1. Struktur Pendidikan</span>
+                                <p className="text-[11px] text-gray-600">Jenjang (Marhalah) &rarr; Tingkat Kelas &rarr; Rombel (Kelas Paralel) & Wali Kelas.</p>
+                            </div>
+                            <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs">
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-person-workspace text-teal-600"></i> 2. Tenaga Pendidik (Guru)</span>
+                                <p className="text-[11px] text-gray-600">Profil pengajar, NIP/NIY, hari ketersediaan mengajar, & kompetensi mapel.</p>
+                            </div>
+                            <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs">
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-book-half text-teal-600"></i> 3. Mata Pelajaran</span>
+                                <p className="text-[11px] text-gray-600">Passing Grade (KKM), multi-modul/kitab, link unduh materi & link beli kitab.</p>
+                            </div>
+                            <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs">
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-calendar-event text-teal-600"></i> 4. Tahun Ajaran & Semester</span>
+                                <p className="text-[11px] text-gray-600">Penetapan semester aktif (Ganjil/Genap), tanggal periode, dan status arsip.</p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '1. Struktur Pendidikan: Jenjang, Kelas & Rombel',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p>Hierarki pendidikan diatur secara terstruktur bertingkat:</p>
+                        <ol className="list-decimal pl-5 space-y-2 bg-gray-50 p-3 rounded-lg border text-xs text-gray-700">
+                            <li>
+                                <strong>Jenjang (Marhalah):</strong> Menentukan unit tingkatan utama lembaga (misal: <em>Salafiyah Ula, Wustho, Ulya, MTs, SMP, MA, SMK</em>).
+                            </li>
+                            <li>
+                                <strong>Tingkat Kelas:</strong> Mengelompokkan tingkat kelas yang menginduk ke Jenjang tertentu (misal: <em>Kelas 1, 2, 3</em> atau <em>Kelas VII, VIII, IX</em>).
+                            </li>
+                            <li>
+                                <strong>Rombel (Rombongan Belajar / Kelas Paralel):</strong> Unit kelas riil tempat santri belajar (misal: <em>Kelas 7A, 7B, Ula-1 Putra</em>). Di sini Anda juga menetapkan <strong>Wali Kelas</strong> yang bertugas.
+                            </li>
+                        </ol>
+                        <div className="text-[11px] bg-blue-50 border-l-4 border-blue-400 p-2.5 rounded text-blue-900">
+                            <strong>💡 Tips Cepat:</strong> Gunakan tombol <strong>"Tambah Banyak (Tabel)"</strong> di setiap tab untuk menginput banyak jenjang, kelas, atau rombel sekaligus layaknya di Excel.
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '2. Tenaga Pendidik: Jadwal Mengajar & Integrasi Akun',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p>Kelola data asatidz/guru pengampu secara terintegrasi:</p>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li><strong>Biodata Lengkap:</strong> NIP/NIY, nama lengkap, gelar, jabatan utama, status kepegawaian (Tetap/Honorer).</li>
+                            <li><strong>Hari Ketersediaan Mengajar:</strong> Atur hari-hari di mana guru bersedia mengajar (Senin-Ahad). Pengaturan ini menjadi filter otomatis anti-bentrok pada modul <em>Jadwal Pelajaran</em>.</li>
+                            <li><strong>Kompetensi Mapel:</strong> Tentukan mata pelajaran apa saja yang diampu oleh masing-masing guru agar sistem dapat merekomendasikan guru yang tepat saat menyusun jadwal.</li>
+                            <li><strong>Pembuatan Akun Login Instan:</strong> Data guru dapat langsung diubah menjadi akun login staf dengan tombol <em>"Ambil dari Data Guru"</em> pada menu <em>Pengaturan &gt; Akun & Pengguna</em>.</li>
                         </ul>
                     </div>
                 )
             },
             {
-                title: 'Cara Input Multi Modul/Link Mapel',
+                title: '3. Mata Pelajaran: Multi-Kitab, Link Unduh & Toko',
                 content: (
                     <div className="space-y-2 text-sm">
-                        <p>Untuk mapel yang punya lebih dari satu kitab/modul atau lebih dari satu tautan:</p>
-                        <ol className="list-decimal pl-5 space-y-1">
-                            <li>Buka <strong>Data Master &gt; Mata Pelajaran</strong>, lalu tambah/edit mapel.</li>
-                            <li>Isi <strong>satu baris per item</strong> pada kolom Modul/Kitab, Link Unduh, dan Link Beli.</li>
-                            <li>Untuk mode <strong>Bulk Editor</strong>, bisa dipisah dengan tanda <code>;</code> atau baris baru.</li>
+                        <p>Mata pelajaran mendukung pengayaan referensi belajar modern & klasik:</p>
+                        <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li>Buka <strong>Data Master &gt; Mata Pelajaran</strong>, klik Tambah Mapel atau edit data yang ada.</li>
+                            <li>Tentukan <strong>Kode Mapel</strong>, <strong>Nama Mapel</strong>, <strong>KKM (Passing Grade)</strong>, dan <strong>Kelompok</strong> (Agama, Kepesantrenan, Umum, Mulok).</li>
+                            <li>
+                                <strong>Multi-Entri Modul/Kitab:</strong> Jika satu mapel menggunakan lebih dari 1 kitab/buku, ketikkan <strong>satu baris per item</strong> (atau gunakan tanda titik koma <code>;</code> pada mode Tambah Banyak).
+                            </li>
+                            <li>
+                                <strong>Link Unduh & Link Pembelian:</strong> Masukkan URL unduhan PDF/e-book modul atau tautan toko pembelian kitab fisik untuk memudahkan santri/wali santri.
+                            </li>
                         </ol>
-                        <p className="text-xs text-gray-600">Contoh: <code>Fathul Qorib;Taqrib;Jurumiyah</code></p>
+                        <div className="bg-gray-50 border p-2.5 rounded text-[11px] text-gray-600 font-mono">
+                            Contoh Input: <code>Fathul Qorib; Taqrib; Safinah</code>
+                        </div>
                     </div>
                 )
             },
             {
-                title: 'Praktik Aman Sebelum Simpan',
+                title: '4. Tahun Ajaran & Semester (Mobile Card & Desktop Table)',
                 content: (
-                    <div className="bg-gray-50 p-3 rounded border text-sm">
-                        <ul className="list-disc pl-5 space-y-1">
-                            <li>Selesaikan edit per tab, lalu cek indikator perubahan.</li>
-                            <li>Simpan hanya saat semua field inti sudah valid.</li>
-                            <li>Jika kerja tim, lakukan sinkronisasi setelah sesi input selesai agar data terbaru terbaca perangkat lain.</li>
+                    <div className="space-y-3 text-sm">
+                        <p>Mengatur periode kalender akademik pondok:</p>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li><strong>Tampilan Responsif Ganda:</strong> Pada layar desktop tampil berupa tabel penuh yang komprehensif, sedangkan pada layar ponsel otomatis beralih ke <strong>Mode Kartu / Accordion</strong> yang ringkas dan nyaman disentuh.</li>
+                            <li><strong>Status Aktif vs Arsip:</strong> Hanya ada 1 tahun ajaran & semester aktif yang menjadi target default pencatatan absensi, tagihan, dan rapor. Periode sebelumnya otomatis tersimpan sebagai arsip historis yang aman.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: '5. Fitur Bulk Grid & Indikator Belum Disimpan (Dirty State)',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1.5">
+                            <h5 className="font-bold flex items-center gap-1.5"><i className="bi bi-shield-exclamation text-amber-600"></i> Proteksi Kehilangan Data (Dirty State Warning)</h5>
+                            <p>Sistem dilengkapi sensor perubahan formulir. Jika Anda melakukan perubahan dan belum menekan tombol Simpan, indikator kuning peringatan akan aktif dan mencegah perpindahan halaman tanpa konfirmasi agar data tidak hilang secara tidak sengaja.</p>
+                        </div>
+                        <ul className="list-disc pl-5 space-y-1 text-xs text-gray-700">
+                            <li>Gunakan <strong>Keyboard Navigation</strong> (`Tab`, `Enter`, panah arah) saat menginput di tabel grid massal.</li>
+                            <li>Mendukung <strong>Copy-Paste langsung dari Excel / Spreadsheet</strong> (`Ctrl+C` & `Ctrl+V`).</li>
                         </ul>
                     </div>
                 )
@@ -1154,45 +1290,211 @@ export const panduanData: PanduanSectionData[] = [
         id: 'tahfizh',
         badge: 7,
         badgeColor: 'green',
-        title: "Tahfizh & Mutaba'ah Qur'an",
+        title: "Tahfizh & Mutaba'ah Qur'an (Rapor & Halaqah)",
         steps: [
-             {
-                title: 'Rekomendasi Workflow (Halaqah Real-time)',
+            {
+                title: 'Ikhtisar & Rekomendasi Alur Kerja (Workflow)',
                 content: (
-                    <>
-                        <p className="mb-2 text-sm">Agar pencatatan hafalan efisien dan tidak menumpuk di meja admin, gunakan alur berikut:</p>
-                        <div className="bg-green-50 p-3 rounded border border-green-200">
-                            <ol className="list-decimal pl-5 space-y-2 text-sm">
-                                <li><strong>Muhaffizh Login di HP/Tablet Sendiri:</strong> Admin membuatkan akun staff untuk setiap muhaffizh.</li>
-                                <li><strong>Input Saat Menyimak:</strong> Muhaffizh membuka menu <em>Tahfizh &gt; Input Setoran</em> saat santri maju setoran.</li>
-                                <li><strong>Otomatis Lanjut Ayat:</strong> Sistem otomatis menyarankan ayat lanjutan berdasarkan setoran terakhir.</li>
-                                <li><strong>Sync Data:</strong> Jika menggunakan Dropbox, klik "Kirim Perubahan". Jika menggunakan <strong>Firebase</strong>, data langsung tersinkron secara real-time.</li>
-                            </ol>
+                    <div className="space-y-3 text-sm">
+                        <p>
+                            Modul Tahfizh dirancang untuk mencatat mutaba'ah harian, ujian berkala per juz, hingga penerbitan Buku Rapor Semesteran dan Syahadah Hafalan secara terstruktur:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                                <h5 className="font-bold text-green-900 flex items-center gap-1.5 mb-1">
+                                    <i className="bi bi-person-workspace text-green-700"></i> 1. Desentralisasi Input Halaqah
+                                </h5>
+                                <p className="text-xs text-gray-700">
+                                    Admin membuatkan akun staff untuk setiap Ustadz Muhaffizh. Pengajar langsung mencatat saat menyimak santri maju setoran lewat HP/tablet masing-masing.
+                                </p>
+                            </div>
+                            <div className="bg-teal-50 p-3 rounded-lg border border-teal-200">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 mb-1">
+                                    <i className="bi bi-cloud-arrow-up text-teal-700"></i> 2. Sinkronisasi Real-Time / Offline
+                                </h5>
+                                <p className="text-xs text-gray-700">
+                                    Bekerja mulus tanpa internet (Offline-First). Bila terhubung Firebase Realtime, data setoran langsung tersinkron ke admin dan portal wali santri.
+                                </p>
+                            </div>
                         </div>
-                    </>
+                    </div>
                 )
             },
             {
-                title: 'Cara Input Setoran',
+                title: '1. Manajemen Halaqah & Plotting Santri (Filter Cascading)',
+                color: 'teal',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Tahfizh &gt; Input Setoran</strong>.</li>
-                        <li>Pilih Nama Santri di panel kiri (gunakan fitur pencarian untuk cepat).</li>
-                        <li>Pilih Jenis Setoran: <strong>Ziyadah</strong> (Hafalan Baru), <strong>Murojaah</strong> (Mengulang), atau <strong>Tasmi'</strong> (Ujian).</li>
-                        <li>Isi detail: Juz, Surat, dan Ayat. Berikan penilaian (Predikat) dan catatan jika perlu.</li>
-                        <li>Klik <strong>Simpan Setoran</strong>.</li>
-                    </ul>
+                    <div className="space-y-3 text-sm">
+                        <p>Kelola kelompok halaqah dan bagi santri ke pembimbingnya:</p>
+                        <ol className="list-decimal pl-5 space-y-2 bg-gray-50 p-3 rounded-lg border text-xs text-gray-700">
+                            <li>
+                                <strong>Membuat Halaqah:</strong> Buka tab <em>Manajemen Halaqah</em> &gt; Klik <strong>"+ Tambah Halaqah"</strong>. Masukkan Nama Halaqah, pilih Ustadz Muhaffizh, dan tentukan target hafalan.
+                            </li>
+                            <li>
+                                <strong>Plotting Anggota dengan Filter Bertingkat:</strong> Buka tab <em>Plotting Anggota</em>. Gunakan filter <strong>Jenjang &rarr; Kelas &rarr; Rombel</strong> di panel atas untuk menyaring santri angkatan tertentu dengan cepat.
+                            </li>
+                            <li>
+                                <strong>Simpan Anggota:</strong> Centang nama-nama santri yang dibimbing, lalu klik <strong>"Simpan Anggota Halaqah"</strong>.
+                            </li>
+                        </ol>
+                    </div>
                 )
             },
             {
-                title: 'Laporan Perkembangan & PDF',
+                title: '2. Metode Setoran: Sabaq (Ziyadah), Sabqi (Murojaah Dekat) & Manzil (Murojaah Jauh)',
+                color: 'green',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka tab <strong>Riwayat & Laporan</strong>.</li>
-                        <li>Cari santri yang diinginkan. Anda akan melihat daftar riwayat setoran lengkap.</li>
-                        <li>Klik kartu santri untuk membuka detail.</li>
-                        <li>Tekan tombol <strong>"Cetak Laporan"</strong> (ikon printer) untuk mengunduh <strong>Laporan Mutaba'ah PDF</strong> resmi yang berisi grafik capaian, detail setoran per tanggal, dan kolom tanda tangan wali.</li>
-                    </ul>
+                    <div className="space-y-3 text-sm">
+                        <p>Aplikasi mendukung klasifikasi setoran hafalan standar internasional (Sabaq, Sabqi, Manzil) dan metode umum:</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                            <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg space-y-1">
+                                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[10px]">SABAQ / ZIYADAH</span>
+                                <h6 className="font-bold text-emerald-950">Hafalan Baru</h6>
+                                <p className="text-gray-600">Setoran ayat/halaman yang baru pertama kali dihafal. Sistem otomatis menyarankan ayat lanjutan dari setoran sebelumnya.</p>
+                            </div>
+                            <div className="bg-teal-50 border border-teal-200 p-3 rounded-lg space-y-1">
+                                <span className="px-2 py-0.5 rounded bg-teal-600 text-white font-bold text-[10px]">SABQI / MUROJAAH DEKAT</span>
+                                <h6 className="font-bold text-teal-950">Ulangan Juz Baru</h6>
+                                <p className="text-gray-600">Murojaah beberapa lembar ke belakang dari juz yang sedang aktif dihafal agar tidak mudah hilang.</p>
+                            </div>
+                            <div className="bg-cyan-50 border border-cyan-200 p-3 rounded-lg space-y-1">
+                                <span className="px-2 py-0.5 rounded bg-cyan-600 text-white font-bold text-[10px]">MANZIL / MUROJAAH JAUH</span>
+                                <h6 className="font-bold text-cyan-950">Ulangan Juz Lama</h6>
+                                <p className="text-gray-600">Pengulangan juz-juz lama yang sudah pernah diujikan untuk menjaga kelancaran hafalan jangka panjang.</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-xs space-y-1.5">
+                            <span className="font-bold text-gray-800 flex items-center gap-1">
+                                <i className="bi bi-mic-fill text-rose-500"></i> Rekam Audio Setoran Suara Santri (Voice Recorder):
+                            </span>
+                            <p className="text-gray-600">
+                                Ustadz dapat merekam lantunan ayat santri langsung dari browser saat menyimak dengan mengklik ikon mikrofon. Rekaman audio disimpan sebagai bukti mutaba'ah, dapat diputar ulang, atau diunduh untuk evaluasi dan laporan kepada wali santri.
+                            </p>
+                        </div>
+
+                        <div className="bg-emerald-50/70 border border-emerald-200 p-3 rounded-lg text-xs space-y-1">
+                            <span className="font-bold text-emerald-900 flex items-center gap-1">
+                                <i className="bi bi-card-checklist text-emerald-700"></i> Preset Kamus Catatan Tajwid & Makhraj:
+                            </span>
+                            <p className="text-gray-700">
+                                Gunakan chip catatan cepat (Tawaqquf/Tersendat, Lahn Jali, Lahn Khafi, Mad Thobi'i, Ghunnah, dll.) untuk mencatat evaluasi teknis hanya dengan 1 klik tanpa harus mengetik manual dari awal.
+                            </p>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '3. Ujian Hafalan Per Juz, Penandaan Mutqin & Analisis Capaian',
+                color: 'blue',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p>Untuk menguji hafalan satu juz penuh atau seperempat Al-Qur'an secara resmi:</p>
+                        <ol className="list-decimal pl-5 space-y-1.5 bg-blue-50 p-3 rounded-lg border border-blue-200 text-xs text-blue-950">
+                            <li>Pilih tipe setoran: <strong>"Ujian Hafalan"</strong>.</li>
+                            <li>Pilih nomor <strong>Juz yang Diujikan</strong> (misal: Juz 30, Juz 1, dsb).</li>
+                            <li>Isi skor kelancaran, tajwid, fashahah/makhraj, serta adab tilawah.</li>
+                            <li>
+                                <strong>Tandai Status Mutqin:</strong> Jika santri lulus dengan nilai di atas batas minimal, centang <strong>"Tandai Status Mutqin"</strong>. Status ini akan otomatis mewarnai nomor juz menjadi hijau terang pada <strong>Peta Visual 30 Juz</strong>.
+                            </li>
+                            <li>
+                                <strong>Grafik & Analisis Kecepatan:</strong> Masuk ke tab <em>Statistik & Grafik</em> untuk memantau grafik kenaikan hafalan bulanan, rata-rata kelancaran, dan estimasi waktu khatam santri.
+                            </li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: '4. Penerbitan Dokumen: Buku Rapor, Kartu Setoran Saku & Syahadah',
+                color: 'purple',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p>Modul Tahfizh menyediakan format dokumen resmi siap cetak dan ekspor:</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            <div className="bg-white p-3 rounded-lg border shadow-2xs">
+                                <h6 className="font-bold text-purple-900 flex items-center gap-1 mb-1">
+                                    <i className="bi bi-journal-bookmark-fill text-purple-600"></i> Buku Rapor Semesteran (A4)
+                                </h6>
+                                <p className="text-gray-600">Dilengkapi Kop Pondok Resmi, Peta Visual 30 Juz, Rekap Rata-rata Nilai, Akumulasi Catatan Evaluasi Semester, dan Tanda Tangan 3 Pihak (Mudir, Pengampu, Wali).</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border shadow-2xs">
+                                <h6 className="font-bold text-emerald-900 flex items-center gap-1 mb-1">
+                                    <i className="bi bi-card-text text-emerald-600"></i> Kartu Mutaba'ah Saku (Buku Harian)
+                                </h6>
+                                <p className="text-gray-600">Format kartu mutaba'ah harian/bulanan ringkas yang bisa dicetak untuk pegangan santri atau diselipkan di mushaf.</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border shadow-2xs">
+                                <h6 className="font-bold text-amber-900 flex items-center gap-1 mb-1">
+                                    <i className="bi bi-award-fill text-amber-600"></i> Syahadah Tahfizh (Landscape)
+                                </h6>
+                                <p className="text-gray-600">Sertifikat kelulusan juz dengan bingkai kaligrafi elegan, titimangsa Hijriah/Masehi resmi, dan barcode validasi.</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border shadow-2xs">
+                                <h6 className="font-bold text-teal-900 flex items-center gap-1 mb-1">
+                                    <i className="bi bi-file-earmark-text-fill text-teal-600"></i> Laporan Perkembangan & Rekap Muhaffizh
+                                </h6>
+                                <p className="text-gray-600">Rekap riwayat kronologis seluruh setoran ziyadah & murojaah santri dalam rentang tanggal untuk laporan ke pengasuh.</p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '5. Pengaturan Titimangsa & Tanda Tangan Proporsional',
+                color: 'orange',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p>Fleksibilitas penanggalan dan penandatanganan rapor/syahadah:</p>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li>
+                                <strong>Format Tanggal:</strong> Pilih format <em>Hanya Masehi</em>, <em>Hanya Hijriah</em>, atau <em>Ganda (Hijriah & Masehi)</em>.
+                            </li>
+                            <li>
+                                <strong>Penyesuaian Hari Hijriah:</strong> Gunakan koreksi hari (-2 s/d +2 hari) untuk menyesuaikan hasil hisab/rukyat lokal atau ketik teks Hijriah manual.
+                            </li>
+                            <li>
+                                <strong>Tata Letak Tanda Tangan:</strong> Titimangsa tempat & tanggal tertata dalam satu baris penuh tanpa terpotong, dengan ruang vertikal tanda tangan yang proporsional.
+                            </li>
+                            <li>
+                                <strong>Penandatangan:</strong> Otomatis mendeteksi Pimpinan/Mudir Pondok, Ustadz Pembimbing Halaqah / Wali Kelas, atau dapat dikustomisasi secara manual.
+                            </li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: '6. Performa Cetak Massal Ringan & Sinkronisasi Multi-Admin',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="bg-teal-50 p-3.5 rounded-lg border border-teal-200 text-teal-950">
+                            <p className="font-semibold flex items-center gap-1.5 text-xs mb-1">
+                                <i className="bi bi-lightning-charge-fill text-amber-500"></i> Optimasi Cetak On-Demand
+                            </p>
+                            <p className="text-xs text-gray-700">
+                                Pencetakan ratusan rapor atau syahadah kini berjalan instan dan hemat memori berkat teknologi <em>On-Demand Lazy Rendering</em>. Dokumen hanya dimuat ke memori saat Anda menekan tombol Cetak/Ekspor, menjaga peramban tetap responsif.
+                            </p>
+                        </div>
+
+                        <div className="bg-indigo-50 p-3.5 rounded-lg border border-indigo-200 text-indigo-950 space-y-2">
+                            <p className="font-semibold flex items-center gap-1.5 text-xs">
+                                <i className="bi bi-arrow-left-right text-indigo-600"></i> SOP Sinkronisasi Multi-Admin Tahfizh:
+                            </p>
+                            <ul className="list-disc pl-5 space-y-1 text-xs text-gray-700">
+                                <li>
+                                    <strong>Mode Firebase (Real-time):</strong> Ustadz yang menginput setoran di halaqah langsung mengalirkan data ke Admin & Portal Wali Santri secara instan tanpa perlu tindakan manual.
+                                </li>
+                                <li>
+                                    <strong>Mode Hub & Spoke (Dropbox/WebDAV):</strong>
+                                    <ol className="list-decimal pl-4 mt-1 space-y-0.5 text-gray-700">
+                                        <li><strong>Ustadz (Spoke):</strong> Setelah selesai halaqah, klik <em>"Kirim Perubahan ke Admin"</em>.</li>
+                                        <li><strong>Admin Utama (Hub):</strong> Buka menu <em>Pusat Sinkronisasi</em> &gt; Klik <em>"Gabung"</em> pada file setoran ustadz &gt; <strong>WAJIB Klik "Publikasikan Master"</strong>.</li>
+                                        <li><strong>Ustadz / Staff Lain:</strong> Klik <em>"Ambil Data Master"</em> di pagi hari sebelum halaqah berikutnya agar data santri & mutaba'ah selalu up-to-date.</li>
+                                    </ol>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
                 )
             }
         ]
@@ -1201,14 +1503,14 @@ export const panduanData: PanduanSectionData[] = [
         id: 'akademik',
         badge: 8,
         badgeColor: 'indigo',
-        title: 'Akademik: Jadwal & Rapor',
+        title: 'Akademik: Jadwal, Leger Nilai & Form Guru',
         steps: [
             { 
                 title: 'Persiapan Jadwal (Data Master) - WAJIB', 
                 content: (
                     <div>
                         <p className="mb-2">Sebelum menyusun jadwal, Anda <strong>wajib</strong> melengkapi Data Master terlebih dahulu agar fitur deteksi bentrok berfungsi:</p>
-                        <ul className="list-disc pl-5 space-y-1 text-sm bg-indigo-50 p-2 rounded border border-indigo-200">
+                        <ul className="list-disc pl-5 space-y-1 text-sm bg-indigo-50 p-2.5 rounded border border-indigo-200 text-indigo-950">
                             <li>Buka <strong>Data Master &gt; Tenaga Pendidik</strong>.</li>
                             <li>Edit Guru, lalu atur <strong>"Hari Ketersediaan"</strong> (hari apa saja guru bisa mengajar) dan <strong>"Kompetensi Mapel"</strong>.</li>
                             <li>Tanpa ini, sistem tidak bisa merekomendasikan guru yang tepat di grid jadwal.</li>
@@ -1228,56 +1530,83 @@ export const panduanData: PanduanSectionData[] = [
                 )
             },
             {
-                title: 'Konsep Rapor Digital (Desentralisasi)',
+                title: 'Konsep Rapor Digital (Desentralisasi Tanpa Login)',
                 color: 'blue',
                 content: (
-                    <div className="bg-blue-50 p-3 rounded text-blue-900 border border-blue-200">
-                        <strong>Metode Unik:</strong> Aplikasi ini dirancang agar Guru <strong>TIDAK PERLU LOGIN</strong> untuk mengisi nilai.
-                        <br/>
-                        Alurnya: Admin Desain Rapor &rarr; Generate File HTML &rarr; Kirim ke Guru (WA) &rarr; Guru Isi Nilai di HP (Offline) &rarr; Kirim Balik ke Admin &rarr; Admin Import.
+                    <div className="bg-blue-50 p-3.5 rounded text-blue-900 border border-blue-200 text-sm space-y-2">
+                        <p>
+                            <strong>Metode Unik & Mandiri:</strong> Aplikasi ini dirancang agar Guru <strong>TIDAK PERLU LOGIN</strong> ke sistem untuk mengisi nilai.
+                        </p>
+                        <div className="bg-white p-2.5 rounded border border-blue-100 font-mono text-xs text-blue-800">
+                            Alur: Admin Desain Template &rarr; Generate Form HTML &rarr; Kirim via WA/Email &rarr; Guru Isi di HP/Laptop (Offline) &rarr; Kirim Balik &rarr; Admin Impor Sekali Klik.
+                        </div>
                     </div>
                 )
             },
             {
-                title: '3. Desain Grid Rapor',
+                title: 'Dukungan Responsif Ganda: Tabel Leger & Form Kartu Santri',
+                color: 'teal',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                    <div className="space-y-3 text-sm">
+                        <p>Formulir HTML guru kini mendukung 2 mode tampilan canggih:</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            <div className="bg-white p-3 rounded-lg border shadow-2xs">
+                                <h5 className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-card-checklist text-teal-600"></i> Mode Form Kartu Santri (Mobile)</h5>
+                                <p className="text-gray-600">Ideal untuk pengisian lewat HP. Menampilkan 1 santri per kartu dengan input nilai besar, tombol navigasi <em>Sebelumnya / Berikutnya</em>, dan pencarian santri instan.</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border shadow-2xs">
+                                <h5 className="font-bold text-indigo-800 flex items-center gap-1.5 mb-1"><i className="bi bi-table text-indigo-600"></i> Mode Tabel Leger (Desktop)</h5>
+                                <p className="text-gray-600">Ideal untuk laptop/PC. Menampilkan matriks tabel penuh dengan <em>Freeze Header</em> & kolom nama santri yang tetap terkunci saat di-scroll horizontal.</p>
+                            </div>
+                        </div>
+                        <div className="bg-teal-50 border-l-4 border-teal-500 p-2.5 rounded text-xs text-teal-900">
+                            <strong>Filter Pintar:</strong> Jika formulir dibuat khusus untuk satu rombel, pilihan kelas/rombel yang berlebih akan disederhanakan otomatis sehingga guru langsung fokus mencari nama santri dan menginput nilai.
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '3. Desain Grid & Rumus Rapor',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1.5 text-sm mt-1">
                         <li>Buka menu <strong>Akademik &gt; Desain Rapor</strong>.</li>
                         <li>Buat Template baru atau Import dari Excel.</li>
-                        <li>Gunakan kode variabel seperti <code>$NAMA</code>, <code>$NIS</code>, atau buat kode input sendiri seperti <code>$NILAI_UH1</code>.</li>
+                        <li>Gunakan variabel dinamis seperti <code>$NAMA</code>, <code>$NIS</code>, <code>$ROMBEL</code>, atau buat kode kolom nilai seperti <code>$NILAI_UH1</code>, <code>$NILAI_PAS</code>.</li>
+                        <li>Gunakan formula otomatis seperti <code>AVERAGE($UH1, $UH2)</code> atau <code>RANK($TOTAL)</code> untuk menghitung peringkat kelas otomatis.</li>
                     </ul>
                 )
             },
             {
-                title: '4. Generate Formulir Guru',
+                title: '4. Generate Formulir Guru & Pengiriman Nilai',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                     <ul className="list-disc pl-5 space-y-1.5 text-sm mt-1">
                         <li>Masuk ke tab <strong>Generate Form</strong>.</li>
-                        <li>Pilih Rombel dan Template.</li>
-                        <li>Pilih metode pengiriman (WhatsApp / Hybrid).</li>
-                        <li>Download file HTML dan kirimkan ke Guru Mapel/Wali Kelas.</li>
+                        <li>Pilih Jenjang, Tingkat Kelas, Rombel, dan Template Rapor.</li>
+                        <li>Pilih metode integrasi: <strong>WhatsApp Web</strong>, <strong>Google Sheets</strong>, atau <strong>Hybrid</strong>.</li>
+                        <li>Download file HTML dan kirimkan ke guru mapel / wali kelas. File dapat dibuka langsung di browser HP tanpa install aplikasi tambahan.</li>
                     </ul>
                 )
             },
             {
-                title: '5. Import & Cetak (Oleh Admin)',
+                title: '5. Import Nilai & Cetak Rapor (Admin)',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Admin menyalin kode pesan dari Guru (diawali <code>RAPOR_V2_START</code>).</li>
-                        <li>Paste di menu <strong>Akademik &gt; Import Nilai</strong>.</li>
-                        <li>Buka tab <strong>Cetak Rapor</strong> untuk mencetak rapor fisik (PDF) atau arsip.</li>
+                    <ul className="list-disc pl-5 space-y-1.5 text-sm mt-1">
+                        <li>Admin menerima salinan kode hasil input guru (diawali kode aman <code>RAPOR_V2_START</code>).</li>
+                        <li>Tempelkan (Paste) di menu <strong>Akademik &gt; Import Nilai</strong>.</li>
+                        <li>Buka tab <strong>Cetak Rapor</strong> untuk mencetak rapor fisik siswa (PDF) lengkap dengan layout tanda tangan wali kelas & kepala madrasah.</li>
                     </ul>
                 )
             },
              {
-                title: '6. Monitoring Progress',
+                title: '6. Monitoring Kelengkapan Nilai',
                 content: (
                      <>
-                        <p className="text-sm mb-1">Fitur ini membantu Admin memantau kelengkapan nilai:</p>
+                        <p className="text-sm mb-1">Fitur ini membantu Admin memantau progres nilai tiap rombel secara real-time:</p>
                         <ul className="list-disc pl-5 space-y-1 text-sm">
                             <li>Buka menu <strong>Akademik &gt; Monitoring</strong>.</li>
                             <li><span className="text-green-600 font-bold">Hijau</span> = Nilai Lengkap (Semua Santri sudah ada nilainya).</li>
-                            <li><span className="text-red-600 font-bold">Merah</span> = Belum ada data masuk sama sekali.</li>
+                            <li><span className="text-amber-600 font-bold">Kuning</span> = Sebagian nilai sudah masuk.</li>
+                            <li><span className="text-red-600 font-bold">Merah</span> = Belum ada data nilai masuk.</li>
                         </ul>
                     </>
                 )
@@ -1581,44 +1910,56 @@ export const panduanData: PanduanSectionData[] = [
         id: 'offline',
         badge: 14,
         badgeColor: 'cyan',
-        title: 'Mode Offline & Instalasi (PWA)',
+        title: 'Mode Offline & Unduh Cache Lengkap',
         steps: [
             {
-                title: 'Apa itu Mode Offline?',
-                content: 'Aplikasi eSantri Web menggunakan teknologi PWA (Progressive Web App). Artinya, aplikasi ini dapat berjalan tanpa koneksi internet setelah aset-asetnya diunduh ke dalam browser Anda.'
+                title: 'Teknologi Offline-First & Service Worker',
+                content: (
+                    <div className="bg-cyan-50 p-4 rounded-lg border-l-4 border-cyan-500 text-sm text-cyan-950 space-y-2">
+                        <p>
+                            Aplikasi eSantri Web dibangun dengan prinsip <strong>Offline-First PWA (Progressive Web App)</strong>. 
+                            Seluruh basis data disimpan lokal di browser (IndexedDB) sehingga Anda dapat bekerja dengan kecepatan maksimal tanpa bergantung pada koneksi internet.
+                        </p>
+                        <p className="text-xs text-cyan-800">
+                            Fitur <strong>Dynamic Asset Discovery</strong> secara otomatis mendeteksi dan mengunduh seluruh berkas aplikasi (Javascript bundle, stylesheet CSS, Google Fonts, Bootstrap Icons, dan manifest) ke dalam cache browser.
+                        </p>
+                    </div>
+                )
             },
             {
-                title: 'Cara Mengunduh Aset Offline',
+                title: 'Cara Mengunduh Cache untuk Pemakaian Offline Penuh',
                 content: (
-                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
-                        <li>Pastikan internet Anda lancar.</li>
+                    <ol className="list-decimal pl-5 space-y-1.5 text-sm mt-1">
+                        <li>Pastikan koneksi internet Anda aktif dan stabil.</li>
                         <li>Masuk ke menu <strong>Pengaturan &gt; Umum</strong>.</li>
-                        <li>Lihat kotak status di bagian atas. Klik tombol <strong>"Unduh Aset Offline"</strong>.</li>
-                        <li>Tunggu hingga proses selesai (100%) dan status berubah menjadi <span className="text-green-600 font-bold"><i className="bi bi-check-circle-fill"></i> Siap Offline</span>.</li>
+                        <li>Lihat panel <em>Status Cache & Mode Offline</em> di bagian atas.</li>
+                        <li>Klik tombol <strong>"Unduh Aset Offline"</strong>.</li>
+                        <li>Sistem akan memindai seluruh skrip, font, dan ikon lalu menyimpannya ke cache. Tunggu hingga status menampilkan <span className="text-green-600 font-bold"><i className="bi bi-check-circle-fill"></i> Siap Offline (100%)</span>.</li>
+                        <li>Setelah selesai, aplikasi dapat diakses kapan saja tanpa koneksi internet sama sekali.</li>
                     </ol>
                 )
             },
             {
-                title: 'Instalasi ke Desktop / HP',
+                title: 'Instalasi Aplikasi (Desktop & Android)',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
                         <li>Di menu <strong>Pengaturan &gt; Umum</strong>, klik tombol <strong>"Install Aplikasi (PWA)"</strong>.</li>
-                        <li>Atau, klik ikon "Install" di address bar browser (Chrome/Edge).</li>
-                        <li>Aplikasi akan muncul di layar utama (Homescreen) atau Desktop dan bisa dibuka seperti aplikasi native tanpa bar browser.</li>
+                        <li>Atau, klik ikon instal di bilah alamat browser (Google Chrome, Microsoft Edge, atau browser Android).</li>
+                        <li>Aplikasi akan terpasang di Homescreen / Desktop dan dapat dibuka layaknya aplikasi native tanpa address bar browser.</li>
                     </ul>
                 )
             },
             {
-                title: 'Kapan Saya Butuh Internet?',
+                title: 'Kapan Saja Internet Dibutuhkan?',
                 color: 'red',
                 content: (
                     <div className="bg-red-50 p-3 rounded border border-red-200 text-sm">
-                        Meskipun "Siap Offline", Anda tetap membutuhkan internet untuk fitur-fitur berikut:
-                        <ul className="list-disc pl-5 mt-1 font-semibold text-red-800">
-                            <li>Sinkronisasi Data (Cloud Sync / Dropbox).</li>
-                            <li>Mengirim Pesan WhatsApp.</li>
-                            <li>Mengakses Formulir PSB Online (Google Sheet).</li>
-                            <li>Generate AI (Magic Draft / Poster).</li>
+                        Meskipun aplikasi 100% offline-ready untuk operasional harian, internet tetap dibutuhkan saat:
+                        <ul className="list-disc pl-5 mt-1 font-semibold text-red-800 space-y-1 text-xs">
+                            <li>Sinkronisasi Cloud Realtime (Firebase / Dropbox / WebDAV).</li>
+                            <li>Mengarahkan pesan broadcast WhatsApp ke WhatsApp Web.</li>
+                            <li>Menerima pendaftaran online santri baru dari Google Sheets (PSB).</li>
+                            <li>Menghasilkan draf surat dengan bantuan AI (Magic Draft).</li>
                         </ul>
                     </div>
                 )
@@ -1741,8 +2082,34 @@ export const panduanData: PanduanSectionData[] = [
         id: 'laporan_lanjutan',
         badge: 'UPDATE',
         badgeColor: 'indigo',
-        title: 'Modul Laporan (Lengkap)',
+        title: 'Modul Laporan & Cetak Kartu Santri',
         steps: [
+            {
+                title: 'Cetak Kartu Santri & ID Card Vertikal (Auto-Fit Font & Presisi)',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="bg-teal-50 p-3.5 rounded-lg border border-teal-200 text-xs text-teal-950 space-y-2">
+                            <h5 className="font-bold flex items-center gap-1.5"><i className="bi bi-person-badge text-teal-700"></i> Desain Kartu Identitas Santri Modern</h5>
+                            <p>Modul Laporan & Identitas mendukung pembuatan Kartu Santri (Landscape 2 Muka) dan Kartu ID Santri Vertikal (Portrait) siap cetak.</p>
+                        </div>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li>
+                                <strong>Ukuran Font Dinamis (Anti-Elipsis):</strong> Judul dan nama lembaga secara otomatis menyesuaikan ukuran font (dinamis) sehingga tidak akan terpotong (...) meskipun nama pesantren sangat panjang.
+                            </li>
+                            <li>
+                                <strong>Tata Letak Tata Tertib Bersih:</strong> Pada kartu vertikal, teks tata tertib diposisikan secara presisi di bawah margin latar merah header sehingga kontras keterbacaan sempurna.
+                            </li>
+                            <li>
+                                <strong>Penempatan Presisi Barcode / QR Code & Nomor Seri:</strong> Nomor seri unik dan barcode/QR diletakkan di slot khusus muka belakang tanpa menumpuk atau menutupi teks header.
+                            </li>
+                            <li>
+                                <strong>Layout Cetak Massal:</strong> Mendukung cetak otomatis per rombel atau seluruh santri dalam format kertas standar A4 dengan batas potong (cutting marks).
+                            </li>
+                        </ul>
+                    </div>
+                )
+            },
             {
                 title: 'Daftar Laporan & Fungsinya',
                 content: (

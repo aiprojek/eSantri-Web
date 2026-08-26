@@ -67,6 +67,8 @@ export const useReportConfig = (
     const [cardSignatoryId, setCardSignatoryId] = useState<string>('');
     const [cardShowQRCode, setCardShowQRCode] = useState<boolean>(false);
     const [cardQRCodeType, setCardQRCodeType] = useState<'qr' | 'barcode' | 'both'>('qr');
+    const [cardRulesFontSize, setCardRulesFontSize] = useState<'auto' | 'small' | 'normal' | 'large'>('auto');
+    const [cardRulesCustomColor, setCardRulesCustomColor] = useState<string>('');
     
     const defaultCardRules = `Kartu ini adalah tanda pengenal resmi santri {NamaPonpes}.
 Santri wajib membawa kartu ini selama berada di lingkungan pesantren atau saat mengikuti kegiatan resmi.
@@ -137,6 +139,8 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
         setCardSignatoryId('');
         setCardShowQRCode(false);
         setCardQRCodeType('qr');
+        setCardRulesFontSize('auto');
+        setCardRulesCustomColor('');
         setUseHijriDate(false);
         setHijriDateMode('auto');
         setManualHijriDate('');
@@ -257,6 +261,8 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             cardHeight, setCardHeight,
             cardBacksideLayout, setCardBacksideLayout,
             cardRules, setCardRules,
+            cardRulesFontSize, setCardRulesFontSize,
+            cardRulesCustomColor, setCardRulesCustomColor,
             cardPrintMode, setCardPrintMode,
             selectedCardSantriIds, setSelectedCardSantriIds,
             cardSignatoryTitle, setCardSignatoryTitle,

@@ -1,12 +1,16 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { useAppContext } from '../../AppContext';
-import { RaporTemplate, GridCell, RaporColumnType } from '../../types';
+import { RaporTemplate, GridCell, RaporColumnType, DigitalAsset } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
+import { DYNAMIC_TAG_CATEGORIES, isMediaTag, getMediaTagImageSrc, resolveRaporText } from '../../utils/raporPlaceholderResolver';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db';
 
 export const TabDesainRapor: React.FC = () => {
     const { settings, onSaveSettings, showToast, showConfirmation, showAlert, currentUser } = useAppContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
+    const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
 
     const [templates, setTemplates] = useState<RaporTemplate[]>(settings.raporTemplates || []);
     const [activeTemplate, setActiveTemplate] = useState<RaporTemplate | null>(null);
@@ -18,6 +22,7 @@ export const TabDesainRapor: React.FC = () => {
     const [dragStart, setDragStart] = useState<{r: number, c: number} | null>(null);
     const [zoomScale, setZoomScale] = useState(1);
     const [isDesignPreviewOpen, setIsDesignPreviewOpen] = useState(false);
+    const [selectedTagCategory, setSelectedTagCategory] = useState<string>('santri');
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -336,18 +341,52 @@ export const TabDesainRapor: React.FC = () => {
 
     const getSimulatedValue = (cell: GridCell) => {
         if (cell.type === 'label') return cell.value;
-        if (cell.type === 'input') return <span className="text-blue-400 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key}]</span>;
-        if (cell.type === 'formula') return <span className="text-yellow-600 italic text-[10px] font-mono bg-yellow-50 px-1 rounded border border-yellow-100">{cell.value || '[Rumus]'}</span>;
-        if (cell.type === 'dropdown') return <span className="text-orange-600 italic text-[10px] font-mono bg-orange-50 px-1 rounded border border-orange-100">[Pilihan: {cell.key}]</span>;
+        if (cell.type === 'input') return <span className="text-blue-500 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key || 'NILAI'}]</span>;
+        if (cell.type === 'formula') return <span className="text-yellow-700 italic text-[10px] font-mono bg-yellow-50 px-1 rounded border border-yellow-100">{cell.value || '[Rumus]'}</span>;
+        if (cell.type === 'dropdown') {
+            const firstOpt = cell.options && cell.options.length > 0 ? cell.options[0] : (cell.key || 'Pilihan');
+            return <span className="text-orange-700 italic text-[10px] font-mono bg-orange-50 px-1 rounded border border-orange-200">[▼ {firstOpt}]</span>;
+        }
         if (cell.type === 'data') {
-            const val = cell.value;
-            if (val === '$NAMA') return 'Ahmad Fauzan (Contoh)';
-            if (val === '$NIS') return '12345678';
-            if (val.includes('$MAPEL')) return 'Matematika (Contoh)';
-            return val;
+            const val = cell.value?.trim() || '';
+            if (isMediaTag(val)) {
+                const simulatedContext = {
+                    settings,
+                    digitalAssets,
+                    santri: { id: 1, namaLengkap: 'Ahmad Fauzan', nis: '202401001', nisn: '0081234567', rombelId: 1, kelasId: 1, jenjangId: 1, status: 'Aktif' } as any,
+                    targetDate: new Date()
+                };
+                const imgSrc = getMediaTagImageSrc(val, simulatedContext);
+                if (imgSrc) {
+                    const isStempel = val.includes('STEMPEL');
+                    const isTtd = val.includes('TTD');
+                    return (
+                        <div className="flex items-center justify-center p-0.5">
+                            <img 
+                                src={imgSrc} 
+                                alt={val} 
+                                className={`object-contain ${isStempel ? 'max-h-12 max-w-[80px] opacity-90' : isTtd ? 'max-h-10 max-w-[100px]' : 'max-h-10 max-w-[80px]'}`} 
+                            />
+                        </div>
+                    );
+                }
+                if (val === '$STEMPEL_PONPES') return <span className="text-rose-600 font-bold text-[10px] bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-patch-check-fill"></i> Stempel Ponpes</span>;
+                if (val === '$LOGO_PONPES') return <span className="text-teal-600 font-bold text-[10px] bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image"></i> Logo Ponpes</span>;
+                if (val === '$LOGO_YAYASAN') return <span className="text-indigo-600 font-bold text-[10px] bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image-fill"></i> Logo Yayasan</span>;
+                if (val.includes('TTD')) return <span className="text-purple-600 font-bold text-[10px] bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-pen-fill"></i> {val.replace('$', '')}</span>;
+                return <span className="text-rose-500 italic text-[10px] font-mono bg-rose-50 px-1 rounded border border-rose-100">[{val}]</span>;
+            }
+
+            // Find matching example in dynamic tag list
+            for (const cat of DYNAMIC_TAG_CATEGORIES) {
+                const found = cat.tags.find(t => t.tag === val);
+                if (found) return found.example;
+            }
+            if (val.includes('$MAPEL')) return 'Pendidikan Agama Islam';
+            return val || '[Data]';
         }
         return cell.value;
-    }
+    };
 
     if (!isEditing) {
         return (
@@ -495,9 +534,140 @@ export const TabDesainRapor: React.FC = () => {
                         </div>
                         {activeCellData.type === 'label' && <div><label className="block text-xs font-bold mb-1">Teks</label><textarea value={activeCellData.value} onChange={e => updateActiveCell({ value: e.target.value })} className="w-full border rounded p-2 text-sm" rows={3}/></div>}
                         {activeCellData.type === 'data' && (
-                             <div className="p-2 bg-purple-50 rounded border"><label className="block text-xs font-bold text-purple-800">Pilih Data</label><select className="w-full text-xs border rounded p-1.5" onChange={(e) => updateActiveCell({ value: e.target.value })}><option value="">-- Pilih --</option><option value="$NAMA">Nama Santri</option><option value="$NIS">NIS</option><option value="$KELAS">Kelas</option><option value="$NAMA_PONPES">Nama Pondok</option><option value="$MAPEL_NAME_1">Mapel (Set ID manual)</option></select></div>
+                             <div className="space-y-3 p-3 bg-purple-50/70 rounded-xl border border-purple-100">
+                                <div className="flex items-center justify-between">
+                                    <label className="block text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                                        <i className="bi bi-tags-fill"></i> Pilih Data Dinamis
+                                    </label>
+                                    <span className="text-[10px] font-mono text-purple-700 font-bold">{activeCellData.value || 'Belum dipilih'}</span>
+                                </div>
+
+                                {/* Category Tabs */}
+                                <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar border-b border-purple-200">
+                                    {DYNAMIC_TAG_CATEGORIES.map(cat => (
+                                        <button
+                                            key={cat.id}
+                                            type="button"
+                                            onClick={() => setSelectedTagCategory(cat.id)}
+                                            className={`px-2 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all flex items-center gap-1 ${selectedTagCategory === cat.id ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-gray-600 hover:bg-purple-100'}`}
+                                        >
+                                            <i className={`bi ${cat.icon}`}></i>
+                                            <span>{cat.title.split(' ')[0]}</span>
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Tag List for Selected Category */}
+                                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                    {DYNAMIC_TAG_CATEGORIES.find(c => c.id === selectedTagCategory)?.tags.map(item => (
+                                        <button
+                                            key={item.tag}
+                                            type="button"
+                                            onClick={() => updateActiveCell({ value: item.tag })}
+                                            className={`w-full text-left p-2 rounded-lg border transition-all text-xs flex flex-col gap-0.5 ${activeCellData.value === item.tag ? 'bg-purple-100 border-purple-400 ring-1 ring-purple-400 font-bold' : 'bg-white hover:bg-purple-50 border-gray-200'}`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-gray-800">{item.label}</span>
+                                                <span className="font-mono text-[9px] text-purple-700 bg-purple-100 px-1 py-0.2 rounded">{item.tag}</span>
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 truncate">{item.description} (Contoh: {item.example})</div>
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Specific Teacher Signature Helper */}
+                                {selectedTagCategory === 'media' && (
+                                    <div className="p-2 bg-white rounded-lg border border-purple-200 space-y-1.5 mt-2">
+                                        <label className="block text-[10px] font-bold text-gray-700 uppercase">TTD Pengajar Spesifik</label>
+                                        <div className="flex gap-1.5">
+                                            <select
+                                                id="specificTeacherTtdSelect"
+                                                className="w-full text-xs border rounded p-1.5 bg-gray-50 font-medium"
+                                                onChange={e => {
+                                                    if (e.target.value) updateActiveCell({ value: e.target.value });
+                                                }}
+                                            >
+                                                <option value="">-- Pilih Guru / Ustadz --</option>
+                                                {settings.tenagaPengajar.map(t => (
+                                                    <option key={t.id} value={`$TTD_PENGAJAR:${t.id}`}>
+                                                        {t.nama}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         )}
-                        {(activeCellData.type === 'input' || activeCellData.type === 'dropdown') && (
+                        {activeCellData.type === 'dropdown' && (
+                            <div className="space-y-3 p-3 bg-orange-50/70 rounded-xl border border-orange-200">
+                                <div>
+                                    <label className="block text-xs font-bold mb-1 text-orange-800 flex items-center justify-between">
+                                        <span>KODE VARIABEL ($)</span>
+                                        <span className="text-[10px] text-orange-600 font-normal">Wajib diisi</span>
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        value={activeCellData.key || ''} 
+                                        onChange={e => updateActiveCell({ key: e.target.value })} 
+                                        className="w-full border rounded-lg p-2 text-sm font-mono uppercase bg-white focus:ring-2 focus:ring-orange-500" 
+                                        placeholder="CONTOH: SIKAP_1"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold mb-1 text-orange-800">Daftar Pilihan (Pisahkan dengan koma)</label>
+                                    <textarea
+                                        value={(activeCellData.options || []).join(', ')}
+                                        onChange={e => {
+                                            const opts = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                            updateActiveCell({ options: opts });
+                                        }}
+                                        className="w-full border rounded-lg p-2 text-xs bg-white focus:ring-2 focus:ring-orange-500"
+                                        rows={2}
+                                        placeholder="Sangat Baik, Baik, Cukup, Kurang"
+                                    />
+                                </div>
+
+                                {/* Preset Templates for Dropdowns */}
+                                <div className="space-y-1.5">
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase">Template Pilihan Cepat</label>
+                                    <div className="flex flex-wrap gap-1">
+                                        {[
+                                            { label: 'A, B, C, D, E', opts: ['A', 'B', 'C', 'D', 'E'] },
+                                            { label: 'Sangat Baik - Kurang', opts: ['Sangat Baik', 'Baik', 'Cukup', 'Kurang'] },
+                                            { label: 'Mumtaz - Rosib', opts: ['Mumtaz', 'Jayyid Jiddan', 'Jayyid', 'Maqbul', 'Rosib'] },
+                                            { label: 'Tuntas / Belum', opts: ['Tuntas', 'Belum Tuntas'] },
+                                            { label: 'Hadir, Izin, Sakit, Alpa', opts: ['Hadir', 'Izin', 'Sakit', 'Alpa'] },
+                                            { label: 'Naik / Tinggal', opts: ['Naik Kelas', 'Tinggal Kelas'] }
+                                        ].map(preset => (
+                                            <button
+                                                key={preset.label}
+                                                type="button"
+                                                onClick={() => updateActiveCell({ options: preset.opts })}
+                                                className="px-2 py-1 rounded bg-white hover:bg-orange-100 border border-orange-200 text-[10px] font-bold text-orange-800 transition-colors shadow-2xs"
+                                            >
+                                                {preset.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {activeCellData.options && activeCellData.options.length > 0 && (
+                                    <div className="pt-2 border-t border-orange-200">
+                                        <div className="text-[10px] font-bold text-orange-900 mb-1">Pratinjau Opsi ({activeCellData.options.length}):</div>
+                                        <div className="flex flex-wrap gap-1">
+                                            {activeCellData.options.map((opt, i) => (
+                                                <span key={i} className="bg-white border border-orange-300 text-orange-800 text-[10px] px-1.5 py-0.5 rounded font-medium">
+                                                    {opt}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {activeCellData.type === 'input' && (
                             <div className="space-y-2">
                                 <div>
                                     <label className="block text-xs font-bold mb-1 text-blue-700">KODE VARIABEL ($)</label>
@@ -546,25 +716,37 @@ export const TabDesainRapor: React.FC = () => {
                                     <div className="font-bold text-yellow-800 border-b border-yellow-200 pb-1 mb-1">Panduan & Helper</div>
                                     
                                     {/* Ranking Helper */}
-                                    <div className="bg-white p-2 rounded border border-yellow-200">
-                                        <label className="block font-bold text-gray-600 mb-1">Buat Peringkat (Ranking)</label>
-                                        <div className="flex gap-1">
-                                            <select id="rankSourceSelect" className="flex-grow border rounded px-1 py-0.5 text-[10px]">
+                                    <div className="bg-white p-2 rounded border border-yellow-200 space-y-1.5">
+                                        <label className="block font-bold text-gray-700 text-[11px]">Buat Peringkat (Ranking)</label>
+                                        <div className="space-y-1">
+                                            <select id="rankSourceSelect" className="w-full border rounded px-1.5 py-1 text-[10px] bg-gray-50 font-mono">
                                                 <option value="">-- Pilih Sumber Nilai --</option>
                                                 {activeTemplate?.cells.flat()
                                                     .filter(c => c.key && c.key !== activeCellData.key)
                                                     .map(c => <option key={c.id} value={c.key}>${c.key}</option>)
                                                 }
                                             </select>
-                                            <button 
-                                                onClick={() => {
-                                                    const sel = document.getElementById('rankSourceSelect') as HTMLSelectElement;
-                                                    if(sel.value) updateActiveCell({ value: `RANK($${sel.value})` });
-                                                }}
-                                                className="bg-yellow-600 text-white px-2 rounded hover:bg-yellow-700"
-                                            >
-                                                Set
-                                            </button>
+                                            <div className="flex gap-1">
+                                                <select id="rankScopeSelect" className="flex-grow border rounded px-1.5 py-1 text-[10px] bg-gray-50 font-medium">
+                                                    <option value="rombel">Per Rombel (Standar)</option>
+                                                    <option value="kelas">Per Tingkat Kelas</option>
+                                                    <option value="jenjang">Per Jenjang</option>
+                                                </select>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const sel = document.getElementById('rankSourceSelect') as HTMLSelectElement;
+                                                        const scopeSel = document.getElementById('rankScopeSelect') as HTMLSelectElement;
+                                                        if(sel.value) {
+                                                            const scope = scopeSel?.value || 'rombel';
+                                                            updateActiveCell({ value: `RANK($${sel.value}, "${scope}")` });
+                                                        }
+                                                    }}
+                                                    className="bg-yellow-600 text-white px-2.5 py-1 rounded text-xs font-bold hover:bg-yellow-700 transition-colors shrink-0"
+                                                >
+                                                    Terapkan
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -577,7 +759,9 @@ export const TabDesainRapor: React.FC = () => {
                                             <li><code>MIN($A, $B)</code> : Nilai terendah</li>
                                             <li><code>IF($A&gt;75, "Lulus", "Remidi")</code> : Logika IF</li>
                                             <li><code>TERBILANG($A)</code> : Mengubah angka jadi teks</li>
-                                            <li><code>RANK($TOTAL)</code> : Peringkat otomatis</li>
+                                            <li><code>RANK($TOTAL, "rombel")</code> : Peringkat per Rombel</li>
+                                            <li><code>RANK($TOTAL, "kelas")</code> : Peringkat per Tingkat Kelas</li>
+                                            <li><code>RANK($TOTAL, "jenjang")</code> : Peringkat per Jenjang</li>
                                         </ul>
                                     </details>
                                 </div>

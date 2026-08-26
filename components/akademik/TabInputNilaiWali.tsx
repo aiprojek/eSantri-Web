@@ -137,6 +137,8 @@ export const TabInputNilaiWali: React.FC = () => {
     const [grades, setGrades] = useState<Record<number, Record<string, string>>>({});
     const [existingPeriodRecords, setExistingPeriodRecords] = useState<RaporRecord[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+    const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+    const [activeStudentIndex, setActiveStudentIndex] = useState(0);
 
     // Load existing records if any
     useEffect(() => {
@@ -413,75 +415,216 @@ export const TabInputNilaiWali: React.FC = () => {
                     <p className="text-gray-500">Tidak ada santri aktif di rombel ini.</p>
                 </div>
             ) : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50 text-gray-600 border-b">
-                                <tr>
-                                    <th className="p-4 w-12 text-center">No</th>
-                                    <th className="p-4 min-w-[200px]">Nama Santri</th>
-                                    {inputKeys.map(k => (
-                                        <th key={k.key} className="p-4 text-center min-w-[100px]">
-                                            <div className="text-[10px] text-gray-400 uppercase mb-1">{k.key}</div>
-                                            <div className="text-xs font-bold text-gray-700">{k.label}</div>
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {studentsInRombel.map((student, idx) => {
-                                    const prevStudent = idx > 0 ? studentsInRombel[idx - 1] : null;
-                                    const showRombelHeader = !prevStudent || prevStudent.rombelId !== student.rombelId;
-                                    const rombelName = settings.rombel.find(r => r.id === student.rombelId)?.nama || 'Tanpa Rombel';
-
-                                    return (
-                                        <React.Fragment key={student.id}>
-                                            {showRombelHeader && (
-                                                <tr className="bg-blue-50/50">
-                                                    <td colSpan={2 + inputKeys.length} className="p-2 px-4 text-xs font-bold text-blue-700 uppercase tracking-wider">
-                                                        📦 Rombel: {rombelName}
-                                                    </td>
-                                                </tr>
-                                            )}
-                                            <tr className="hover:bg-gray-50 transition-colors">
-                                                <td className="p-4 text-center text-gray-400">{idx + 1}</td>
-                                                <td className="p-4">
-                                                    <div className="font-bold text-gray-800">{student.namaLengkap}</div>
-                                                    <div className="text-[10px] text-gray-400 font-mono">{student.nis}</div>
-                                                </td>
-                                                {inputKeys.map(k => {
-                                                    // Find the cell in template to check if it's a dropdown
-                                                    const cell = template?.cells.flat().find(c => c.key === k.key);
-                                                    return (
-                                                        <td key={k.key} className="p-2">
-                                                            {cell?.type === 'dropdown' ? (
-                                                                <select 
-                                                                    value={grades[student.id]?.[k.key] || ''} 
-                                                                    onChange={e => handleInputChange(student.id, k.key, e.target.value)}
-                                                                    className="w-full border rounded p-2 text-center focus:ring-2 focus:ring-teal-500 outline-none"
-                                                                >
-                                                                    <option value=""></option>
-                                                                    {cell.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                                                </select>
-                                                            ) : (
-                                                                <input 
-                                                                    type="text" 
-                                                                    value={grades[student.id]?.[k.key] || ''} 
-                                                                    onChange={e => handleInputChange(student.id, k.key, e.target.value)}
-                                                                    className="w-full border rounded p-2 text-center focus:ring-2 focus:ring-teal-500 outline-none font-mono"
-                                                                    placeholder="0"
-                                                                />
-                                                            )}
-                                                        </td>
-                                                    );
-                                                })}
-                                            </tr>
-                                        </React.Fragment>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                <div className="space-y-4">
+                    {/* View Switcher & Counter Header */}
+                    <div className="bg-white p-3 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tampilan Input:</span>
+                            <div className="inline-flex rounded-lg bg-gray-100 p-1 border">
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('table')}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'table' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                >
+                                    <i className="bi bi-table"></i>
+                                    <span>Tabel Leger (Desktop)</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setViewMode('card')}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-all ${viewMode === 'card' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                >
+                                    <i className="bi bi-card-text"></i>
+                                    <span>Form Kartu (Mobile Friendly)</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="text-xs font-semibold text-gray-500 flex items-center gap-2">
+                            <span className="bg-teal-50 text-teal-700 border border-teal-200 px-2.5 py-1 rounded-full text-xs font-bold">
+                                Total: {studentsInRombel.length} Santri
+                            </span>
+                        </div>
                     </div>
+
+                    {/* TABLE MODE */}
+                    {viewMode === 'table' && (
+                        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-50 text-gray-600 border-b">
+                                        <tr>
+                                            <th className="p-4 w-12 text-center">No</th>
+                                            <th className="p-4 min-w-[200px]">Nama Santri</th>
+                                            {inputKeys.map(k => (
+                                                <th key={k.key} className="p-4 text-center min-w-[100px]">
+                                                    <div className="text-[10px] text-gray-400 uppercase mb-1">{k.key}</div>
+                                                    <div className="text-xs font-bold text-gray-700">{k.label}</div>
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {studentsInRombel.map((student, idx) => {
+                                            const prevStudent = idx > 0 ? studentsInRombel[idx - 1] : null;
+                                            const showRombelHeader = !prevStudent || prevStudent.rombelId !== student.rombelId;
+                                            const rombelName = settings.rombel.find(r => r.id === student.rombelId)?.nama || 'Tanpa Rombel';
+
+                                            return (
+                                                <React.Fragment key={student.id}>
+                                                    {showRombelHeader && (
+                                                        <tr className="bg-blue-50/50">
+                                                            <td colSpan={2 + inputKeys.length} className="p-2 px-4 text-xs font-bold text-blue-700 uppercase tracking-wider">
+                                                                📦 Rombel: {rombelName}
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                    <tr className="hover:bg-gray-50 transition-colors">
+                                                        <td className="p-4 text-center text-gray-400">{idx + 1}</td>
+                                                        <td className="p-4">
+                                                            <div className="font-bold text-gray-800">{student.namaLengkap}</div>
+                                                            <div className="text-[10px] text-gray-400 font-mono">{student.nis}</div>
+                                                        </td>
+                                                        {inputKeys.map(k => {
+                                                            const cell = template?.cells.flat().find(c => c.key === k.key);
+                                                            return (
+                                                                <td key={k.key} className="p-2">
+                                                                    {cell?.type === 'dropdown' ? (
+                                                                        <select 
+                                                                            value={grades[student.id]?.[k.key] || ''} 
+                                                                            onChange={e => handleInputChange(student.id, k.key, e.target.value)}
+                                                                            className="w-full border rounded p-2 text-center focus:ring-2 focus:ring-teal-500 outline-none"
+                                                                        >
+                                                                            <option value=""></option>
+                                                                            {cell.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                                        </select>
+                                                                    ) : (
+                                                                        <input 
+                                                                            type="text" 
+                                                                            value={grades[student.id]?.[k.key] || ''} 
+                                                                            onChange={e => handleInputChange(student.id, k.key, e.target.value)}
+                                                                            className="w-full border rounded p-2 text-center focus:ring-2 focus:ring-teal-500 outline-none font-mono"
+                                                                            placeholder="0"
+                                                                        />
+                                                                    )}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CARD / MOBILE STEPPER MODE */}
+                    {viewMode === 'card' && (() => {
+                        const currentStudent = studentsInRombel[activeStudentIndex] || studentsInRombel[0];
+                        const rombelName = settings.rombel.find(r => r.id === currentStudent?.rombelId)?.nama || 'Tanpa Rombel';
+
+                        return (
+                            <div className="bg-white rounded-2xl border shadow-md overflow-hidden max-w-2xl mx-auto">
+                                {/* Top Student Selector Header */}
+                                <div className="bg-gradient-to-r from-teal-700 to-emerald-700 p-4 text-white">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-xs font-bold bg-white/20 px-2.5 py-0.5 rounded-full backdrop-blur-sm">
+                                            Santri #{activeStudentIndex + 1} dari {studentsInRombel.length}
+                                        </span>
+                                        <span className="text-xs font-bold text-teal-100">
+                                            📦 {rombelName}
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                        <div>
+                                            <h3 className="text-lg font-black tracking-tight">{currentStudent?.namaLengkap}</h3>
+                                            <p className="text-xs text-teal-100 font-mono">NIS: {currentStudent?.nis || '-'}</p>
+                                        </div>
+                                        <select 
+                                            value={activeStudentIndex} 
+                                            onChange={e => setActiveStudentIndex(Number(e.target.value))}
+                                            className="bg-white text-gray-900 text-xs font-bold rounded-lg px-3 py-2 border-0 outline-none shadow-sm cursor-pointer"
+                                        >
+                                            {studentsInRombel.map((s, idx) => (
+                                                <option key={s.id} value={idx}>
+                                                    {idx + 1}. {s.namaLengkap}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Form Fields */}
+                                <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto bg-gray-50/50">
+                                    {inputKeys.map(k => {
+                                        const cell = template?.cells.flat().find(c => c.key === k.key);
+                                        const val = grades[currentStudent?.id]?.[k.key] || '';
+                                        return (
+                                            <div key={k.key} className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-bold bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-200 font-mono">
+                                                            ${k.key}
+                                                        </span>
+                                                        <span className="text-xs font-bold text-gray-800">{k.label}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="w-full sm:w-48">
+                                                    {cell?.type === 'dropdown' ? (
+                                                        <select 
+                                                            value={val} 
+                                                            onChange={e => handleInputChange(currentStudent.id, k.key, e.target.value)}
+                                                            className="w-full border-2 border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-800 focus:border-teal-500 outline-none bg-white"
+                                                        >
+                                                            <option value="">-- Pilih --</option>
+                                                            {cell.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                        </select>
+                                                    ) : (
+                                                        <input 
+                                                            type="text" 
+                                                            value={val} 
+                                                            onChange={e => handleInputChange(currentStudent.id, k.key, e.target.value)}
+                                                            className="w-full border-2 border-gray-200 rounded-lg p-2 text-sm font-bold text-center font-mono focus:border-teal-500 outline-none bg-white"
+                                                            placeholder="0"
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Bottom Stepper Footer */}
+                                <div className="p-4 bg-white border-t flex items-center justify-between gap-2">
+                                    <button 
+                                        type="button"
+                                        disabled={activeStudentIndex === 0}
+                                        onClick={() => setActiveStudentIndex(prev => Math.max(0, prev - 1))}
+                                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-200 disabled:opacity-40 flex items-center gap-1 transition-all"
+                                    >
+                                        <i className="bi bi-chevron-left"></i> Santri Sebelumnya
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={handleSave}
+                                        disabled={isSaving}
+                                        className="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 disabled:opacity-50 shadow-sm flex items-center gap-1 transition-all"
+                                    >
+                                        <i className="bi bi-save2"></i> Simpan
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        disabled={activeStudentIndex === studentsInRombel.length - 1}
+                                        onClick={() => setActiveStudentIndex(prev => Math.min(studentsInRombel.length - 1, prev + 1))}
+                                        className="px-4 py-2 bg-teal-50 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold hover:bg-teal-100 disabled:opacity-40 flex items-center gap-1 transition-all"
+                                    >
+                                        Santri Berikutnya <i className="bi bi-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
             )}
 

@@ -1012,9 +1012,11 @@ export interface Sirkulasi {
 export interface Obat {
     id: number;
     nama: string;
-    jenis: string; // Tablet, Sirup, Salep
+    jenis: string; // Tablet, Sirup, Salep, dll
     stok: number;
     satuan: string;
+    stokMinimum?: number; // Ambang batas minimum stok (default: 5)
+    tglKadaluarsa?: string; // Tanggal expired format YYYY-MM-DD
     keterangan?: string;
     deleted?: boolean;
     lastModified?: number;
@@ -1038,6 +1040,14 @@ export interface KesehatanRecord {
     status: 'Rawat Jalan' | 'Rawat Inap (Pondok)' | 'Rujuk RS/Klinik' | 'Sembuh';
     pemeriksa: string;
     catatan?: string;
+    // Tanda Vital (Vital Signs)
+    suhuTubuh?: number; // Suhu tubuh (°C)
+    tekananDarah?: string; // Tensi darah (misal: 120/80 mmHg)
+    beratBadan?: number; // Berat badan (kg)
+    // Parameter Medis Tambahan
+    lamaIstirahatHari?: number; // Durasi anjuran istirahat (hari)
+    faskesRujukan?: string; // Nama faskes tujuan rujukan (misal: Puskesmas / RSUD)
+    alasanRujukan?: string; // Alasan dirujuk ke faskes luar
     deleted?: boolean;
     lastModified?: number;
 }

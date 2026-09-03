@@ -8,15 +8,24 @@ import { useLiveQuery } from 'dexie-react-hooks';
 interface JurnalMengajarModalProps {
     isOpen: boolean;
     onClose: () => void;
-    rombelId: number;
-    tanggal: string; // YYYY-MM-DD
+    rombelId?: number;
+    tanggal?: string; // YYYY-MM-DD
 }
 
-export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen, onClose, rombelId, tanggal }) => {
+export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    rombelId: propRombelId, 
+    tanggal: propTanggal 
+}) => {
     const { settings, showToast, currentUser, showConfirmation } = useAppContext();
     const { jurnalMengajarList, onSaveJurnalMengajar, onDeleteJurnalMengajar } = useSantriContext();
     
-    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write' || currentUser?.permissions?.absensi === 'write';
+
+    // Rombel and Tanggal selection state
+    const [selectedRombelId, setSelectedRombelId] = useState<number>(propRombelId || (settings.rombel[0]?.id ?? 0));
+    const [selectedTanggal, setSelectedTanggal] = useState<string>(propTanggal || new Date().toISOString().split('T')[0]);
 
     // Form state
     const [guruId, setGuruId] = useState<number>(0);
@@ -26,12 +35,15 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
     const [kompetensiMateri, setKompetensiMateri] = useState('');
     const [catatanKejadian, setCatatanKejadian] = useState('');
 
-    const recordsToday = jurnalMengajarList.filter(j => j.rombelId === rombelId && j.tanggal === tanggal).sort((a,b) => (a.jamPelajaranIds?.[0] || 0) - (b.jamPelajaranIds?.[0] || 0));
-    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
-
-    // Reset form when modal opens
+    // Update active rombel/tanggal when props change
     useEffect(() => {
-        if(isOpen) {
+        if (isOpen) {
+            if (propRombelId) setSelectedRombelId(propRombelId);
+            else if (!selectedRombelId && settings.rombel.length > 0) setSelectedRombelId(settings.rombel[0].id);
+            
+            if (propTanggal) setSelectedTanggal(propTanggal);
+            else if (!selectedTanggal) setSelectedTanggal(new Date().toISOString().split('T')[0]);
+
             setGuruId(0);
             setMataPelajaranId(0);
             setJamPelajaranIds([]);
@@ -39,25 +51,35 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
             setKompetensiMateri('');
             setCatatanKejadian('');
         }
-    }, [isOpen]);
+    }, [isOpen, propRombelId, propTanggal, settings.rombel]);
 
-    const rombel = settings.rombel.find(r => r.id === rombelId);
-    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const recordsToday = useMemo(() => {
+        return jurnalMengajarList
+            .filter(j => j.rombelId === selectedRombelId && j.tanggal === selectedTanggal)
+            .sort((a,b) => (a.jamPelajaranIds?.[0] || 0) - (b.jamPelajaranIds?.[0] || 0));
+    }, [jurnalMengajarList, selectedRombelId, selectedTanggal]);
+
+    const jadwalList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
+
+    const rombel = useMemo(() => settings.rombel.find(r => r.id === selectedRombelId), [settings.rombel, selectedRombelId]);
+    const kelas = useMemo(() => rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined, [settings.kelas, rombel]);
     const jenjangId = kelas?.jenjangId;
+
     const filteredMapel = useMemo(() => {
         if (!jenjangId) return settings.mataPelajaran;
         return settings.mataPelajaran.filter(m => m.jenjangId === jenjangId);
     }, [settings.mataPelajaran, jenjangId]);
+
     const jamPilihan = useMemo(() => {
         if (!jenjangId) return [1, 2, 3, 4, 5, 6, 7, 8];
         const jamConfig = (settings.jamPelajaran || []).filter(j => j.jenjangId === jenjangId && j.jenis === 'KBM');
         const maxFromConfig = jamConfig.length ? Math.max(...jamConfig.map(j => j.urutan || j.id || 0)) : 0;
         const maxFromJadwal = jadwalList
-            .filter(j => j.rombelId === rombelId)
+            .filter(j => j.rombelId === selectedRombelId)
             .reduce((max, j) => Math.max(max, j.jamKe || 0), 0);
         const totalJam = Math.max(maxFromConfig, maxFromJadwal, 1);
         return Array.from({ length: totalJam }, (_, i) => i + 1);
-    }, [settings.jamPelajaran, jadwalList, jenjangId, rombelId]);
+    }, [settings.jamPelajaran, jadwalList, jenjangId, selectedRombelId]);
 
     useEffect(() => {
         if (!mataPelajaranId) return;
@@ -92,21 +114,26 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
         e.preventDefault();
         if(!canWrite) return;
         
+        if(!selectedRombelId) return showToast('Pilih rombel kelas terlebih dahulu', 'error');
+        if(!selectedTanggal) return showToast('Pilih tanggal pembelajaran', 'error');
         if(!guruId) return showToast('Pilih guru pengajar', 'error');
+
         const validSesiEkstra = sesiEkstra
             .filter(s => s.kegiatan.trim() || s.materi.trim() || (s.waktuMulai && s.waktuSelesai))
             .map(s => ({ kegiatan: s.kegiatan.trim(), materi: s.materi.trim(), waktuMulai: s.waktuMulai, waktuSelesai: s.waktuSelesai }));
+        
         if(!mataPelajaranId && validSesiEkstra.length === 0) {
             return showToast('Pilih mapel atau isi minimal 1 sesi ekstra', 'error');
         }
         if(!kompetensiMateri.trim()) return showToast('Isi materi / kompetensi dasar', 'error');
+        
         const tipeEntri: 'kbm' | 'ekstra' | 'campuran' =
             mataPelajaranId && validSesiEkstra.length > 0 ? 'campuran' : mataPelajaranId ? 'kbm' : 'ekstra';
 
         const record: JurnalMengajarRecord = {
             id: Date.now() + Math.random(),
-            tanggal,
-            rombelId,
+            tanggal: selectedTanggal,
+            rombelId: selectedRombelId,
             guruId,
             mataPelajaranId: mataPelajaranId || undefined,
             tipeEntri,
@@ -157,7 +184,9 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                 <div className="flex items-center justify-between px-6 py-4 border-b bg-teal-600 text-white shrink-0">
                     <div>
                         <h2 className="text-xl font-bold flex items-center gap-2"><i className="bi bi-journal-text"></i> Jurnal Mengajar</h2>
-                        <p className="text-teal-100 text-sm mt-1">{rombel?.nama} • {new Date(tanggal).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'})}</p>
+                        <p className="text-teal-100 text-sm mt-1">
+                            {rombel?.nama || 'Pilih Rombel'} • {selectedTanggal ? new Date(selectedTanggal).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'}) : ''}
+                        </p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors text-white">
                         <i className="bi bi-x-lg text-xl"></i>
@@ -166,10 +195,42 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
 
                 <div className="flex-grow overflow-y-auto p-6 bg-gray-50 custom-scrollbar space-y-6">
                     
-                    {/* Daftar Jurnal Hari Ini */}
+                    {/* Header Selectors for Target Rombel & Tanggal */}
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Target Rombel</label>
+                            <select 
+                                value={selectedRombelId} 
+                                onChange={e => setSelectedRombelId(Number(e.target.value))}
+                                className="w-full text-sm font-semibold p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                            >
+                                <option value={0}>-- Pilih Rombel --</option>
+                                {settings.rombel.map(r => {
+                                    const k = settings.kelas.find(kl => kl.id === r.kelasId);
+                                    const j = settings.jenjang.find(jn => jn.id === k?.jenjangId);
+                                    return (
+                                        <option key={r.id} value={r.id}>
+                                            {r.nama} ({k?.nama || '-'} • {j?.nama || '-'})
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Tanggal KBM</label>
+                            <input 
+                                type="date" 
+                                value={selectedTanggal} 
+                                onChange={e => setSelectedTanggal(e.target.value)}
+                                className="w-full text-sm font-semibold p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Daftar Jurnal Masuk Hari Ini */}
                     {recordsToday.length > 0 && (
                         <div className="space-y-3">
-                            <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wider mb-2">Jurnal Masuk Hari Ini</h3>
+                            <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wider mb-2">Jurnal Masuk ({recordsToday.length})</h3>
                             {recordsToday.map(r => (
                                 <div key={r.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative group overflow-hidden">
                                      <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
@@ -177,7 +238,7 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                                          <div>
                                             <div className="flex flex-wrap items-center gap-2 mb-1">
                                                 <span className="font-bold text-gray-800">{getMapelName(r.mataPelajaranId)}</span>
-                                                <span className={`text-[10px] px-2 py-0.5 rounded-full border ${r.tipeEntri === 'ekstra' ? 'bg-purple-50 text-purple-700 border-purple-200' : r.tipeEntri === 'campuran' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${r.tipeEntri === 'ekstra' ? 'bg-purple-50 text-purple-700 border-purple-200' : r.tipeEntri === 'campuran' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
                                                     {(r.tipeEntri || 'kbm').toUpperCase()}
                                                 </span>
                                                 {r.jamPelajaranIds && r.jamPelajaranIds.length > 0 && (
@@ -228,7 +289,7 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({ isOpen
                             <div className="absolute top-0 right-0 w-24 h-24 bg-teal-50 rounded-bl-full -z-0"></div>
                             
                             <h3 className="font-bold text-teal-800 text-sm uppercase tracking-wider mb-4 relative z-10 flex items-center gap-2">
-                                <i className="bi bi-plus-circle-fill"></i> Tambah Entri Baru
+                                <i className="bi bi-plus-circle-fill"></i> Tambah Entri Jurnal
                             </h3>
                             
                             <form onSubmit={handleSave} className="space-y-4 relative z-10">

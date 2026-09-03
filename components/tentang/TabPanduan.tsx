@@ -238,11 +238,14 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                             
                             {activeSection.id === 'absensi' && (
                                 <div className="bg-teal-50 p-4 rounded-xl mb-8 text-sm text-teal-900 border border-teal-200 flex items-start gap-3 shadow-sm border-l-4">
-                                    <i className="bi bi-cloud-check-fill text-xl text-teal-500"></i>
+                                    <i className="bi bi-shield-check text-xl text-teal-600 shrink-0 mt-0.5"></i>
                                     <div>
-                                        <strong className="block mb-1">REKOMENDASI OPTIMAL:</strong> 
-                                        Gunakan fitur ini bersama <strong>Sync Cloud</strong> aktif.
-                                        Ini memungkinkan Guru/Musyrif menggunakan <em>perangkat masing-masing</em> untuk mengabsen (tidak harus di komputer Admin).
+                                        <strong className="block mb-1 font-bold">SOP KERJA MULTI-ADMIN &amp; SINKRONISASI CLOUD:</strong> 
+                                        <span>
+                                            Gunakan <strong>Firebase Live Sync</strong> untuk pencatatan presensi real-time antar perangkat guru di kelas. 
+                                            Bila area asrama/kelas minim sinyal, terapkan arsitektur <strong>Hub-and-Spoke (Offline-First)</strong>: 
+                                            guru (Spoke) mengabsen di kelas secara lokal, lalu mengirimkan perubahan ke Admin Pusat (Hub) di akhir sesi untuk digabungkan (Merge Changes) tanpa tumpang-tindih.
+                                        </span>
                                     </div>
                                 </div>
                             )}

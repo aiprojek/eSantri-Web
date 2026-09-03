@@ -5,6 +5,10 @@ export const WA_TEMPLATES = {
     TAGIHAN: "Assalamualaikum Bapak/Ibu [ortu], menginfokan tagihan [nama_santri] bulan [bulan] sebesar Rp [nominal] belum terlunasi. Mohon segera diselesaikan. Syukron.",
     KWITANSI: "Alhamdulillah, pembayaran [nama_santri] sebesar Rp [nominal] untuk [item] telah kami terima pada [tanggal]. Jazakumullah Khairan.",
     TAHFIZH: "Laporan Tahfizh [nama_santri]: Hari ini telah menyetorkan [tipe] Juz [juz] Surah [surah]. Predikat: [predikat]. Terus semangat!",
+    ABSENSI_ALPHA: "Pemberitahuan Pesantren: Ananda [nama_santri] tercatat TIDAK HADIR (Alpha) pada [sesi] tanggal [tanggal] di [rombel]. Mohon konfirmasi kehadiran/keterangan kepada pihak wali kelas. Syukron.",
+    ABSENSI_SAKIT: "Pemberitahuan Pesantren: Ananda [nama_santri] hari ini tercatat izin SAKIT ([keterangan]) pada [sesi] tanggal [tanggal]. Semoga ananda lekas sembuh. Aamiin.",
+    ABSENSI_IZIN: "Pemberitahuan Pesantren: Izin ketidakhadiran ananda [nama_santri] ([keterangan]) pada [sesi] tanggal [tanggal] telah tercatat dalam sistem absensi pesantren. Syukron.",
+    ABSENSI_BLAST: "Laporan Presensi Harian [rombel] - Tanggal [tanggal] ([sesi]): Ananda [nama_santri] tercatat [status] (Ket: [keterangan]). Mohon menjadi maklum. Syukron.",
     PENGUMUMAN: "PENGUMUMAN PONDOK: [pesan]. Mohon menjadi periksa. Syukron.",
     SIARAN_UMUM: "Assalamualaikum. [pesan]\n\nInfo: [agenda]\nTanggal: [tanggal]\n\nTerima kasih.",
     SIARAN_GRUP: "Assalamualaikum Ayah/Bunda. [pesan]\n\nPengumuman Grup: [agenda]\nTanggal: [tanggal]\n\nMohon disimak bersama."

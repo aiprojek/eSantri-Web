@@ -43,6 +43,8 @@ const Reports: React.FC = () => {
       tahunAjaran: '',
       status: '',
       gender: '',
+      jenisSantri: '',
+      searchQuery: '',
       gedungId: '',
       provinsi: '',
       kabupaten: '',
@@ -77,12 +79,28 @@ const Reports: React.FC = () => {
 
       if (hideInactive) return false;
 
+      // Search query check (NIS, NISN, Nama Lengkap)
+      if (filters.searchQuery?.trim()) {
+        const q = filters.searchQuery.toLowerCase().trim();
+        const matchNama = s.namaLengkap.toLowerCase().includes(q);
+        const matchNis = s.nis?.toLowerCase().includes(q);
+        const matchNisn = s.nisn?.toLowerCase().includes(q);
+        if (!matchNama && !matchNis && !matchNisn) return false;
+      }
+
       return (
         (!filters.jenjangId || Number(s.jenjangId) === parseInt(filters.jenjangId, 10)) &&
         (!filters.kelasId || Number(s.kelasId) === parseInt(filters.kelasId, 10)) &&
         (!filters.rombelId || Number(s.rombelId) === parseInt(filters.rombelId, 10)) &&
         (!filters.status || s.status === filters.status) &&
         (!filters.gender || (filters.gender === 'Laki-laki' ? isSantriPutra(s) : isSantriPutri(s))) &&
+        (!filters.jenisSantri || (
+          filters.jenisSantri === 'Mondok' || filters.jenisSantri === 'Mukim'
+            ? (s.jenisSantri?.toLowerCase().includes('mondok') || s.jenisSantri?.toLowerCase().includes('mukim'))
+            : filters.jenisSantri === 'Laju' || filters.jenisSantri === 'Non-Mukim'
+            ? (s.jenisSantri?.toLowerCase().includes('laju') || s.jenisSantri?.toLowerCase().includes('non'))
+            : s.jenisSantri === filters.jenisSantri
+        )) &&
         (!filters.provinsi || s.alamat.provinsi?.toLowerCase().includes(filters.provinsi.toLowerCase()))
       );
     });

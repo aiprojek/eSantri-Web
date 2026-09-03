@@ -483,6 +483,7 @@ export const exportToWord = (elementId: string, fileName: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
     const isJadwalPrint = elementId === 'jadwal-print-area';
+    const isSurat = elementId === 'surat-peringatan-print-area' || elementId === 'surat-preview-container';
     const content = extractPrintableContent(element, elementId);
     const styles = collectDocumentStyles();
     const finalHtml = `
@@ -490,15 +491,59 @@ export const exportToWord = (elementId: string, fileName: string) => {
 <head>
 <meta charset="utf-8">
 <title>${fileName}</title>
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+    <w:View>Print</w:View>
+    <w:Zoom>100</w:Zoom>
+    <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
 ${styles}
 <style>
     @page Section1 {
         size: ${isJadwalPrint ? '841.9pt 595.3pt' : '595.3pt 841.9pt'};
         mso-page-orientation: ${isJadwalPrint ? 'landscape' : 'portrait'};
-        margin: 0pt;
+        margin: ${isSurat ? '54.0pt 54.0pt 54.0pt 54.0pt' : '36.0pt 36.0pt 36.0pt 36.0pt'};
+        mso-header-margin: 36.0pt;
+        mso-footer-margin: 36.0pt;
+        mso-paper-source: 0;
     }
-    div.Section1 { page: Section1; }
-    body { margin: 0; padding: 0; background: #fff; }
+    div.Section1 { 
+        page: Section1; 
+        font-family: 'Times New Roman', 'Book Antiqua', Palatino, serif;
+        font-size: 11pt;
+        line-height: 1.4;
+        color: #000;
+    }
+    body { 
+        margin: 0; 
+        padding: 0; 
+        background: #fff; 
+        font-family: 'Times New Roman', 'Book Antiqua', Palatino, serif;
+    }
+    table {
+        border-collapse: collapse;
+        mso-table-lspace: 0pt;
+        mso-table-rspace: 0pt;
+    }
+    td, th {
+        mso-table-rspace: 0pt;
+        mso-table-lspace: 0pt;
+    }
+    p {
+        margin-top: 0;
+        margin-bottom: 6pt;
+    }
+    .print-portrait, .print-landscape {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        min-height: auto !important;
+    }
     ${getUnifiedPreviewPrintStyles()}
 </style>
 </head>

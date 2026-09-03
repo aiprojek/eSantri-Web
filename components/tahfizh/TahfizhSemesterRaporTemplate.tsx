@@ -258,8 +258,8 @@ export const TahfizhSemesterRaporTemplateComponent: React.FC<TahfizhSemesterRapo
 
     return (
         <div 
-            className={`font-sans text-black p-6 sm:p-7 bg-white flex flex-col justify-between printable-content-wrapper print-portrait ${pageBreakAfter ? 'page-break-after' : ''}`}
-            style={{ width: '21cm', minHeight: '29.7cm' }}
+            className={`font-sans text-black p-6 sm:p-7 bg-white flex flex-col justify-between box-border printable-content-wrapper print-portrait ${pageBreakAfter ? 'page-break-after' : ''}`}
+            style={{ width: '21cm', minHeight: '29.7cm', boxSizing: 'border-box' }}
         >
             <div>
                 <PrintHeader settings={settings} title="RAPOR MUTABA'AH TAHFIZHUL QUR'AN" compact />

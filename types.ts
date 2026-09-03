@@ -872,6 +872,8 @@ export interface NilaiMapel {
     deskripsi?: string;
 }
 
+export type SesiAbsensi = 'KBM Pagi' | 'Sholat Subuh' | 'Sholat Maghrib-Isya' | 'Halaqah Asrama' | 'Ekstrakurikuler' | 'Lainnya';
+
 export interface AbsensiRecord {
     id: number;
     santriId: number;
@@ -879,6 +881,7 @@ export interface AbsensiRecord {
     tanggal: string; // YYYY-MM-DD
     status: 'H' | 'S' | 'I' | 'A';
     keterangan?: string;
+    sesi?: SesiAbsensi | string;
     recordedBy?: string;
     lastModified?: number;
 }
@@ -972,6 +975,9 @@ export interface CalendarEvent {
     category: 'Libur' | 'Ujian' | 'Kegiatan' | 'Rapat' | 'Lainnya';
     color: string; // Tailwind class like 'bg-red-500'
     description?: string;
+    jenjangId?: number;
+    kelasId?: number;
+    rombelId?: number;
     deleted?: boolean;
     lastModified?: number;
 }

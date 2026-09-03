@@ -181,10 +181,42 @@ export const generateBiodataReports = (data: Santri[], settings: PondokSettings,
     }));
 };
 
+// --- QR CODE & BARCODE COMPONENTS FOR CARDS ---
+const CardQRCodeView: React.FC<{ value: string; size?: number; className?: string; isDark?: boolean }> = ({ value, size = 42, className, isDark = false }) => {
+    const [dataUrl, setDataUrl] = useState<string>('');
+
+    useEffect(() => {
+        let active = true;
+        generateQRCodeDataUrl(value, size * 2).then(url => {
+            if (active) setDataUrl(url);
+        });
+        return () => { active = false; };
+    }, [value, size]);
+
+    if (!dataUrl) {
+        return <div className={`animate-pulse rounded bg-gray-200/40 ${className}`} style={{ width: size, height: size }} />;
+    }
+
+    return (
+        <div className={`p-[1px] rounded bg-white shadow-xs flex items-center justify-center shrink-0 ${isDark ? 'border border-slate-600' : 'border border-gray-200'} ${className}`}>
+            <img src={dataUrl} alt={`QR-${value}`} className="object-contain" style={{ width: size, height: size }} referrerPolicy="no-referrer" />
+        </div>
+    );
+};
+
+const CardBarcodeView: React.FC<{ value: string; width?: number; height?: number; className?: string; isDark?: boolean }> = ({ value, width = 85, height = 22, className, isDark = false }) => {
+    const src = generateBarcodeVisual(value, width, height);
+    return (
+        <div className={`p-0.5 rounded bg-white shadow-sm flex items-center justify-center shrink-0 ${isDark ? 'border border-slate-600' : 'border border-gray-200'} ${className}`}>
+            <img src={src} alt={`Barcode-${value}`} className="object-contain" style={{ width, height }} referrerPolicy="no-referrer" />
+        </div>
+    );
+};
+
 // --- KARTU SANTRI ---
 
 const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
-    const { cardDesign, cardValidUntil, cardFields, cardWidth, cardHeight, cardValidityMode, cardShowQRCode, cardQRCodeType } = options || {};
+    const { cardDesign, cardValidUntil, cardFields, cardWidth, cardHeight, cardValidityMode, cardShowQRCode, cardQRPlacement = 'with_photo' } = options || {};
     const rombel = settings.rombel.find(r => r.id === santri.rombelId);
     const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
     const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
@@ -200,6 +232,7 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
 
     const nama = santri.namaLengkap;
     const nis = santri.nis;
+    const nisValue = santri?.nis || (santri?.id ? `SAN${santri.id}` : '');
     const jenjangKelas = `${jenjang?.nama?.split(' ')[0] || ''} / ${kelas?.nama || ''}`; 
     const rombelNama = rombel?.nama || 'N/A';
     const ttl = `${santri.tempatLahir}, ${formatDate(santri.tanggalLahir)}`;
@@ -219,6 +252,95 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
         height: `${cardHeight}cm`,
         flexShrink: 0,
         boxSizing: 'border-box',
+    };
+
+    const themeQrStyles: Record<string, { badgeBorder: string; onlyBorder: string }> = {
+        classic: {
+            badgeBorder: 'border border-[#D4AF37] ring-1 ring-[#D4AF37]/40 shadow-xs',
+            onlyBorder: 'border-2 border-[#D4AF37] shadow-sm'
+        },
+        modern: {
+            badgeBorder: 'border border-blue-400 ring-1 ring-blue-500/20 shadow-xs',
+            onlyBorder: 'border-2 border-blue-300 shadow-sm'
+        },
+        vertical: {
+            badgeBorder: 'border border-red-400 ring-1 ring-red-500/20 shadow-xs',
+            onlyBorder: 'border-2 border-red-300 shadow-sm'
+        },
+        dark: {
+            badgeBorder: 'border border-teal-400 ring-1 ring-teal-500/30 shadow-xs',
+            onlyBorder: 'border-2 border-teal-500 shadow-sm'
+        },
+        ceria: {
+            badgeBorder: 'border-2 border-teal-400 shadow-xs',
+            onlyBorder: 'border-2 border-teal-400 shadow-sm'
+        }
+    };
+
+    // Helper for Photo or QR Placement on Front Card
+    const renderSantriPhotoOrQR = ({
+        variant,
+        shapeClass,
+        widthClass,
+        heightClass,
+        qrSize = 20,
+        qrOnlySize = 48,
+        borderClass = '',
+        qrPositionClass = 'bottom-0.5 right-0.5',
+        isDark = false
+    }: {
+        variant: 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria';
+        shapeClass: string;
+        widthClass: string;
+        heightClass: string;
+        qrSize?: number;
+        qrOnlySize?: number;
+        borderClass?: string;
+        qrPositionClass?: string;
+        isDark?: boolean;
+    }) => {
+        const themeStyle = themeQrStyles[variant] || themeQrStyles.classic;
+        const isCircular = shapeClass.includes('rounded-full');
+
+        if (cardShowQRCode && cardQRPlacement === 'replace_photo') {
+            // For circular frames (e.g. Ceria & Modern), size must fit safely inside inscribed square so corners are never clipped
+            const safeQrOnlySize = isCircular ? 34 : qrOnlySize;
+
+            return (
+                <div className={`${widthClass} ${heightClass} ${shapeClass} ${themeStyle.onlyBorder} bg-white shadow-md flex items-center justify-center p-1 relative overflow-hidden`}>
+                    <CardQRCodeView value={nisValue} size={safeQrOnlySize} className="p-0 border-none shadow-none" isDark={isDark} />
+                </div>
+            );
+        }
+
+        if (cardShowQRCode && cardQRPlacement === 'with_photo') {
+            const safeBadgeSize = isCircular ? Math.min(qrSize, 17) : qrSize;
+
+            return (
+                <div className={`relative inline-block ${widthClass} ${heightClass}`}>
+                    <SmartAvatar
+                        santri={santri}
+                        variant={variant}
+                        className={`w-full h-full object-cover ${shapeClass} ${borderClass}`}
+                        forcePlaceholder={!showPhoto}
+                    />
+                    {nisValue && (
+                        <div className={`absolute ${qrPositionClass} z-20 bg-white p-[1.5px] rounded-xs ${themeStyle.badgeBorder} flex items-center justify-center`}>
+                            <CardQRCodeView value={nisValue} size={safeBadgeSize} className="p-0 border-none shadow-none" isDark={isDark} />
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        return (
+            <SmartAvatar
+                santri={santri}
+                variant={variant}
+                className={`${widthClass} ${heightClass} object-cover ${shapeClass} ${borderClass}`}
+                forcePlaceholder={!showPhoto}
+            />
+        );
     };
 
     // Dynamic Title Font Sizing without ellipsis
@@ -253,8 +375,16 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 
                 <div className="flex p-2 gap-2 flex-grow relative overflow-hidden">
                     <div className="flex flex-col items-center justify-center h-full">
-                        <SmartAvatar santri={santri} variant="classic" className="w-[2cm] h-[2.5cm] bg-[#f0fdf4] border-2 border-[#D4AF37] shadow-lg rounded-sm" forcePlaceholder={!showPhoto} />
-                        <div className="mt-1 text-[6pt] text-center bg-[#D4AF37] text-[#1B4D3E] px-1 rounded font-bold w-full">SANTRI AKTIF</div>
+                        {renderSantriPhotoOrQR({
+                            variant: 'classic',
+                            shapeClass: 'rounded-sm',
+                            widthClass: 'w-[2cm]',
+                            heightClass: 'h-[2.5cm]',
+                            borderClass: 'border-2 border-[#D4AF37] shadow-lg bg-[#f0fdf4]',
+                            qrSize: 20,
+                            qrOnlySize: 48,
+                            qrPositionClass: 'bottom-0.5 right-0.5'
+                        })}
                     </div>
                     <div className="flex-grow text-[7pt] space-y-0.5 z-10 flex flex-col justify-center">
                         {showNama && <div className="font-bold text-[#D4AF37] text-[10pt] border-b border-[#D4AF37]/30 pb-0.5 mb-1">{nama}</div>}
@@ -303,7 +433,16 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 {/* Body Section: Photo and Data */}
                 <div className="flex justify-between items-start p-3 z-10 relative flex-grow overflow-hidden">
                     <div className="text-white mt-1">
-                        <SmartAvatar santri={santri} variant="modern" className="w-[1.8cm] h-[1.8cm] rounded-full border-4 border-white shadow-md bg-white object-cover" forcePlaceholder={!showPhoto} />
+                        {renderSantriPhotoOrQR({
+                            variant: 'modern',
+                            shapeClass: 'rounded-full',
+                            widthClass: 'w-[1.8cm]',
+                            heightClass: 'h-[1.8cm]',
+                            borderClass: 'border-4 border-white shadow-md bg-white',
+                            qrSize: 18,
+                            qrOnlySize: 42,
+                            qrPositionClass: 'bottom-0 right-0'
+                        })}
                     </div>
                     <div className="text-right flex-grow pl-2 pt-1 flex flex-col items-end">
                         <div className="text-[6pt] text-gray-400 tracking-[0.2em] uppercase mb-1">Kartu Tanda Santri</div>
@@ -345,7 +484,16 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 </div>
 
                 <div className="z-10 mt-3 relative">
-                    <SmartAvatar santri={santri} variant="vertical" className="w-[2.2cm] h-[2.8cm] rounded-lg shadow-lg border-2 border-white bg-gray-100 object-cover" forcePlaceholder={!showPhoto} />
+                    {renderSantriPhotoOrQR({
+                        variant: 'vertical',
+                        shapeClass: 'rounded-lg',
+                        widthClass: 'w-[2.2cm]',
+                        heightClass: 'h-[2.8cm]',
+                        borderClass: 'border-2 border-white shadow-lg bg-gray-100',
+                        qrSize: 20,
+                        qrOnlySize: 52,
+                        qrPositionClass: 'bottom-0.5 right-0.5'
+                    })}
                 </div>
 
                 <div className="z-10 mt-4 px-2 w-full flex-grow flex flex-col items-center overflow-hidden">
@@ -395,7 +543,16 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
 
                 <div className="flex p-3 gap-3 z-10 flex-grow overflow-hidden">
                     <div className="flex flex-col gap-2">
-                        <SmartAvatar santri={santri} variant="dark" className="w-[2cm] h-[2cm] rounded-lg border border-slate-600 bg-slate-800 object-cover" forcePlaceholder={!showPhoto} />
+                        {renderSantriPhotoOrQR({
+                            variant: 'dark',
+                            shapeClass: 'rounded-lg',
+                            widthClass: 'w-[2cm]',
+                            heightClass: 'h-[2cm]',
+                            borderClass: 'border border-slate-600 bg-slate-800',
+                            qrSize: 20,
+                            qrOnlySize: 46,
+                            qrPositionClass: 'bottom-0.5 right-0.5'
+                        })}
                         <div className="text-center">
                             {showNis && <div className="text-[9pt] font-mono font-bold text-teal-400">{nis}</div>}
                             <div className="text-[5pt] text-slate-500 uppercase tracking-widest">Nomor Induk</div>
@@ -441,7 +598,18 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 <div className="flex p-2 gap-3 items-start flex-grow pl-4 overflow-hidden">
                     <div className="relative mt-1">
                         <div className="absolute inset-0 bg-teal-400 rounded-full transform translate-x-1 translate-y-1"></div>
-                        <SmartAvatar santri={santri} variant="ceria" className="w-[2cm] h-[2cm] rounded-full border-2 border-white bg-teal-200 relative z-10 object-cover" forcePlaceholder={!showPhoto} />
+                        <div className="relative z-10">
+                            {renderSantriPhotoOrQR({
+                                variant: 'ceria',
+                                shapeClass: 'rounded-full',
+                                widthClass: 'w-[2cm]',
+                                heightClass: 'h-[2cm]',
+                                borderClass: 'border-2 border-white bg-teal-200',
+                                qrSize: 18,
+                                qrOnlySize: 44,
+                                qrPositionClass: 'bottom-0 right-0'
+                            })}
+                        </div>
                     </div>
                     
                     <div className="flex-grow pl-2 z-10 relative">
@@ -495,7 +663,16 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
             </div>
             <div className="flex p-2 gap-2 flex-grow relative overflow-hidden">
                 <div className="flex flex-col items-center justify-center h-full">
-                    <SmartAvatar santri={santri} variant="classic" className="w-[2cm] h-[2.5cm] bg-[#f0fdf4] border-2 border-[#D4AF37] shadow-lg rounded-sm" forcePlaceholder={!showPhoto} />
+                    {renderSantriPhotoOrQR({
+                        variant: 'classic',
+                        shapeClass: 'rounded-sm',
+                        widthClass: 'w-[2cm]',
+                        heightClass: 'h-[2.5cm]',
+                        borderClass: 'border-2 border-[#D4AF37] shadow-lg bg-[#f0fdf4]',
+                        qrSize: 20,
+                        qrOnlySize: 48,
+                        qrPositionClass: 'bottom-0.5 right-0.5'
+                    })}
                 </div>
                 <div className="flex-grow text-[7pt] space-y-0.5 z-10 flex flex-col justify-center">
                     {showNama && <div className="font-bold text-[#D4AF37] text-[10pt] border-b border-[#D4AF37]/30 pb-0.5 mb-1">{nama}</div>}
@@ -514,39 +691,7 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
     );
 };
 
-// --- QR CODE & BARCODE COMPONENTS FOR CARDS ---
-const CardQRCodeView: React.FC<{ value: string; size?: number; className?: string; isDark?: boolean }> = ({ value, size = 42, className, isDark = false }) => {
-    const [dataUrl, setDataUrl] = useState<string>('');
-
-    useEffect(() => {
-        let active = true;
-        generateQRCodeDataUrl(value, size * 2).then(url => {
-            if (active) setDataUrl(url);
-        });
-        return () => { active = false; };
-    }, [value, size]);
-
-    if (!dataUrl) {
-        return <div className={`animate-pulse rounded bg-gray-200/40 ${className}`} style={{ width: size, height: size }} />;
-    }
-
-    return (
-        <div className={`p-0.5 rounded bg-white shadow-sm flex items-center justify-center shrink-0 ${isDark ? 'border border-slate-600' : 'border border-gray-200'} ${className}`}>
-            <img src={dataUrl} alt={`QR-${value}`} className="object-contain" style={{ width: size, height: size }} referrerPolicy="no-referrer" />
-        </div>
-    );
-};
-
-const CardBarcodeView: React.FC<{ value: string; width?: number; height?: number; className?: string; isDark?: boolean }> = ({ value, width = 85, height = 22, className, isDark = false }) => {
-    const src = generateBarcodeVisual(value, width, height);
-    return (
-        <div className={`p-0.5 rounded bg-white shadow-sm flex items-center justify-center shrink-0 ${isDark ? 'border border-slate-600' : 'border border-gray-200'} ${className}`}>
-            <img src={src} alt={`Barcode-${value}`} className="object-contain" style={{ width, height }} referrerPolicy="no-referrer" />
-        </div>
-    );
-};
-
-const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
+const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSettings; options: any }> = ({ settings, options }) => {
     const { 
         cardDesign = 'classic', 
         cardWidth = 8.56, 
@@ -555,9 +700,7 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
         cardRulesFontSize = 'auto',
         cardRulesCustomColor = '',
         cardSignatoryTitle, 
-        cardSignatoryId, 
-        cardShowQRCode, 
-        cardQRCodeType 
+        cardSignatoryId
     } = options || {};
     
     // Replace placeholder with actual name safely
@@ -610,9 +753,6 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
         WebkitPrintColorAdjust: 'exact'
     } as any;
 
-    const nisValue = santri?.nis || (santri?.id ? `SAN${santri.id}` : '');
-    const showCode = Boolean(cardShowQRCode && (santri?.nis || santri?.id));
-
     // ==========================================
     // DESIGN 1: CLASSIC TRADITIONAL (Hijau & Emas)
     // ==========================================
@@ -652,29 +792,9 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 border-t border-[#D4AF37]/20">
-                        {totalChars <= 280 ? (
-                            <div className="italic text-[#D4AF37]/90 font-serif text-[4.8pt] text-left leading-tight">
-                                "Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain."
-                            </div>
-                        ) : <div />}
-
-                        <div className="flex flex-col items-end shrink-0">
-                            {showCode && (
-                                <div className="flex items-center gap-1 mb-0.5">
-                                    {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
-                                        <CardQRCodeView value={nisValue} size={26} />
-                                    )}
-                                    {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
-                                        <CardBarcodeView value={nisValue} width={62} height={16} />
-                                    )}
-                                </div>
-                            )}
-                            {nisValue && (
-                                <div className="font-mono text-[4.8pt] text-[#D4AF37] font-bold tracking-wider">
-                                    S: {santri?.nis || nisValue}
-                                </div>
-                            )}
+                    <div className="mt-1 pt-0.5 border-t border-[#D4AF37]/20 flex items-center justify-center">
+                        <div className="italic text-[#D4AF37]/90 font-serif text-[4.8pt] text-center leading-tight">
+                            "Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain."
                         </div>
                     </div>
                 </div>
@@ -737,29 +857,9 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 border-t border-blue-100">
-                        {totalChars <= 280 ? (
-                            <div className="italic text-blue-700/80 text-[4.8pt] leading-tight">
-                                "Menuntut ilmu adalah kewajiban bagi setiap muslim."
-                            </div>
-                        ) : <div />}
-
-                        <div className="flex flex-col items-end shrink-0">
-                            {showCode && (
-                                <div className="flex items-center gap-1 mb-0.5">
-                                    {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
-                                        <CardQRCodeView value={nisValue} size={26} />
-                                    )}
-                                    {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
-                                        <CardBarcodeView value={nisValue} width={62} height={16} />
-                                    )}
-                                </div>
-                            )}
-                            {nisValue && (
-                                <div className="font-mono text-[4.8pt] text-blue-800 font-bold bg-blue-50/80 px-1 rounded border border-blue-200/60 tracking-wider">
-                                    S: {santri?.nis || nisValue}
-                                </div>
-                            )}
+                    <div className="mt-1 pt-0.5 border-t border-blue-100 flex items-center justify-center">
+                        <div className="italic text-blue-700/80 text-[4.8pt] text-center leading-tight">
+                            "Menuntut ilmu adalah kewajiban bagi setiap muslim."
                         </div>
                     </div>
                 </div>
@@ -813,28 +913,9 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                     </ol>
 
                     <div className="mt-1 pt-1 border-t border-gray-100 flex flex-col items-center shrink-0">
-                        {totalChars <= 250 && (
-                            <div className="italic text-red-700/80 text-[4.5pt] text-center mb-0.5 leading-tight">
-                                "Disiplin dan adab adalah kunci keberkahan ilmu."
-                            </div>
-                        )}
-
-                        {showCode && (
-                            <div className="flex justify-center gap-1 my-0.5">
-                                {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
-                                    <CardQRCodeView value={nisValue} size={24} />
-                                )}
-                                {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
-                                    <CardBarcodeView value={nisValue} width={58} height={15} />
-                                )}
-                            </div>
-                        )}
-
-                        {nisValue && (
-                            <div className="font-mono text-[4.8pt] text-red-700 font-bold bg-red-50 px-1.5 py-0.5 rounded border border-red-200/80 mt-0.5 tracking-wider">
-                                S: {santri?.nis || nisValue}
-                            </div>
-                        )}
+                        <div className="italic text-red-700/80 text-[4.5pt] text-center mb-0.5 leading-tight">
+                            "Disiplin dan adab adalah kunci keberkahan ilmu."
+                        </div>
                     </div>
                 </div>
 
@@ -885,29 +966,9 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 border-t border-slate-800">
-                        {totalChars <= 280 ? (
-                            <div className="italic text-teal-300/80 font-serif text-[4.8pt] leading-tight">
-                                "Adab dan akhlak mulia mendahului ketinggian ilmu."
-                            </div>
-                        ) : <div />}
-
-                        <div className="flex flex-col items-end shrink-0">
-                            {showCode && (
-                                <div className="flex items-center gap-1 mb-0.5">
-                                    {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
-                                        <CardQRCodeView value={nisValue} size={26} isDark />
-                                    )}
-                                    {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
-                                        <CardBarcodeView value={nisValue} width={62} height={16} isDark />
-                                    )}
-                                </div>
-                            )}
-                            {nisValue && (
-                                <div className="font-mono text-[4.8pt] text-teal-400 font-bold tracking-wider">
-                                    S: {santri?.nis || nisValue}
-                                </div>
-                            )}
+                    <div className="mt-1 pt-0.5 border-t border-slate-800 flex items-center justify-center">
+                        <div className="italic text-teal-300/80 font-serif text-[4.8pt] text-center leading-tight">
+                            "Adab dan akhlak mulia mendahului ketinggian ilmu."
                         </div>
                     </div>
                 </div>
@@ -959,29 +1020,9 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="flex items-center justify-between gap-2 mt-1 pt-0.5 border-t border-orange-200">
-                        {totalChars <= 280 ? (
-                            <div className="italic text-teal-700 font-medium text-[4.8pt] leading-tight">
-                                "Rajin mengaji, santun berbudi, berbakti pada orang tua & guru."
-                            </div>
-                        ) : <div />}
-
-                        <div className="flex flex-col items-end shrink-0">
-                            {showCode && (
-                                <div className="flex items-center gap-1 mb-0.5">
-                                    {(cardQRCodeType === 'qr' || cardQRCodeType === 'both') && (
-                                        <CardQRCodeView value={nisValue} size={26} />
-                                    )}
-                                    {(cardQRCodeType === 'barcode' || cardQRCodeType === 'both') && (
-                                        <CardBarcodeView value={nisValue} width={62} height={16} />
-                                    )}
-                                </div>
-                            )}
-                            {nisValue && (
-                                <div className="font-mono text-[4.8pt] text-orange-700 font-bold bg-orange-100/80 px-1 rounded border border-orange-200 tracking-wider">
-                                    S: {santri?.nis || nisValue}
-                                </div>
-                            )}
+                    <div className="mt-1 pt-0.5 border-t border-orange-200 flex items-center justify-center">
+                        <div className="italic text-teal-700 font-medium text-[4.8pt] text-center leading-tight">
+                            "Rajin mengaji, santun berbudi, berbakti pada orang tua & guru."
                         </div>
                     </div>
                 </div>
@@ -1019,13 +1060,8 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         <li key={i}>{rule.trim()}</li>
                     ))}
                 </ol>
-                <div className="flex justify-between items-center mt-1 pt-0.5 border-t border-[#D4AF37]/20">
-                    <div className="text-[4.2pt] italic text-[#D4AF37]">"Disiplin & Berakhlakul Karimah"</div>
-                    {nisValue && (
-                        <div className="font-mono text-[4.8pt] text-[#D4AF37] font-bold tracking-wider">
-                            S: {santri?.nis || nisValue}
-                        </div>
-                    )}
+                <div className="flex justify-center items-center mt-1 pt-0.5 border-t border-[#D4AF37]/20">
+                    <div className="text-[4.5pt] italic text-[#D4AF37] text-center">"Disiplin & Berakhlakul Karimah"</div>
                 </div>
             </div>
             <div className="py-1 px-2.5 border-t border-[#D4AF37]/30 flex justify-between items-end bg-black/25">

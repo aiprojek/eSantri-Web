@@ -59,6 +59,7 @@ const RESTORE_TABLE_CONFIG: Array<{ key: string; label: string; table: any; alia
     { key: 'pembayaranHutang', label: 'Pembayaran Hutang', table: db.pembayaranHutang },
     { key: 'warehouses', label: 'Gudang', table: db.warehouses },
     { key: 'stockTransfers', label: 'Transfer Stok', table: db.stockTransfers },
+    { key: 'digitalAssets', label: 'Aset Digital', table: db.digitalAssets },
 ];
 
 const getArrayFromBackup = (payload: BackupPayload, key: string, aliases: string[] = []): unknown[] | null => {
@@ -102,6 +103,8 @@ const HealthDashboard: React.FC = () => {
                 'Pendaftar (PSB)': await db.pendaftar.count(),
                 'Rapor': await db.raporRecords.count(),
                 'Absensi': await db.absensi.count(),
+                'Konseling (BK)': await db.bkSessions.count(),
+                'Arsip Surat': await db.arsipSurat.count(),
                 'Tahfizh': await db.tahfizh.count(),
                 'Inventaris': await db.inventaris.count(),
                 'Audit Logs': await db.auditLogs.count(),

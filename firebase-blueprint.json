@@ -82,6 +82,58 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "santriId", "tanggal", "tipe", "lastModified"]
+    },
+    "AbsensiRecord": {
+      "title": "AbsensiRecord",
+      "description": "Catatan presensi harian santri dan dispensasi per sesi kegiatan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "santriId": { "type": "number" },
+        "rombelId": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "status": { "type": "string", "enum": ["H", "S", "I", "A"] },
+        "keterangan": { "type": "string" },
+        "sesi": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "santriId", "rombelId", "tanggal", "status", "lastModified"]
+    },
+    "JurnalMengajarRecord": {
+      "title": "JurnalMengajarRecord",
+      "description": "Catatan jurnal mengajar ustadz dan kegiatan KBM",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "rombelId": { "type": "number" },
+        "guruId": { "type": "number" },
+        "mataPelajaranId": { "type": "number" },
+        "tipeEntri": { "type": "string" },
+        "materi": { "type": "string" },
+        "catatan": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "tanggal", "rombelId", "guruId", "lastModified"]
+    },
+    "BkSession": {
+      "title": "BkSession",
+      "description": "Catatan sesi bimbingan konseling santri (BK) per tenant",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "santriId": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "kategori": { "type": "string" },
+        "keluhan": { "type": "string" },
+        "penanganan": { "type": "string" },
+        "status": { "type": "string" },
+        "privasi": { "type": "string" },
+        "konselor": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "santriId", "tanggal", "kategori", "keluhan", "penanganan", "lastModified"]
     }
   },
   "firestore": {
@@ -104,6 +156,18 @@
     "tenants/{tenantId}/tahfizh": {
       "schema": "TahfizhRecord",
       "description": "Koleksi catatan tahfizh & ujian santri per tenant"
+    },
+    "tenants/{tenantId}/absensi": {
+      "schema": "AbsensiRecord",
+      "description": "Koleksi catatan presensi santri per tenant"
+    },
+    "tenants/{tenantId}/bkSessions": {
+      "schema": "BkSession",
+      "description": "Koleksi sesi bimbingan konseling santri per tenant"
+    },
+    "tenants/{tenantId}/jurnalMengajar": {
+      "schema": "JurnalMengajarRecord",
+      "description": "Koleksi jurnal mengajar ustadz per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

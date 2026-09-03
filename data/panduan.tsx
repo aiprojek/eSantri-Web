@@ -1227,61 +1227,210 @@ export const panduanData: PanduanSectionData[] = [
         id: 'absensi',
         badge: 6,
         badgeColor: 'teal',
-        title: 'Absensi & Kehadiran',
+        title: 'Absensi & Kehadiran Santri',
         steps: [
             {
-                title: 'Alur Absensi Harian',
+                title: 'SOP Kerja Multi-Admin: Real-Time Sync vs Hub-and-Spoke',
                 content: (
-                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Absensi</strong>.</li>
-                        <li>Pilih Jenjang, Kelas, Rombel, dan Tanggal.</li>
-                        <li>Status default adalah 'Hadir' (H). Klik status santri untuk mengubah (Izin, Sakit, Alpa).</li>
-                        <li>Untuk status <strong>S/I/A</strong>, isi keterangan (wajib) sebelum simpan.</li>
-                        <li>Klik <strong>Simpan Data Absensi</strong> atau <strong>Simpan &amp; Tanggal Berikutnya</strong>.</li>
-                    </ol>
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Kedisiplinan Kerja Multi-Admin:</strong>
+                                Di pondok pesantren dengan puluhan ustadz/musyrif yang mengabsen serentak di kelas dan asrama, sistem mendukung 2 arsitektur utama: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline/Dropbox/File)</strong>. Ikuti SOP di bawah ini agar data absensi tidak saling menimpa (conflict-free).
+                            </div>
+                        </div>
+
+                        {/* Model A */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Cocok untuk lingkungan pondok dengan koneksi WiFi/internet lancar di ruang kelas dan kantor guru.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-person-check text-teal-600"></i> Akun Mandiri Guru
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Setiap pengajar login menggunakan akun masing-masing. Nama pencatat otomatis direkam di atribut <code>recordedBy</code> untuk audit jejak digital.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600"></i> Sinkronisasi Detik Itu Juga
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat guru menekan "Simpan Data Absensi", data masuk ke IndexedDB lokal dan langsung didorong ke Cloud Firebase. Admin pusat &amp; pimpinan pondok dapat memantau secara live.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-shield-lock text-teal-600"></i> Partisi Kerja Rombel
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Ustadz A mengabsen Rombel 1A, Ustadz B mengabsen Rombel 1B. Jangan ada 2 admin yang menginput rombel yang sama di tanggal &amp; sesi yang sama secara simultan.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File JSON)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Cocok untuk pondok yang ruang asrama atau kelasnya tidak memiliki jangkauan sinyal internet stabil.
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">A. Peran HUB (Pusat Data Induk di Kantor TU):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Komputer Utama di Kantor Tata Usaha yang memegang salinan induk seluruh data santri, absensi, tagihan, dan pengaturan.
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">B. Peran SPOKE (Perangkat Guru/Musyrif di Kelas):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Laptop atau HP masing-masing pengajar. Sebelum jam KBM/halaqah dimulai, guru memastikan perangkatnya telah memuat Master Data terbaru dari Hub.
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Sore Hari:</strong>
+                                    <ol className="list-decimal pl-4 mt-1 space-y-1 text-[11px] text-gray-600">
+                                        <li>Guru mengabsen santri secara mandiri di kelas (tanpa perlu paket data).</li>
+                                        <li>Saat KBM selesai atau ketika mendapat sinyal, guru mengeklik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong> di menu Cloud Sync, atau mengirim file ekspor ke Admin.</li>
+                                        <li>Admin Utama di Hub mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem membandingkan stempel <code>lastModified</code> dan menyatukan seluruh absensi tanpa menimpa data rombel lain.</li>
+                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> untuk mendistribusikan data termutakhir ke seluruh staf.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )
             },
             {
-                title: 'Persiapan: Multi-User & Kolaborasi Cloud',
+                title: '5 Aturan Emas Menjaga Keutuhan Data Absensi',
                 content: (
-                    <>
-                        <p>Agar tidak bergantung pada satu komputer Admin (Admin Sentris), sangat disarankan mengaktifkan <strong>Sync Cloud (Dropbox)</strong>.</p>
-                        <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                            <li><strong>Gunakan Perangkat Masing-masing:</strong> Guru/Musyrif bisa mengabsen langsung di kelas/asrama menggunakan HP atau Laptop mereka sendiri.</li>
-                            <li><strong>Akuntabilitas (Multi-User):</strong> Setiap guru login dengan akun masing-masing yang dibuatkan Admin.</li>
-                            <li><strong>Sinkronisasi:</strong> Jika menggunakan Dropbox, klik "Kirim Perubahan" setelah selesai. Jika menggunakan <strong>Firebase</strong>, data otomatis masuk ke pusat secara real-time.</li>
+                    <div className="space-y-2 text-xs text-gray-700">
+                        <p className="text-sm font-medium text-gray-800">
+                            Patuhi 5 panduan utama berikut agar rekaman absensi selalu konsisten, akurat, dan terbebas dari tumpang tindih data:
+                        </p>
+                        <ul className="space-y-2.5 pt-1">
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-teal-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">1. Satu Rombel Satu Penanggung Jawab:</strong>
+                                    <span className="text-gray-600 text-[11px]">Jangan izinkan dua orang membuka dan mengedit form absensi untuk rombel &amp; sesi yang persis sama pada waktu bersamaan.</span>
+                                </div>
+                            </li>
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-teal-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">2. Gunakan Fitur Dispensasi untuk Izin Multi-Hari:</strong>
+                                    <span className="text-gray-600 text-[11px]">Jika santri sakit/izin lebih dari 1 hari atau izin massal rombongan lomba, gunakan tab <em>Izin &amp; Dispensasi</em> agar nomor disposisi dan catatan tercatat rapi secara atomik.</span>
+                                </div>
+                            </li>
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-teal-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">3. Wajib Isi Alasan untuk Non-Hadir:</strong>
+                                    <span className="text-gray-600 text-[11px]">Pastikan alasan sakit, izin, atau alpa diisi dengan jelas sebelum menyimpan form agar riwayat absensi bernilai valid saat audit atau cetak laporan.</span>
+                                </div>
+                            </li>
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-teal-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">4. Segera Ambil Tindakan untuk Santri At-Risk:</strong>
+                                    <span className="text-gray-600 text-[11px]">Jika muncul badge peringatan merah (Alpha ≥ 3 atau kehadiran &lt; 80%), wali kelas wajib menjadwalkan konseling BK atau menerbitkan Surat Peringatan (SP) langsung dari aplikasi.</span>
+                                </div>
+                            </li>
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-teal-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">5. Download Backup JSON Berkala:</strong>
+                                    <span className="text-gray-600 text-[11px]">Admin Pusat wajib mengunduh berkas cadangan JSON di menu <em>Pengaturan &gt; Backup &amp; Restore</em> minimal 1 minggu sekali sebagai arsip fisik cold-storage.</span>
+                                </div>
+                            </li>
                         </ul>
-                    </>
+                    </div>
                 )
             },
             {
-                title: 'Proses Absensi Harian (Mobile Friendly)',
+                title: 'Alur Input Presensi Harian & Multi-Sesi (Mobile Friendly)',
                 content: (
-                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 bg-gray-50 p-2 rounded">
-                        <li>Buka menu <strong>Absensi</strong>.</li>
-                        <li>Klik panel <strong>Pilih kelas, rombel, dan tanggal</strong> untuk membuka drawer pengaturan sesi absensi.</li>
-                        <li>Pilih Jenjang, Kelas, Rombel, dan Tanggal (tanggal bisa mundur/maju).</li>
-                        <li>Klik tombol <strong>"Lanjut"</strong>.</li>
-                        <li>Tips Cepat: Klik tombol <strong>"Tandai Semua Hadir"</strong> di pojok kanan atas. Semua status santri akan berubah menjadi (H).</li>
-                        <li>Ubah status santri yang tidak hadir (Sakit/Izin/Alpha) dengan mengklik tombol huruf di sebelah namanya.</li>
-                        <li>Isi keterangan jika status santri <strong>bukan Hadir</strong>.</li>
-                        <li>Klik <strong>Simpan Data Absensi</strong> di bagian bawah.</li>
-                    </ol>
+                    <div className="space-y-2 text-sm text-gray-700">
+                        <p>
+                            Mendukung multi-sesi harian (KBM Pagi, KBM Siang, Sore / Madrasah Diniyah, Halaqah Qur'an Malam, Subuh, dan Sholat Fardhu Berjamaah) dengan langkah efisien:
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <li>Buka menu <strong>Absensi</strong> &gt; Tab <strong>Input Harian</strong>.</li>
+                            <li>Tentukan Jenjang, Kelas, Rombel, Tanggal, dan Sesi Kehadiran.</li>
+                            <li><strong>Pintasan Cepat:</strong> Klik tombol <em>"Tandai Semua Hadir"</em> di pojok atas untuk mengisi status Hadir (H) ke semua santri sekaligus.</li>
+                            <li>Ubah status santri yang berhalangan hadir dengan mengklik tombol huruf di sebelah nama (S = Sakit, I = Izin, A = Alpha).</li>
+                            <li><strong>Catatan Alasan Wajib:</strong> Untuk status non-Hadir (S/I/A), isi kolom keterangan alasan untuk akuntabilitas.</li>
+                            <li><strong>Early Warning System:</strong> Santri dengan Alpha ≥ 3 atau kehadiran &lt; 80% akan ditandai dengan banner kuning/merah disertai tombol langsung untuk membuat sesi BK Konseling atau mengirim WhatsApp ke wali santri.</li>
+                            <li><strong>Simpan &amp; Lanjut:</strong> Klik <em>"Simpan Data Absensi"</em> atau gunakan <em>"Simpan &amp; Tanggal Berikutnya"</em> untuk mempercepat penginputan presensi secara beruntun.</li>
+                            <li><strong>Impor Massal Excel:</strong> Klik tombol <em>"Impor Excel"</em> di header halaman untuk mengunggah rekap presensi dari lembar kerja spreadsheet dengan validasi NIS dan rombel otomatis.</li>
+                        </ol>
+                    </div>
                 )
             },
             {
-                title: 'Rekap, Export Excel & Cetak PDF',
+                title: 'Izin & Dispensasi Massal (Multi-Hari & Multi-Santri)',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Masuk ke tab <strong>Rekap & Laporan</strong> di menu Absensi. Pilih Rombel, Bulan, dan Tahun.</li>
-                        <li>Sistem akan menampilkan tabel matriks kehadiran tanggal 1-31 beserta persentase.</li>
-                        <li>Klik tombol <strong>Export</strong> (Pojok Kanan Atas) untuk opsi lanjutan:
-                             <ul className="list-disc pl-4 mt-1 border-l-2 border-teal-200">
-                                <li><strong>Download PDF:</strong> Menghasilkan file PDF digital yang sangat rapi (High Quality/Vector), lengkap dengan Kop Surat resmi.</li>
-                                <li><strong>Excel (.xlsx):</strong> Mengunduh data mentah untuk diolah lebih lanjut di Microsoft Excel.</li>
-                             </ul>
-                        </li>
-                    </ul>
+                    <div className="space-y-2 text-sm text-gray-700">
+                        <p>
+                            Gunakan tab <strong>Izin &amp; Dispensasi</strong> saat santri berhalangan hadir lebih dari 1 hari atau perizinan rombongan:
+                        </p>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-600">
+                            <li><strong>Dispensasi Rentang Tanggal:</strong> Memungkinkan pemberian izin/sakit sekaligus untuk beberapa hari ke depan tanpa harus menginput satu per satu hari secara manual.</li>
+                            <li><strong>Pemberian Massal ke Banyak Santri:</strong> Pilih beberapa santri sekaligus (misalnya delegasi lomba MQK/Pospeda, santri isolasi kesehatan di asrama, atau santri izin pulang).</li>
+                            <li><strong>Nomor Surat Disposisi:</strong> Otomatis menghasilkan dan merekam nomor surat dispensasi resmi pada catatan absensi santri.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: 'Surat Peringatan (SP 1, SP 2, SP 3, Panggilan Wali) & Konseling BK',
+                content: (
+                    <div className="space-y-2 text-sm text-gray-700">
+                        <p>
+                            Terintegrasi penuh untuk pembinaan kedisiplinan dan penanganan santri bermasalah:
+                        </p>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-600">
+                            <li><strong>Klasifikasi Otomatis:</strong> Sistem mengelompokkan santri yang masuk kriteria SP 1 (Alpha 3-4 hari), SP 2 (Alpha 5-6 hari), SP 3 (Alpha ≥ 7 hari), dan Surat Pemanggilan Orang Tua.</li>
+                            <li><strong>Generator Dokumen Resmi:</strong> Dokumen surat otomatis memuat kop resmi pondok, nomor surat dinamis, biodata santri, rincian tanggal mangkir, kolom tanda tangan wali kelas &amp; pimpinan, serta barcode verifikasi keaslian surat.</li>
+                            <li><strong>Ekspor Dokumen &amp; Simpan ke Arsip:</strong> Surat dapat dicetak langsung, diunduh sebagai file Microsoft Word (.doc), dan disimpan langsung ke database <strong>Arsip Surat Resmi</strong> aplikasi melalui tombol <em>"Simpan ke Arsip"</em>.</li>
+                            <li><strong>Bimbingan Konseling (BK):</strong> Klik tombol <em>"Jadwalkan Konseling BK"</em> untuk mencatat riwayat konsultasi, keluhan, penanganan, dan komitmen santri di database konseling (<code>db.bkSessions</code>).</li>
+                            <li><strong>WhatsApp Notifikasi Wali:</strong> Kirimkan pesan resmi evaluasi kehadiran santri langsung ke nomor orang tua/wali via WhatsApp Web/Desktop.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: 'Kalender Kehadiran, Analitik Komparasi Rombel, & Rekap Matriks 1-31',
+                content: (
+                    <div className="space-y-2 text-sm text-gray-700">
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-600">
+                            <li><strong>Heatmap Kalender:</strong> Visualisasi kehadiran bulanan dengan indikator warna (Hijau: Kehadiran tinggi, Kuning: Sedang, Merah: Rendah).</li>
+                            <li><strong>Komparasi Rombel:</strong> Perbandingan persentase kedisiplinan antar kelas/halaqah untuk bahan evaluasi wali kelas dan pimpinan.</li>
+                            <li><strong>Segmentasi Santri:</strong> Filter analitik berdasarkan status Mukim (Mondok) dan Non-Mukim (Laju).</li>
+                            <li><strong>Matriks Presensi 1-31:</strong> Format tabel absensi konvensional tanggal 1 hingga 31 lengkap dengan total Hadir, Sakit, Izin, Alpha, dan persentase kehadiran per santri.</li>
+                            <li><strong>Ekspor Fleksibel:</strong> Unduh berkas format Excel (.xlsx) untuk laporan dinas/Kemenag, atau cetak lembar PDF digital ber-kop resmi pondok pesantren.</li>
+                        </ul>
+                    </div>
                 )
             }
         ]

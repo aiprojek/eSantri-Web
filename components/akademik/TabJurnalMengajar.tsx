@@ -8,6 +8,7 @@ import { id } from 'date-fns/locale';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from '../../utils/lazyClientLibs';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
+import { JurnalMengajarModal } from './modals/JurnalMengajarModal';
 
 export const TabJurnalMengajar: React.FC = () => {
     const { settings, showConfirmation, showToast, currentUser } = useAppContext();
@@ -28,7 +29,9 @@ export const TabJurnalMengajar: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [isInputModalOpen, setIsInputModalOpen] = useState(false);
 
+    const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write' || currentUser?.permissions?.absensi === 'write';
     const canDelete = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
     const availableKelas = useMemo(() => (
         filterJenjangId ? settings.kelas.filter(k => k.jenjangId === filterJenjangId) : settings.kelas
@@ -59,7 +62,7 @@ export const TabJurnalMengajar: React.FC = () => {
         const source = activeJenjangIdForMapel
             ? settings.mataPelajaran.filter(m => m.jenjangId === activeJenjangIdForMapel)
             : settings.mataPelajaran;
-        return source.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+        return [...source].sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
     }, [settings.mataPelajaran, activeJenjangIdForMapel]);
     const availableEkstraForFilter = useMemo(() => {
         const values = new Set<string>();
@@ -345,10 +348,20 @@ export const TabJurnalMengajar: React.FC = () => {
             <div className="bg-teal-50 border border-teal-100 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h2 className="text-xl font-bold text-teal-800 flex items-center gap-2">
-                        <i className="bi bi-journal-text"></i> Monitoring Jurnal Mengajar
+                        <i className="bi bi-journal-text"></i> Jurnal Mengajar
                     </h2>
-                    <p className="text-sm text-teal-600">Lihat dan awasi kegiatan belajar mengajar harian.</p>
+                    <p className="text-sm text-teal-600">Catat dan pantau log kegiatan belajar mengajar (KBM) harian.</p>
                 </div>
+                {canWrite && (
+                    <button
+                        type="button"
+                        onClick={() => setIsInputModalOpen(true)}
+                        className="w-full md:w-auto px-4 py-2.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white rounded-xl text-sm font-bold shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                        <i className="bi bi-plus-circle-fill text-base"></i>
+                        <span>+ Isi Jurnal Mengajar</span>
+                    </button>
+                )}
             </div>
 
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
@@ -750,6 +763,14 @@ export const TabJurnalMengajar: React.FC = () => {
                     <p>Gunakan Jurnal Mengajar untuk memantau progres kurikulum secara real-time. Anda juga dapat mendiskusikan catatan kejadian khusus dengan guru terkait melalui menu Pesan atau saat evaluasi mingguan.</p>
                 </div>
             </div>
+
+            {/* Modal Input Jurnal */}
+            <JurnalMengajarModal
+                isOpen={isInputModalOpen}
+                onClose={() => setIsInputModalOpen(false)}
+                rombelId={filterRombelId || (settings.rombel[0]?.id ?? 0)}
+                tanggal={filterDateTo || todayStr}
+            />
         </div>
     );
 };

@@ -67,6 +67,7 @@ export const useReportConfig = (
     const [cardSignatoryId, setCardSignatoryId] = useState<string>('');
     const [cardShowQRCode, setCardShowQRCode] = useState<boolean>(false);
     const [cardQRCodeType, setCardQRCodeType] = useState<'qr' | 'barcode' | 'both'>('qr');
+    const [cardQRPlacement, setCardQRPlacement] = useState<'replace_photo' | 'with_photo'>('with_photo');
     const [cardRulesFontSize, setCardRulesFontSize] = useState<'auto' | 'small' | 'normal' | 'large'>('auto');
     const [cardRulesCustomColor, setCardRulesCustomColor] = useState<string>('');
     
@@ -114,6 +115,15 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
     const [rombelVisibleColumns, setRombelVisibleColumns] = useState<string[]>([
         'no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat'
     ]);
+    const [rombelTitle, setRombelTitle] = useState<string>('DAFTAR SANTRI');
+    const [rombelGrouping, setRombelGrouping] = useState<'rombel' | 'kelas' | 'jenjang' | 'jenisSantri' | 'none'>('rombel');
+    const [showRombelStats, setShowRombelStats] = useState<boolean>(true);
+    const [rombelShowSignatures, setRombelShowSignatures] = useState<boolean>(true);
+    const [rombelSignatory1Title, setRombelSignatory1Title] = useState<string>('Wali Kelas');
+    const [rombelSignatory1Id, setRombelSignatory1Id] = useState<string>('');
+    const [rombelSignatory2Title, setRombelSignatory2Title] = useState<string>('Kepala Madrasah / Mudir');
+    const [rombelSignatory2Id, setRombelSignatory2Id] = useState<string>('');
+    const [rombelOrientation, setRombelOrientation] = useState<'auto' | 'portrait' | 'landscape'>('auto');
     const [tahfizhStartDate, setTahfizhStartDate] = useState<string>(mutasiStartDate);
     const [tahfizhEndDate, setTahfizhEndDate] = useState<string>(mutasiEndDate);
     const [tahfizhTipeFilter, setTahfizhTipeFilter] = useState<string[]>(['Ziyadah', 'Murojaah', "Tasmi'", 'Ujian Hafalan']);
@@ -171,6 +181,15 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
         setLabelHeight(3.2);
         setLabelFontSize(10);
         setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat']);
+        setRombelTitle('DAFTAR SANTRI');
+        setRombelGrouping('rombel');
+        setShowRombelStats(true);
+        setRombelShowSignatures(true);
+        setRombelSignatory1Title('Wali Kelas');
+        setRombelSignatory1Id('');
+        setRombelSignatory2Title('Kepala Madrasah / Mudir');
+        setRombelSignatory2Id('');
+        setRombelOrientation('auto');
     }, [defaultAcademicYear]);
 
     const canGenerate = useMemo(() => {
@@ -269,6 +288,7 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             cardSignatoryId, setCardSignatoryId,
             cardShowQRCode, setCardShowQRCode,
             cardQRCodeType, setCardQRCodeType,
+            cardQRPlacement, setCardQRPlacement,
             agendaKedatangan, setAgendaKedatangan,
             semester, setSemester,
             tahunAjaran, setTahunAjaran,
@@ -301,6 +321,15 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             bkStartDate, setBkStartDate,
             bkEndDate, setBkEndDate,
             rombelVisibleColumns, setRombelVisibleColumns,
+            rombelTitle, setRombelTitle,
+            rombelGrouping, setRombelGrouping,
+            showRombelStats, setShowRombelStats,
+            rombelShowSignatures, setRombelShowSignatures,
+            rombelSignatory1Title, setRombelSignatory1Title,
+            rombelSignatory1Id, setRombelSignatory1Id,
+            rombelSignatory2Title, setRombelSignatory2Title,
+            rombelSignatory2Id, setRombelSignatory2Id,
+            rombelOrientation, setRombelOrientation,
             tahfizhStartDate, setTahfizhStartDate,
             tahfizhEndDate, setTahfizhEndDate,
             tahfizhTipeFilter, setTahfizhTipeFilter,

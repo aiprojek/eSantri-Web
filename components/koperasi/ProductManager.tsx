@@ -845,7 +845,7 @@ export const ProductManager: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {products.sort((a,b) => a.nama.localeCompare(b.nama)).map(p => {
+                                    {[...products].sort((a,b) => a.nama.localeCompare(b.nama)).map(p => {
                                         const fisik = opnameData[p.id] !== undefined ? opnameData[p.id] : p.stok;
                                         const diff = fisik - p.stok;
                                         const isChanged = diff !== 0;

@@ -437,9 +437,6 @@ export const TahfizhInput: React.FC = () => {
                     >
                         <i className="bi bi-table"></i>
                         <span>Tabel Cepat Halaqah</span>
-                        <span className="text-[10px] bg-amber-400 text-amber-950 px-1.5 py-0.5 rounded-full uppercase font-black tracking-wider">
-                            Baru
-                        </span>
                     </button>
                 </div>
 

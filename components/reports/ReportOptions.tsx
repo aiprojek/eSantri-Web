@@ -468,30 +468,46 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                                 className="w-4 h-4 text-teal-600 rounded"
                             />
                             <label htmlFor="show-qrcode" className="ml-2 text-sm font-medium text-gray-700">
-                                Tampilkan QR Code / Barcode NIS
+                                Tampilkan QR Code NIS
                             </label>
                         </div>
                         <p className="text-xs text-gray-500 mb-3">
-                            QR Code/Barcode ini bisa digunakan untuk absensi kelas, pembayaran koprasi, dan tarik tunai.
+                            QR Code diletakkan pada muka depan kartu santri untuk absensi, perizinan, dan transaksi santri.
                         </p>
                         {options.cardShowQRCode && (
-                            <div className="space-y-3 pl-6">
-                                <div>
-                                    <label className="block mb-1 text-sm font-medium text-gray-700">Tipe Kode</label>
-                                    <div className="flex gap-4">
-                                        <div className="flex items-center">
-                                            <input type="radio" id="qr-type-qr" value="qr" checked={options.cardQRCodeType === 'qr'} onChange={() => options.setCardQRCodeType('qr')} className="w-4 h-4 text-teal-600"/>
-                                            <label htmlFor="qr-type-qr" className="ml-2 text-sm">QR Code</label>
+                            <div className="space-y-2.5 pl-6 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                <label className="block text-xs font-semibold text-gray-700">Pilihan Penempatan QR Code</label>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <label className="flex items-start gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="cardQRPlacement"
+                                            id="qr-placement-with-photo"
+                                            value="with_photo"
+                                            checked={options.cardQRPlacement !== 'replace_photo'}
+                                            onChange={() => options.setCardQRPlacement('with_photo')}
+                                            className="w-4 h-4 text-teal-600 mt-0.5"
+                                        />
+                                        <div>
+                                            <span className="text-xs font-medium text-gray-800 block">Bersama Foto Santri</span>
+                                            <span className="text-[11px] text-gray-500">QR Code di pojok kanan bawah foto santri</span>
                                         </div>
-                                        <div className="flex items-center">
-                                            <input type="radio" id="qr-type-barcode" value="barcode" checked={options.cardQRCodeType === 'barcode'} onChange={() => options.setCardQRCodeType('barcode')} className="w-4 h-4 text-teal-600"/>
-                                            <label htmlFor="qr-type-barcode" className="ml-2 text-sm">Barcode</label>
+                                    </label>
+                                    <label className="flex items-start gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="cardQRPlacement"
+                                            id="qr-placement-replace-photo"
+                                            value="replace_photo"
+                                            checked={options.cardQRPlacement === 'replace_photo'}
+                                            onChange={() => options.setCardQRPlacement('replace_photo')}
+                                            className="w-4 h-4 text-teal-600 mt-0.5"
+                                        />
+                                        <div>
+                                            <span className="text-xs font-medium text-gray-800 block">Gantikan Foto Santri</span>
+                                            <span className="text-[11px] text-gray-500">Kotak foto santri digantikan QR Code NIS</span>
                                         </div>
-                                        <div className="flex items-center">
-                                            <input type="radio" id="qr-type-both" value="both" checked={options.cardQRCodeType === 'both'} onChange={() => options.setCardQRCodeType('both')} className="w-4 h-4 text-teal-600"/>
-                                            <label htmlFor="qr-type-both" className="ml-2 text-sm">Keduanya</label>
-                                        </div>
-                                    </div>
+                                    </label>
                                 </div>
                             </div>
                         )}
@@ -931,21 +947,173 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
             );
         case ReportType.DaftarRombel:
             return (
-                <div className="pt-4 border-t space-y-4">
-                    <h4 className="text-sm font-semibold text-gray-700">Kolom yang Ditampilkan</h4>
-                    <p className="text-xs text-gray-500">Default mengikuti format laporan saat ini. Minimal pilih 1 kolom selain nomor.</p>
-                    <div className="max-h-64 overflow-y-auto border bg-white p-3 rounded-md space-y-1">
-                        {daftarRombelColumns.map((col) => (
-                            <label key={col.id} className="flex items-center rounded-md border border-gray-200 bg-gray-50 p-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
+                <div className="pt-4 border-t space-y-5">
+                    {/* Judul Laporan Kustom */}
+                    <div>
+                        <label className="block mb-1 text-xs font-semibold text-gray-700">Judul Laporan</label>
+                        <input
+                            type="text"
+                            value={options.rombelTitle || 'DAFTAR SANTRI'}
+                            onChange={e => options.setRombelTitle(e.target.value)}
+                            placeholder="Contoh: DAFTAR SANTRI AKTIF"
+                            className="w-full bg-white border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5"
+                        />
+                    </div>
+
+                    {/* Pengelompokan Data */}
+                    <div>
+                        <label className="block mb-1 text-xs font-semibold text-gray-700">Pengelompokan Santri (Grouping)</label>
+                        <select
+                            value={options.rombelGrouping || 'rombel'}
+                            onChange={e => options.setRombelGrouping(e.target.value as any)}
+                            className="w-full bg-white border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5"
+                        >
+                            <option value="rombel">Per Rombel (Standar - Halaman/Tabel Per Rombel)</option>
+                            <option value="kelas">Per Kelas (Gabungan Semua Rombel dalam Kelas)</option>
+                            <option value="jenjang">Per Jenjang (Gabungan Semua Santri dalam Jenjang)</option>
+                            <option value="jenisSantri">Per Jenis Santri (Mondok - Baru, Mondok - Pindahan, Laju - Baru, Laju - Pindahan)</option>
+                            <option value="none">Tanpa Pengelompokan (Satu Daftar Rata Terurut)</option>
+                        </select>
+                    </div>
+
+                    {/* Orientasi Kertas */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block mb-1 text-xs font-semibold text-gray-700">Orientasi Kertas</label>
+                            <select
+                                value={options.rombelOrientation || 'auto'}
+                                onChange={e => options.setRombelOrientation(e.target.value as any)}
+                                className="w-full bg-white border border-gray-300 text-gray-900 text-sm rounded-lg p-2"
+                            >
+                                <option value="auto">Otomatis (Sesuai Jumlah Kolom)</option>
+                                <option value="portrait">Tegak (Portrait)</option>
+                                <option value="landscape">Memanjang (Landscape)</option>
+                            </select>
+                        </div>
+                        <div className="flex flex-col justify-end">
+                            <label className="flex items-center gap-2 p-2 bg-gray-50 border rounded-lg cursor-pointer hover:bg-gray-100 text-xs font-medium text-gray-700">
                                 <input
                                     type="checkbox"
-                                    checked={options.rombelVisibleColumns.includes(col.id)}
-                                    onChange={() => handleRombelColumnToggle(col.id)}
-                                    className="mr-2 h-4 w-4 text-teal-600"
+                                    checked={options.showRombelStats ?? true}
+                                    onChange={e => options.setShowRombelStats(e.target.checked)}
+                                    className="h-4 w-4 text-teal-600 rounded"
                                 />
-                                {col.label}
+                                Ringkasan Statistik Santri
                             </label>
-                        ))}
+                        </div>
+                    </div>
+
+                    {/* Kolom yang Ditampilkan & Presets */}
+                    <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                            <h4 className="text-xs font-semibold text-gray-700">Pilih Kolom Tabel ({options.rombelVisibleColumns.length} dipilih)</h4>
+                        </div>
+
+                        {/* Presets Kolom Cepat */}
+                        <div className="flex flex-wrap gap-1.5 mb-2.5">
+                            <button
+                                type="button"
+                                onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat'])}
+                                className="text-[11px] px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 font-medium"
+                            >
+                                Standar (Data Pokok)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'nisn', 'nik', 'namaLengkap', 'lp', 'ttl', 'jenjang', 'kelas', 'rombel', 'jenisSantri', 'status', 'wali', 'telepon', 'alamat'])}
+                                className="text-[11px] px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 font-medium"
+                            >
+                                Lengkap (Akademik & Domisili)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'ayah', 'ibu', 'wali', 'teleponAyah', 'teleponIbu', 'teleponWali', 'alamat'])}
+                                className="text-[11px] px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100 font-medium"
+                            >
+                                Kontak Wali
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => options.setRombelVisibleColumns(daftarRombelColumns.map(c => c.id))}
+                                className="text-[11px] px-2 py-1 bg-gray-100 text-gray-700 border border-gray-200 rounded hover:bg-gray-200"
+                            >
+                                Pilih Semua
+                            </button>
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto border bg-white p-2.5 rounded-lg space-y-1 divide-y divide-gray-100">
+                            {daftarRombelColumns.map((col) => (
+                                <label key={col.id} className="flex items-center p-1.5 text-xs text-gray-700 hover:bg-teal-50 rounded cursor-pointer transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={options.rombelVisibleColumns.includes(col.id)}
+                                        onChange={() => handleRombelColumnToggle(col.id)}
+                                        className="mr-2 h-4 w-4 text-teal-600 rounded"
+                                    />
+                                    <span className={options.rombelVisibleColumns.includes(col.id) ? "font-medium text-teal-900" : "text-gray-600"}>
+                                        {col.label}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Pengaturan Tanda Tangan */}
+                    <div className="pt-3 border-t space-y-3">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={options.rombelShowSignatures ?? true}
+                                onChange={e => options.setRombelShowSignatures(e.target.checked)}
+                                className="h-4 w-4 text-teal-600 rounded"
+                            />
+                            Tampilkan Kolom Tanda Tangan Resmi
+                        </label>
+
+                        {(options.rombelShowSignatures ?? true) && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6 border-l-2 border-teal-200 bg-gray-50/50 p-2.5 rounded-r-lg">
+                                <div>
+                                    <label className="block mb-1 text-[11px] font-medium text-gray-600">Jabatan Penandatangan 1</label>
+                                    <input
+                                        type="text"
+                                        value={options.rombelSignatory1Title || 'Wali Kelas'}
+                                        onChange={e => options.setRombelSignatory1Title(e.target.value)}
+                                        placeholder="Wali Kelas"
+                                        className="w-full bg-white border border-gray-300 text-xs rounded p-2 mb-1.5"
+                                    />
+                                    <select
+                                        value={options.rombelSignatory1Id || ''}
+                                        onChange={e => options.setRombelSignatory1Id(e.target.value)}
+                                        className="w-full bg-white border border-gray-300 text-xs rounded p-2"
+                                    >
+                                        <option value="">-- Otomatis Wali Kelas Terkait --</option>
+                                        {settings.tenagaPengajar.map(tp => (
+                                            <option key={tp.id} value={tp.id}>{tp.nama}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-[11px] font-medium text-gray-600">Jabatan Penandatangan 2</label>
+                                    <input
+                                        type="text"
+                                        value={options.rombelSignatory2Title || 'Kepala Madrasah / Mudir'}
+                                        onChange={e => options.setRombelSignatory2Title(e.target.value)}
+                                        placeholder="Kepala Madrasah"
+                                        className="w-full bg-white border border-gray-300 text-xs rounded p-2 mb-1.5"
+                                    />
+                                    <select
+                                        value={options.rombelSignatory2Id || ''}
+                                        onChange={e => options.setRombelSignatory2Id(e.target.value)}
+                                        className="w-full bg-white border border-gray-300 text-xs rounded p-2"
+                                    >
+                                        <option value="">-- Mudir / Pimpinan Utama --</option>
+                                        {settings.tenagaPengajar.map(tp => (
+                                            <option key={tp.id} value={tp.id}>{tp.nama}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             );

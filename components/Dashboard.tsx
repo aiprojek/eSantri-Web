@@ -247,7 +247,7 @@ const Dashboard: React.FC<DashboardProps> = ({ navigateTo }) => {
                     onChange={setActiveTab}
                     tabs={[
                         { value: 'ikhtisar', label: 'Ikhtisar Umum', icon: 'bi-grid-fill' },
-                        { value: 'analitik', label: 'Analitik Strategis', icon: 'bi-graph-up-arrow', badge: <span className="rounded-full border border-teal-100 bg-teal-50 px-1.5 py-0.5 text-[10px] text-teal-700">Pro</span> },
+                        { value: 'analitik', label: 'Analitik Strategis', icon: 'bi-graph-up-arrow' },
                     ]}
                 />
             }

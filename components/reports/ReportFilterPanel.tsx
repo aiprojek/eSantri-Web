@@ -23,6 +23,8 @@ interface ReportFilterPanelProps {
         tahunAjaran: string;
         status: string;
         gender: string;
+        jenisSantri?: string;
+        searchQuery?: string;
         gedungId: string;
         provinsi: string;
         kabupaten: string;
@@ -91,6 +93,31 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                         ) : (
                             <>
                                 <div className="grid grid-cols-1 gap-3">
+                                    {/* Search Query */}
+                                    <div>
+                                        <label className="block mb-1 text-xs font-medium text-gray-700">Cari Santri (Nama / NIS)</label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={filters.searchQuery || ''}
+                                                onChange={e => onFilterChange('searchQuery', e.target.value)}
+                                                placeholder="Ketik nama atau NIS..."
+                                                className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg pl-8 pr-8 p-2"
+                                            />
+                                            <i className="bi bi-search absolute left-2.5 top-2.5 text-gray-400 text-xs"></i>
+                                            {filters.searchQuery && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onFilterChange('searchQuery', '')}
+                                                    className="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 text-sm"
+                                                    title="Hapus pencarian"
+                                                >
+                                                    <i className="bi bi-x-circle-fill"></i>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label className="block mb-1 text-xs font-medium text-gray-700">Jenjang</label>
                                         <select value={filters.jenjangId} onChange={e => onFilterChange('jenjangId', e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5">
@@ -133,6 +160,22 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                                                 <option value="">Semua</option><option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option>
                                             </select>
                                         </div>
+                                        <div className="col-span-2">
+                                            <label className="block mb-1 text-xs font-medium text-gray-700">Jenis Santri</label>
+                                            <select value={filters.jenisSantri || ''} onChange={e => onFilterChange('jenisSantri', e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5">
+                                                <option value="">Semua Jenis Santri</option>
+                                                <optgroup label="Kategori Utama">
+                                                    <option value="Mondok">Semua Mondok (Berasrama)</option>
+                                                    <option value="Laju">Semua Laju (Pulang-Pergi / Non-Mukim)</option>
+                                                </optgroup>
+                                                <optgroup label="Opsi Spesifik (Data Santri)">
+                                                    <option value="Mondok - Baru">Mondok - Baru</option>
+                                                    <option value="Mondok - Pindahan">Mondok - Pindahan</option>
+                                                    <option value="Laju - Baru">Laju - Baru</option>
+                                                    <option value="Laju - Pindahan">Laju - Pindahan</option>
+                                                </optgroup>
+                                            </select>
+                                        </div>
                                     </div>
                                     {/* Sorting */}
                                     <div className="pt-2 border-t mt-2">
@@ -141,10 +184,12 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                                             <select value={filters.sortBy} onChange={e => onFilterChange('sortBy', e.target.value)} className="w-2/3 bg-white border border-gray-300 text-xs rounded-lg p-2">
                                                 <option value="namaLengkap">Nama Lengkap</option>
                                                 <option value="nis">NIS</option>
+                                                <option value="nisn">NISN</option>
+                                                <option value="tanggalMasuk">Tanggal Masuk</option>
                                             </select>
                                             <select value={filters.sortOrder} onChange={e => onFilterChange('sortOrder', e.target.value)} className="w-1/3 bg-white border border-gray-300 text-xs rounded-lg p-2">
-                                                <option value="asc">A-Z</option>
-                                                <option value="desc">Z-A</option>
+                                                <option value="asc">A-Z / Lama-Baru</option>
+                                                <option value="desc">Z-A / Baru-Lama</option>
                                             </select>
                                         </div>
                                     </div>

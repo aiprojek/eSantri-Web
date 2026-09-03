@@ -408,12 +408,16 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
     };
 
     const handlePrintRapor = () => {
-        printToPdfNative('tahfizh-rapor-preview', `Rapor_Tahfizh_${raporSemester}_${santri.namaLengkap.replace(/\s+/g, '_')}`);
+        printToPdfNative('tahfizh-rapor-print-clean', `Rapor_Tahfizh_${raporSemester}_${santri.namaLengkap.replace(/\s+/g, '_')}`, {
+            orientation: 'portrait'
+        });
     };
 
     const handlePrintSyahadah = () => {
         const titleClean = getFinalDocTitle().replace(/\s+/g, '_');
-        printToPdfNative('tahfizh-syahadah-preview', `${titleClean}_${santri.namaLengkap.replace(/\s+/g, '_')}`);
+        printToPdfNative('tahfizh-syahadah-preview', `${titleClean}_${santri.namaLengkap.replace(/\s+/g, '_')}`, {
+            orientation: 'landscape'
+        });
     };
 
     const handleSendWa = (rec: TahfizhRecord) => {
@@ -1466,7 +1470,7 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                     </button>
                                 </div>
                                 <div className="w-full overflow-x-auto flex justify-center pb-2">
-                                    <div id="tahfizh-rapor-preview" className="shadow-2xl scale-90 sm:scale-100 origin-top bg-white print-portrait">
+                                    <div id="tahfizh-rapor-preview-screen" className="shadow-2xl scale-90 sm:scale-100 origin-top bg-white print-portrait">
                                         <TahfizhSemesterRaporTemplate
                                             santri={santri}
                                             records={records}
@@ -2240,7 +2244,7 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                             endDate={endDate} 
                          />
                     </div>
-                    <div id="tahfizh-rapor-preview" className="w-[21cm]">
+                    <div id="tahfizh-rapor-print-clean" className="w-[21cm]">
                         <TahfizhSemesterRaporTemplate
                             santri={santri}
                             records={records}

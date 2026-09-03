@@ -204,6 +204,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             pembayaranHutang: await db.pembayaranHutang.toArray(),
             warehouses: await db.warehouses.toArray(),
             stockTransfers: await db.stockTransfers.toArray(),
+            digitalAssets: await db.digitalAssets.toArray(),
             
             version: '3.0',
             timestamp: new Date().toISOString(),

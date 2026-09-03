@@ -156,7 +156,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
         return (
             <div 
-                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#FDFBF7] text-gray-900 font-serif relative overflow-hidden flex flex-col justify-between box-border select-none ${pageBreakAfter ? 'break-after-page' : ''}`}
+                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#FDFBF7] text-gray-900 font-serif relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${pageBreakAfter ? 'break-after-page' : ''}`}
                 style={{ fontFamily: "'Cinzel', 'Amiri', 'Georgia', serif" }}
             >
                 {/* Borders */}
@@ -310,7 +310,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
         return (
             <div 
-                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-white text-slate-800 font-sans relative overflow-hidden flex flex-col justify-between box-border select-none ${pageBreakAfter ? 'break-after-page' : ''}`}
+                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-white text-slate-800 font-sans relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${pageBreakAfter ? 'break-after-page' : ''}`}
             >
                 {/* Modern Geometric Border */}
                 <div className="absolute inset-4 border-2 border-blue-900 pointer-events-none"></div>
@@ -464,7 +464,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
         return (
             <div 
-                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#FFFCFA] text-gray-900 font-serif relative overflow-hidden flex flex-col justify-between box-border select-none ${pageBreakAfter ? 'break-after-page' : ''}`}
+                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#FFFCFA] text-gray-900 font-serif relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${pageBreakAfter ? 'break-after-page' : ''}`}
                 style={{ fontFamily: "'Cinzel', 'Amiri', 'Georgia', serif" }}
             >
                 {/* Red & Gold Regal Borders */}
@@ -618,7 +618,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
         return (
             <div 
-                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#0F172A] text-slate-100 font-serif relative overflow-hidden flex flex-col justify-between box-border select-none ${pageBreakAfter ? 'break-after-page' : ''}`}
+                className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#0F172A] text-slate-100 font-serif relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${pageBreakAfter ? 'break-after-page' : ''}`}
                 style={{ fontFamily: "'Cinzel', 'Amiri', 'Georgia', serif" }}
             >
                 {/* Glowing Radial Background */}
@@ -775,7 +775,7 @@ export const TahfizhSyahadahTemplateComponent: React.FC<TahfizhSyahadahTemplateP
 
     return (
         <div 
-            className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#FFFDF5] text-amber-950 font-sans relative overflow-hidden flex flex-col justify-between box-border select-none ${pageBreakAfter ? 'break-after-page' : ''}`}
+            className={`w-[29.7cm] h-[21cm] p-8 mx-auto bg-[#FFFDF5] text-amber-950 font-sans relative overflow-hidden flex flex-col justify-between box-border select-none print-landscape printable-content-wrapper ${pageBreakAfter ? 'break-after-page' : ''}`}
         >
             {/* Playful Colorful Borders */}
             <div className="absolute inset-4 border-4 border-amber-500 rounded-2xl pointer-events-none"></div>

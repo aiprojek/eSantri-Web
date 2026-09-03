@@ -519,12 +519,22 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             </tr>
         );
     } else if (type === 'Rombel') {
-        title = "DAFTAR SANTRI PER ROMBEL";
-        orientation = 'landscape';
+        const customTitle = options.rombelTitle?.trim() || "DAFTAR SANTRI";
+        title = customTitle;
         const defaultColumns = ['no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat'];
         const activeColumns: string[] = (options.rombelVisibleColumns && options.rombelVisibleColumns.length > 0)
             ? options.rombelVisibleColumns
             : defaultColumns;
+            
+        // Calculate orientation
+        if (options.rombelOrientation === 'portrait') {
+            orientation = 'portrait';
+        } else if (options.rombelOrientation === 'landscape') {
+            orientation = 'landscape';
+        } else {
+            orientation = activeColumns.length > 7 ? 'landscape' : 'portrait';
+        }
+
         const getColumnLabel = (id: string) => {
             const labels: Record<string, string> = {
                 no: 'No',
@@ -536,12 +546,12 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                 lp: 'L/P',
                 tempatLahir: 'Tempat Lahir',
                 tanggalLahir: 'Tanggal Lahir',
-                ttl: 'TTL',
+                ttl: 'Tempat, Tgl Lahir',
                 kewarganegaraan: 'Kewarganegaraan',
                 ayah: 'Nama Ayah',
                 ibu: 'Nama Ibu',
                 wali: 'Ayah / Wali / Ibu',
-                telepon: 'No. Telepon Utama',
+                telepon: 'No. Telepon',
                 teleponAyah: 'Telepon Ayah',
                 teleponIbu: 'Telepon Ibu',
                 teleponWali: 'Telepon Wali',
@@ -550,73 +560,65 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                 rombel: 'Rombel',
                 status: 'Status',
                 jenisSantri: 'Jenis Santri',
-                tanggalMasuk: 'Tanggal Masuk',
+                tanggalMasuk: 'Tgl Masuk',
                 alamat: 'Alamat Lengkap',
-                desa: 'Desa/Kelurahan',
+                desa: 'Desa/Kel.',
                 kecamatan: 'Kecamatan',
-                kabupaten: 'Kabupaten/Kota',
+                kabupaten: 'Kab./Kota',
                 provinsi: 'Provinsi',
                 kodePos: 'Kode Pos',
                 sekolahAsal: 'Sekolah Asal',
                 anakKe: 'Anak Ke-',
-                jumlahSaudara: 'Jml. Saudara',
-                tinggiBadan: 'Tinggi (cm)',
-                beratBadan: 'Berat (kg)',
+                jumlahSaudara: 'Jml Sdr',
+                tinggiBadan: 'TB (cm)',
+                beratBadan: 'BB (kg)',
             };
             return labels[id] || id;
         };
+
         const getColumnClass = (id: string) => {
-            // Define explicit widths for ALL columns for consistent table layout
-            const baseClass = 'border border-black p-2';
+            const baseClass = 'border border-black px-2 py-1.5 text-xs';
             const widthMap: Record<string, string> = {
-                no: 'border border-black p-2 text-center w-8',
-                lp: 'border border-black p-2 text-center w-10',
-                nis: 'border border-black p-2 w-20',
-                nisn: 'border border-black p-2 w-20',
-                nik: 'border border-black p-2 w-24',
-                namaLengkap: 'border border-black p-2 w-44',
-                namaHijrah: 'border border-black p-2 w-32',
-                tempatLahir: 'border border-black p-2 w-24',
-                tanggalLahir: 'border border-black p-2 w-28',
-                ttl: 'border border-black p-2 w-44',
-                kewarganegaraan: 'border border-black p-2 w-20',
-                ayah: 'border border-black p-2 w-32',
-                ibu: 'border border-black p-2 w-32',
-                wali: 'border border-black p-2 w-32',
-                telepon: 'border border-black p-2 w-24',
-                teleponAyah: 'border border-black p-2 w-24',
-                teleponIbu: 'border border-black p-2 w-24',
-                teleponWali: 'border border-black p-2 w-24',
-                jenjang: 'border border-black p-2 w-20',
-                kelas: 'border border-black p-2 w-16',
-                rombel: 'border border-black p-2 w-20',
-                status: 'border border-black p-2 w-16',
-                jenisSantri: 'border border-black p-2 w-20',
-                tanggalMasuk: 'border border-black p-2 w-28',
-                alamat: 'border border-black p-2 w-48',
-                desa: 'border border-black p-2 w-24',
-                kecamatan: 'border border-black p-2 w-24',
-                kabupaten: 'border border-black p-2 w-24',
-                provinsi: 'border border-black p-2 w-20',
-                kodePos: 'border border-black p-2 w-16',
-                sekolahAsal: 'border border-black p-2 w-32',
-                anakKe: 'border border-black p-2 w-12',
-                jumlahSaudara: 'border border-black p-2 w-12',
-                tinggiBadan: 'border border-black p-2 w-16',
-                beratBadan: 'border border-black p-2 w-16',
+                no: 'border border-black px-1 py-1.5 text-center w-8',
+                lp: 'border border-black px-1 py-1.5 text-center w-10',
+                nis: 'border border-black px-2 py-1.5 text-center w-20',
+                nisn: 'border border-black px-2 py-1.5 text-center w-24',
+                nik: 'border border-black px-2 py-1.5 text-center w-28',
+                namaLengkap: 'border border-black px-2 py-1.5 font-medium',
+                namaHijrah: 'border border-black px-2 py-1.5',
+                tempatLahir: 'border border-black px-2 py-1.5',
+                tanggalLahir: 'border border-black px-2 py-1.5 text-center',
+                ttl: 'border border-black px-2 py-1.5',
+                kewarganegaraan: 'border border-black px-2 py-1.5 text-center',
+                ayah: 'border border-black px-2 py-1.5',
+                ibu: 'border border-black px-2 py-1.5',
+                wali: 'border border-black px-2 py-1.5',
+                telepon: 'border border-black px-2 py-1.5 text-center',
+                teleponAyah: 'border border-black px-2 py-1.5 text-center',
+                teleponIbu: 'border border-black px-2 py-1.5 text-center',
+                teleponWali: 'border border-black px-2 py-1.5 text-center',
+                jenjang: 'border border-black px-2 py-1.5 text-center',
+                kelas: 'border border-black px-2 py-1.5 text-center',
+                rombel: 'border border-black px-2 py-1.5 text-center',
+                status: 'border border-black px-2 py-1.5 text-center',
+                jenisSantri: 'border border-black px-2 py-1.5 text-center',
+                tanggalMasuk: 'border border-black px-2 py-1.5 text-center',
+                alamat: 'border border-black px-2 py-1.5',
+                desa: 'border border-black px-2 py-1.5',
+                kecamatan: 'border border-black px-2 py-1.5',
+                kabupaten: 'border border-black px-2 py-1.5',
+                provinsi: 'border border-black px-2 py-1.5',
+                kodePos: 'border border-black px-2 py-1.5 text-center',
+                sekolahAsal: 'border border-black px-2 py-1.5',
+                anakKe: 'border border-black px-1 py-1.5 text-center',
+                jumlahSaudara: 'border border-black px-1 py-1.5 text-center',
+                tinggiBadan: 'border border-black px-1 py-1.5 text-center',
+                beratBadan: 'border border-black px-1 py-1.5 text-center',
             };
             return widthMap[id] || baseClass;
         };
-        tableHeader = (
-            <thead className="bg-gray-200">
-                <tr>
-                    {activeColumns.map(col => (
-                        <th key={col} className={getColumnClass(col)}>{getColumnLabel(col)}</th>
-                    ))}
-                </tr>
-            </thead>
-        );
-        tableRow = (s, i) => {
+
+        const renderSingleRow = (s: Santri, i: number) => {
             const currentRombel = settings.rombel.find(r => r.id === s.rombelId);
             const currentKelas = settings.kelas.find(k => k.id === s.kelasId);
             const currentJenjang = settings.jenjang.find(j => j.id === s.jenjangId);
@@ -662,7 +664,7 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             };
             
             return (
-                <tr key={s.id}>
+                <tr key={s.id} className="hover:bg-gray-50/50">
                     {activeColumns.map(col => (
                         <td key={col} className={getColumnClass(col)}>
                             {col === 'namaLengkap' ? (
@@ -680,6 +682,249 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                 </tr>
             );
         };
+
+        const renderTableHeader = () => (
+            <thead className="bg-gray-200 uppercase font-semibold text-xs text-center border-b border-black">
+                <tr>
+                    {activeColumns.map(col => (
+                        <th key={col} className={getColumnClass(col)}>{getColumnLabel(col)}</th>
+                    ))}
+                </tr>
+            </thead>
+        );
+
+        // Grouping logic for Daftar Santri
+        const groupingMode = options.rombelGrouping || 'rombel';
+        let groups: { groupTitle: string; groupMeta: any; items: Santri[] }[] = [];
+
+        if (groupingMode === 'rombel') {
+            const rombelMap = new Map<number, Santri[]>();
+            const unassigned: Santri[] = [];
+            data.forEach(s => {
+                if (s.rombelId) {
+                    const list = rombelMap.get(s.rombelId) || [];
+                    list.push(s);
+                    rombelMap.set(s.rombelId, list);
+                } else {
+                    unassigned.push(s);
+                }
+            });
+
+            rombelMap.forEach((items, rombelId) => {
+                const rombelObj = settings.rombel.find(r => r.id === rombelId);
+                const kelasObj = rombelObj ? settings.kelas.find(k => k.id === rombelObj.kelasId) : undefined;
+                const jenjangObj = kelasObj ? settings.jenjang.find(j => j.id === kelasObj.jenjangId) : undefined;
+                const waliKelasObj = rombelObj?.waliKelasId ? settings.tenagaPengajar.find(tp => tp.id === rombelObj.waliKelasId) : undefined;
+
+                groups.push({
+                    groupTitle: rombelObj?.nama ? `Rombel: ${rombelObj.nama}` : `Rombel ID ${rombelId}`,
+                    groupMeta: {
+                        ...meta,
+                        jenjang: jenjangObj?.nama || meta.jenjang,
+                        kelas: kelasObj?.nama || meta.kelas,
+                        rombel: rombelObj?.nama || meta.rombel,
+                        waliKelas: waliKelasObj?.nama || meta.waliKelas,
+                    },
+                    items
+                });
+            });
+
+            if (unassigned.length > 0) {
+                groups.push({
+                    groupTitle: 'Tanpa Rombel',
+                    groupMeta: meta,
+                    items: unassigned
+                });
+            }
+        } else if (groupingMode === 'kelas') {
+            const kelasMap = new Map<number, Santri[]>();
+            const unassigned: Santri[] = [];
+            data.forEach(s => {
+                if (s.kelasId) {
+                    const list = kelasMap.get(s.kelasId) || [];
+                    list.push(s);
+                    kelasMap.set(s.kelasId, list);
+                } else {
+                    unassigned.push(s);
+                }
+            });
+
+            kelasMap.forEach((items, kelasId) => {
+                const kelasObj = settings.kelas.find(k => k.id === kelasId);
+                const jenjangObj = kelasObj ? settings.jenjang.find(j => j.id === kelasObj.jenjangId) : undefined;
+                groups.push({
+                    groupTitle: kelasObj?.nama ? `Kelas: ${kelasObj.nama}` : `Kelas ID ${kelasId}`,
+                    groupMeta: {
+                        ...meta,
+                        jenjang: jenjangObj?.nama || meta.jenjang,
+                        kelas: kelasObj?.nama || meta.kelas,
+                        rombel: 'Semua Rombel',
+                    },
+                    items
+                });
+            });
+
+            if (unassigned.length > 0) {
+                groups.push({ groupTitle: 'Tanpa Kelas', groupMeta: meta, items: unassigned });
+            }
+        } else if (groupingMode === 'jenjang') {
+            const jenjangMap = new Map<number, Santri[]>();
+            const unassigned: Santri[] = [];
+            data.forEach(s => {
+                if (s.jenjangId) {
+                    const list = jenjangMap.get(s.jenjangId) || [];
+                    list.push(s);
+                    jenjangMap.set(s.jenjangId, list);
+                } else {
+                    unassigned.push(s);
+                }
+            });
+
+            jenjangMap.forEach((items, jenjangId) => {
+                const jenjangObj = settings.jenjang.find(j => j.id === jenjangId);
+                groups.push({
+                    groupTitle: jenjangObj?.nama ? `Jenjang: ${jenjangObj.nama}` : `Jenjang ID ${jenjangId}`,
+                    groupMeta: {
+                        ...meta,
+                        jenjang: jenjangObj?.nama || meta.jenjang,
+                        kelas: 'Semua Kelas',
+                        rombel: 'Semua Rombel',
+                    },
+                    items
+                });
+            });
+
+            if (unassigned.length > 0) {
+                groups.push({ groupTitle: 'Tanpa Jenjang', groupMeta: meta, items: unassigned });
+            }
+        } else if (groupingMode === 'jenisSantri') {
+            const jenisMap = new Map<string, Santri[]>();
+            data.forEach(s => {
+                const jenis = s.jenisSantri || 'Lainnya';
+                const list = jenisMap.get(jenis) || [];
+                list.push(s);
+                jenisMap.set(jenis, list);
+            });
+
+            jenisMap.forEach((items, jenisName) => {
+                groups.push({
+                    groupTitle: `Jenis Santri: ${jenisName}`,
+                    groupMeta: { ...meta, agenda: `Kategori ${jenisName}` },
+                    items
+                });
+            });
+        } else {
+            // No grouping (flat list)
+            groups = [{
+                groupTitle: '',
+                groupMeta: meta,
+                items: data
+            }];
+        }
+
+        if (groups.length === 0) {
+            groups = [{ groupTitle: '', groupMeta: meta, items: [] }];
+        }
+
+        // Return formatted report pages for each group
+        return groups.map((group) => {
+            const totalCount = group.items.length;
+            const lCount = group.items.filter(s => s.jenisKelamin === 'Laki-laki').length;
+            const pCount = group.items.filter(s => s.jenisKelamin === 'Perempuan').length;
+            
+            // Flexible matching for Mondok (Mukim/Asrama) vs Laju (Non-Mukim/Pulang Pergi)
+            const isMondok = (js?: string) => js ? (js.toLowerCase().includes('mondok') || js.toLowerCase().includes('mukim') || js.toLowerCase().includes('asrama')) : false;
+            const isLaju = (js?: string) => js ? (js.toLowerCase().includes('laju') || js.toLowerCase().includes('non') || js.toLowerCase().includes('pulang')) : false;
+
+            const mondokCount = group.items.filter(s => isMondok(s.jenisSantri)).length;
+            const lajuCount = group.items.filter(s => isLaju(s.jenisSantri)).length;
+
+            const sig1Title = options.rombelSignatory1Title || 'Wali Kelas';
+            let sig1Name = '...........................................';
+            if (options.rombelSignatory1Id) {
+                const found = settings.tenagaPengajar.find(t => t.id === Number(options.rombelSignatory1Id));
+                if (found) sig1Name = found.nama;
+            } else if (group.groupMeta.waliKelas && group.groupMeta.waliKelas !== '-') {
+                sig1Name = group.groupMeta.waliKelas;
+            }
+
+            const sig2Title = options.rombelSignatory2Title || 'Kepala Madrasah / Mudir';
+            let sig2Name = '...........................................';
+            if (options.rombelSignatory2Id) {
+                const found = settings.tenagaPengajar.find(t => t.id === Number(options.rombelSignatory2Id));
+                if (found) sig2Name = found.nama;
+            } else {
+                const pimpinan = settings.tenagaPengajar.find(t => t.riwayatJabatan?.some(rj => rj.jabatan?.toLowerCase().includes('mudir') || rj.jabatan?.toLowerCase().includes('kepala') || rj.jabatan?.toLowerCase().includes('pimpinan')));
+                if (pimpinan) sig2Name = pimpinan.nama;
+            }
+
+            return {
+                content: (
+                    <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '9.5pt' }}>
+                        <div>
+                            <AcademicHeader settings={settings} title={title} meta={group.groupMeta} />
+
+                            {/* Optional Group Title header if multiple groups */}
+                            {groups.length > 1 && group.groupTitle && (
+                                <div className="mb-2 px-3 py-1 bg-gray-100 border border-gray-300 rounded font-bold text-sm text-gray-800 flex justify-between items-center">
+                                    <span>{group.groupTitle}</span>
+                                    <span className="text-xs font-normal text-gray-600">Total: {totalCount} Santri</span>
+                                </div>
+                            )}
+
+                            {/* Summary Statistics Bar */}
+                            {(options.showRombelStats ?? true) && (
+                                <div className="mb-3 p-2 bg-gray-50 border border-gray-200 rounded flex flex-wrap items-center justify-between text-xs gap-2">
+                                    <div className="flex items-center gap-4">
+                                        <span><strong>Total:</strong> {totalCount} Santri</span>
+                                        <span><strong>Laki-laki (L):</strong> {lCount}</span>
+                                        <span><strong>Perempuan (P):</strong> {pCount}</span>
+                                    </div>
+                                    <div className="flex items-center gap-4 text-gray-700">
+                                        <span><strong>Mondok (Mukim):</strong> {mondokCount}</span>
+                                        <span><strong>Laju (Non-Mukim):</strong> {lajuCount}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Table */}
+                            <table className="w-full text-left border-collapse border border-black text-xs">
+                                {renderTableHeader()}
+                                <tbody>
+                                    {group.items.length > 0 ? (
+                                        group.items.map((s, i) => renderSingleRow(s, i))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={activeColumns.length} className="text-center py-6 text-gray-400 italic border border-black">
+                                                Tidak ada santri yang terdaftar dalam kelompok ini.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+
+                            {/* Formal Signature Section */}
+                            {(options.rombelShowSignatures ?? true) && (
+                                <div className="mt-8 pt-4 flex justify-between text-center text-xs" style={{ breakInside: 'avoid' }}>
+                                    <div className="w-56">
+                                        <p className="font-medium text-gray-700">Mengetahui,</p>
+                                        <p className="font-semibold text-gray-900 mt-0.5 mb-14">{sig1Title}</p>
+                                        <p className="font-bold underline text-gray-900">{sig1Name}</p>
+                                    </div>
+                                    <div className="w-56">
+                                        <p className="font-medium text-gray-700">Pondok Pesantren, {formatTanggalDokumen(new Date())}</p>
+                                        <p className="font-semibold text-gray-900 mt-0.5 mb-14">{sig2Title}</p>
+                                        <p className="font-bold underline text-gray-900">{sig2Name}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <ReportFooter />
+                    </div>
+                ),
+                orientation
+            };
+        });
     } else if (type === 'Rapor') {
         title = "LEMBAR PENGAMBILAN DAN PENGEMBALIAN RAPOR";
         orientation = 'portrait';

@@ -24,15 +24,36 @@ interface EventModalProps {
     onDelete: (id: number) => Promise<void>;
     eventData: CalendarEvent | null;
     selectedDate?: string;
+    settings: PondokSettings;
 }
 
-const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onUpdate, onDelete, eventData, selectedDate }) => {
-    const { register, handleSubmit, reset, setValue } = useForm<CalendarEvent>();
+const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onUpdate, onDelete, eventData, selectedDate, settings }) => {
+    const { register, handleSubmit, reset, setValue, watch } = useForm<CalendarEvent>();
+    const [selectedJenjang, setSelectedJenjang] = useState<number>(0);
+    const [selectedKelas, setSelectedKelas] = useState<number>(0);
+    const [selectedRombel, setSelectedRombel] = useState<number>(0);
+
+    const availableKelasModal = useMemo(() => {
+        if (!selectedJenjang) return settings.kelas;
+        return settings.kelas.filter(k => k.jenjangId === selectedJenjang);
+    }, [selectedJenjang, settings.kelas]);
+
+    const availableRombelModal = useMemo(() => {
+        if (!selectedKelas) {
+            if (!selectedJenjang) return settings.rombel;
+            const kIds = availableKelasModal.map(k => k.id);
+            return settings.rombel.filter(r => kIds.includes(r.kelasId));
+        }
+        return settings.rombel.filter(r => r.kelasId === selectedKelas);
+    }, [selectedKelas, selectedJenjang, availableKelasModal, settings.rombel]);
 
     React.useEffect(() => {
         if (isOpen) {
             if (eventData) {
                 reset(eventData);
+                setSelectedJenjang(eventData.jenjangId || 0);
+                setSelectedKelas(eventData.kelasId || 0);
+                setSelectedRombel(eventData.rombelId || 0);
             } else {
                 reset({
                     title: '',
@@ -40,17 +61,29 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onUpda
                     endDate: selectedDate || new Date().toISOString().split('T')[0],
                     category: 'Kegiatan',
                     color: 'bg-blue-500',
-                    description: ''
+                    description: '',
+                    jenjangId: undefined,
+                    kelasId: undefined,
+                    rombelId: undefined,
                 });
+                setSelectedJenjang(0);
+                setSelectedKelas(0);
+                setSelectedRombel(0);
             }
         }
     }, [isOpen, eventData, selectedDate, reset]);
 
     const onSubmit = async (data: CalendarEvent) => {
+        const payload: any = {
+            ...data,
+            jenjangId: selectedJenjang || undefined,
+            kelasId: selectedKelas || undefined,
+            rombelId: selectedRombel || undefined,
+        };
         if (eventData?.id) {
-            await onUpdate({ ...data, id: eventData.id });
+            await onUpdate({ ...payload, id: eventData.id });
         } else {
-            await onSave(data);
+            await onSave(payload);
         }
         onClose();
     };
@@ -70,40 +103,96 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onUpda
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[70] flex justify-center items-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
                 <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
-                    <h3 className="text-lg font-bold text-gray-800">{eventData ? 'Edit Agenda' : 'Tambah Agenda'}</h3>
-                    <button onClick={onClose}><i className="bi bi-x-lg"></i></button>
+                    <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <i className="bi bi-calendar-event text-teal-600"></i>
+                        {eventData ? 'Edit Agenda' : 'Tambah Agenda'}
+                    </h3>
+                    <button onClick={onClose}><i className="bi bi-x-lg text-gray-500 hover:text-gray-700"></i></button>
                 </div>
-                <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
+                <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
                     <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Nama Kegiatan</label>
-                        <input type="text" {...register('title', { required: true })} className="w-full border rounded p-2 text-sm" placeholder="Contoh: Ujian Tengah Semester" />
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Nama Kegiatan <span className="text-red-500">*</span></label>
+                        <input type="text" {...register('title', { required: true })} className="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500" placeholder="Contoh: Ujian Akhir Semester / Libur Puasa" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Mulai</label>
-                            <input type="date" {...register('startDate', { required: true })} className="w-full border rounded p-2 text-sm" />
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Mulai <span className="text-red-500">*</span></label>
+                            <input type="date" {...register('startDate', { required: true })} className="w-full border rounded-lg p-2 text-sm" />
                         </div>
                         <div>
-                             <label className="block text-xs font-bold text-gray-700 mb-1">Selesai</label>
-                            <input type="date" {...register('endDate', { required: true })} className="w-full border rounded p-2 text-sm" />
+                             <label className="block text-xs font-bold text-gray-700 mb-1">Selesai <span className="text-red-500">*</span></label>
+                            <input type="date" {...register('endDate', { required: true })} className="w-full border rounded-lg p-2 text-sm" />
                         </div>
                     </div>
+                    
+                    {/* Target Scope: Jenjang, Kelas, Rombel */}
+                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2">
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide">
+                            <i className="bi bi-diagram-3 mr-1 text-teal-600"></i> Target Jenjang / Kelas / Rombel (Opsional)
+                        </label>
+                        <p className="text-[11px] text-gray-500">Biarkan "Umum / Semua" jika agenda berlaku untuk seluruh santri.</p>
+                        <div className="grid grid-cols-3 gap-2">
+                            <div>
+                                <label className="block text-[10px] text-gray-500 mb-0.5">Jenjang</label>
+                                <select 
+                                    value={selectedJenjang} 
+                                    onChange={e => {
+                                        const val = Number(e.target.value);
+                                        setSelectedJenjang(val);
+                                        setSelectedKelas(0);
+                                        setSelectedRombel(0);
+                                    }} 
+                                    className="w-full border rounded-lg p-2 text-xs bg-white"
+                                >
+                                    <option value={0}>Semua Jenjang</option>
+                                    {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-gray-500 mb-0.5">Kelas</label>
+                                <select 
+                                    value={selectedKelas} 
+                                    onChange={e => {
+                                        const val = Number(e.target.value);
+                                        setSelectedKelas(val);
+                                        setSelectedRombel(0);
+                                    }} 
+                                    className="w-full border rounded-lg p-2 text-xs bg-white"
+                                >
+                                    <option value={0}>Semua Kelas</option>
+                                    {availableKelasModal.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-gray-500 mb-0.5">Rombel</label>
+                                <select 
+                                    value={selectedRombel} 
+                                    onChange={e => setSelectedRombel(Number(e.target.value))} 
+                                    className="w-full border rounded-lg p-2 text-xs bg-white"
+                                >
+                                    <option value={0}>Semua Rombel</option>
+                                    {availableRombelModal.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">Kategori</label>
-                            <select {...register('category')} className="w-full border rounded p-2 text-sm">
-                                <option value="Libur">Libur</option>
-                                <option value="Ujian">Ujian</option>
+                            <select {...register('category')} className="w-full border rounded-lg p-2 text-sm bg-white">
                                 <option value="Kegiatan">Kegiatan</option>
+                                <option value="Ujian">Ujian</option>
+                                <option value="Libur">Libur</option>
                                 <option value="Rapat">Rapat</option>
                                 <option value="Lainnya">Lainnya</option>
                             </select>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-700 mb-1">Warna Label</label>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-2 pt-1">
                                 {colors.map(c => (
                                     <button 
                                         key={c.val}
@@ -118,16 +207,16 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onUpda
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">Deskripsi (Opsional)</label>
-                        <textarea {...register('description')} rows={3} className="w-full border rounded p-2 text-sm"></textarea>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Deskripsi & Catatan (Opsional)</label>
+                        <textarea {...register('description')} rows={2} className="w-full border rounded-lg p-2 text-sm" placeholder="Rincian tempat, pakaian, atau instruksi..."></textarea>
                     </div>
                     
                     <div className="pt-4 border-t flex justify-end gap-2">
                         {eventData && (
-                            <button type="button" onClick={() => { if(window.confirm('Hapus kegiatan ini?')) onDelete(eventData.id); onClose(); }} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded text-sm font-medium mr-auto">Hapus</button>
+                            <button type="button" onClick={() => { if(window.confirm('Hapus kegiatan ini?')) onDelete(eventData.id); onClose(); }} className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium mr-auto">Hapus</button>
                         )}
-                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 text-sm">Batal</button>
-                        <button type="submit" className="px-6 py-2 bg-teal-600 text-white rounded text-sm font-bold hover:bg-teal-700">Simpan</button>
+                        <button type="button" onClick={onClose} className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-100 text-sm font-medium">Batal</button>
+                        <button type="submit" className="px-6 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold hover:bg-teal-700 shadow-sm">Simpan</button>
                     </div>
                 </form>
             </div>
@@ -932,8 +1021,61 @@ const Kalender: React.FC = () => {
         }
     }, [primarySystem, hijriAdjustment]);
 
-    // ... (Existing logic for grid generation, header, navigation, event handling remains unchanged)
-    
+    // Filters for Kalender
+    const [filterJenjangId, setFilterJenjangId] = useState<number>(0);
+    const [filterKelasId, setFilterKelasId] = useState<number>(0);
+    const [filterRombelId, setFilterRombelId] = useState<number>(0);
+    const [filterCategory, setFilterCategory] = useState<string>('Semua');
+    const [searchQuery, setSearchQuery] = useState<string>('');
+
+    const availableKelas = useMemo(() => {
+        if (!filterJenjangId) return settings.kelas;
+        return settings.kelas.filter(k => k.jenjangId === filterJenjangId);
+    }, [filterJenjangId, settings.kelas]);
+
+    const availableRombel = useMemo(() => {
+        if (!filterKelasId) {
+            if (!filterJenjangId) return settings.rombel;
+            const kIds = availableKelas.map(k => k.id);
+            return settings.rombel.filter(r => kIds.includes(r.kelasId));
+        }
+        return settings.rombel.filter(r => r.kelasId === filterKelasId);
+    }, [filterKelasId, filterJenjangId, availableKelas, settings.rombel]);
+
+    const isFilterActive = filterJenjangId > 0 || filterKelasId > 0 || filterRombelId > 0 || filterCategory !== 'Semua' || searchQuery.trim().length > 0;
+
+    const resetFilters = () => {
+        setFilterJenjangId(0);
+        setFilterKelasId(0);
+        setFilterRombelId(0);
+        setFilterCategory('Semua');
+        setSearchQuery('');
+    };
+
+    const filteredEvents = useMemo(() => {
+        return events.filter(e => {
+            if (filterJenjangId) {
+                if (e.jenjangId && e.jenjangId !== filterJenjangId) return false;
+            }
+            if (filterKelasId) {
+                if (e.kelasId && e.kelasId !== filterKelasId) return false;
+            }
+            if (filterRombelId) {
+                if (e.rombelId && e.rombelId !== filterRombelId) return false;
+            }
+            if (filterCategory !== 'Semua') {
+                if (e.category !== filterCategory) return false;
+            }
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                const matchTitle = e.title.toLowerCase().includes(q);
+                const matchDesc = e.description?.toLowerCase().includes(q);
+                if (!matchTitle && !matchDesc) return false;
+            }
+            return true;
+        });
+    }, [events, filterJenjangId, filterKelasId, filterRombelId, filterCategory, searchQuery]);
+
     // Grid Generation Logic
     const calendarDays = useMemo(() => {
         const days: { dateObj: Date, masehi: number, hijri: string, hijriDay: string, isFasting?: string, isRamadan?: boolean }[] = [];
@@ -1054,7 +1196,7 @@ const Kalender: React.FC = () => {
         const start = calendarDays[0].dateObj;
         const end = calendarDays[calendarDays.length - 1].dateObj;
         
-        return events.filter(e => {
+        return filteredEvents.filter(e => {
             const eStart = new Date(e.startDate);
             const eEnd = new Date(e.endDate);
             eStart.setHours(0,0,0,0); eEnd.setHours(0,0,0,0); 
@@ -1062,7 +1204,7 @@ const Kalender: React.FC = () => {
             const gridEnd = new Date(end); gridEnd.setHours(0,0,0,0);
             return eStart <= gridEnd && eEnd >= gridStart;
         });
-    }, [events, calendarDays]);
+    }, [filteredEvents, calendarDays]);
 
     const handleSaveEvent = async (data: Omit<CalendarEvent, 'id'>) => {
         if (!canWrite) return;
@@ -1677,12 +1819,12 @@ const Kalender: React.FC = () => {
             />
 
             {activeView === 'kalender' && (
-                <div className="animate-fade-in">
-                    {/* Toolbar */}
-                    <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
+                <div className="animate-fade-in space-y-4">
+                    {/* Toolbar & Actions */}
+                    <div className="flex flex-wrap justify-between items-center gap-3">
                          {/* Toggle Fasting */}
-                         <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border shadow-sm">
-                            <label className="text-sm text-gray-700 font-medium cursor-pointer select-none flex items-center gap-2">
+                         <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-xs">
+                            <label className="text-xs text-gray-700 font-bold cursor-pointer select-none flex items-center gap-2">
                                 <input type="checkbox" checked={showFasting} onChange={e => setShowFasting(e.target.checked)} className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500" />
                                 <i className="bi bi-moon-stars text-teal-600"></i>
                                 Tampilkan Puasa Sunnah
@@ -1690,24 +1832,138 @@ const Kalender: React.FC = () => {
                         </div>
 
                          <div className="flex gap-2 ml-auto">
-                            <button disabled={isExporting} onClick={() => setIsPrintModalOpen(true)} className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-800 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
-                                <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-printer'}`}></i> {isExporting ? 'Memproses...' : 'Cetak'}
+                            <button disabled={isExporting} onClick={() => setIsPrintModalOpen(true)} className="bg-gray-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-gray-900 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed shadow-xs">
+                                <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-printer'}`}></i> {isExporting ? 'Memproses...' : 'Cetak & Export'}
                             </button>
                             {canWrite && (
                                 <div className="flex gap-2">
-                                     <button onClick={() => { setIsBulkModalOpen(true); }} className="bg-teal-50 text-teal-700 border border-teal-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-100 flex items-center gap-2">
-                                        <i className="bi bi-table"></i> Bulk
+                                     <button onClick={() => { setIsBulkModalOpen(true); }} className="bg-teal-50 text-teal-700 border border-teal-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-teal-100 flex items-center gap-2 shadow-xs">
+                                        <i className="bi bi-table"></i> Bulk Agenda
                                     </button>
-                                    <button onClick={() => { setEditingEvent(null); setSelectedDate(''); setIsEventModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700 flex items-center gap-2">
-                                        <i className="bi bi-plus-lg"></i> Agenda
+                                    <button onClick={() => { setEditingEvent(null); setSelectedDate(''); setIsEventModalOpen(true); }} className="bg-teal-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-teal-700 flex items-center gap-2 shadow-xs">
+                                        <i className="bi bi-plus-lg"></i> Tambah Agenda
                                     </button>
                                 </div>
                             )}
                         </div>
                     </div>
+
+                    {/* Filter Panel for Kalender */}
+                    <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-2.5">
+                            <div className="flex items-center gap-2">
+                                <i className="bi bi-funnel-fill text-teal-600 text-sm"></i>
+                                <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">Filter Agenda Kalender</span>
+                                {isFilterActive && (
+                                    <span className="px-2 py-0.5 bg-teal-100 text-teal-800 text-[10px] font-black rounded-full">
+                                        Filter Aktif
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="inline-flex bg-gray-100 p-1 rounded-xl">
+                                    <button 
+                                        onClick={() => setPrimarySystem('Masehi')}
+                                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${primarySystem === 'Masehi' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        Masehi
+                                    </button>
+                                    <button 
+                                        onClick={() => setPrimarySystem('Hijriah')}
+                                        className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${primarySystem === 'Hijriah' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        Hijriah
+                                    </button>
+                                </div>
+                                {isFilterActive && (
+                                    <button 
+                                        onClick={resetFilters} 
+                                        className="text-xs text-red-600 hover:text-red-700 font-bold px-2.5 py-1 rounded-lg hover:bg-red-50 flex items-center gap-1 transition-colors"
+                                    >
+                                        <i className="bi bi-x-circle"></i> Reset Filter
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5">
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Jenjang</label>
+                                <select 
+                                    value={filterJenjangId} 
+                                    onChange={e => {
+                                        setFilterJenjangId(Number(e.target.value));
+                                        setFilterKelasId(0);
+                                        setFilterRombelId(0);
+                                    }}
+                                    className="w-full text-xs font-medium p-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                                >
+                                    <option value={0}>Semua Jenjang</option>
+                                    {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kelas</label>
+                                <select 
+                                    value={filterKelasId} 
+                                    onChange={e => {
+                                        setFilterKelasId(Number(e.target.value));
+                                        setFilterRombelId(0);
+                                    }}
+                                    className="w-full text-xs font-medium p-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                                >
+                                    <option value={0}>Semua Kelas</option>
+                                    {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Rombel</label>
+                                <select 
+                                    value={filterRombelId} 
+                                    onChange={e => setFilterRombelId(Number(e.target.value))}
+                                    className="w-full text-xs font-medium p-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                                >
+                                    <option value={0}>Semua Rombel</option>
+                                    {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Kategori</label>
+                                <select 
+                                    value={filterCategory} 
+                                    onChange={e => setFilterCategory(e.target.value)}
+                                    className="w-full text-xs font-medium p-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                                >
+                                    <option value="Semua">Semua Kategori</option>
+                                    <option value="Kegiatan">Kegiatan</option>
+                                    <option value="Ujian">Ujian</option>
+                                    <option value="Libur">Libur</option>
+                                    <option value="Rapat">Rapat</option>
+                                    <option value="Lainnya">Lainnya</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Cari Kegiatan</label>
+                                <div className="relative">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Ketik judul kegiatan..."
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                        className="w-full text-xs font-medium pl-8 p-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                                    />
+                                    <i className="bi bi-search absolute left-2.5 top-2 text-gray-400 text-xs"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     
                     {showFasting && (
-                        <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded text-sm text-yellow-800 flex items-start gap-2">
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-xl text-xs text-yellow-800 flex items-start gap-2">
                             <i className="bi bi-info-circle-fill mt-0.5"></i>
                             <div>
                                 <strong>Tanbih:</strong> Tanggal Hijriah, Awal Ramadhan, dan Hari Raya dalam kalender ini adalah hasil <em>hisab/estimasi</em> algoritma. 
@@ -1716,35 +1972,18 @@ const Kalender: React.FC = () => {
                         </div>
                     )}
 
-                    <div className="flex justify-end mb-4">
-                        <div className="inline-flex bg-white border rounded-lg p-1 shadow-sm">
-                            <button 
-                                onClick={() => setPrimarySystem('Masehi')}
-                                className={`px-3 py-1 text-xs font-bold rounded ${primarySystem === 'Masehi' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                Masehi
-                            </button>
-                            <button 
-                                onClick={() => setPrimarySystem('Hijriah')}
-                                className={`px-3 py-1 text-xs font-bold rounded ${primarySystem === 'Hijriah' ? 'bg-teal-100 text-teal-700' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                Hijriah
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-                        <div className="flex justify-between items-center p-4 border-b bg-gray-50">
-                            <button onClick={handlePrev} className="p-2 hover:bg-gray-200 rounded-full"><i className="bi bi-chevron-left"></i></button>
+                    <div className="bg-white rounded-2xl shadow-2xs border border-gray-200 overflow-hidden">
+                        <div className="flex justify-between items-center p-4 border-b bg-gray-50/70">
+                            <button onClick={handlePrev} className="p-2 hover:bg-gray-200 rounded-full transition-colors"><i className="bi bi-chevron-left"></i></button>
                             <div className="text-center">
-                                <h2 className="text-xl font-bold text-gray-800">{headerInfo.main}</h2>
-                                <p className="text-sm text-teal-600 font-medium">{headerInfo.sub}</p>
+                                <h2 className="text-xl font-black text-gray-800 tracking-tight">{headerInfo.main}</h2>
+                                <p className="text-xs text-teal-600 font-bold mt-0.5">{headerInfo.sub}</p>
                             </div>
-                            <button onClick={handleNext} className="p-2 hover:bg-gray-200 rounded-full"><i className="bi bi-chevron-right"></i></button>
+                            <button onClick={handleNext} className="p-2 hover:bg-gray-200 rounded-full transition-colors"><i className="bi bi-chevron-right"></i></button>
                         </div>
                         <div className="grid grid-cols-7 bg-gray-100 border-b">
                             {['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].map((day, i) => (
-                                <div key={day} className={`p-3 text-center font-bold text-sm ${i === 0 ? 'text-red-600' : 'text-gray-600'}`}>{day}</div>
+                                <div key={day} className={`p-3 text-center font-bold text-xs ${i === 0 ? 'text-red-600' : 'text-gray-600'}`}>{day}</div>
                             ))}
                         </div>
                         <div className="grid grid-cols-7 bg-gray-200 gap-px border-b">
@@ -1752,30 +1991,60 @@ const Kalender: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="mt-8 bg-white p-6 rounded-xl shadow-md">
-                        <h3 className="text-lg font-bold text-gray-700 mb-4 border-b pb-2">Agenda Bulan Ini</h3>
+                    <div className="bg-white p-5 rounded-2xl shadow-2xs border border-gray-200 space-y-3">
+                        <div className="flex justify-between items-center border-b pb-2">
+                            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                <i className="bi bi-card-checklist text-teal-600"></i>
+                                <span>Agenda Bulan Ini</span>
+                            </h3>
+                            <span className="text-xs text-gray-500 font-semibold">{monthEvents.length} agenda aktif</span>
+                        </div>
                         {monthEvents.length > 0 ? (
-                            <ul className="space-y-3">
-                                {[...monthEvents].sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).map(ev => (
-                                    <li key={ev.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg group">
-                                        <div className={`w-3 h-3 rounded-full shrink-0 ${ev.color.startsWith('#') ? '' : ev.color}`} style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}></div>
-                                        <div className="flex-grow">
-                                            <div className="font-bold text-gray-800 text-sm">{ev.title}</div>
-                                            <div className="text-xs text-gray-500">
-                                                {formatDate(ev.startDate)} {ev.startDate !== ev.endDate && ` - ${formatDate(ev.endDate)}`}
-                                                <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-[10px] uppercase border">{ev.category}</span>
+                            <ul className="space-y-2">
+                                {[...monthEvents].sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).map(ev => {
+                                    const jenjangObj = ev.jenjangId ? settings.jenjang.find(j => j.id === ev.jenjangId) : null;
+                                    const kelasObj = ev.kelasId ? settings.kelas.find(k => k.id === ev.kelasId) : null;
+                                    const rombelObj = ev.rombelId ? settings.rombel.find(r => r.id === ev.rombelId) : null;
+
+                                    return (
+                                        <li key={ev.id} className="flex items-center gap-3 p-2.5 hover:bg-gray-50 rounded-xl group border border-transparent hover:border-gray-200 transition-all">
+                                            <div className={`w-3 h-3 rounded-full shrink-0 ${ev.color.startsWith('#') ? '' : ev.color}`} style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}></div>
+                                            <div className="flex-grow min-w-0">
+                                                <div className="font-bold text-gray-800 text-xs flex items-center gap-2">
+                                                    <span>{ev.title}</span>
+                                                    {jenjangObj && (
+                                                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded border border-blue-200">
+                                                            {jenjangObj.nama}
+                                                        </span>
+                                                    )}
+                                                    {kelasObj && (
+                                                        <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded border border-purple-200">
+                                                            {kelasObj.nama}
+                                                        </span>
+                                                    )}
+                                                    {rombelObj && (
+                                                        <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded border border-emerald-200">
+                                                            {rombelObj.nama}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-[11px] text-gray-500 flex items-center gap-2 mt-0.5">
+                                                    <span>{formatDate(ev.startDate)} {ev.startDate !== ev.endDate && ` - ${formatDate(ev.endDate)}`}</span>
+                                                    <span className="px-1.5 py-0.2 bg-gray-100 rounded text-[9px] uppercase font-bold text-gray-600 border">{ev.category}</span>
+                                                    {ev.description && <span className="text-gray-400 truncate">• {ev.description}</span>}
+                                                </div>
                                             </div>
-                                        </div>
-                                        {canWrite && (
-                                            <button onClick={() => { setEditingEvent(ev); setIsEventModalOpen(true); }} className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <i className="bi bi-pencil-square"></i>
-                                            </button>
-                                        )}
-                                    </li>
-                                ))}
+                                            {canWrite && (
+                                                <button onClick={() => { setEditingEvent(ev); setIsEventModalOpen(true); }} className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-blue-50 rounded">
+                                                    <i className="bi bi-pencil-square"></i>
+                                                </button>
+                                            )}
+                                        </li>
+                                    );
+                                })}
                             </ul>
                         ) : (
-                            <p className="text-gray-400 italic text-sm">Tidak ada agenda di bulan ini.</p>
+                            <p className="text-gray-400 italic text-xs py-4 text-center">Tidak ada agenda di bulan ini yang sesuai filter.</p>
                         )}
                     </div>
                 </div>
@@ -1791,6 +2060,7 @@ const Kalender: React.FC = () => {
                 onDelete={handleDeleteEvent}
                 eventData={editingEvent}
                 selectedDate={selectedDate}
+                settings={settings}
             />
 
             <BulkEventModal 

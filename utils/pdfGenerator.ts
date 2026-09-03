@@ -370,7 +370,7 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     const margin = options?.margin;
 
     // Detect orientation from the preview content
-    const isLandscape = element.querySelector('.print-landscape') !== null || orientation === 'landscape';
+    const isLandscape = element.querySelector('.print-landscape') !== null || orientation === 'landscape' || element.classList.contains('print-landscape');
     const actualOrientation = isLandscape ? 'landscape' : 'portrait';
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isCalendarPrint = elementId === 'calendar-print-area';
@@ -418,19 +418,28 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     styles += `
     <style>
         @media print {
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; -webkit-filter: opacity(1) !important; }
-            @page { margin: ${marginStr}; size: ${pageWidth}cm ${pageHeight}cm; }
-            .printable-content-wrapper {
-                width: auto !important;
-                height: auto !important;
-                min-height: initial !important;
-                transform: none !important;
+            body { 
+                -webkit-print-color-adjust: exact !important; 
+                print-color-adjust: exact !important; 
+                background-color: white !important; 
+                -webkit-filter: opacity(1) !important;
                 margin: 0 !important;
                 padding: 0 !important;
+            }
+            @page { 
+                margin: ${marginStr}; 
+                size: ${paperSize} ${actualOrientation}; 
+            }
+            * {
+                box-shadow: none !important;
+                -webkit-box-shadow: none !important;
+                text-shadow: none !important;
+                filter: none !important;
+            }
+            .printable-content-wrapper {
+                transform: none !important;
                 box-shadow: none !important;
                 overflow: visible !important;
-                display: block !important;
-                background-color: transparent !important;
             }
             /* Hide items tagged with no-print */
             .no-print { display: none !important; }

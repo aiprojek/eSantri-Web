@@ -51,27 +51,39 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
     const themeConfigs = {
         classic: {
             bg: '#1B4D3E', borderColor: '#D4AF37', textClass: 'text-white',
-            headerBg: 'bg-black/20', accentColor: '#D4AF37', accentTextClass: 'text-[#D4AF37]'
+            headerBg: 'bg-black/20', accentColor: '#D4AF37', accentTextClass: 'text-[#D4AF37]',
+            qrBadgeBorder: 'border border-[#D4AF37] ring-1 ring-[#D4AF37]/30 shadow-xs',
+            qrContainerClass: 'bg-white border-2 border-[#D4AF37]'
         },
         modern: {
             bg: 'bg-white', borderColor: '#e5e7eb', textClass: 'text-gray-800',
-            headerBg: 'bg-blue-50', accentColor: '#1e40af', accentTextClass: 'text-blue-900'
+            headerBg: 'bg-blue-50', accentColor: '#1e40af', accentTextClass: 'text-blue-900',
+            qrBadgeBorder: 'border border-blue-400 ring-1 ring-blue-500/20 shadow-xs',
+            qrContainerClass: 'bg-white border-2 border-blue-300'
         },
         bold: {
             bg: 'bg-white', borderColor: '#000', textClass: 'text-black',
-            headerBg: 'bg-black', accentColor: '#000', accentTextClass: 'text-black'
+            headerBg: 'bg-black', accentColor: '#000', accentTextClass: 'text-black',
+            qrBadgeBorder: 'border-2 border-black shadow-xs',
+            qrContainerClass: 'bg-white border-2 border-black'
         },
         dark: {
             bg: '#0f172a', borderColor: '#334155', textClass: 'text-white',
-            headerBg: 'bg-slate-800', accentColor: '#0d9488', accentTextClass: 'text-teal-400'
+            headerBg: 'bg-slate-800', accentColor: '#0d9488', accentTextClass: 'text-teal-400',
+            qrBadgeBorder: 'border border-teal-400 ring-1 ring-teal-500/30 shadow-xs',
+            qrContainerClass: 'bg-slate-900 border-2 border-teal-500'
         },
         ceria: {
             bg: 'bg-orange-50', borderColor: '#fed7aa', textClass: 'text-orange-900',
-            headerBg: 'bg-orange-400', accentColor: '#f97316', accentTextClass: 'text-orange-700'
+            headerBg: 'bg-orange-400', accentColor: '#f97316', accentTextClass: 'text-orange-700',
+            qrBadgeBorder: 'border-2 border-teal-400 shadow-xs',
+            qrContainerClass: 'bg-white border-2 border-teal-400'
         },
         vertical: {
             bg: 'bg-white', borderColor: '#e5e7eb', textClass: 'text-gray-800',
-            headerBg: 'bg-red-700', accentColor: '#dc2626', accentTextClass: 'text-red-700'
+            headerBg: 'bg-red-700', accentColor: '#dc2626', accentTextClass: 'text-red-700',
+            qrBadgeBorder: 'border border-red-400 ring-1 ring-red-500/20 shadow-xs',
+            qrContainerClass: 'bg-white border-2 border-red-300'
         }
     };
 
@@ -91,9 +103,17 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
         return t as 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria';
     };
 
-    const QrBadge = ({ size = '1cm', rounded = 'rounded-md' }: { size?: string; rounded?: string }) => (
+    const QrBadge = ({
+        size = '0.55cm',
+        rounded = 'rounded-xs',
+        className = ''
+    }: {
+        size?: string;
+        rounded?: string;
+        className?: string;
+    }) => (
         qrDataUrl ? (
-            <div className={`bg-white p-0.5 ${rounded} shadow-md border border-gray-200 overflow-hidden`}>
+            <div className={`bg-white p-[1.5px] ${rounded} ${className || 'shadow-sm border border-gray-300'} overflow-hidden leading-none flex items-center justify-center`}>
                 <img src={qrDataUrl} alt="QR NIS" className={`object-contain ${rounded}`} style={{ width: size, height: size }} />
             </div>
         ) : null
@@ -105,9 +125,9 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
         avatarVariant = getAvatarVariant(theme),
         avatarClassName = '',
         shapeClassName = 'rounded-lg',
-        qrSize = '0.8cm',
-        qrRounded = 'rounded-md',
-        qrOnlyContainerClassName = 'bg-slate-800'
+        qrSize = '0.55cm',
+        qrRounded = 'rounded-xs',
+        qrOnlyContainerClassName = ''
     }: {
         width?: string;
         height?: string;
@@ -129,23 +149,31 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
         }
 
         if (displayMode === 'qr') {
+            const isCircular = shapeClassName.includes('rounded-full');
+            // For circular frames (such as Ceria), square QR must fit safely inside inscribed square diameter (~1.15cm) so corners don't get cut off
+            const qrCalcSize = isCircular ? '1.15cm' : `calc(${width} - 0.4cm)`;
+            const containerStyle = qrOnlyContainerClassName || config.qrContainerClass;
+
             return (
                 <div
-                    className={`flex items-center justify-center ${shapeClassName} overflow-hidden shadow-lg ${qrOnlyContainerClassName}`}
+                    className={`flex items-center justify-center ${shapeClassName} overflow-hidden shadow-lg ${containerStyle}`}
                     style={frameStyle}
                 >
-                    <QrBadge size={`calc(${width} - 0.45cm)`} rounded={qrRounded} />
+                    <QrBadge size={qrCalcSize} rounded={isCircular ? 'rounded-xs' : qrRounded} className="border-none shadow-none p-0" />
                 </div>
             );
         }
+
+        const isCircular = shapeClassName.includes('rounded-full');
+        const badgePosition = isCircular ? 'bottom-0 right-0' : 'bottom-0.5 right-0.5';
 
         return (
             <div className="relative flex items-center justify-center" style={frameStyle}>
                 <div className={`${shapeClassName} overflow-hidden shadow-lg w-full h-full`}>
                     <SmartAvatar santri={santri} variant={avatarVariant} className={`w-full h-full object-cover ${avatarClassName}`.trim()} />
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5">
-                    <QrBadge size={qrSize} rounded={qrRounded} />
+                <div className={`absolute ${badgePosition} z-20`}>
+                    <QrBadge size={isCircular ? '0.52cm' : qrSize} rounded={isCircular ? 'rounded-xs' : qrRounded} className={config.qrBadgeBorder} />
                 </div>
             </div>
         );
@@ -205,8 +233,8 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                                 height: '2cm',
                                 avatarVariant: 'classic',
                                 shapeClassName: 'rounded-lg',
-                                qrSize: '0.9cm',
-                                qrRounded: 'rounded-md'
+                                qrSize: '0.55cm',
+                                qrRounded: 'rounded-xs'
                             })}
                         </div>
                         <div className="flex-grow text-[7pt] space-y-0.5 z-10 flex flex-col justify-center">
@@ -244,8 +272,8 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                                 height: '2cm',
                                 avatarVariant: 'modern',
                                 shapeClassName: 'rounded-lg',
-                                qrSize: '0.9cm',
-                                qrRounded: 'rounded-md'
+                                qrSize: '0.55cm',
+                                qrRounded: 'rounded-xs'
                             })}
                         </div>
                         <div className="text-right flex-grow pl-2 pt-1 flex flex-col items-end">
@@ -281,8 +309,8 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                             height: '2.8cm',
                             avatarVariant: 'vertical',
                             shapeClassName: 'rounded-lg border-2 border-white',
-                            qrSize: '0.8cm',
-                            qrRounded: 'rounded'
+                            qrSize: '0.55cm',
+                            qrRounded: 'rounded-xs'
                         })}
                     </div>
                     <div className="z-10 mt-4 px-2 w-full flex-grow flex flex-col items-center overflow-hidden">
@@ -318,8 +346,8 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                                 height: '2cm',
                                 avatarVariant: 'modern',
                                 shapeClassName: 'rounded-lg',
-                                qrSize: '0.9cm',
-                                qrRounded: 'rounded-md'
+                                qrSize: '0.55cm',
+                                qrRounded: 'rounded-xs'
                             })}
                         </div>
                         <div className="flex-grow space-y-1">
@@ -402,9 +430,9 @@ export const KartuPerpusTemplate: React.FC<KartuPerpusTemplateProps> = ({
                                 avatarVariant: 'ceria',
                                 avatarClassName: 'bg-teal-200',
                                 shapeClassName: 'rounded-full border-2 border-white',
-                                qrSize: '0.8cm',
-                                qrRounded: 'rounded-md',
-                                qrOnlyContainerClassName: 'bg-teal-200'
+                                qrSize: '0.52cm',
+                                qrRounded: 'rounded-xs',
+                                qrOnlyContainerClassName: 'bg-white border-2 border-teal-400'
                             })}
                         </div>
                     </div>

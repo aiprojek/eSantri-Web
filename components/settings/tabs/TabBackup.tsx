@@ -43,7 +43,7 @@ const RESTORE_TABLE_CONFIG: Array<{ key: string; label: string; table: any; alia
     { key: 'sirkulasi', label: 'Sirkulasi Perpustakaan', table: db.sirkulasi },
     { key: 'obat', label: 'Data Obat', table: db.obat },
     { key: 'kesehatanRecords', label: 'Kesehatan', table: db.kesehatanRecords },
-    { key: 'bkSessions', label: 'BK', table: db.bkSessions },
+    { key: 'bkSessions', label: 'BK (Bimbingan Konseling)', table: db.bkSessions, aliases: ['bimbinganKonseling', 'konseling', 'bk', 'bk_sessions', 'bkSessions'] },
     { key: 'bukuTamu', label: 'Buku Tamu', table: db.bukuTamu },
     { key: 'jadwalPelajaran', label: 'Jadwal Pelajaran', table: db.jadwalPelajaran },
     { key: 'arsipJadwal', label: 'Arsip Jadwal', table: db.arsipJadwal },

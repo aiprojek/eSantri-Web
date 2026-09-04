@@ -236,19 +236,7 @@ export const TabPanduan: React.FC<{ initialSection?: string | null }> = ({ initi
                                 </div>
                             )}
                             
-                            {activeSection.id === 'absensi' && (
-                                <div className="bg-teal-50 p-4 rounded-xl mb-8 text-sm text-teal-900 border border-teal-200 flex items-start gap-3 shadow-sm border-l-4">
-                                    <i className="bi bi-shield-check text-xl text-teal-600 shrink-0 mt-0.5"></i>
-                                    <div>
-                                        <strong className="block mb-1 font-bold">SOP KERJA MULTI-ADMIN &amp; SINKRONISASI CLOUD:</strong> 
-                                        <span>
-                                            Gunakan <strong>Firebase Live Sync</strong> untuk pencatatan presensi real-time antar perangkat guru di kelas. 
-                                            Bila area asrama/kelas minim sinyal, terapkan arsitektur <strong>Hub-and-Spoke (Offline-First)</strong>: 
-                                            guru (Spoke) mengabsen di kelas secara lokal, lalu mengirimkan perubahan ke Admin Pusat (Hub) di akhir sesi untuk digabungkan (Merge Changes) tanpa tumpang-tindih.
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
+
 
                             {activeSection.id === 'whatsapp' && (
                                 <div className="bg-green-50 p-4 rounded-xl mb-8 text-sm text-green-900 border border-green-200 flex items-start gap-3 shadow-sm border-l-4">

@@ -24,40 +24,430 @@ export const panduanData: PanduanSectionData[] = [
         title: 'Persiapan, Multi-Admin & Sinkronisasi Sistem',
         steps: [
             {
-                title: 'Pemberitahuan Penting: Konsep & 2 Model Sinkronisasi Multi-Admin',
+                title: 'Ikhtisar & Tahapan Memulai eSantri Web',
                 content: (
-                    <div className="bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-500 text-sm text-gray-700 space-y-3">
-                        <p>
-                            <strong>Pilihan Arsitektur Multi-Admin:</strong> Aplikasi ini mendukung operasional offline-first dengan dua pilihan mode sinkronisasi multi-admin:
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="bg-white p-3 rounded-lg border border-yellow-200 shadow-2xs">
-                                <h4 className="font-bold text-teal-800 text-xs uppercase mb-1 flex items-center gap-1.5">
-                                    <i className="bi bi-fire text-amber-600"></i> Mode 1: Firebase Realtime
-                                </h4>
-                                <p className="text-[11px] text-gray-600">Data tersinkronisasi otomatis dan instan antar perangkat saat terhubung internet. Sangat praktis untuk kolaborasi harian tanpa perlu kirim/gabung file manual.</p>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        {/* Roadmap Implementasi */}
+                        <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 text-xs text-purple-950 space-y-2">
+                            <h5 className="font-bold flex items-center gap-2 text-purple-900 text-sm">
+                                <i className="bi bi-compass-fill text-purple-600 text-base"></i>
+                                Tahapan Kronologis Penerapan Sistem di Pesantren
+                            </h5>
+                            <p className="leading-relaxed text-gray-700">
+                                Agar implementasi eSantri Web di lingkungan pondok pesantren berjalan rapi, patuhi 5 tahapan berurutan berikut:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 pt-1 text-center font-medium">
+                                <div className="bg-white p-2 rounded-lg border border-purple-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-purple-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">1</span>
+                                    <strong className="text-purple-950 block text-[11px]">Profil Lembaga</strong>
+                                    <span className="text-[10px] text-gray-500">Identitas & Logo</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-purple-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-purple-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">2</span>
+                                    <strong className="text-purple-950 block text-[11px]">Data Master</strong>
+                                    <span className="text-[10px] text-gray-500">Kelas & Guru</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-purple-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-purple-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">3</span>
+                                    <strong className="text-purple-950 block text-[11px]">Multi-User</strong>
+                                    <span className="text-[10px] text-gray-500">Kunci & Akun Staf</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-purple-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-purple-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">4</span>
+                                    <strong className="text-purple-950 block text-[11px]">Pairing Cloud</strong>
+                                    <span className="text-[10px] text-gray-500">Koneksi Perangkat</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-purple-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-purple-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">5</span>
+                                    <strong className="text-purple-950 block text-[11px]">Operasional</strong>
+                                    <span className="text-[10px] text-gray-500">SOP Input & Sync</span>
+                                </div>
                             </div>
-                            <div className="bg-white p-3 rounded-lg border border-yellow-200 shadow-2xs">
-                                <h4 className="font-bold text-teal-800 text-xs uppercase mb-1 flex items-center gap-1.5">
-                                    <i className="bi bi-diagram-3-fill text-indigo-600"></i> Mode 2: Hub & Spoke (Dropbox / WebDAV)
-                                </h4>
-                                <p className="text-[11px] text-gray-600">Pola Admin Utama (Hub) dan Staf/Guru (Spoke). Staf mengirim paket data perubahan, dan Admin Utama bertindak sebagai pengepul untuk menggabungkan ke Master.</p>
+                        </div>
+
+                        {/* Anjuran Penggunaan Multi-Admin */}
+                        <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-xs text-amber-950 space-y-2.5">
+                            <h5 className="font-bold flex items-center gap-2 text-amber-900 text-sm">
+                                <i className="bi bi-shield-check text-amber-600 text-base"></i>
+                                Mengapa Pesantren Wajib Mengaktifkan Sistem Multi-Admin?
+                            </h5>
+                            <p className="leading-relaxed text-gray-700">
+                                Ketika pondok pesantren mulai mengaktifkan banyak modul secara bersamaan (seperti <strong>Data Santri</strong>, <strong>Absensi KBM &amp; Asrama</strong>, <strong>Mutaba'ah Tahfizh</strong>, <strong>Poskestren / Medis</strong>, dan <strong>Bimbingan Konseling</strong>), <strong>SANGAT DIANJURKAN</strong> mengaktifkan sistem Multi-Admin / Multi-User dan sinkronisasi. Pembagian akun mandiri untuk setiap penanggung jawab memberikan manfaat vital:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                                <div className="bg-white p-2.5 rounded-lg border border-amber-200/80 shadow-2xs space-y-1">
+                                    <strong className="text-amber-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-diagram-2 text-amber-600"></i> Beban Input Terdistribusi
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600 leading-relaxed">
+                                        Mencegah antrean panjang dan beban menumpuk di satu komputer TU. Ustadz, musyrif, perawat klinik, dan konselor menginput langsung dari lokasi tugas masing-masing.
+                                    </p>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-lg border border-amber-200/80 shadow-2xs space-y-1">
+                                    <strong className="text-amber-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-shield-lock text-amber-600"></i> Kerahasiaan &amp; Privasi Terjaga
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600 leading-relaxed">
+                                        Data rekam medis santri dan catatan konseling BK bersifat rahasia dan terlindungi, hanya dapat diakses oleh petugas medis dan guru BK berwenang.
+                                    </p>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-lg border border-amber-200/80 shadow-2xs space-y-1">
+                                    <strong className="text-amber-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-lightning-charge text-amber-600"></i> Kecepatan &amp; Akurasi Data
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600 leading-relaxed">
+                                        Data kehadiran santri, mutaba'ah hafalan, dan perizinan selalu mutakhir setiap hari tanpa perlu menunggu rekapitulasi berkas manual di akhir pekan.
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
                 )
             },
             {
-                title: '⚡ PANDUAN WAJIB: Alur Kerja Multi-Admin Hub & Spoke (Dropbox / WebDAV)',
-                color: 'indigo',
+                title: 'Tahap 1: Konfigurasi Identitas & Data Master Lembaga',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p className="text-gray-700">
+                            Sebelum membuka akses bagi staf pengajar dan pengasuh, Super Admin wajib mengonfigurasi identitas pondok dan fondasi data master lembaga:
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-2 bg-gray-50 p-3.5 rounded-xl border border-gray-200 text-xs text-gray-700">
+                            <li>
+                                <strong>Identitas Yayasan &amp; Pesantren:</strong> Buka menu <strong>Pengaturan &gt; Umum</strong>. Lengkapi Nama Pesantren, Nama Yayasan, Alamat, Nomor Kontak/Telepon, Website, dan Pimpinan Pondok.
+                            </li>
+                            <li>
+                                <strong>Unggah Logo Resmi:</strong> Unggah berkas logo pesantren di menu Pengaturan Umum. Logo ini otomatis dicantumkan di kop surat resmi, slip pembayaran SPP / kuitansi keuangan, kartu santri, dan sampul Buku Rapor.
+                            </li>
+                            <li>
+                                <strong>Struktur Pendidikan (Marhalah &amp; Rombel):</strong> Buka menu <strong>Data Master &gt; Struktur Pendidikan</strong>.
+                                <ul className="list-disc pl-4 mt-1 text-[11px] text-gray-600 space-y-0.5">
+                                    <li>Isi <strong>Jenjang (Marhalah)</strong> terlebih dahulu (misal: Salafiyah Ula, Wustho, Ulya, MTs, MA).</li>
+                                    <li>Isi <strong>Tingkat Kelas</strong> yang menginduk ke jenjang tersebut (Kelas 1, 2, 3 atau 7, 8, 9).</li>
+                                    <li>Isi <strong>Rombel (Rombongan Belajar)</strong> sebagai unit kelas riil santri (misal: 7A, 7B, Ula-1) dan tentukan <strong>Wali Kelas</strong> yang bertugas.</li>
+                                </ul>
+                            </li>
+                            <li>
+                                <strong>Data Tenaga Pendidik &amp; Guru:</strong> Buka menu <strong>Data Master &gt; Tenaga Pendidik</strong>. Gunakan tombol <strong>"Tambah Banyak (Tabel)"</strong> untuk memasukkan daftar asatidz, NIP/NIY, jabatan, ketersediaan hari mengajar, dan kompetensi mata pelajaran secara massal.
+                            </li>
+                        </ol>
+                        <div className="p-2.5 bg-blue-50 border-l-4 border-blue-500 rounded text-blue-900 text-xs flex items-center gap-2">
+                            <i className="bi bi-info-circle-fill text-blue-600 shrink-0"></i>
+                            <span>
+                                <strong>Tips Efisiensi:</strong> Masukkan data guru selengkap mungkin di tahap ini, karena daftar guru akan langsung dikonversi menjadi akun login staf dengan sekali klik di langkah berikutnya.
+                            </span>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Tahap 2: Aktivasi Mode Multi-User & Kunci Pemulihan Darurat',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p className="text-gray-700">
+                            Secara default, instalasi baru berjalan dalam mode <em>Admin Tunggal (tanpa login)</em>. Untuk mengamankan sistem dan membagi wewenang petugas, aktifkan Mode Multi-User:
+                        </p>
+
+                        <div className="bg-indigo-50 p-3.5 rounded-xl border border-indigo-200 text-xs text-indigo-950 space-y-2">
+                            <h6 className="font-bold flex items-center gap-1.5 text-indigo-900 text-xs">
+                                <i className="bi bi-toggle-on text-indigo-600 text-sm"></i>
+                                Cara Mengaktifkan Mode Multi-User
+                            </h6>
+                            <ol className="list-decimal pl-4 space-y-1 text-gray-700">
+                                <li>Buka menu <strong>Pengaturan &gt; User &amp; Keamanan</strong> (atau <em>Pengaturan &gt; Akun</em>).</li>
+                                <li>Nyalakan toggle <strong>"Aktifkan Mode Multi-User"</strong>.</li>
+                                <li>Sistem otomatis membuatkan akun Super Admin default dengan username: <code>admin</code> dan password awal: <code>admin123</code>. Segera perbarui kata sandi admin ini.</li>
+                            </ol>
+                        </div>
+
+                        {/* Emergency Recovery Key Box */}
+                        <div className="bg-red-50 p-3.5 rounded-xl border border-red-200 text-xs text-red-950 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <strong className="font-bold text-red-900 flex items-center gap-1.5 text-xs">
+                                    <i className="bi bi-key-fill text-red-600"></i> KUNCI PEMULIHAN DARURAT (EMERGENCY RECOVERY KEY)
+                                </strong>
+                                <span className="px-2 py-0.5 rounded-full bg-red-200 text-red-900 text-[10px] font-black uppercase">Wajib Dicatat</span>
+                            </div>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Saat pertama kali Mode Multi-User diaktifkan, sistem akan memunculkan jendela dialog berisi <strong>Kunci Pemulihan Darurat</strong> dengan format unik <code>ESANTRI-XXXX-XXXX-XXXX</code> (12 karakter alfanumerik).
+                            </p>
+                            <div className="p-2.5 bg-white rounded-lg border border-red-200 text-center font-mono font-bold text-red-700 tracking-wider text-xs shadow-2xs">
+                                Contoh Format: ESANTRI-8K9P-M2W4-7TRX
+                            </div>
+                            <ul className="list-disc pl-4 text-[11px] text-gray-700 space-y-1">
+                                <li><strong>SOP Penyimpanan:</strong> Pimpinan Pondok atau Kepala Yayasan wajib mencatat kunci ini di buku catatan fisik atau brankas terpisah dari perangkat komputer operasional.</li>
+                                <li><strong>Cara Penggunaan:</strong> Jika seluruh kata sandi admin lupa dan staff kehilangan akses, buka halaman login &rarr; klik <em>"Lupa Password?"</em> &rarr; pilih <em>"Pakai Kunci Pemulihan Darurat"</em> &rarr; masukkan kode untuk langsung mereset password Super Admin tanpa merusak atau menghapus database santri.</li>
+                            </ul>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Tahap 3: Manajemen Akun Staf & Penerapan Role Preset',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p className="text-gray-700">
+                            Pondok pesantren tidak perlu membuat akun pengajar satu per satu secara manual. Gunakan fasilitas pembuatan akun massal terintegrasi:
+                        </p>
+
+                        <div className="bg-teal-50 p-3.5 rounded-xl border border-teal-200 text-xs text-teal-950 space-y-2">
+                            <h6 className="font-bold flex items-center gap-1.5 text-teal-900 text-xs">
+                                <i className="bi bi-people-fill text-teal-600 text-sm"></i>
+                                Pembuatan Akun Massal: "Ambil dari Data Guru"
+                            </h6>
+                            <p className="text-gray-700">
+                                Di menu <strong>Pengaturan &gt; Akun &amp; Pengguna</strong>, klik tombol <strong>"Ambil dari Data Guru"</strong>. Sistem membuka tabel konversi massal:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-gray-700 text-[11px]">
+                                <li><strong>Auto-Generate Username:</strong> Nama guru otomatis dibersihkan dari gelar akademik (misal: <em>Dr., S.Pd, Lc, M.Pd</em>) menjadi username standar tanpa spasi.</li>
+                                <li><strong>Password Awal Default:</strong> Diatur seragam ke <code>123456</code> (dapat langsung disesuaikan di tabel sebelum disimpan).</li>
+                                <li><strong>Pertanyaan Keamanan Otomatis:</strong> Diatur ke pertanyaan: <em>"Apa nama aplikasi ini?"</em> dengan jawaban: <code>esantri</code> untuk fasilitas lupa password mandiri.</li>
+                            </ul>
+                        </div>
+
+                        {/* 7 Preset Role */}
+                        <div className="space-y-2">
+                            <h6 className="font-bold text-gray-800 text-xs">
+                                7 Pilihan Template Wewenang (Role Presets) yang Tersedia di Sistem:
+                            </h6>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                    <strong className="text-purple-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-shield-shaded text-purple-600"></i> 1. Super Administrator
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600">Akses penuh semua modul, konfigurasi yayasan, manajemen akun, audit log, dan izin Pusat Sinkronisasi.</p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                    <strong className="text-blue-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-people-fill text-blue-600"></i> 2. Kesantrian / Pengasuhan
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600">Akses tulis ke Data Santri, Absensi, Tahfizh, Asrama, Poskestren, Bimbingan Konseling, dan Buku Tamu.</p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                    <strong className="text-emerald-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-cash-stack text-emerald-600"></i> 3. Bendahara / Keuangan
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600">Akses tulis ke Pembayaran SPP/Tagihan, Buku Kas Pondok, dan Koperasi. Data santri berstatus hanya baca (read-only).</p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                    <strong className="text-indigo-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-mortarboard-fill text-indigo-600"></i> 4. Tata Usaha / Akademik
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600">Akses tulis ke Modul Akademik (Jadwal &amp; Nilai), Surat Menyurat, PSB/Pendaftaran, Kalender, dan Santri.</p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                    <strong className="text-amber-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-building text-amber-600"></i> 5. Sarpras &amp; Aset
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600">Akses tulis khusus ke modul Sarana Prasarana, Inventaris Gedung &amp; Kamar, serta Kalender Kegiatan.</p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                    <strong className="text-rose-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-book text-rose-600"></i> 6. Perpustakaan
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600">Akses tulis ke Sirkulasi Peminjaman Buku, Katalog Kitab/Pustaka, dan Pengembalian Santri.</p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-200 bg-teal-50/40 shadow-2xs space-y-1 sm:col-span-2">
+                                    <strong className="text-teal-900 flex items-center gap-1.5 font-semibold text-[11px]">
+                                        <i className="bi bi-person-check-fill text-teal-600"></i> 7. Wali Kelas / Guru Pengampu (Standar Pengajar)
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600">Akses tulis Absensi KBM, Nilai Akademik, Mutaba'ah Tahfizh, dan Laporan Rapor. Modul kesehatan dan konseling hanya baca.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
+                            <strong className="text-gray-900 flex items-center gap-1.5 font-semibold">
+                                <i className="bi bi-sliders text-gray-700"></i> Kustomisasi Izin Modular &amp; Hak Akses Pusat Sinkronisasi:
+                            </strong>
+                            <p className="text-[11px] text-gray-600">
+                                Klik tombol <strong>"Atur / Kustom"</strong> pada baris user untuk menyesuaikan izin per modul dengan 3 opsi: <code>Penuh (Tulis/Edit)</code>, <code>Hanya Lihat (Baca)</code>, atau <code>Diblokir (None)</code>.
+                            </p>
+                            <p className="text-[11px] text-amber-800">
+                                <strong>Perhatian Hak Sync Admin:</strong> Kolom centang <em>"Akses Pusat Sinkronisasi"</em> menentukan apakah staf tersebut dapat membuka halaman penggabungan data (Hub Merge). Berikan izin ini hanya kepada Admin Pusat di kantor TU.
+                            </p>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Tahap 4: Pilihan Arsitektur Sinkronisasi (Firebase vs Hub & Spoke)',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p className="text-gray-700">
+                            eSantri Web dirancang fleksibel untuk segala kondisi koneksi pondok. Pilih salah satu dari dua arsitektur sinkronisasi berikut:
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-teal-50/70 p-3.5 rounded-xl border border-teal-200 space-y-2">
+                                <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                    <h6 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                        <i className="bi bi-cloud-check-fill text-teal-600 text-sm"></i> Model A: Firebase Real-Time Cloud
+                                    </h6>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-100 text-emerald-800 font-bold uppercase">Online Aktif</span>
+                                </div>
+                                <p className="text-xs text-gray-600 leading-relaxed">
+                                    Menyinkronkan data seketika antar-laptop dan smartphone staf secara otomatis tanpa perlu kirim atau gabung file manual.
+                                </p>
+                                <div className="space-y-1 text-[11px] text-gray-700">
+                                    <div className="flex items-start gap-1.5">
+                                        <i className="bi bi-check2-circle text-teal-600 mt-0.5"></i>
+                                        <span><strong>Kapan Dipilih:</strong> Pondok dengan koneksi WiFi stabil di kantor, kelas, asrama, dan poskestren.</span>
+                                    </div>
+                                    <div className="flex items-start gap-1.5">
+                                        <i className="bi bi-check2-circle text-teal-600 mt-0.5"></i>
+                                        <span><strong>Keunggulan:</strong> Live Dashboard pimpinan selalu terupdate detik itu juga, dan terhubung ke Portal Wali Santri.</span>
+                                    </div>
+                                    <div className="flex items-start gap-1.5">
+                                        <i className="bi bi-check2-circle text-teal-600 mt-0.5"></i>
+                                        <span><strong>Ketahanan Offline:</strong> Tetap bisa menginput saat WiFi putus sesaat; data otomatis terunggah saat sinyal pulih.</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-indigo-50/70 p-3.5 rounded-xl border border-indigo-200 space-y-2">
+                                <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                    <h6 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                        <i className="bi bi-diagram-3-fill text-indigo-600 text-sm"></i> Model B: Hub &amp; Spoke (Dropbox / WebDAV)
+                                    </h6>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-100 text-indigo-800 font-bold uppercase">Hybrid / Offline</span>
+                                </div>
+                                <p className="text-xs text-gray-600 leading-relaxed">
+                                    Pola 1 komputer kantor TU sebagai Pusat Induk (Hub) dan laptop/HP pengajar di asrama/kelas sebagai Cabang Penginput (Spoke).
+                                </p>
+                                <div className="space-y-1 text-[11px] text-gray-700">
+                                    <div className="flex items-start gap-1.5">
+                                        <i className="bi bi-check2-circle text-indigo-600 mt-0.5"></i>
+                                        <span><strong>Kapan Dipilih:</strong> Sudut masjid/asrama halaqah atau klinik berada di titik yang minim atau tanpa sinyal WiFi kontinu.</span>
+                                    </div>
+                                    <div className="flex items-start gap-1.5">
+                                        <i className="bi bi-check2-circle text-indigo-600 mt-0.5"></i>
+                                        <span><strong>Keunggulan:</strong> 100% offline-first. Staf bebas mencatat seharian di laptop lokal tanpa kuota internet.</span>
+                                    </div>
+                                    <div className="flex items-start gap-1.5">
+                                        <i className="bi bi-check2-circle text-indigo-600 mt-0.5"></i>
+                                        <span><strong>Alur Kerja:</strong> Sore hari staf mengirimkan berkas perubahan ke folder Inbox cloud untuk digabungkan oleh Admin Pusat.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Tahap 5: Menghubungkan Perangkat Staf via Pairing Code 1-Klik',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-teal-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-qr-code-scan text-teal-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-teal-900 block mb-0.5">Kemudahan Pairing Code Tanpa Setup Rumit:</strong>
+                                Anda <strong>TIDAK PERLU</strong> membuat akun Dropbox Developer atau memasukkan API Key/Secret manual di setiap laptop guru. Cukup buat satu koneksi di komputer Admin Utama, lalu bagikan <strong>Pairing Code</strong> terenkripsi kepada seluruh staf.
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 bg-purple-600 text-white rounded-full flex items-center justify-center text-[10px]">A</span>
+                                    Langkah di Komputer Admin Utama (Hub):
+                                </h6>
+                                <ol className="list-decimal pl-4 space-y-1 text-gray-600 text-[11px]">
+                                    <li>Buka menu <strong>Pengaturan &gt; Cloud &amp; Sinkronisasi</strong>.</li>
+                                    <li>Pastikan penyedia cloud (Dropbox, WebDAV, atau Firebase) sudah dalam status <strong>"Terhubung"</strong>.</li>
+                                    <li>Klik tombol <strong>"Bagikan Akses ke Staff (Pairing Code)"</strong>.</li>
+                                    <li>Sistem menyalin kode pairing panjang berformat <code>ESANTRI-CLOUD-...</code> ke clipboard.</li>
+                                    <li>Kirimkan kode tersebut ke grup WhatsApp guru atau simpan di flashdisk kantor.</li>
+                                </ol>
+                            </div>
+
+                            <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 bg-teal-600 text-white rounded-full flex items-center justify-center text-[10px]">B</span>
+                                    Langkah di Laptop / HP Staf Pengajar (Spoke):
+                                </h6>
+                                <ol className="list-decimal pl-4 space-y-1 text-gray-600 text-[11px]">
+                                    <li>Buka eSantri Web di browser laptop staf.</li>
+                                    <li>Buka menu <strong>Pengaturan &gt; Cloud &amp; Sinkronisasi</strong>.</li>
+                                    <li>Tempel (Paste) kode pada kotak <strong>"Masukkan Pairing Code dari Admin"</strong>.</li>
+                                    <li>Klik tombol <strong>"Hubungkan Perangkat"</strong>.</li>
+                                    <li>Perangkat staf otomatis tersambung ke penyimpanan cloud pondok secara instan.</li>
+                                </ol>
+                            </div>
+                        </div>
+
+                        <p className="text-[11px] text-gray-500 italic">
+                            *Untuk Firebase: Staf cukup memasukkan Pairing Code lalu login dengan akun Google masing-masing untuk bergabung ke tenant pesantren secara otomatis.
+                        </p>
+                    </div>
+                )
+            },
+            {
+                title: '⚡ SOP Operasional Model 1: Real-Time Cloud (Firebase)',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="bg-teal-50 p-3.5 rounded-lg border border-teal-200 text-xs text-teal-950 space-y-2">
+                            <h5 className="font-bold flex items-center gap-1.5 text-teal-900">
+                                <i className="bi bi-broadcast text-teal-600"></i> SOP Wajib Operasional Real-Time Live Sync
+                            </h5>
+                            <p className="text-gray-700">
+                                Model <strong>Real-Time Cloud</strong> mengalirkan data seketika antar-perangkat petugas yang terhubung internet. Patuhi 4 aturan kerja berikut:
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-white p-3 rounded-lg border border-teal-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-teal-900 flex items-center gap-1">
+                                    <span className="w-5 h-5 bg-teal-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">1</span>
+                                    Login Mandiri Setiap Petugas
+                                </h6>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Setiap ustadz, musyrif, petugas medis, dan konselor login menggunakan akun masing-masing di laptop/HP pribadinya. Nama pencatat otomatis tersemat dalam riwayat aktivitas sistem untuk transparansi jejak kerja.
+                                </p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-lg border border-teal-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-teal-900 flex items-center gap-1">
+                                    <span className="w-5 h-5 bg-teal-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">2</span>
+                                    Sinkronisasi Otomatis Detik Itu Juga
+                                </h6>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Begitu tombol <em>"Simpan"</em> diklik pada modul apa pun (Absensi KBM, Setoran Tahfizh, Pasien Poskestren, BK), data langsung terunggah ke Cloud. Pimpinan pondok dapat memantau grafik dashboard secara langsung tanpa menunggu laporan akhir pekan.
+                                </p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-lg border border-teal-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-teal-900 flex items-center gap-1">
+                                    <span className="w-5 h-5 bg-teal-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">3</span>
+                                    Ketahanan Saat Internet Terputus (Offline-Resilience)
+                                </h6>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Bila koneksi WiFi pondok mendadak terputus, staf tetap dapat melanjutkan penginputan secara lancar. Sistem menyimpan data di penyimpanan lokal perangkat, dan otomatis mengirimkannya ke Cloud seketika koneksi pulih kembali.
+                                </p>
+                            </div>
+
+                            <div className="bg-white p-3 rounded-lg border border-teal-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-teal-900 flex items-center gap-1">
+                                    <span className="w-5 h-5 bg-teal-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">4</span>
+                                    Pembagian Partisi Kerja Tim
+                                </h6>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Meskipun sistem sinkron secara langsung, terapkan pembagian tugas yang jelas: Ustadz mengabsen rombel kelasnya sendiri, Muhaffizh menguji halaqahnya sendiri, dan Petugas Medis melayani pasien di kliniknya. Hindari dua orang mengedit baris data santri yang sama secara bersamaan.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '⚡ SOP Operasional Model 2: Hub & Spoke (Dropbox / WebDAV)',
                 content: (
                     <div className="space-y-3 text-sm">
                         <div className="bg-indigo-50 p-3.5 rounded-lg border border-indigo-200 text-xs text-indigo-950 space-y-2">
                             <h5 className="font-bold flex items-center gap-1.5 text-indigo-900">
-                                <i className="bi bi-arrow-repeat text-indigo-600"></i> SOP Wajib Operasional Hub & Spoke (Pencegah Timpa Data)
+                                <i className="bi bi-arrow-repeat text-indigo-600"></i> SOP 4 Langkah Wajib Hub &amp; Spoke (Pencegah Data Tertimpa)
                             </h5>
                             <p className="text-gray-700">
-                                Dalam model <strong>Hub & Spoke</strong>, satu komputer bertindak sebagai <strong>Admin Pusat (Hub)</strong> dan perangkat staf/guru sebagai <strong>Cabang (Spoke)</strong>. Agar tidak terjadi bentrok atau kehilangan data, patuhi urutan 4 langkah wajib berikut:
+                                Dalam model <strong>Hub &amp; Spoke</strong>, satu komputer bertindak sebagai <strong>Admin Pusat (Hub)</strong> dan perangkat staf/guru sebagai <strong>Cabang (Spoke)</strong>. Patuhi urutan 4 langkah wajib harian berikut:
                             </p>
                         </div>
 
@@ -65,20 +455,20 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs space-y-1.5">
                                 <h6 className="font-bold text-xs text-indigo-800 flex items-center gap-1">
                                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">1</span>
-                                    Staf / Guru Mengirim Data (Spoke)
+                                    Staf / Guru Mengirim Data (Spoke Upload)
                                 </h6>
                                 <p className="text-[11px] text-gray-600">
-                                    Setelah selesai menginput setoran Tahfizh, Absensi, atau Nilai di laptop/HP masing-masing, Staf mengklik tombol <strong>"Kirim Perubahan ke Admin"</strong> di bar atas/menu Sinkronisasi. Data terkompresi otomatis terunggah ke folder Cloud (Dropbox/WebDAV).
+                                    Setelah selesai mencatat setoran Tahfizh, Absensi, atau Rekam Medis di laptop masing-masing, staf mengeklik tombol <strong>"Kirim Perubahan ke Admin"</strong> di bar atas/menu Sinkronisasi. Berkas data terkompresi GZIP otomatis masuk ke folder cloud <code>inbox_staff</code>.
                                 </p>
                             </div>
 
                             <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs space-y-1.5">
                                 <h6 className="font-bold text-xs text-indigo-800 flex items-center gap-1">
                                     <span className="w-5 h-5 bg-indigo-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">2</span>
-                                    Admin Pusat Menggabung (Hub Merge)
+                                    Admin Pusat Menggabung Data (Hub Merge)
                                 </h6>
                                 <p className="text-[11px] text-gray-600">
-                                    Admin Utama membuka menu <strong>Pusat Sinkronisasi &gt; Inbox Perubahan Staff</strong> &gt; Klik <strong>"Segarkan"</strong> &gt; Klik <strong>"Gabung"</strong> pada berkas kiriman staf. Sistem memadukan data baru dengan aman (Last-Write-Wins).
+                                    Admin Utama membuka menu <strong>Pusat Sinkronisasi &gt; Inbox Perubahan Staff</strong> &gt; Klik <strong>"Segarkan"</strong> &gt; Klik <strong>"Gabung"</strong> pada berkas kiriman staf. Sistem memadukan data baru secara cerdas berdasarkan perbandingan waktu modifikasi terakhir (<code>lastModified</code>).
                                 </p>
                             </div>
 
@@ -88,169 +478,120 @@ export const panduanData: PanduanSectionData[] = [
                                     Admin Publikasikan Master (WAJIB)
                                 </h6>
                                 <p className="text-[11px] text-gray-700 font-medium">
-                                    Setelah seluruh berkas staf selesai digabungkan, Admin Utama <strong>WAJIB menekan tombol "Publikasikan Master"</strong>. Tindakan ini memperbarui berkas database induk di Cloud agar siap diambil oleh seluruh staf.
+                                    Setelah seluruh berkas staf digabungkan, Admin Utama <strong>WAJIB menekan tombol "Publikasikan Master"</strong>. Tindakan ini memperbarui berkas database induk (<code>master_data.json</code>) di Cloud agar siap diambil oleh seluruh staf.
                                 </p>
                             </div>
 
                             <div className="bg-white p-3 rounded-lg border border-teal-200 bg-teal-50/50 shadow-2xs space-y-1.5">
                                 <h6 className="font-bold text-xs text-teal-900 flex items-center gap-1">
                                     <span className="w-5 h-5 bg-teal-600 text-white rounded-full inline-flex items-center justify-center text-[10px]">4</span>
-                                    Staf Mengambil Master Terbaru
+                                    Staf Memperoleh Master Data Terbaru (Otomatis saat Login)
                                 </h6>
-                                <p className="text-[11px] text-gray-600">
-                                    Sebelum memulai aktivitas menginput di hari baru, Staf menekan tombol <strong>"Ambil Data Master"</strong> (atau "Update dari Cloud") agar data di perangkat mereka sinkron dengan hasil olahan Admin Pusat.
+                                <p className="text-[11px] text-gray-700">
+                                    <strong>⚡ Otomatis Saat Login:</strong> Begitu staf memasukkan username &amp; password dan berhasil masuk, sistem <em>secara otomatis menarik master data terbaru</em> dari Cloud di latar belakang (dan memperbaruinya tiap 5 menit jika Auto-Sync aktif). Staf tidak diwajibkan menarik manual setiap pagi!
+                                </p>
+                                <p className="text-[11px] text-gray-500">
+                                    <strong>Tombol Manual "Ambil Master Data" di Modal:</strong> Hanya digunakan sebagai penyegaran cadangan jika laptop baru terhubung internet di tengah hari atau ada instruksi pembaruan mendadak dari Admin TU tanpa perlu logout.
                                 </p>
                             </div>
                         </div>
 
+                        {/* Visual Conflict Resolution Box */}
                         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-1">
-                            <strong className="flex items-center gap-1 font-bold"><i className="bi bi-exclamation-triangle-fill text-red-600"></i> Peringatan Resolusi Konflik Data:</strong>
-                            <p>
-                                Jika Admin dan Staf mengubah santri atau transaksi yang sama secara bersamaan, jendela <strong>Resolusi Konflik</strong> akan otomatis muncul saat tombol Gabung diklik. Admin dapat memilih:
+                            <strong className="flex items-center gap-1 font-bold"><i className="bi bi-exclamation-triangle-fill text-red-600"></i> Penanganan Bentrok Data (Visual Conflict Resolver):</strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Jika Admin dan Staf mengedit record data santri atau transaksi keuangan yang sama pada jam yang sama, jendela <strong>Resolusi Konflik</strong> akan otomatis muncul saat tombol Gabung diklik. Admin dapat membandingkan data secara berdampingan (*side-by-side*) dan memilih:
                             </p>
-                            <ul className="list-disc pl-5 mt-1 space-y-0.5 text-gray-700">
-                                <li><strong>Versi Lokal (Admin):</strong> Mempertahankan nilai yang ada di komputer Admin.</li>
-                                <li><strong>Versi Staff:</strong> Menggunakan perubahan yang diajukan oleh staf.</li>
-                                <li><strong>Mix & Match:</strong> Memilih bagian data tertentu per baris atribut sebelum disimpan.</li>
+                            <ul className="list-disc pl-5 mt-1 space-y-0.5 text-gray-700 text-[11px]">
+                                <li><strong>Gunakan Versi Lokal (Admin):</strong> Mempertahankan nilai yang tersimpan di komputer Hub.</li>
+                                <li><strong>Gunakan Versi Staff:</strong> Mengganti nilai dengan perubahan yang diajukan oleh staf.</li>
+                                <li><strong>Pilih Per Field (Mix &amp; Match):</strong> Memilih baris atribut tertentu (misal: alamat ambil dari versi staf, status SPP ambil dari versi admin).</li>
                             </ul>
                         </div>
                     </div>
                 )
             },
             {
-                title: 'Konfigurasi Data Lembaga',
+                title: 'Tahap 6: Pemeliharaan: Keamanan Sesi, Reset Password, Backup & AI',
                 content: (
-                    <>
-                        <p>Lakukan langkah ini sebelum menggunakan fitur lain:</p>
-                        <ol className="list-decimal pl-5 space-y-1 mt-2 bg-gray-50 p-3 rounded border border-gray-200 text-sm">
-                            <li>Buka menu <strong>Pengaturan &gt; Umum</strong>. Isi data lengkap yayasan dan pesantren (Nama, Alamat, Logo).</li>
-                            <li>Buka menu <strong>Data Master &gt; Tenaga Pendidik</strong>. Gunakan tombol <strong>"Tambah Banyak (Tabel)"</strong> untuk menginput daftar guru, jabatan, dan tanggal mulai tugas secara massal.</li>
-                            <li>Buka menu <strong>Data Master &gt; Struktur Pendidikan</strong>.
-                                <ul className="list-disc pl-4 mt-1 text-xs text-gray-500">
-                                    <li>Isi <strong>Jenjang</strong> terlebih dahulu (misal: Salafiyah Wustho).</li>
-                                    <li>Isi <strong>Kelas</strong>. Gunakan "Tambah Banyak" untuk input Kelas 1, 2, 3 sekaligus dan memilih Jenjang Induknya di tabel.</li>
-                                    <li>Isi <strong>Rombel</strong>. Gunakan "Tambah Banyak" untuk membuat kelas paralel (1A, 1B, dll) dan pilih Kelas Induk & Wali Kelasnya.</li>
-                                </ul>
-                            </li>
-                        </ol>
-                    </>
-                )
-            },
-            {
-                title: 'Keamanan: Aktivasi Mode Multi-User',
-                content: (
-                    <>
-                         <p>Secara default, aplikasi ini berjalan tanpa login. <strong>Sangat disarankan</strong> mengaktifkan Mode Multi-User di menu <em>Pengaturan &gt; User & Keamanan</em>.</p>
-                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div className="bg-blue-50 p-3 rounded border border-blue-100">
-                                <h4 className="font-bold text-blue-800 mb-1"><i className="bi bi-shield-check"></i> Keamanan Data</h4>
-                                <p>Mencegah orang tidak berwenang mengakses data santri atau keuangan jika laptop ditinggal.</p>
+                    <div className="space-y-3 text-sm">
+                        <p className="text-gray-700">
+                            Panduan teknis bagi operator sistem untuk disiplin keamanan sesi akun, pemulihan akses staf, keamanan cadangan berkas, dan aktivasi kecerdasan buatan:
+                        </p>
+
+                        {/* SOP Sesi Akun & Lupa Logout */}
+                        <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+                            <h6 className="font-bold text-amber-950 flex items-center gap-1.5 text-xs">
+                                <i className="bi bi-shield-lock-fill text-amber-700"></i> SOP Keamanan Sesi Akun: Aturan jika Akun Lupa Logout
+                            </h6>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Sistem eSantri Web secara default mempertahankan sesi login agar guru tidak perlu berulang kali mengetik kata sandi saat membuka browser. Namun di lingkungan pesantren yang memakai komputer bersama, perhatikan aturan penting berikut:
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs pt-1">
+                                <div className="p-2.5 bg-white rounded-lg border border-amber-200 shadow-2xs space-y-1">
+                                    <strong className="text-amber-950 block font-semibold text-[11px]">
+                                        <i className="bi bi-laptop text-teal-600"></i> 1. Laptop / HP Pribadi Guru
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Boleh dibiarkan tetap login. Data otomatis diperbarui di latar belakang (tiap 5 menit di Hub &amp; Spoke, atau seketika di Firebase). Anda tidak perlu khawatir data usang.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-amber-200 shadow-2xs space-y-1">
+                                    <strong className="text-amber-950 block font-semibold text-[11px]">
+                                        <i className="bi bi-display text-rose-600"></i> 2. Komputer Bersama (Kantor TU / UKS / Pos Jaga)
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        <strong>WAJIB LOGOUT setelah selesai tugas!</strong> Jika Anda lupa logout, input data guru berikutnya akan tercatat atas nama akun Anda (mencemari jejak audit/audit trail) dan data sensitif (rekam medis/BK) berisiko bocor.
+                                    </p>
+                                </div>
                             </div>
-                            <div className="bg-green-50 p-3 rounded border border-green-100">
-                                <h4 className="font-bold text-green-800 mb-1"><i className="bi bi-person-fill-lock"></i> Pembagian Tugas</h4>
-                                <p>Buat akun khusus Staff (misal: Bendahara hanya akses Keuangan, tidak bisa lihat Keuangan). Pembagian tugas yang jelas akan meningkatkan efisiensi.</p>
-                            </div>
-                            <div className="bg-orange-50 p-3 rounded border border-orange-100">
-                                <h4 className="font-bold text-orange-800 mb-1"><i className="bi bi-activity"></i> Audit Trail</h4>
-                                <p>Sistem mencatat siapa yang melakukan perubahan data di menu <strong>Log Aktivitas</strong>.</p>
-                            </div>
-                            <div className="bg-red-50 p-3 rounded border border-red-100">
-                                <h4 className="font-bold text-red-800 mb-1"><i className="bi bi-key-fill"></i> Kunci Darurat</h4>
-                                <p>Saat aktivasi, Anda akan dapat <strong>Kunci Pemulihan</strong>. Simpan baik-baik untuk reset password Admin jika lupa.</p>
+                            <div className="rounded-lg bg-white/90 p-2 border border-amber-100 text-[11px] text-gray-700 space-y-1">
+                                <p>
+                                    <strong>👉 Menemukan Komputer Masih Login Akun Rekan?</strong> Jangan langsung menginput data! Klik tombol <strong>Logout (Keluar)</strong> di pojok profil terlebih dahulu, lalu login menggunakan akun Anda sendiri.
+                                </p>
+                                <p>
+                                    <strong>👉 Tindakan Darurat Admin (Force Logout):</strong> Jika staf kehilangan perangkat atau lupa logout di warung internet/tempat umum, Super Admin dapat membuka menu <em>Pengaturan &gt; Akun Pengguna &gt; Reset Password</em> staf tersebut. Sesi pada perangkat lama akan otomatis terputus saat sinkronisasi berikutnya.
+                                </p>
                             </div>
                         </div>
-                    </>
-                )
-            },
-            {
-                title: 'Manajemen User & Lupa Password',
-                content: (
-                    <div className="space-y-3">
-                        <div className="border-l-4 border-indigo-500 pl-3 py-1 bg-indigo-50">
-                            <h4 className="font-bold text-indigo-800 text-sm">Menambah User Staff</h4>
-                            <p className="text-xs">Gunakan tombol <strong>"Ambil dari Data Guru"</strong> di menu Pengaturan Akun. Username akan dibuat otomatis. <br/><strong>Password Default:</strong> <code>123456</code> (Bisa diubah di tabel).</p>
-                            <ul className="list-disc pl-4 mt-2 text-xs text-indigo-700 space-y-1">
-                                <li>Saat bulk, Anda bisa atur <strong>Role</strong>, <strong>Preset Izin</strong>, dan <strong>Izin Sync</strong> per user.</li>
-                                <li>Gunakan tombol <strong>Atur/Kustom</strong> untuk mengatur hak akses <strong>per modul</strong> (Blokir/Lihat/Edit) sebelum user dibuat.</li>
-                            </ul>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="p-3 bg-white rounded-lg border border-indigo-200 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <i className="bi bi-person-lock text-indigo-600"></i> Prosedur Lupa &amp; Reset Password Staf
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    <strong>1. Mandiri:</strong> Staf klik <em>"Lupa Password?"</em> di layar login, lalu jawab Pertanyaan Keamanan.
+                                </p>
+                                <p className="text-[11px] text-gray-600">
+                                    <strong>2. Oleh Admin:</strong> Admin mereset password di menu <em>Pengaturan &gt; Akun</em> &rarr; Klik <em>"Publikasikan Master"</em>. Di laptop staf, klik tombol <strong>"Update Data Akun dari Cloud"</strong> di layar login untuk menarik password baru tanpa perlu login dulu.
+                                </p>
+                            </div>
+
+                            <div className="p-3 bg-white rounded-lg border border-teal-200 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <i className="bi bi-file-earmark-arrow-down text-teal-600"></i> SOP Backup &amp; Restore JSON
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    Lakukan unduh berkas cadangan (<strong>Backup JSON</strong>) rutin setiap hari Sabtu/Ahad di menu <em>Pengaturan &gt; Backup &amp; Restore</em>.
+                                </p>
+                                <p className="text-[11px] text-gray-600">
+                                    Saat restore dilakukan, sistem menampilkan <strong>Laporan Hasil Restore</strong> yang merinci jumlah tabel dan data yang berhasil dipulihkan.
+                                </p>
+                            </div>
                         </div>
-                        <div className="border-l-4 border-red-500 pl-3 py-1 bg-red-50">
-                            <h4 className="font-bold text-red-800 text-sm">Fitur Lupa Password Staff (Mandiri)</h4>
-                            <p className="text-xs mb-1">Jika staff lupa password, klik <strong>"Lupa Password?"</strong> di halaman login.</p>
-                            <ul className="list-disc pl-4 text-xs text-red-700">
-                                <li>Untuk user yang dibuat manual, jawab pertanyaan keamanan yang diset saat pembuatan.</li>
-                                <li>Untuk user dari "Data Guru" (Bulk), Pertanyaan default: <strong>"Apa nama aplikasi ini?"</strong>, Jawaban: <strong>"esantri"</strong>.</li>
-                            </ul>
-                        </div>
-                        <div className="border-l-4 border-orange-500 pl-3 py-1 bg-orange-50">
-                            <h4 className="font-bold text-orange-800 text-sm">SOP Reset Password Manual (Oleh Admin)</h4>
-                            <p className="text-xs mb-1">Jika staff lupa jawaban keamanan dan Admin mereset password secara manual, ikuti urutan wajib ini agar password baru bisa dipakai staff:</p>
-                            <ol className="list-decimal pl-4 text-xs text-orange-900 space-y-1">
-                                <li><strong>Admin:</strong> Ubah password di menu <em>Pengaturan &gt; Akun</em>.</li>
-                                <li><strong>Admin:</strong> Buka menu <em>Pusat Sync</em> (atau klik tombol Sync Cloud) &gt; Klik <strong>"Publikasikan Master"</strong> (atau data akan otomatis terkirim jika menggunakan Firebase).</li>
-                                <li><strong>Staff:</strong> Di halaman login laptop staff, klik tombol <strong>"Update Data Akun dari Cloud"</strong>.</li>
-                                <li><strong>Staff:</strong> Login dengan password baru.</li>
-                            </ol>
-                        </div>
-                        <div className="border-l-4 border-teal-500 pl-3 py-1 bg-teal-50">
-                            <h4 className="font-bold text-teal-800 text-sm">Jika Menggunakan Firebase (Google Login)</h4>
-                            <p className="text-xs mb-1">Jika Anda menggunakan Firebase Realtime, manajemen password sedikit berbeda:</p>
-                            <ul className="list-disc pl-4 text-xs text-teal-700">
-                                <li><strong>Password Google:</strong> Jika lupa password Google, silakan reset melalui layanan Google.</li>
-                                <li><strong>Password Lokal:</strong> Jika Anda lupa password lokal untuk masuk ke aplikasi, gunakan tombol <strong>"Update Data Akun dari Cloud"</strong> di halaman login. Sistem akan mengambil data user terbaru dari Firebase (termasuk password yang mungkin sudah direset oleh Admin Utama).</li>
-                            </ul>
-                        </div>
-                    </div>
-                )
-            },
-            {
-                title: 'Update Hak Akses Saat Ada Fitur Baru',
-                content: (
-                    <div className="space-y-2 text-sm">
-                        <p>Setiap kali aplikasi menambah modul/fitur baru, lakukan pengecekan hak akses di <strong>Pengaturan &gt; User &amp; Keamanan</strong>.</p>
-                        <div className="rounded border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-900">
-                            <strong>Perilaku default:</strong> akun staff lama yang belum memiliki izin untuk fitur baru akan dianggap <strong>tidak punya akses</strong> sampai Admin memperbarui permission-nya.
-                        </div>
-                        <ol className="list-decimal pl-5 text-xs text-gray-700 space-y-1">
-                            <li>Buka daftar user, pilih akun staff yang relevan.</li>
-                            <li>Aktifkan izin modul baru sesuai kebutuhan (Read / Write).</li>
-                            <li>Simpan perubahan, lalu minta staff login ulang atau update data akun dari cloud.</li>
-                        </ol>
-                    </div>
-                )
-            },
-            {
-                title: 'Backup & Restore (Yang Perlu Dipahami Operator)',
-                content: (
-                    <div className="space-y-2 text-sm">
-                        <ul className="list-disc pl-5 space-y-1">
-                            <li>Backup JSON mencakup pengaturan dan seluruh data modul inti aplikasi.</li>
-                            <li>Saat restore selesai, sistem menampilkan <strong>Laporan Hasil Restore</strong> berisi data apa yang diperbarui dan data apa yang tidak ditemukan di file backup.</li>
-                            <li>Jika ada tabel yang tidak ditemukan, biasanya karena backup berasal dari versi lama atau fitur tersebut belum dipakai saat backup dibuat.</li>
-                        </ul>
-                        <p className="text-xs text-gray-600">Saran operasional: lakukan backup rutin mingguan dan simpan minimal 2 file cadangan terakhir di lokasi berbeda.</p>
-                    </div>
-                )
-            },
-            {
-                title: 'Pengaturan AI (BYOK OpenAI / Gemini)',
-                content: (
-                    <div className="space-y-2 text-sm">
-                        <p>Fitur AI di eSantri (Draft Surat, Insight Dashboard, dan Generator Poster) bisa memakai mode gratis atau API key milik Anda sendiri.</p>
-                        <ol className="list-decimal pl-5 text-xs text-gray-700 space-y-1">
-                            <li>Buka <strong>Pengaturan &gt; Umum &gt; AI Assistant (BYOK)</strong>.</li>
-                            <li>Pilih provider utama: <strong>Pollinations</strong>, <strong>OpenAI</strong>, <strong>Gemini</strong>, atau <strong>OpenRouter</strong>.</li>
-                            <li>Jika pakai BYOK, isi API key dan model yang sesuai.</li>
-                            <li>Klik <strong>Uji Koneksi OpenAI</strong> / <strong>Uji Koneksi Gemini</strong> untuk validasi sebelum digunakan di modul.</li>
-                            <li>Jika pakai OpenRouter: klik <strong>Refresh Model</strong>, filter model gratis (<code>:free</code>), lalu pilih model aktif.</li>
-                            <li>Aktifkan <strong>Auto fallback ke model gratis</strong> agar saat limit model aktif habis, sistem mencoba model gratis lain dari daftar.</li>
-                            <li>Cek indikator status <strong>Sehat/Gagal</strong> dan waktu <strong>Terakhir tes</strong> di panel AI.</li>
-                            <li>Aktifkan <strong>Prioritaskan BYOK</strong> agar sistem memakai API key Anda dulu, lalu fallback ke mode gratis jika gagal.</li>
-                            <li>Konfigurasi AI bersifat <strong>global aplikasi</strong>, jadi user non-admin yang punya akses fitur AI akan otomatis memakai konfigurasi API dari admin inti.</li>
-                            <li>Untuk poster, aktifkan <strong>Generate Desain Poster langsung di aplikasi</strong> lalu gunakan tombol Generate di modul PSB Poster Maker.</li>
-                        </ol>
-                        <div className="rounded border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-900">
-                            <strong>Catatan:</strong> API key disimpan di perangkat/database aplikasi Anda. Batasi akses perangkat admin dan lakukan backup terenkripsi sesuai SOP internal pondok.
+
+                        {/* Konfigurasi AI */}
+                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
+                            <h6 className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
+                                <i className="bi bi-robot text-purple-600"></i> Konfigurasi Asisten Cerdas AI (BYOK OpenAI / Gemini)
+                            </h6>
+                            <p className="text-[11px] text-gray-600 leading-relaxed">
+                                Fitur AI eSantri (Pembuat Draf Surat, Analisis Insight Dashboard, dan Generator Poster PSB) dapat menggunakan mode gratis (Pollinations) atau API Key Anda sendiri (BYOK: OpenAI, Google Gemini, OpenRouter) di menu <strong>Pengaturan &gt; Umum &gt; AI Assistant</strong>.
+                            </p>
+                            <p className="text-[11px] text-gray-500">
+                                Pengaturan AI bersifat global lembaga; seluruh staf non-admin otomatis dapat menggunakan fitur AI sesuai wewenang modulnya tanpa perlu memasukkan kunci API di laptop masing-masing.
+                            </p>
                         </div>
                     </div>
                 )
@@ -820,10 +1161,114 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'santri',
-        badge: 2,
+        badge: 6,
         badgeColor: 'teal',
         title: 'Manajemen Santri',
         steps: [
+            {
+                title: 'SOP Kerja Multi-Admin: Real-Time Sync vs Hub-and-Spoke',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin Pendataan Santri:</strong>
+                                Data santri adalah basis primer seluruh sistem (digunakan oleh Absensi, Tahfizh, Kesehatan, BK, Rapor, hingga Tagihan). Penerimaan Santri Baru (PSB), pembagian kelas, mutasi, dan verifikasi berkas keluarga memerlukan pembagian kerja multi-admin yang disiplin agar tidak terjadi duplikasi NIS atau NIK santri.
+                            </div>
+                        </div>
+
+                        {/* Model A */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Sangat ideal bila panitia PSB dan staf tata usaha terhubung jaringan WiFi kantor atau internet stabil.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-person-badge text-teal-600"></i> Akun Khusus Panitia &amp; TU
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Admin membatasi hak akses ubah data induk hanya untuk staf administrasi kesiswaan/TU. Asatidz dan musyrif cukup memiliki hak baca (read-only) untuk keperluan absensi.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600"></i> Pembaruan Seketika Lintas Modul
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat panitia menambah santri baru atau mengubah rombel kelas, perubahan otomatis langsung terdistribusi ke tablet ustadz di kelas, poskestren, dan halaqah tahfizh.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-diagram-3 text-teal-600"></i> Partisi Kerja Input Santri
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat input massal santri baru, bagi tugas tim per jenjang/marhalah (misal: Admin 1 menginput MTs, Admin 2 menginput MA) untuk menghindari penginputan ganda.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Solusi terbaik jika meja registrasi pendaftaran santri baru berada di tenda lapangan yang belum terjangkau koneksi internet kontinu.
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">A. Peran HUB (Pusat Master Santri di Kantor TU):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Komputer utama kantor TU memegang otoritas tertinggi nomor induk (NIS), penetapan rombel kelas, dan arsip data keluarga santri.
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">B. Peran SPOKE (Laptop Petugas Registrasi / Lapangan):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Panitia pendaftaran menginput formulir biodata santri baru menggunakan formulir atau tabel bulk editor tanpa memerlukan koneksi internet.
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Data Santri:</strong>
+                                    <div className="mt-1.5 p-2 bg-teal-50/80 border border-teal-200 rounded text-[11px] text-teal-950">
+                                        <strong>⚡ Otomatis Saat Login (Auto-Pull):</strong> Begitu panitia PSB/staf login di pagi hari, sistem <em>secara otomatis menarik master data terbaru</em> dari Cloud di latar belakang. Anda tidak perlu menarik manual setiap saat. Gunakan tombol modal <em>"Ambil Master Data"</em> hanya jika laptop Anda baru tersambung internet di tengah hari atau ada pengumuman pembaruan mendadak dari Kantor TU.
+                                    </div>
+                                    <ol className="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-gray-600">
+                                        <li>Petugas menginput berkas pendaftaran santri baru secara mandiri di posko registrasi (offline).</li>
+                                        <li>Setelah sesi pendaftaran selesai atau saat laptop terhubung WiFi, petugas mengeklik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong> di menu Sinkronisasi.</li>
+                                        <li>Admin Utama di Kantor TU membuka menu Sinkronisasi dan mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem menyatukan data santri baru secara cerdas dan aman.</li>
+                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> agar seluruh perangkat staf pondok lainnya memperoleh daftar santri terbaru.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SOP Sesi & Audit Trail Santri */}
+                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-shield-lock-fill text-amber-700"></i> SOP Keamanan Sesi Akun &amp; Disiplin Logout Panitia:
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Formulir santri mencakup data kependudukan sensitif (NIK, NISN, nomor HP wali, dan dokumen keluarga). Pada meja pendaftaran yang digunakan bergantian, <strong>petugas WAJIB mengeklik "Logout (Keluar)"</strong> saat pergantian shift. Setiap santri yang ditambahkan akan merekam akun petugas aktif sebagai pembuat data (*audit trail*). Jika menemukan laptop masih terbuka dengan akun panitia lain, klik Logout terlebih dahulu lalu login dengan akun Anda sendiri.
+                            </p>
+                        </div>
+                    </div>
+                )
+            },
             {
                 title: 'Alur Input Data Santri (Manual + Bulk)',
                 content: (
@@ -1117,7 +1562,7 @@ export const panduanData: PanduanSectionData[] = [
                             <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
                             <div>
                                 <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin di Poskestren:</strong>
-                                Jangan biarkan Admin Kantor TU menginput seluruh data kesehatan sendirian. Poskestren beroperasi optimal saat didelegasikan langsung ke Petugas Medis / UKS di klinik pondok. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File JSON)</strong>. Ikuti SOP di bawah ini agar pencatatan medis dan mutasi stok obat akurat tanpa tumpang tindih.
+                                Jangan biarkan Admin Kantor TU menginput seluruh data kesehatan sendirian. Poskestren beroperasi optimal saat didelegasikan langsung ke Petugas Medis / UKS di klinik pondok. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>. Ikuti SOP di bawah ini agar pencatatan medis dan mutasi stok obat akurat tanpa tumpang tindih.
                             </div>
                         </div>
 
@@ -1139,7 +1584,7 @@ export const panduanData: PanduanSectionData[] = [
                                         <i className="bi bi-person-badge text-teal-600"></i> Akun Khusus Petugas Medis
                                     </strong>
                                     <p className="text-[11px] text-gray-600">
-                                        Admin membuat akun dengan role <em>Staff</em> dan izin akses dibatasi hanya ke modul <strong>Kesehatan</strong>. Data keuangan, tagihan, dan rapor santri tetap terlindungi secara privat.
+                                        Admin membuat akun khusus dengan izin akses dibatasi hanya ke modul <strong>Kesehatan</strong>. Data keuangan, tagihan, dan catatan BK santri tetap terlindungi secara privat.
                                     </p>
                                 </div>
                                 <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
@@ -1147,7 +1592,7 @@ export const panduanData: PanduanSectionData[] = [
                                         <i className="bi bi-broadcast text-teal-600"></i> Sinkronisasi Instan Antar-Device
                                     </strong>
                                     <p className="text-[11px] text-gray-600">
-                                        Saat petugas menyimpan pemeriksaan atau meresepkan obat di laptop klinik, data langsung masuk ke cloud. Admin pusat dan pengasuh dapat memantau santri yang sakit secara live.
+                                        Saat petugas menyimpan pemeriksaan atau meresepkan obat di laptop klinik, data langsung masuk ke cloud. Admin pusat dan pengasuh dapat memantau santri yang sakit secara langsung.
                                     </p>
                                 </div>
                                 <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
@@ -1166,7 +1611,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File JSON)
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -1175,7 +1620,7 @@ export const panduanData: PanduanSectionData[] = [
                             </p>
                             <div className="space-y-2 pt-1 text-xs">
                                 <div className="p-2 bg-white rounded-lg border border-indigo-100">
-                                    <strong className="text-indigo-950">A. Peran HUB (Komputer Induk di Kantor Tata Usaha):</strong>
+                                    <strong className="text-indigo-950">A. Peran HUB (Pusat Data Induk di Kantor Tata Usaha):</strong>
                                     <p className="text-[11px] text-gray-600 mt-0.5">
                                         Memegang basis data master lengkap (seluruh santri, master obat, stok induk, dan riwayat rekam medis).
                                     </p>
@@ -1183,19 +1628,32 @@ export const panduanData: PanduanSectionData[] = [
                                 <div className="p-2 bg-white rounded-lg border border-indigo-100">
                                     <strong className="text-indigo-950">B. Peran SPOKE (Laptop Petugas di Ruang Poskestren):</strong>
                                     <p className="text-[11px] text-gray-600 mt-0.5">
-                                        Petugas klinik membuka aplikasi dan melayani santri sakit tanpa memerlukan koneksi internet (semua tersimpan di IndexedDB browser lokal).
+                                        Petugas klinik membuka aplikasi dan melayani santri sakit tanpa memerlukan koneksi internet (semua tersimpan aman di penyimpanan laptop lokal).
                                     </p>
                                 </div>
                                 <div className="p-2 bg-white rounded-lg border border-indigo-100">
                                     <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Harian Poskestren:</strong>
-                                    <ol className="list-decimal pl-4 mt-1 space-y-1 text-[11px] text-gray-600">
+                                    <div className="mt-1.5 p-2 bg-teal-50/80 border border-teal-200 rounded text-[11px] text-teal-950">
+                                        <strong>⚡ Otomatis Saat Login (Auto-Pull):</strong> Begitu petugas medis login saat mulai jam dinas, sistem <em>secara otomatis menarik master santri dan stok obat terbaru</em> dari Cloud di latar belakang. Tidak perlu tarik manual setiap pagi! Tombol <em>"Ambil Master Data"</em> di modal hanya sebagai cadangan jika koneksi baru terhubung atau ada penambahan stok obat mendadak di gudang pusat.
+                                    </div>
+                                    <ol className="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-gray-600">
                                         <li>Petugas mencatat pemeriksaan dan resep obat santri sepanjang jam jaga secara offline di klinik.</li>
-                                        <li>Saat pergantian shift atau saat laptop terhubung WiFi/tethering, petugas membuka menu <em>Pengaturan &gt; Sinkronisasi Cloud</em> lalu klik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong>.</li>
-                                        <li>Admin Utama di Kantor TU membuka menu Sinkronisasi dan mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem membandingkan stempel <code>lastModified</code> sehingga rekam medis baru masuk dan stok obat terpotong aman tanpa menimpa data modul lain.</li>
-                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> agar seluruh perangkat staff lainnya memperoleh data stok dan kesehatan termutakhir.</li>
+                                        <li>Saat pergantian shift atau saat laptop terhubung WiFi/tethering, petugas membuka menu Sinkronisasi lalu klik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong>.</li>
+                                        <li>Admin Utama di Kantor TU membuka menu Sinkronisasi dan mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem membandingkan waktu perubahan terakhir sehingga rekam medis baru masuk dan stok obat terpotong aman tanpa menimpa data modul lain.</li>
+                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> agar seluruh perangkat staf lainnya memperoleh data stok dan kesehatan termutakhir.</li>
                                     </ol>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* SOP Sesi & Kerahasiaan Medis */}
+                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-shield-lock-fill text-amber-700"></i> SOP Keamanan Sesi Akun &amp; Kerahasiaan Rekam Medis Santri:
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Rekam medis santri, riwayat penyakit menular, dan riwayat alergi obat bersifat rahasia medis. Komputer ruang UKS/Poskestren yang sering ditinggal piket <strong>WAJIB DI-LOGOUT</strong> begitu petugas selesai jam dinas. Jangan membiarkan akun medis terbuka di meja klinik karena santri atau orang lain dapat melihat riwayat penyakit santri lain. Jika menemukan komputer UKS masih login akun shift sebelumnya, klik Logout terlebih dahulu lalu masuk dengan akun Anda sendiri agar resep obat tercatat atas penanggung jawab yang tepat (*audit trail*).
+                            </p>
                         </div>
                     </div>
                 )
@@ -1394,47 +1852,220 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'bk',
-        badge: 5,
-        badgeColor: 'indigo',
+        badge: 4,
+        badgeColor: 'teal',
         title: 'Bimbingan Konseling (BK)',
         steps: [
-             {
-                title: 'Penting: Privasi Data (Confidential)',
-                color: 'red',
+            {
+                title: 'SOP Kerja Multi-Admin: Real-Time Sync vs Hub-and-Spoke',
                 content: (
-                    <div className="bg-indigo-50 p-3 border border-indigo-200 rounded text-sm text-indigo-900">
-                        <i className="bi bi-shield-lock-fill mr-1"></i> Data BK bersifat <strong>Sangat Rahasia</strong>.
-                        Pastikan Anda mengaktifkan <strong>Multi-User Mode</strong> di Pengaturan. 
-                        Buat akun khusus untuk Konselor/Guru BK. Staff biasa yang tidak memiliki izin akses 'BK' <strong>TIDAK AKAN BISA</strong> melihat menu ini.
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-shield-exclamation text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin Bimbingan Konseling:</strong>
+                                Layanan Bimbingan Konseling memuat catatan pribadi santri yang sensitif. Pembagian akun mandiri dan penerapan arsitektur sinkronisasi yang jelas melindungi kerahasiaan santri dan memastikan catatan tindak lanjut tersimpan aman tanpa tertimpa. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>.
+                            </div>
+                        </div>
+
+                        {/* Model A */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Sangat ideal bila ruang konseling/BK terjangkau jaringan WiFi pondok atau internet stabil.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-person-badge text-teal-600"></i> Akun Khusus Guru BK
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Admin membuat akun khusus konselor dengan izin akses dibatasi hanya ke modul <strong>Bimbingan Konseling</strong>. Akun umum di kantor TU tidak dapat membuka catatan sesi privat santri.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600"></i> Sinkronisasi Detik Itu Juga
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat konselor menyimpan catatan sesi atau evaluasi sikap, data langsung masuk ke cloud. Riwayat pembinaan tersimpan aman tanpa perlu kirim berkas manual.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-shield-lock text-teal-600"></i> Partisi Privasi Kasus
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Gunakan 3 tingkat privasi (Biasa, Rahasia, Sangat Rahasia) agar koordinasi kasus santri bersama Musyrif atau Pimpinan tepat sasaran tanpa membocorkan rahasia.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Solusi terbaik jika ruang BK berada di sudut gedung pesantren yang belum terjangkau koneksi internet kontinu.
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">A. Peran HUB (Pusat Data Induk di Kantor Tata Usaha):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Memegang basis data master lengkap (data induk santri, riwayat perizinan, dan arsip dokumen pondok).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">B. Peran SPOKE (Laptop Konselor di Ruang BK):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Guru BK mencatat sesi bimbingan santri di laptop ruang BK secara tenang dan rahasia tanpa memerlukan koneksi internet (semua tersimpan aman di penyimpanan laptop lokal).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Konseling:</strong>
+                                    <div className="mt-1.5 p-2 bg-teal-50/80 border border-teal-200 rounded text-[11px] text-teal-950">
+                                        <strong>⚡ Otomatis Saat Login (Auto-Pull):</strong> Begitu Guru BK login di ruang konseling, sistem <em>secara otomatis menarik master santri dan catatan kejadian terbaru</em> dari Cloud di latar belakang. Tidak perlu tarik manual setiap pagi! Tombol <em>"Ambil Master Data"</em> di modal hanya sebagai cadangan jika koneksi baru terhubung atau ada laporan pelanggaran mendadak yang baru diinput pengasuhan.
+                                    </div>
+                                    <ol className="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-gray-600">
+                                        <li>Guru BK mencatat sesi pembinaan dan tindak lanjut santri di laptop ruang BK secara offline.</li>
+                                        <li>Saat terhubung internet atau WiFi pondok, konselor membuka menu Sinkronisasi lalu klik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong>.</li>
+                                        <li>Admin Utama di Kantor TU membuka menu Sinkronisasi dan mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem menyatukan catatan konseling terbaru secara aman dan rahasia tanpa menimpa data modul lain.</li>
+                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> agar seluruh perangkat staf lainnya memperoleh data termutakhir.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SOP Sesi & Kerahasiaan BK */}
+                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-shield-lock-fill text-amber-700"></i> SOP Keamanan Sesi Akun &amp; Perlindungan Privasi Konseling Santri:
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Curahan hati santri, konflik keluarga, dan catatan pelanggaran disiplin dalam modul BK merupakan data dengan kerahasiaan tingkat tinggi. Guru BK <strong>WAJIB MENGEKLIK LOGOUT</strong> jika meninggalkan laptop konseling, terutama bila laptop tersebut dibawa ke ruang guru atau digunakan bergantian. Jika akun tertinggal dalam keadaan login, risiko pembacaan catatan privat santri oleh pihak tak berwenang sangat fatal. Jika konselor lain akan menggunakan laptop, klik Logout terlebih dahulu agar resume pembinaan tercatat atas nama konselor yang menangani (*audit trail*).
+                            </p>
+                        </div>
                     </div>
                 )
             },
-             {
-                title: 'Cara Aman Menggunakan (Desentralisasi)',
-                color: 'teal',
+            {
+                title: 'Kerahasiaan & Pembagian Tingkat Privasi Kasus',
+                color: 'red',
                 content: (
-                    <>
-                        <p className="mb-2 text-sm">Agar kerahasiaan terjaga dan tidak terekspos di komputer admin pusat yang ramai, gunakan metode ini:</p>
-                        <div className="bg-teal-50 p-3 rounded border border-teal-200">
-                            <ol className="list-decimal pl-5 space-y-2 text-sm">
-                                <li><strong>Konselor Pakai Laptop Sendiri:</strong> Jangan mencatat BK di komputer utama kantor.</li>
-                                <li><strong>Gunakan Sync Cloud:</strong> Hubungkan laptop Konselor ke Dropbox atau <strong>Firebase</strong> pondok.</li>
-                                <li><strong>Input & Sync:</strong> Konselor mencatat sesi di laptopnya. Jika menggunakan Dropbox, klik "Kirim Perubahan". Jika menggunakan <strong>Firebase</strong>, data tersimpan secara real-time dan aman.</li>
-                            </ol>
+                    <div className="space-y-3 text-sm">
+                        <p className="text-xs text-gray-700">
+                            Setiap sesi bimbingan konseling dapat dikelompokkan ke dalam 3 tingkat kerahasiaan untuk memudahkan koordinasi yang tepat:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                            <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                                    Biasa
+                                </span>
+                                <p className="text-gray-600 text-[11px] leading-relaxed pt-1">
+                                    Untuk masalah ringan seperti adaptasi kamar, motivasi belajar, atau kedisiplinan harian yang dapat dikoordinasikan bersama wali kelas dan musyrif asrama.
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                                    Rahasia
+                                </span>
+                                <p className="text-gray-600 text-[11px] leading-relaxed pt-1">
+                                    Untuk permasalahan khusus, konflik santri, atau pelanggaran tata tertib yang hanya diketahui oleh Konselor, Wali Kelas, dan Kepala Pengasuhan.
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-lg border border-gray-200 shadow-2xs space-y-1">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                    Sangat Rahasia
+                                </span>
+                                <p className="text-gray-600 text-[11px] leading-relaxed pt-1">
+                                    Untuk permasalahan mendalam atau masalah keluarga yang bersifat sangat pribadi dan penanganannya hanya dilakukan oleh Konselor utama atau Pimpinan Pondok.
+                                </p>
+                            </div>
                         </div>
-                    </>
+                    </div>
                 )
             },
             {
-                title: 'Mencatat Sesi Konseling',
+                title: 'Alur Pelayanan & Pemantauan Perkembangan Santri',
+                color: 'teal',
                 content: (
-                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Bimbingan Konseling</strong> di Sidebar.</li>
-                        <li>Klik <strong>"Catat Sesi Baru"</strong>.</li>
-                        <li>Pilih Nama Santri dan Kategori Masalah (Pribadi, Belajar, Keluarga, dll).</li>
-                        <li>Tulis keluhan santri dan saran/penanganan.</li>
-                        <li><strong>Privasi:</strong> Pilih tingkat kerahasiaan (Biasa/Rahasia/Sangat Rahasia).</li>
-                    </ol>
+                    <div className="space-y-3 text-sm">
+                        <ol className="list-decimal pl-5 space-y-2 text-xs text-gray-700">
+                            <li>
+                                <strong>Pencatatan Sesi Konseling Baru:</strong>
+                                <p className="text-[11px] text-gray-600 mt-0.5">
+                                    Buka menu <strong>Bimbingan Konseling</strong> &gt; klik <strong>"Catat Sesi Baru"</strong>. Pilih nama santri, tanggal konseling, nama konselor, dan kategori masalah (Pribadi, Sosial, Belajar, Disiplin, Ibadah, Keluarga, atau Karir &amp; Minat Bakat).
+                                </p>
+                            </li>
+                            <li>
+                                <strong>Koordinasi Pihak Terkait:</strong>
+                                <p className="text-[11px] text-gray-600 mt-0.5">
+                                    Tentukan pihak yang dilibatkan dalam bimbingan, seperti Musyrif Asrama, Wali Kelas, Orang Tua/Wali, Petugas Poskestren, atau Keamanan Pondok.
+                                </p>
+                            </li>
+                            <li>
+                                <strong>Komitmen Santri &amp; Jadwal Kontrol:</strong>
+                                <p className="text-[11px] text-gray-600 mt-0.5">
+                                    Tuliskan hasil kesepakatan perbaikan sikap santri dan tentukan tanggal kontrol berikutnya untuk evaluasi lanjutan.
+                                </p>
+                            </li>
+                            <li>
+                                <strong>Pencatatan Riwayat Tindak Lanjut (Follow-Up):</strong>
+                                <p className="text-[11px] text-gray-600 mt-0.5">
+                                    Gunakan tombol <strong>"Follow-up / Lanjutan"</strong> pada kartu konseling untuk mencatat setiap perkembangan santri secara berkala tanpa menghapus catatan sesi sebelumnya. Status santri dapat disesuaikan bertahap: <em>Baru &rarr; Proses &rarr; Pemantauan &rarr; Selesai</em>.
+                                </p>
+                            </li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: 'Penerbitan Surat Resmi & Pengiriman Pesan WhatsApp',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="p-3 bg-white border border-teal-200 rounded-xl space-y-1.5 shadow-2xs">
+                                <h6 className="font-bold text-teal-900 flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-text text-teal-600 text-sm"></i> Format Surat Konseling
+                                </h6>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Klik tombol <strong>"Cetak Surat"</strong> pada kartu sesi bimbingan untuk memilih format dokumen resmi:
+                                </p>
+                                <ul className="text-gray-600 text-[11px] space-y-1 pl-3 list-disc">
+                                    <li><strong>Surat Undangan Wali Santri:</strong> Untuk mengundang orang tua/wali hadir musyawarah di pondok.</li>
+                                    <li><strong>Surat Panggilan Santri:</strong> Untuk memanggil santri hadir ke ruang konseling.</li>
+                                    <li><strong>Berita Acara Konseling:</strong> Risalah tertulis hasil pembinaan dan komitmen santri.</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-3 bg-white border border-green-200 rounded-xl space-y-1.5 shadow-2xs">
+                                <h6 className="font-bold text-green-900 flex items-center gap-1.5">
+                                    <i className="bi bi-whatsapp text-green-600 text-sm"></i> Notifikasi WhatsApp Cepat
+                                </h6>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Pada jendela pratinjau surat, klik tombol <strong>"Kirim Pesan WhatsApp Resmi"</strong> untuk langsung menghubungi orang tua/wali santri:
+                                </p>
+                                <ul className="text-gray-600 text-[11px] space-y-1 pl-3 list-disc">
+                                    <li>Nomor WhatsApp wali santri otomatis terisi sesuai data profil santri.</li>
+                                    <li>Template pesan resmi sudah tersusun rapi dan sopan.</li>
+                                    <li>Tersedia tombol untuk mengirim langsung via WhatsApp atau menyalin teks pesan.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 )
             }
         ]
@@ -1453,7 +2084,7 @@ export const panduanData: PanduanSectionData[] = [
                             <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
                             <div>
                                 <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Kedisiplinan Kerja Multi-Admin:</strong>
-                                Di pondok pesantren dengan puluhan ustadz/musyrif yang mengabsen serentak di kelas dan asrama, sistem mendukung 2 arsitektur utama: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline/Dropbox/File)</strong>. Ikuti SOP di bawah ini agar data absensi tidak saling menimpa (conflict-free).
+                                Di pondok pesantren dengan puluhan ustadz/musyrif yang mengabsen serentak di kelas dan asrama, sistem mendukung 2 arsitektur utama: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>. Ikuti SOP di bawah ini agar data absensi tidak saling menimpa.
                             </div>
                         </div>
 
@@ -1475,7 +2106,7 @@ export const panduanData: PanduanSectionData[] = [
                                         <i className="bi bi-person-check text-teal-600"></i> Akun Mandiri Guru
                                     </strong>
                                     <p className="text-[11px] text-gray-600">
-                                        Setiap pengajar login menggunakan akun masing-masing. Nama pencatat otomatis direkam di atribut <code>recordedBy</code> untuk audit jejak digital.
+                                        Setiap pengajar login menggunakan akun masing-masing. Nama pencatat otomatis direkam di riwayat aktivitas sistem untuk audit jejak kerja.
                                     </p>
                                 </div>
                                 <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
@@ -1483,7 +2114,7 @@ export const panduanData: PanduanSectionData[] = [
                                         <i className="bi bi-broadcast text-teal-600"></i> Sinkronisasi Detik Itu Juga
                                     </strong>
                                     <p className="text-[11px] text-gray-600">
-                                        Saat guru menekan "Simpan Data Absensi", data masuk ke IndexedDB lokal dan langsung didorong ke Cloud Firebase. Admin pusat &amp; pimpinan pondok dapat memantau secara live.
+                                        Saat guru menekan "Simpan Data Absensi", data tersimpan di penyimpanan lokal dan langsung tersinkronisasi ke Cloud. Pimpinan pondok dapat memantau kehadiran santri secara langsung.
                                     </p>
                                 </div>
                                 <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
@@ -1502,7 +2133,7 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File JSON)
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
                                 </h5>
                                 <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
                             </div>
@@ -1524,14 +2155,27 @@ export const panduanData: PanduanSectionData[] = [
                                 </div>
                                 <div className="p-2 bg-white rounded-lg border border-indigo-100">
                                     <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Sore Hari:</strong>
-                                    <ol className="list-decimal pl-4 mt-1 space-y-1 text-[11px] text-gray-600">
+                                    <div className="mt-1.5 p-2 bg-teal-50/80 border border-teal-200 rounded text-[11px] text-teal-950">
+                                        <strong>⚡ Otomatis Saat Login (Auto-Pull):</strong> Begitu ustadz/guru login di jam mengajar pertama, sistem <em>secara otomatis menarik master data santri &amp; rombel terbaru</em> dari Cloud di latar belakang. Status santri yang sedang Sakit di Poskestren atau Izin di Kesantrian otomatis terdeteksi tanpa perlu tarik manual. Tombol <em>"Ambil Master Data"</em> di modal hanya sebagai cadangan jika laptop baru terhubung WiFi atau ada perubahan rombel darurat di siang hari.
+                                    </div>
+                                    <ol className="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-gray-600">
                                         <li>Guru mengabsen santri secara mandiri di kelas (tanpa perlu paket data).</li>
-                                        <li>Saat KBM selesai atau ketika mendapat sinyal, guru mengeklik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong> di menu Cloud Sync, atau mengirim file ekspor ke Admin.</li>
-                                        <li>Admin Utama di Hub mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem membandingkan stempel <code>lastModified</code> dan menyatukan seluruh absensi tanpa menimpa data rombel lain.</li>
+                                        <li>Saat KBM selesai atau ketika mendapat sinyal, guru mengeklik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong> di menu Sinkronisasi Cloud, atau mengirim file ekspor ke Admin.</li>
+                                        <li>Admin Utama di Hub mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem membandingkan waktu perubahan terakhir dan menyatukan seluruh absensi tanpa menimpa data rombel lain.</li>
                                         <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> untuk mendistribusikan data termutakhir ke seluruh staf.</li>
                                     </ol>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* SOP Sesi & Audit Presensi */}
+                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-shield-lock-fill text-amber-700"></i> SOP Keamanan Sesi Akun &amp; Validitas Jejak Presensi (Audit Trail):
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Setiap presensi yang disimpan merekam identitas akun ustadz yang sedang aktif. Di ruang kelas atau kantor guru yang menggunakan komputer inventaris bersama, <strong>guru WAJIB LOGOUT setelah jam pelajaran selesai</strong>. Jika akun dibiarkan aktif, guru jam berikutnya akan mengabsen menggunakan akun Anda, sehingga data kehadiran santri tercatat atas nama guru yang salah saat diaudit pimpinan. Jika menemukan komputer kelas masih terbuka akun guru lain, klik Logout terlebih dahulu lalu login dengan akun Anda sendiri.
+                            </p>
                         </div>
                     </div>
                 )
@@ -1658,29 +2302,105 @@ export const panduanData: PanduanSectionData[] = [
         title: "Tahfizh & Mutaba'ah Qur'an (Rapor & Halaqah)",
         steps: [
             {
-                title: 'Ikhtisar & Rekomendasi Alur Kerja (Workflow)',
+                title: 'SOP Kerja Multi-Admin: Real-Time Sync vs Hub-and-Spoke',
                 content: (
                     <div className="space-y-3 text-sm">
-                        <p>
-                            Modul Tahfizh dirancang untuk mencatat mutaba'ah harian, ujian berkala per juz, hingga penerbitan Buku Rapor Semesteran dan Syahadah Hafalan secara terstruktur:
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                                <h5 className="font-bold text-green-900 flex items-center gap-1.5 mb-1">
-                                    <i className="bi bi-person-workspace text-green-700"></i> 1. Desentralisasi Input Halaqah
-                                </h5>
-                                <p className="text-xs text-gray-700">
-                                    Admin membuatkan akun staff untuk setiap Ustadz Muhaffizh. Pengajar langsung mencatat saat menyimak santri maju setoran lewat HP/tablet masing-masing.
-                                </p>
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin di Program Tahfizh:</strong>
+                                Di pondok pesantren dengan puluhan halaqah yang menyimak ratusan santri serentak setiap subuh dan ashar di masjid, sistem mendukung 2 arsitektur utama: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>. Ikuti SOP di bawah ini agar setiap ustadz muhaffizh dapat mencatat mutaba'ah secara mandiri dan lancar tanpa risiko data tertimpa.
                             </div>
-                            <div className="bg-teal-50 p-3 rounded-lg border border-teal-200">
-                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 mb-1">
-                                    <i className="bi bi-cloud-arrow-up text-teal-700"></i> 2. Sinkronisasi Real-Time / Offline
+                        </div>
+
+                        {/* Model A */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Real-Time Live Sync (Firebase Firestore)
                                 </h5>
-                                <p className="text-xs text-gray-700">
-                                    Bekerja mulus tanpa internet (Offline-First). Bila terhubung Firebase Realtime, data setoran langsung tersinkron ke admin dan portal wali santri.
-                                </p>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
+                            <p className="text-xs text-gray-600">
+                                Sangat ideal bila masjid atau ruang halaqah terjangkau jaringan WiFi pondok atau paket data internet.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-person-badge text-teal-600"></i> Akun Mandiri Ustadz Muhaffizh
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Setiap pengajar halaqah login dengan akun masing-masing dan langsung diarahkan ke daftar anggota halaqah binaannya sendiri.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600"></i> Sinkronisasi Detik Itu Juga
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat ustadz menekan simpan setoran, mutaba'ah hafalan otomatis tersimpan di cloud, grafik capaian juz terakumulasi, dan data tampil di Portal Wali Santri.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-diagram-3 text-teal-600"></i> Partisi Kerja Per Halaqah
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Setiap ustadz fokus pada santri halaqahnya sendiri sehingga mutaba'ah tidak saling bertabrakan. Pengurus pusat memantau rekap keseluruhan secara langsung.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Solusi terbaik jika masjid atau sudut asrama halaqah berada di area yang minim sinyal internet.
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">A. Peran HUB (Pusat Koordinator Tahfizh di Kantor TU):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Komputer utama di kantor TU yang memegang salinan master plotting halaqah, target juz, dan penerbitan Buku Rapor Tahfizh semesteran.
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">B. Peran SPOKE (Laptop/HP Ustadz di Masjid atau Asrama):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Ustadz menyimak hafalan santri di sudut masjid secara lancar dan cepat tanpa memerlukan koneksi internet (semua tersimpan aman di penyimpanan lokal).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Tahfizh:</strong>
+                                    <div className="mt-1.5 p-2 bg-teal-50/80 border border-teal-200 rounded text-[11px] text-teal-950">
+                                        <strong>⚡ Otomatis Saat Login (Auto-Pull):</strong> Begitu ustadz muhaffizh login saat halaqah subuh/ashar dimulai, sistem <em>secara otomatis menarik master data santri &amp; riwayat hafalan terakhir</em> dari Cloud di latar belakang. Muhaffizh tidak perlu repot mencari menu sinkronisasi sebelum menyimak setoran! Tombol <em>"Ambil Master Data"</em> di modal hanya sebagai cadangan jika laptop baru tersambung internet atau ada santri pindah halaqah mendadak.
+                                    </div>
+                                    <ol className="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-gray-600">
+                                        <li>Ustadz mencatat setoran sabaq, sabqi, dan manzil selama halaqah berlangsung secara offline.</li>
+                                        <li>Selesai sesi halaqah atau saat terhubung WiFi pondok, ustadz membuka menu Sinkronisasi dan mengeklik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong>.</li>
+                                        <li>Admin Utama di Kantor TU membuka menu Sinkronisasi dan mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem menyatukan catatan mutaba'ah santri tanpa menimpa data halaqah lain.</li>
+                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> agar data kemajuan hafalan santri terdistribusi ke seluruh pengurus pondok.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SOP Sesi & Audit Tahfizh */}
+                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-shield-lock-fill text-amber-700"></i> SOP Keamanan Sesi Akun &amp; Validitas Penyimak Setoran (Audit Trail):
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Setiap setoran juz, surat, dan ayat yang tersimpan otomatis merekam akun muhaffizh yang menyimak. Pada laptop atau tablet inventaris pondok yang digunakan bergantian di masjid, <strong>ustadz muhaffizh WAJIB mengeklik "Logout (Keluar)"</strong> begitu sesi halaqah berakhir. Jika akun dibiarkan aktif, muhaffizh halaqah berikutnya akan mencatat setoran santri binaannya di bawah nama akun Anda, sehingga data penguji pada Buku Rapor Tahfizh santri menjadi keliru. Jika menemukan perangkat halaqah masih aktif dengan akun rekan lain, klik Logout terlebih dahulu lalu login dengan akun Anda sendiri.
+                            </p>
                         </div>
                     </div>
                 )

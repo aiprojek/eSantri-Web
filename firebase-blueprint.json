@@ -128,9 +128,15 @@
         "kategori": { "type": "string" },
         "keluhan": { "type": "string" },
         "penanganan": { "type": "string" },
+        "hasil": { "type": "string" },
         "status": { "type": "string" },
         "privasi": { "type": "string" },
         "konselor": { "type": "string" },
+        "tanggalBerikutnya": { "type": "string" },
+        "pihakTerlibat": { "type": "array", "items": { "type": "string" } },
+        "komitmenSantri": { "type": "string" },
+        "followUpLogs": { "type": "array" },
+        "deleted": { "type": "boolean" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "santriId", "tanggal", "kategori", "keluhan", "penanganan", "lastModified"]

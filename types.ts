@@ -1052,17 +1052,31 @@ export interface KesehatanRecord {
     lastModified?: number;
 }
 
+export type BkKategori = 'Pribadi' | 'Sosial' | 'Belajar' | 'Karir' | 'Keluarga' | 'Ibadah' | 'Homesick' | 'Kedisiplinan' | 'Perundungan' | 'Lainnya';
+
+export interface BkFollowUpLog {
+    id: string;
+    tanggal: string;
+    catatan: string;
+    konselor: string;
+    statusSetelahnya?: 'Baru' | 'Proses' | 'Pemantauan' | 'Selesai';
+}
+
 export interface BkSession {
     id: number;
     santriId: number;
     tanggal: string;
-    kategori: 'Pribadi' | 'Sosial' | 'Belajar' | 'Karir' | 'Keluarga' | 'Ibadah' | 'Lainnya';
+    kategori: BkKategori;
     keluhan: string;
     penanganan: string;
     hasil?: string;
     status: 'Baru' | 'Proses' | 'Selesai' | 'Pemantauan';
     privasi: 'Biasa' | 'Rahasia' | 'Sangat Rahasia';
     konselor: string;
+    tanggalBerikutnya?: string; // Jadwal tindak lanjut / kontrol berikutnya
+    pihakTerlibat?: string[]; // e.g. ['Musyrif Asrama', 'Wali Kelas', 'Orang Tua / Wali']
+    komitmenSantri?: string; // Kesepakatan / komitmen perbaikan
+    followUpLogs?: BkFollowUpLog[]; // Riwayat sesi lanjutan bertahap
     deleted?: boolean;
     lastModified?: number;
 }

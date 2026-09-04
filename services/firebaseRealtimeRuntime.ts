@@ -159,9 +159,17 @@ export const startFirebaseSync = (tenantId: string) => {
         TABLES_TO_SYNC.forEach((tableName) => {
             const table = (db as any)[tableName];
 
-            const creatingHook = (_primKey: any, obj: any) => {
+            const creatingHook = function (this: any, primKey: any, obj: any) {
                 if (isSyncingFromCloud) return;
-                void syncLocalToFirebase(actualId, tableName, obj);
+                if (primKey !== undefined) {
+                    void syncLocalToFirebase(actualId, tableName, { ...obj, id: obj.id ?? primKey });
+                } else if (this && typeof this.onsuccess === 'function') {
+                    this.onsuccess = (key: any) => {
+                        void syncLocalToFirebase(actualId, tableName, { ...obj, id: obj.id ?? key });
+                    };
+                } else {
+                    void syncLocalToFirebase(actualId, tableName, obj);
+                }
             };
             const updatingHook = (mods: any, _primKey: any, obj: any) => {
                 if (isSyncingFromCloud) return;

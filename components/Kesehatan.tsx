@@ -17,7 +17,6 @@ import {
     DocumentType
 } from './kesehatan/KesehatanPrintTemplates';
 import { WhatsAppHealthModal } from './kesehatan/WhatsAppHealthModal';
-import { PrintDocumentModal } from './kesehatan/PrintDocumentModal';
 import { MedicalPrintPreviewModal, MedicalDocumentType } from './kesehatan/MedicalPrintPreviewModal';
 
 // --- SUB COMPONENTS: STOK OBAT ---
@@ -703,7 +702,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                     for (const item of editingRecord.resep) {
                         const obat = await db.obat.get(item.obatId);
                         if (obat) {
-                            await db.obat.update(obat.id, { stok: obat.stok + item.jumlah });
+                            await db.obat.update(obat.id, { stok: obat.stok + item.jumlah, lastModified: Date.now() });
                         }
                     }
                 }

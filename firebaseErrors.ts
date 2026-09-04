@@ -1,3 +1,5 @@
+import { isFirebaseClientConfigReady } from './firebaseApp';
+
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -23,12 +25,30 @@ export interface FirestoreErrorInfo {
       email: string | null;
       photoUrl: string | null;
     }[];
-  }
+  };
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  // If Firebase BYOK is not configured, ignore silently
+  if (!isFirebaseClientConfigReady) {
+    return;
+  }
+
+  const rawMsg = error instanceof Error ? error.message : String(error);
+  const isExpectedAuthOrPermIssue =
+    rawMsg.includes('permission-denied') ||
+    rawMsg.includes('unauthenticated') ||
+    rawMsg.includes('insufficient permissions') ||
+    rawMsg.includes('unavailable') ||
+    rawMsg.includes('offline');
+
+  if (isExpectedAuthOrPermIssue) {
+    console.warn(`[Firebase BYOK Info] Operasi ${operationType} pada "${path || '-'}" dibatasi atau offline: ${rawMsg}`);
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: rawMsg,
     authInfo: {
       userId: undefined,
       email: undefined,
@@ -41,6 +61,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   };
 
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.warn('Firestore Operation Notice: ', JSON.stringify(errInfo));
 }

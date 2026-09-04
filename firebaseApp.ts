@@ -1,7 +1,7 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import firebaseConfig from './firebase-applet-config.json';
 
-const isPlaceholder = (value?: string) => !value || value.startsWith('VITE_') || value.includes('YOUR_');
+const isPlaceholder = (value?: string) => !value || value.startsWith('VITE_') || value.includes('YOUR_') || value === 'placeholder';
 
 const getFirebaseConfig = () => {
   const envConfig = {
@@ -14,7 +14,7 @@ const getFirebaseConfig = () => {
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   };
 
-  if (envConfig.apiKey) {
+  if (envConfig.apiKey && !isPlaceholder(envConfig.apiKey)) {
     return envConfig;
   }
 
@@ -22,7 +22,7 @@ const getFirebaseConfig = () => {
     const customConfigStr = localStorage.getItem('esantri_custom_firebase_config');
     if (customConfigStr) {
       const custom = JSON.parse(customConfigStr);
-      if (custom.apiKey && custom.projectId) {
+      if (custom.apiKey && !isPlaceholder(custom.apiKey) && custom.projectId && !isPlaceholder(custom.projectId)) {
         return custom;
       }
     }
@@ -34,10 +34,39 @@ const getFirebaseConfig = () => {
 };
 
 export const activeFirebaseConfig = getFirebaseConfig();
+
 export const isFirebaseClientConfigReady = Boolean(
   activeFirebaseConfig?.projectId &&
-  activeFirebaseConfig?.authDomain &&
+  !isPlaceholder(activeFirebaseConfig?.projectId) &&
+  activeFirebaseConfig?.apiKey &&
+  !isPlaceholder(activeFirebaseConfig?.apiKey) &&
   activeFirebaseConfig?.appId &&
-  !isPlaceholder(activeFirebaseConfig?.apiKey)
+  !isPlaceholder(activeFirebaseConfig?.appId)
 );
-export const firebaseApp = initializeApp(activeFirebaseConfig);
+
+let _firebaseApp: FirebaseApp | null = null;
+
+export const getFirebaseApp = (): FirebaseApp | null => {
+  if (!isFirebaseClientConfigReady) {
+    return null;
+  }
+  const existingApps = getApps();
+  if (existingApps.length > 0) {
+    return existingApps[0];
+  }
+  if (!_firebaseApp) {
+    _firebaseApp = initializeApp(activeFirebaseConfig);
+  }
+  return _firebaseApp;
+};
+
+// Lazy proxy for backwards compatibility with direct imports
+export const firebaseApp: FirebaseApp = new Proxy({} as FirebaseApp, {
+  get(_target, prop, receiver) {
+    const app = getFirebaseApp();
+    if (!app) {
+      return undefined;
+    }
+    return Reflect.get(app, prop, receiver);
+  }
+});

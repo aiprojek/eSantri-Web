@@ -1105,43 +1105,259 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'kesehatan',
-        badge: 3,
+        badge: 6,
         badgeColor: 'red',
-        title: "Poskestren & Kesehatan",
+        title: "Poskestren & Kesehatan Santri",
         steps: [
             {
-                title: 'Setup Stok & Data Obat',
+                title: 'SOP Kerja Multi-Admin: Real-Time Sync vs Hub-and-Spoke',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Kesehatan &gt; Stok Obat</strong>.</li>
-                        <li>Klik <strong>Tambah Obat</strong> untuk menginput database obat (Nama, Jenis, Stok Awal).</li>
-                        <li>Stok akan otomatis berkurang saat obat diresepkan kepada santri.</li>
-                    </ul>
-                )
-            },
-            {
-                title: 'Alur Pemeriksaan Ideal (Beban Kerja Terbagi)',
-                content: (
-                     <>
-                        <div className="bg-red-50 p-3 rounded border border-red-200 text-sm mb-2 text-red-900">
-                            <strong>REKOMENDASI:</strong> Jangan biarkan Admin Kantor mengerjakan semuanya. Delegasikan input kesehatan ke Petugas Poskestren.
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin di Poskestren:</strong>
+                                Jangan biarkan Admin Kantor TU menginput seluruh data kesehatan sendirian. Poskestren beroperasi optimal saat didelegasikan langsung ke Petugas Medis / UKS di klinik pondok. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File JSON)</strong>. Ikuti SOP di bawah ini agar pencatatan medis dan mutasi stok obat akurat tanpa tumpang tindih.
+                            </div>
                         </div>
-                        <ol className="list-decimal pl-5 space-y-2 text-sm mt-1">
-                            <li><strong>Buat Akun Petugas:</strong> Admin membuat user baru dengan role 'Staff' dan akses hanya ke modul 'Kesehatan'.</li>
-                            <li><strong>Input di Klinik:</strong> Petugas Poskestren login di laptop klinik. Saat ada santri sakit, input data di menu <strong>Rekam Medis</strong>.</li>
-                            <li><strong>Sync Data:</strong> Jika menggunakan Cloud Sync (Dropbox), Petugas klik "Kirim Perubahan". Jika menggunakan <strong>Firebase</strong>, data otomatis terkirim secara real-time.</li>
-                        </ol>
-                    </>
+
+                        {/* Model A */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Sangat ideal bila ruang klinik/Poskestren terjangkau jaringan WiFi pondok atau internet stabil.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-person-badge text-teal-600"></i> Akun Khusus Petugas Medis
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Admin membuat akun dengan role <em>Staff</em> dan izin akses dibatasi hanya ke modul <strong>Kesehatan</strong>. Data keuangan, tagihan, dan rapor santri tetap terlindungi secara privat.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600"></i> Sinkronisasi Instan Antar-Device
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat petugas menyimpan pemeriksaan atau meresepkan obat di laptop klinik, data langsung masuk ke cloud. Admin pusat dan pengasuh dapat memantau santri yang sakit secara live.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-link-45deg text-teal-600"></i> Auto-Link Absensi &amp; Portal Wali
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Status Rawat Inap atau Rujuk RS otomatis menandai presensi <strong>Sakit (S)</strong> pada absensi KBM hari itu dan status terkini terhubung ke Portal Wali Santri.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File JSON)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Solusi terbaik jika gedung Poskestren/UKS berada di sudut asrama yang belum terjangkau koneksi internet kontinu.
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">A. Peran HUB (Komputer Induk di Kantor Tata Usaha):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Memegang basis data master lengkap (seluruh santri, master obat, stok induk, dan riwayat rekam medis).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">B. Peran SPOKE (Laptop Petugas di Ruang Poskestren):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Petugas klinik membuka aplikasi dan melayani santri sakit tanpa memerlukan koneksi internet (semua tersimpan di IndexedDB browser lokal).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Harian Poskestren:</strong>
+                                    <ol className="list-decimal pl-4 mt-1 space-y-1 text-[11px] text-gray-600">
+                                        <li>Petugas mencatat pemeriksaan dan resep obat santri sepanjang jam jaga secara offline di klinik.</li>
+                                        <li>Saat pergantian shift atau saat laptop terhubung WiFi/tethering, petugas membuka menu <em>Pengaturan &gt; Sinkronisasi Cloud</em> lalu klik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong>.</li>
+                                        <li>Admin Utama di Kantor TU membuka menu Sinkronisasi dan mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem membandingkan stempel <code>lastModified</code> sehingga rekam medis baru masuk dan stok obat terpotong aman tanpa menimpa data modul lain.</li>
+                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> agar seluruh perangkat staff lainnya memperoleh data stok dan kesehatan termutakhir.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )
             },
             {
-                title: 'Integrasi Absensi & Cetak Surat',
+                title: '1. Pengelolaan Stok Obat, Batas Minimum & Peringatan Kadaluarsa',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Absensi Otomatis:</strong> Jika status pemeriksaan adalah <strong>Rawat Inap (Pondok)</strong> atau <strong>Rujuk RS/Klinik</strong>, sistem otomatis menandai santri tersebut <strong>Sakit (S)</strong> di menu Absensi pada tanggal tersebut.</li>
-                        <li><strong>Catatan:</strong> Status <strong>Rawat Jalan</strong> tidak mengubah absensi otomatis agar tidak menandai sakit berlebihan.</li>
-                        <li><strong>Cetak Surat:</strong> Klik ikon printer pada tabel rekam medis untuk mencetak Surat Keterangan Sakit resmi untuk izin sekolah/kamar.</li>
-                    </ul>
+                    <div className="space-y-3 text-sm">
+                        <p>
+                            Modul inventori obat di Poskestren memastikan ketersediaan pertolongan pertama santri terpantau akurat secara real-time:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-white p-3 rounded-lg border border-red-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-red-800 flex items-center gap-1.5">
+                                    <i className="bi bi-capsule text-red-600"></i> Input & Kategori Obat
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    Buka menu <strong>Kesehatan &gt; Stok Obat</strong> &gt; Klik <strong>"Tambah Obat"</strong>. Masukkan nama obat, jenis (Tablet, Sirup, Kapsul, Salep, dll), stok awal, satuan (strip/botol/pcs), ambang batas <em>Stok Minimum</em> (default 5), serta <em>Tanggal Kadaluarsa (Expired Date)</em>.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-amber-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-amber-800 flex items-center gap-1.5">
+                                    <i className="bi bi-exclamation-triangle-fill text-amber-600"></i> Deteksi Kritis & Kadaluarsa
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    Gunakan tab filter cepat <strong>"Stok Kritis"</strong> untuk memantau obat yang hampir habis, dan <strong>"Kadaluarsa"</strong> untuk mengamankan obat yang telah lewat tanggal berlakunya. Sistem juga memotong stok otomatis saat obat diresepkan.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '2. Alur Pemeriksaan Medis, Tanda Vital & Resep Obat',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 text-xs text-blue-900 space-y-1.5">
+                            <h6 className="font-bold flex items-center gap-1.5 text-blue-900">
+                                <i className="bi bi-heart-pulse text-blue-600"></i> Rekam Medis Standar Klinis Poskestren
+                            </h6>
+                            <p className="text-gray-700">
+                                Saat santri datang memeriksakan diri ke klinik, petugas mengklik <strong>"Pemeriksaan Baru"</strong> lalu mengisi:
+                            </p>
+                        </div>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li><strong>Identitas Santri:</strong> Pilih nama santri (sistem otomatis menampilkan NIS, kamar, dan kelas).</li>
+                            <li><strong>Tanda Vital (Vital Signs):</strong> Input <em>Suhu Tubuh (°C)</em> (otomatis mendeteksi demam), <em>Tensi Darah (mmHg)</em>, dan <em>Berat Badan (kg)</em>.</li>
+                            <li><strong>Anamnesa & Diagnosa:</strong> Catat keluhan utama santri dan tentukan diagnosa penyakit.</li>
+                            <li><strong>Tindakan & Resep Obat:</strong> Berikan tindakan medis serta tambahkan obat dari inventori Poskestren lengkap dengan dosis (misal: <em>3x1 sesudah makan</em>). Stok obat berkurang otomatis saat rekam medis disimpan.</li>
+                            <li><strong>Status Penanganan:</strong> Pilih antara <em>Rawat Jalan</em>, <em>Rawat Inap (Pondok)</em>, atau <em>Rujuk RS/Klinik Luar</em> (disertai nama Faskes Rujukan & alasan rujukan).</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: '3. Live Preview & Cetak Dokumen Medis Resmi (Sakit, Rujukan, Izin Pulang)',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <p>
+                            Poskestren kini dilengkapi fitur <strong>Live Preview Interaktif (*Side-by-Side*)</strong> untuk mencetak dokumen resmi pondok:
+                        </p>
+                        <div className="space-y-2">
+                            <div className="bg-gray-50 p-2.5 rounded border border-gray-200 text-xs space-y-1">
+                                <strong className="text-gray-800 flex items-center gap-1">
+                                    <i className="bi bi-file-earmark-medical text-teal-600"></i> 1. Surat Keterangan Sakit (Format Ringkas A5)
+                                </strong>
+                                <p className="text-gray-600">Diberikan kepada santri untuk dispensasi istirahat di kamar dan izin KBM sekolah/madrasah.</p>
+                            </div>
+                            <div className="bg-gray-50 p-2.5 rounded border border-gray-200 text-xs space-y-1">
+                                <strong className="text-gray-800 flex items-center gap-1">
+                                    <i className="bi bi-hospital text-blue-600"></i> 2. Surat Pengantar Rujukan Medis (Format Resmi A4)
+                                </strong>
+                                <p className="text-gray-600">Mencantumkan faskes tujuan (Puskesmas/RSUD), indikasi medis, tanda vital lengkap, serta nama petugas/ustadz pendamping.</p>
+                            </div>
+                            <div className="bg-gray-50 p-2.5 rounded border border-gray-200 text-xs space-y-1">
+                                <strong className="text-gray-800 flex items-center gap-1">
+                                    <i className="bi bi-house-heart text-amber-600"></i> 3. Surat Rekomendasi Pulang Sakit (Format Resmi A4)
+                                </strong>
+                                <p className="text-gray-600">Untuk santri yang membutuhkan rawat jalan di rumah, memuat durasi istirahat, tanggal perkiraan kembali ke pondok, serta kolom tanda tangan penjemput/wali santri.</p>
+                            </div>
+                        </div>
+                        <div className="bg-teal-50 p-3 rounded-lg border border-teal-200 text-xs text-teal-900 space-y-1">
+                            <p className="font-semibold flex items-center gap-1">
+                                <i className="bi bi-sliders text-teal-700"></i> Kustomisasi Bebas Sebelum Cetak:
+                            </p>
+                            <p className="text-gray-700">
+                                Di panel preview, petugas dapat mengubah nomor surat resmi, tanggal/kota terbit, nama petugas pemeriksa, maupun pimpinan pondok tanpa mengubah data master. Setiap dokumen memiliki footer standar resmi: <em>"Dokumen resmi [Nama Pondok] - dibuat dengan Esantri Web by AI Projek | aiprojek01.my.id"</em>.
+                            </p>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '4. Integrasi Absensi & Notifikasi WhatsApp Otomatis ke Wali Santri',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-purple-800 flex items-center gap-1.5">
+                                    <i className="bi bi-calendar-check text-purple-600"></i> Sinkronisasi Presensi Otomatis
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    Jika status santri diatur <strong>Rawat Inap (Pondok)</strong> atau <strong>Rujuk RS/Klinik</strong>, sistem otomatis menyinkronkan data presensi santri menjadi <strong>Sakit (S)</strong> pada absensi KBM hari tersebut.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-emerald-100 shadow-2xs space-y-1.5">
+                                <h6 className="font-bold text-xs text-emerald-800 flex items-center gap-1.5">
+                                    <i className="bi bi-whatsapp text-emerald-600"></i> Notifikasi WhatsApp Resmi 1-Klik
+                                </h6>
+                                <p className="text-[11px] text-gray-600">
+                                    Klik tombol WhatsApp pada baris rekam medis untuk langsung membuka template pesan resmi yang memuat diagnosa, tanda vital, terapi obat, dan anjuran dokter ke nomor HP wali santri.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '5 Aturan Emas Menjaga Keutuhan & Keamanan Data Poskestren',
+                content: (
+                    <div className="space-y-2 text-xs text-gray-700">
+                        <p className="text-sm font-medium text-gray-800">
+                            Patuhi 5 panduan utama berikut agar data medis santri dan persediaan obat selalu valid, sinkron, dan aman:
+                        </p>
+                        <ul className="space-y-2.5 pt-1">
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-red-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">1. Isolasi Akun Petugas Medis (Role Staff):</strong>
+                                    <span className="text-gray-600 text-[11px]">Jangan gunakan akun Super Admin di laptop klinik umum. Berikan akun khusus bertipe Staff dengan hak akses modul Kesehatan saja untuk menjaga privasi data sensitif pondok.</span>
+                                </div>
+                            </li>
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-red-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">2. Satu Santri Satu Petugas Pemeriksa:</strong>
+                                    <span className="text-gray-600 text-[11px]">Jangan membuka dan menyimpan form pemeriksaan santri yang sama dari dua komputer berbeda pada saat bersamaan untuk mencegah benturan riwayat resep.</span>
+                                </div>
+                            </li>
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-red-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">3. Disiplin Input Resep &amp; Mutasi Obat:</strong>
+                                    <span className="text-gray-600 text-[11px]">Selalu catat pemberian obat melalui form resep di rekam medis agar stok terpotong otomatis dan riwayat pemakaian obat per santri tercatat jelas.</span>
+                                </div>
+                            </li>
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-red-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">4. Koordinasi Kepulangan &amp; Rujukan:</strong>
+                                    <span className="text-gray-600 text-[11px]">Jika santri dirujuk atau direkomendasikan pulang, cetak Surat Rujukan / Surat Pulang dan berkoordinasi dengan bagian Keamanan/Satpam (Buku Tamu) saat penjemputan wali santri.</span>
+                                </div>
+                            </li>
+                            <li className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                <i className="bi bi-check-circle-fill text-red-600 shrink-0 text-sm mt-0.5"></i>
+                                <div>
+                                    <strong className="text-gray-900 block">5. Download Cadangan (Backup JSON) Rutin:</strong>
+                                    <span className="text-gray-600 text-[11px]">Admin Pusat wajib mendownload cadangan data di menu <em>Pengaturan &gt; Backup &amp; Restore</em> secara mingguan sebagai arsip perlindungan data offline.</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
                 )
             }
         ]
@@ -1511,15 +1727,6 @@ export const panduanData: PanduanSectionData[] = [
                                 <h6 className="font-bold text-cyan-950">Ulangan Juz Lama</h6>
                                 <p className="text-gray-600">Pengulangan juz-juz lama yang sudah pernah diujikan untuk menjaga kelancaran hafalan jangka panjang.</p>
                             </div>
-                        </div>
-
-                        <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-xs space-y-1.5">
-                            <span className="font-bold text-gray-800 flex items-center gap-1">
-                                <i className="bi bi-mic-fill text-rose-500"></i> Rekam Audio Setoran Suara Santri (Voice Recorder):
-                            </span>
-                            <p className="text-gray-600">
-                                Ustadz dapat merekam lantunan ayat santri langsung dari browser saat menyimak dengan mengklik ikon mikrofon. Rekaman audio disimpan sebagai bukti mutaba'ah, dapat diputar ulang, atau diunduh untuk evaluasi dan laporan kepada wali santri.
-                            </p>
                         </div>
 
                         <div className="bg-emerald-50/70 border border-emerald-200 p-3 rounded-lg text-xs space-y-1">

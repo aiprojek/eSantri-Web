@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { PondokSettings } from '../types';
 import { migrateUserPermissions } from './permissionMigrationService';
+import { isFirebaseClientConfigReady } from '../firebaseApp';
 import {
   db as fdb,
   collection,
@@ -74,6 +75,10 @@ const getTime = (val: unknown) => {
 
 export const startFirebaseSync = (tenantId: string) => {
     stopFirebaseSync();
+
+    if (!isFirebaseClientConfigReady) {
+        return;
+    }
 
     const activeTenantId = db.settings.toArray().then((settings) => settings[0]?.cloudSyncConfig?.firebasePairedTenantId || tenantId);
 

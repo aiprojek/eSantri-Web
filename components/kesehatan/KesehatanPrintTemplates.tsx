@@ -79,7 +79,7 @@ export const SuratSakitTemplate: React.FC<TemplateProps> = ({ record, santri, se
             </div>
             
             <div className="mt-4 pt-2 border-t border-gray-300 text-center text-[8pt] text-gray-400 italic">
-                Sistem Informasi Pesantren eSantri Web | Dicetak resmi oleh Poskestren {settings.namaPonpes}
+                Dokumen resmi {settings.namaPonpes} - dibuat dengan Esantri Web by AI Projek | aiprojek01.my.id
             </div>
         </div>
     );
@@ -184,7 +184,7 @@ export const SuratRujukanTemplate: React.FC<TemplateProps> = ({ record, santri, 
             </div>
             
             <div className="mt-auto pt-6 border-t border-gray-300 text-center text-[8pt] text-gray-400 italic">
-                Dokumen Resmi Poskestren {settings.namaPonpes} | Terintegrasi eSantri Web
+                Dokumen resmi {settings.namaPonpes} - dibuat dengan Esantri Web by AI Projek | aiprojek01.my.id
             </div>
         </div>
     );
@@ -266,7 +266,7 @@ export const SuratIzinPulangTemplate: React.FC<TemplateProps> = ({ record, santr
             </div>
             
             <div className="mt-auto pt-6 border-t border-gray-300 text-center text-[8pt] text-gray-400 italic">
-                Dokumen Resmi eSantri Web Poskestren {settings.namaPonpes}
+                Dokumen resmi {settings.namaPonpes} - dibuat dengan Esantri Web by AI Projek | aiprojek01.my.id
             </div>
         </div>
     );

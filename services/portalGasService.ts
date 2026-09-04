@@ -198,7 +198,13 @@ export const syncPortalBridgeToGas = async (settings: PondokSettings): Promise<v
                     ? { tanggal: latestTahfizh.tanggal, tipe: latestTahfizh.tipe, surah: latestTahfizh.surah, ayat: `${latestTahfizh.ayatAwal}-${latestTahfizh.ayatAkhir}` }
                     : null,
                 kesehatanTerakhir: latestHealth
-                    ? { tanggal: latestHealth.tanggal, status: latestHealth.status, diagnosa: latestHealth.diagnosa || '' }
+                    ? {
+                        tanggal: latestHealth.tanggal,
+                        status: latestHealth.status,
+                        diagnosa: latestHealth.diagnosa || '',
+                        suhuTubuh: latestHealth.suhuTubuh,
+                        keluhan: latestHealth.keluhan || ''
+                    }
                     : null,
                 pinjamanBukuAktif: borrowedBooks,
             };

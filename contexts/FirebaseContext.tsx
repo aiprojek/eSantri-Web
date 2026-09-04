@@ -85,7 +85,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
         };
 
-        if (settings.cloudSyncConfig?.provider === 'firebase') {
+        if (settings.cloudSyncConfig?.provider === 'firebase' && isFirebaseClientConfigReady) {
             const hasAuthHint = localStorage.getItem(FIREBASE_AUTH_HINT_KEY) === 'true';
             if (hasAuthHint) {
                 void initializeAuthState();

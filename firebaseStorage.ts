@@ -1,6 +1,25 @@
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { firebaseApp } from './firebaseApp';
+import { getStorage, ref, uploadBytes, getDownloadURL, FirebaseStorage } from 'firebase/storage';
+import { getFirebaseApp, isFirebaseClientConfigReady } from './firebaseApp';
 
-export const storage = getStorage(firebaseApp);
+let _storage: FirebaseStorage | null = null;
 
-export { ref, uploadBytes, getDownloadURL };
+export const getFirebaseStorage = (): FirebaseStorage | null => {
+  if (_storage) return _storage;
+  const app = getFirebaseApp();
+  if (!app) return null;
+  _storage = getStorage(app);
+  return _storage;
+};
+
+export const storage: FirebaseStorage = new Proxy({} as FirebaseStorage, {
+  get(_target, prop, receiver) {
+    const instance = getFirebaseStorage();
+    if (!instance) {
+      return undefined;
+    }
+    const val = Reflect.get(instance, prop, receiver);
+    return typeof val === 'function' ? val.bind(instance) : val;
+  }
+});
+
+export { ref, uploadBytes, getDownloadURL, isFirebaseClientConfigReady };

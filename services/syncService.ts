@@ -2,7 +2,6 @@
 import { CloudSyncConfig, SyncFileRecord, ConflictItem } from '../types';
 import { db } from '../db';
 import { createClient, WebDAVClient } from 'webdav';
-import { db as fdb, collection, getDocs, query } from '../firebase';
 import { migrateUserPermissions } from './permissionMigrationService';
 
 const MASTER_FILENAME = 'master_data.json';
@@ -772,6 +771,7 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
         const tenantId = config.firebasePairedTenantId;
         if (!tenantId) throw new Error("Tenant ID tidak ditemukan. Harap hubungkan Firebase terlebih dahulu.");
         
+        const { db: fdb, collection, getDocs, query } = await import('../firebase');
         const path = `tenants/${tenantId}/users`;
         const q = query(collection(fdb, path));
         const snapshot = await getDocs(q);

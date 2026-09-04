@@ -725,7 +725,7 @@ const SuratSakitLiveSheet: React.FC<{
             </div>
 
             <div className="mt-4 pt-2 border-t border-gray-300 text-center text-[8pt] text-gray-400 italic">
-                Sistem Informasi Pesantren eSantri Web | Dicetak resmi oleh Poskestren {settings.namaPonpes}
+                Dokumen resmi {settings.namaPonpes} - dibuat dengan Esantri Web by AI Projek | aiprojek01.my.id
             </div>
         </div>
     );
@@ -837,7 +837,7 @@ const SuratRujukanLiveSheet: React.FC<{
             </div>
 
             <div className="mt-auto pt-6 border-t border-gray-300 text-center text-[8pt] text-gray-400 italic">
-                Dokumen Resmi Poskestren {settings.namaPonpes} | Terintegrasi eSantri Web
+                Dokumen resmi {settings.namaPonpes} - dibuat dengan Esantri Web by AI Projek | aiprojek01.my.id
             </div>
         </div>
     );
@@ -933,7 +933,7 @@ const SuratPulangLiveSheet: React.FC<{
             </div>
 
             <div className="mt-auto pt-6 border-t border-gray-300 text-center text-[8pt] text-gray-400 italic">
-                Dokumen Resmi eSantri Web Poskestren {settings.namaPonpes}
+                Dokumen resmi {settings.namaPonpes} - dibuat dengan Esantri Web by AI Projek | aiprojek01.my.id
             </div>
         </div>
     );

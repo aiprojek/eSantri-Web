@@ -85,10 +85,21 @@ export const initialSettings: PondokSettings = {
         { id: 2, nama: 'Asrama Putri Khadijah', jenis: 'Putri' }
     ],
     kamar: [
-        { id: 1, nama: 'Kamar 101', gedungId: 1, kapasitas: 10, musyrifId: 4 },
-        { id: 2, nama: 'Kamar 102', gedungId: 1, kapasitas: 10, musyrifId: 4 },
-        { id: 3, nama: 'Kamar 201', gedungId: 2, kapasitas: 12, musyrifId: 3 },
-        { id: 4, nama: 'Kamar 202', gedungId: 2, kapasitas: 12, musyrifId: 3 }
+        { id: 1, nama: 'Kamar 101 (Abu Bakar)', gedungId: 1, kapasitas: 10, musyrifId: 4, lantai: 'Lantai 1', fasilitas: '5 Ranjang Susun, 10 Lemari, 2 Kipas Angin', kondisiFasilitas: 'Baik', ketuaKamarId: 1 },
+        { id: 2, nama: 'Kamar 102 (Umar bin Khattab)', gedungId: 1, kapasitas: 10, musyrifId: 4, lantai: 'Lantai 1', fasilitas: '5 Ranjang Susun, 10 Lemari, 2 Kipas Angin', kondisiFasilitas: 'Baik', ketuaKamarId: 5 },
+        { id: 3, nama: 'Kamar 201 (Aisyah)', gedungId: 2, kapasitas: 12, musyrifId: 3, lantai: 'Lantai 2', fasilitas: '6 Ranjang Susun, 12 Lemari, 3 Kipas Angin', kondisiFasilitas: 'Baik', ketuaKamarId: 3 },
+        { id: 4, nama: 'Kamar 202 (Fathimah)', gedungId: 2, kapasitas: 12, musyrifId: 3, lantai: 'Lantai 2', fasilitas: '6 Ranjang Susun, 12 Lemari, 2 Kipas Angin, 1 AC', kondisiFasilitas: 'Cukup' }
+    ],
+    inspeksiKamar: [
+        { id: 1, tanggal: '2026-09-01', kamarId: 1, skorKebersihan: 95, skorKerapian: 90, skorKedisiplinan: 92, skorTotal: 92, predikat: 'Mumtaz', musyrifPemeriksa: 'Ust. Zulkifli, S.Pd.I', catatan: 'Sangat rapi, kasur tertata kencang dan lantai harum.' },
+        { id: 2, tanggal: '2026-09-01', kamarId: 2, skorKebersihan: 85, skorKerapian: 82, skorKedisiplinan: 88, skorTotal: 85, predikat: 'Jayyid Jiddan', musyrifPemeriksa: 'Ust. Zulkifli, S.Pd.I', catatan: 'Handuk dijemur di luar rapi, perlu pembersihan rak sepatu.' },
+        { id: 3, tanggal: '2026-09-01', kamarId: 3, skorKebersihan: 98, skorKerapian: 95, skorKedisiplinan: 96, skorTotal: 96, predikat: 'Mumtaz', musyrifPemeriksa: 'Ustdz. Fatimah, S.Pd', catatan: 'Juara kerapian pekanan, loker santri bersih dan terkunci tertib.' },
+        { id: 4, tanggal: '2026-09-01', kamarId: 4, skorKebersihan: 78, skorKerapian: 75, skorKedisiplinan: 80, skorTotal: 78, predikat: 'Jayyid', musyrifPemeriksa: 'Ustdz. Fatimah, S.Pd', catatan: 'Peralatan makan belum dicuci tuntas di wastafel kamar.' }
+    ],
+    jurnalAsrama: [
+        { id: 1, tanggal: '2026-09-03', waktu: '05:30', gedungId: 1, kamarId: 1, jenisKegiatan: 'Kedisiplinan', keterangan: 'Semua santri kamar 101 bangun tepat waktu dan melaksanakan sholat subuh berjamaah di masjid tepat di shaf pertama.', tindakan: 'Diberikan apresiasi kebersihan dan disiplin oleh musyrif.', namaMusyrif: 'Ust. Zulkifli, S.Pd.I' },
+        { id: 2, tanggal: '2026-09-02', waktu: '16:45', gedungId: 1, kamarId: 2, jenisKegiatan: 'Kebersihan', keterangan: 'Kerja bakti pembersihan kipas angin dan ventilasi kamar bersama seluruh penghuni.', tindakan: 'Pengecekan fasilitas selesai dengan baik.', namaMusyrif: 'Ust. Zulkifli, S.Pd.I' },
+        { id: 3, tanggal: '2026-09-02', waktu: '20:15', gedungId: 2, kamarId: 3, jenisKegiatan: 'Pembinaan', keterangan: 'Evaluasi adab tidur, doa bersama, dan pembagian piket kebersihan kamar oleh ketua kamar.', tindakan: 'Musyrifah memberikan arahan 15 menit.', namaMusyrif: 'Ustdz. Fatimah, S.Pd' }
     ],
     kelompokHalaqah: [
         { id: 1, nama: 'Halaqah Ula (Ust. Hasan)', muhaffizhId: 2, targetJuz: 30, lokasi: 'Masjid Utama', keterangan: 'Fokus Juz 30 & Tahsin' },

@@ -2806,36 +2806,175 @@ export const panduanData: PanduanSectionData[] = [
         id: 'asrama',
         badge: 10,
         badgeColor: 'orange',
-        title: 'Keasramaan',
+        title: 'Keasramaan & Pengasuhan',
         steps: [
             {
-                title: 'Manajemen Kamar',
+                title: 'SOP Kerja Multi-Admin: Real-Time Sync vs Hub-and-Spoke',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-exclamation-triangle-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin Keasramaan &amp; Pengasuhan:</strong>
+                                Di pondok pesantren dengan asrama putra (banin) dan putri (banat) yang terpisah secara fisik serta puluhan musyrif/musyrifah piket harian, sistem mendukung 2 arsitektur sinkronisasi utama: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>. Ikuti tata kelola di bawah ini agar penempatan kamar, mutasi santri, sidak kebersihan, dan jurnal pengasuhan berjalan tertib tanpa bentrok data antar-gedung.
+                            </div>
+                        </div>
+
+                        {/* Model A */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Sangat ideal bila pos piket asrama atau kantor musyrif terjangkau jaringan WiFi pondok atau internet seluler stabil.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-person-badge text-teal-600"></i> Akun Mandiri Musyrif
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Setiap musyrif login dengan akun masing-masing (hak akses modul <strong>Keasramaan</strong>). Setiap mutasi kamar, sidak nadhafah, dan catatan jurnal otomatis tercatat atas nama musyrif pembuat (<em>audit trail</em>).
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600"></i> Sinkron Instan Lintas Divisi
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Santri yang dirawat inap di Poskestren atau izin pulang di pos keamanan langsung memunculkan lencana status khusus (<em>🏥 Rawat Inap</em> / <em>📋 Izin Pulang</em>) pada kartu kamar asrama secara otomatis.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-building-lock text-teal-600"></i> Partisi Gedung Putra &amp; Putri
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Musyrif Putra mengelola Gedung Banin, Musyrifah mengelola Gedung Banat. Sistem memvalidasi kesesuaian gender santri dan sisa kapasitas kasur kamar secara otomatis untuk mencegah tumpang tindih.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Solusi terbaik jika gedung asrama santri berada di lokasi yang belum terjangkau koneksi internet kontinu saat jam piket malam.
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">A. Peran HUB (Pusat Data Induk di Kantor Pengasuhan / Tata Usaha):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Komputer Utama memegang basis data master lengkap (data santri, struktur gedung, kamar, fasilitas, dan riwayat mutasi santri).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">B. Peran SPOKE (Laptop / Tablet Musyrif di Meja Piket Asrama):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Musyrif piket membuka aplikasi di pos asrama untuk mengecek penghuni, melakukan mutasi lokal, menilai kebersihan kamar, dan mencatat jurnal harian tanpa perlu koneksi internet (semua tersimpan aman di penyimpanan lokal).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Harian Asrama:</strong>
+                                    <div className="mt-1.5 p-2 bg-teal-50/80 border border-teal-200 rounded text-[11px] text-teal-950">
+                                        <strong>⚡ Otomatis Saat Login (Auto-Pull):</strong> Begitu musyrif login saat memulai piket asrama, sistem <em>secara otomatis menarik master santri, status kamar, dan perizinan terbaru</em> dari Cloud di latar belakang. Tidak perlu tarik manual setiap pagi! Tombol <em>"Ambil Master Data"</em> di modal sinkronisasi hanya sebagai cadangan jika laptop baru terhubung WiFi atau ada mutasi santri mendadak dari bagian administrasi pusat.
+                                    </div>
+                                    <ol className="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-gray-600">
+                                        <li>Musyrif mencatat sidak nadhafah, jurnal kegiatan, dan mutasi kamar santri sepanjang jam piket secara offline di pos jaga.</li>
+                                        <li>Saat pergantian shift atau saat perangkat terhubung ke WiFi pondok, musyrif membuka menu Sinkronisasi lalu klik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong>.</li>
+                                        <li>Admin Pengasuhan Pusat / TU membuka menu Sinkronisasi dan mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem menyatukan mutasi kamar dan jurnal terbaru secara aman tanpa menimpa data modul lain.</li>
+                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> agar seluruh perangkat musyrif lainnya memperoleh pemetaan kamar terkini.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Golden Rules */}
+                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-2">
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-shield-check text-amber-700"></i> 3 Pantangan Keras &amp; Aturan Disiplin Multi-Admin Keasramaan:
+                            </strong>
+                            <ol className="list-decimal pl-4 space-y-1 text-[11px] text-gray-700">
+                                <li>
+                                    <strong>Disiplin Partisi Wilayah:</strong> Musyrif Asrama Putra dilarang mengedit penempatan kamar di Gedung Putri, dan sebaliknya, guna menjaga privasi dan ketertiban administrasi.
+                                </li>
+                                <li>
+                                    <strong>Koordinasi Mutasi Antar-Gedung:</strong> Pemindahan santri lintas komplek asrama wajib dikoordinasikan dengan Pengasuhan Pusat agar status kamar lama dilepas sebelum ditempatkan di kamar baru.
+                                </li>
+                                <li>
+                                    <strong>Wajib Logout di Perangkat Piket Bersama:</strong> Tablet atau PC di pos piket asrama yang digunakan bergantian antar-regu jaga <strong>WAJIB DI-LOGOUT</strong> setiap pergantian shift agar catatan sidak kamar dan jurnal tidak tercatat atas nama musyrif yang keliru pada jejak audit trail.
+                                </li>
+                            </ol>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Manajemen Gedung, Kamar & Fasilitas',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Keasramaan &gt; Manajemen Asrama</strong>.</li>
-                        <li>Tambah Gedung (Putra/Putri) dan Kamar beserta kapasitasnya.</li>
+                        <li>Buka tab <strong>Gedung &amp; Kamar</strong>. Tambahkan gedung asrama dengan membedakan kategori <em>Putra (Banin)</em> atau <em>Putri (Banat)</em>.</li>
+                        <li>Tambahkan kamar dengan spesifikasi lengkap: <strong>Nama Kamar</strong>, <strong>Lantai</strong>, <strong>Kapasitas Kasur</strong>, penugasan <strong>Musyrif Pembina</strong>, serta <strong>Ketua Kamar (Rais Ghorfah)</strong>.</li>
+                        <li><strong>Inventarisasi Fasilitas:</strong> Catat daftar fasilitas (ranjang susun, lemari, kipas angin) serta status kelayakan fisik (<em>Baik</em>, <em>Cukup</em>, atau <em>Perlu Perbaikan</em>).</li>
+                        <li><strong>Cetak Label Pintu Kamar (Door Tag):</strong> Klik tombol <em>Label Pintu</em> untuk mencetak lembar resmi siap tempel di pintu kamar (lengkap dengan kop pondok, nama musyrif, ketua kamar, dan daftar nomor urut penghuni).</li>
                     </ul>
                 )
             },
             {
-                title: 'Penempatan Santri',
+                title: 'Penempatan Cepat & Mutasi Santri (1-Klik)',
                 content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka tab <strong>Penempatan Santri</strong>.</li>
-                        <li>Pilih santri dari daftar "Tanpa Kamar" (bisa filter per kelas).</li>
-                        <li>Klik tombol "Tempatkan" pada kartu kamar yang tersedia.</li>
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li><strong>Penempatan Santri Baru:</strong> Pada tab <em>Penempatan &amp; Mutasi</em>, centang santri dari kolom kiri "Santri Tanpa Kamar", lalu klik tombol <em>Tempatkan</em> pada kartu kamar tujuan. Sistem otomatis memvalidasi kesesuaian gender dan sisa kapasitas kasur.</li>
+                        <li><strong>Pencarian Lokasi Santri:</strong> Gunakan kotak pencarian cepat di bagian atas untuk menemukan posisi kamar santri mana saja secara instan.</li>
+                        <li><strong>Mutasi / Pindah Kamar Cepat:</strong> Klik ikon <em>Pindah</em> pada baris santri untuk memindahkan santri ke kamar lain dalam satu klik tanpa harus mengeluarkan dan mencari ulang santri.</li>
+                        <li><strong>Tunjuk Ketua Kamar (Rais Ghorfah):</strong> Klik ikon bintang di samping nama santri untuk menetapkannya sebagai penanggung jawab ketertiban kamar.</li>
+                        <li><strong>Kosongkan Kamar Massal:</strong> Gunakan tombol <em>Kosongkan</em> pada header kartu kamar untuk mereset seluruh penghuni kamar menjelang pergantian semester atau renovasi kamar.</li>
                     </ul>
                 )
             },
             {
-                title: 'Optimalisasi Tim Asrama (Cloud)',
-                color: 'orange',
+                title: 'Inspeksi Kebersihan Kamar (Sidak Nadhafah)',
                 content: (
-                    <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm">
-                        <strong>Tips Kolaborasi:</strong> Jika kantor asrama putra dan putri terpisah, gunakan fitur <strong>Cloud Sync</strong>. 
-                        <ul className="list-disc pl-5 mt-1">
-                            <li>Buat akun khusus untuk Musyrif/Musyrifah.</li>
-                            <li>Mereka dapat mengecek data santri atau kapasitas kamar langsung dari asrama tanpa perlu ke kantor pusat.</li>
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka tab <strong>Jurnal &amp; Inspeksi &gt; Inspeksi Kebersihan Kamar</strong>.</li>
+                        <li>Pilih tanggal sidak dan kamar yang dinilai, lalu tentukan nilai (0-100) untuk 3 kriteria utama: <em>Kebersihan Lantai &amp; Ruangan</em>, <em>Kerapian Kasur &amp; Lemari</em>, dan <em>Kedisiplinan &amp; Ketertiban</em>.</li>
+                        <li>Sistem otomatis menghitung skor rata-rata dan menentukan predikat nilai: <strong>Mumtaz</strong> (≥90), <strong>Jayyid Jiddan</strong> (≥80), <strong>Jayyid</strong> (≥70), <strong>Maqbul</strong> (≥60), atau <strong>Rasib</strong> (&lt;60).</li>
+                        <li>Hasil sidak otomatis membentuk <strong>Peringkat Kamar Terbersih (Top 5)</strong> di Dashboard Asrama untuk penentuan piala bergilir atau penghargaan kamar teladan pekanan.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'Jurnal Pembinaan & Catatan Harian Musyrif',
+                content: (
+                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
+                        <li>Buka sub-tab <strong>Jurnal Pembinaan &amp; Catatan Musyrif</strong> untuk mendokumentasikan rutinitas pengasuhan harian.</li>
+                        <li>Pilih kategori kegiatan: <em>Kebersihan (Roan)</em>, <em>Kedisiplinan (Bangun Subuh/Jam Malam)</em>, <em>Pembinaan Adab</em>, <em>Kunjungan Wali Santri</em>, atau <em>P3K Ringan Kamar</em>.</li>
+                        <li>Tuliskan uraian kejadian secara objektif beserta arahan/tindakan yang telah diambil musyrif pembina.</li>
+                        <li>Riwayat jurnal tersimpan rapi dan dapat ditinjau oleh pimpinan pondok atau bagian kepengasuhan santri pusat.</li>
+                    </ul>
+                )
+            },
+            {
+                title: 'SOP Keamanan Sesi & Logout di Perangkat Piket',
+                color: 'red',
+                content: (
+                    <div className="bg-rose-50 p-3 rounded-xl border border-rose-200 text-xs text-rose-950 space-y-2">
+                        <strong><i className="bi bi-shield-exclamation text-rose-600 mr-1"></i> SOP Wajib bagi Musyrif Piket Asrama:</strong>
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li><strong>Perangkat Bersama:</strong> Jika musyrif menggunakan PC / tablet piket asrama yang dipakai bergantian antar regu jaga, <strong>WAJIB LOGOUT</strong> setiap kali pergantian shift atau meninggalkan meja piket.</li>
+                            <li><strong>Cegah Salah Akun:</strong> Jangan biarkan sesi akun Anda terbuka agar mutasi kamar, sidak kebersihan, dan catatan jurnal tidak tercatat atas nama musyrif yang salah pada audit trail.</li>
+                            <li><strong>Jika Lupa Logout:</strong> Buka menu profil akun di pojok kanan atas, klik <strong>Keluar / Logout</strong>, atau lakukan <em>Clear Data Sesi</em> jika berpindah perangkat.</li>
                         </ul>
                     </div>
                 )

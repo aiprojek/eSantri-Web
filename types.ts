@@ -301,6 +301,40 @@ export interface Kamar {
     gedungId: number;
     kapasitas: number;
     musyrifId?: number;
+    ketuaKamarId?: number; // Santri ID (Rais Ghorfah / Ketua Kamar)
+    lantai?: string | number; // Lantai 1, Lantai 2, etc.
+    fasilitas?: string; // e.g. '4 Ranjang Susun, 8 Lemari, 2 Kipas Angin'
+    kondisiFasilitas?: 'Baik' | 'Cukup' | 'Perlu Perbaikan';
+    catatan?: string;
+}
+
+export interface InspeksiKamar {
+    id: number;
+    tanggal: string; // YYYY-MM-DD
+    kamarId: number;
+    skorKebersihan: number; // 0 - 100
+    skorKerapian: number;   // 0 - 100
+    skorKedisiplinan: number; // 0 - 100
+    skorTotal: number;      // rata-rata 0 - 100
+    predikat: 'Mumtaz' | 'Jayyid Jiddan' | 'Jayyid' | 'Maqbul' | 'Rasib';
+    catatan?: string;
+    musyrifPemeriksa?: string;
+    lastModified?: number;
+}
+
+export interface JurnalAsrama {
+    id: number;
+    tanggal: string; // YYYY-MM-DD
+    waktu?: string;  // HH:mm
+    gedungId?: number;
+    kamarId?: number;
+    santriId?: number;
+    jenisKegiatan: 'Kebersihan' | 'Kedisiplinan' | 'Pembinaan' | 'Kunjungan Wali' | 'Kesehatan/P3K' | 'Lainnya';
+    keterangan: string;
+    tindakan?: string;
+    musyrifId?: number;
+    namaMusyrif?: string;
+    lastModified?: number;
 }
 
 export interface KelompokHalaqah {
@@ -596,6 +630,8 @@ export interface PondokSettings {
     gedungAsrama: GedungAsrama[];
     kamar: Kamar[];
     kelompokHalaqah?: KelompokHalaqah[];
+    inspeksiKamar?: InspeksiKamar[];
+    jurnalAsrama?: JurnalAsrama[];
     
     multiUserMode: boolean;
     nisSettings: NisSettings;

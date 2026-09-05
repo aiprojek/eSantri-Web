@@ -1132,6 +1132,17 @@ export interface BukuTamu {
     platNomor?: string;
     status: 'Bertamu' | 'Selesai';
     petugas: string;
+    nomorBadge?: string; // Nomor Badge Visitor (misal: B-01, T-05)
+    jenisIdentitas?: 'KTP' | 'SIM' | 'Kartu Pegawai' | 'Lainnya';
+    nomorIdentitas?: string; // Nomor KTP/SIM yang ditinggal di pos
+    jumlahRombongan?: number; // Jumlah orang (default: 1)
+    tipeEntri?: 'Kunjungan Langsung' | 'Titipan Paket';
+    statusPaket?: 'Di Pos Satpam' | 'Sudah Diambil';
+    namaKurirEkspedisi?: string; // Kurir J&T, SiCepat, Shopee, Pos, dll
+    noResi?: string;
+    deskripsiPaket?: string;
+    penerimaPaket?: string; // Santri / Ustadz penerima paket
+    waktuDiambil?: string;
     lastModified?: number;
 }
 

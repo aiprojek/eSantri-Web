@@ -40,3 +40,15 @@ console.log(`Build Version: ${version}`);
 // Write to a file that can be imported
 const versionFile = path.resolve('version.ts');
 fs.writeFileSync(versionFile, `export const APP_VERSION = "${version}";\n`, 'utf8');
+
+// Also ensure public/version.json is kept in sync
+const publicVersionFile = path.resolve('public/version.json');
+try {
+  fs.writeFileSync(
+    publicVersionFile,
+    JSON.stringify({ version, buildDate: now.toISOString() }, null, 2),
+    'utf8'
+  );
+} catch (e) {
+  console.warn('Could not write to public/version.json:', e);
+}

@@ -1,4 +1,4 @@
-import { Santri, PondokSettings, TransaksiKas, Tagihan, TransaksiKoperasi } from '../types';
+import { Santri, PondokSettings, TransaksiKas, Tagihan, TransaksiKoperasi, BukuTamu } from '../types';
 import { loadXLSX } from '../utils/lazyClientLibs';
 
 // Stub functions to satisfy TS - implementation logic resides in actual files if preserved, 
@@ -246,3 +246,47 @@ export const exportKoperasiToExcel = async (transaksiList: TransaksiKoperasi[], 
     XLSX.utils.book_append_sheet(workbook, worksheet, "Transaksi");
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
 };
+
+/**
+ * Ekspor Catatan Buku Tamu & Keamanan ke Excel
+ */
+export const exportBukuTamuToExcel = async (
+    data: BukuTamu[],
+    santriList: Santri[],
+    fileName: string
+) => {
+    const XLSX = await loadXLSX();
+    const excelData = data.map((item, index) => {
+        const santri = item.santriId ? santriList.find(s => s.id === item.santriId) : null;
+        const jamMasuk = new Date(item.jamMasuk).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        const jamKeluar = item.jamKeluar ? new Date(item.jamKeluar).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-';
+
+        return {
+            'No': index + 1,
+            'Tanggal': new Date(item.tanggal).toLocaleDateString('id-ID'),
+            'No. Badge': item.nomorBadge || '-',
+            'Nama Tamu / Pengantar': item.namaTamu,
+            'No. Telepon / WA': item.noHp || '-',
+            'Kategori': item.kategori,
+            'Tipe Entri': item.tipeEntri || 'Kunjungan Langsung',
+            'Santri / Yang Dikunjungi': santri ? `${santri.namaLengkap} (${santri.nis})` : (item.bertemuDengan || '-'),
+            'Keperluan': item.keperluan,
+            'Identitas Ditahan': item.jenisIdentitas ? `${item.jenisIdentitas} ${item.nomorIdentitas ? `(${item.nomorIdentitas})` : ''}` : '-',
+            'Kendaraan': item.kendaraan || '-',
+            'Plat Nomor': item.platNomor || '-',
+            'Jumlah Rombongan': item.jumlahRombongan || 1,
+            'Jam Masuk': jamMasuk,
+            'Jam Keluar': jamKeluar,
+            'Status': item.status,
+            'Status Paket': item.statusPaket || '-',
+            'Ekspedisi/Resi': item.namaKurirEkspedisi ? `${item.namaKurirEkspedisi} ${item.noResi ? `[${item.noResi}]` : ''}` : '-',
+            'Petugas': item.petugas
+        };
+    });
+
+    const worksheet = await buildWorksheetWithMeta(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Buku Tamu");
+    XLSX.writeFile(workbook, `${fileName}.xlsx`);
+};
+

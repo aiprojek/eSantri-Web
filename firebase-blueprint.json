@@ -8,6 +8,7 @@
         "id": { "type": "number" },
         "namaLengkap": { "type": "string" },
         "nis": { "type": "string" },
+        "kamarId": { "type": "number" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "namaLengkap", "nis"]
@@ -140,6 +141,40 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "santriId", "tanggal", "kategori", "keluhan", "penanganan", "lastModified"]
+    },
+    "BukuTamu": {
+      "title": "BukuTamu",
+      "description": "Catatan kunjungan tamu dan logistik pos keamanan satpam",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "jamMasuk": { "type": "string" },
+        "jamKeluar": { "type": "string" },
+        "namaTamu": { "type": "string" },
+        "noHp": { "type": "string" },
+        "kategori": { "type": "string" },
+        "santriId": { "type": "number" },
+        "bertemuDengan": { "type": "string" },
+        "keperluan": { "type": "string" },
+        "kendaraan": { "type": "string" },
+        "platNomor": { "type": "string" },
+        "status": { "type": "string" },
+        "petugas": { "type": "string" },
+        "nomorBadge": { "type": "string" },
+        "jenisIdentitas": { "type": "string" },
+        "nomorIdentitas": { "type": "string" },
+        "jumlahRombongan": { "type": "number" },
+        "tipeEntri": { "type": "string" },
+        "statusPaket": { "type": "string" },
+        "namaKurirEkspedisi": { "type": "string" },
+        "noResi": { "type": "string" },
+        "deskripsiPaket": { "type": "string" },
+        "penerimaPaket": { "type": "string" },
+        "waktuDiambil": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "tanggal", "jamMasuk", "namaTamu", "status", "petugas", "lastModified"]
     }
   },
   "firestore": {
@@ -174,6 +209,10 @@
     "tenants/{tenantId}/jurnalMengajar": {
       "schema": "JurnalMengajarRecord",
       "description": "Koleksi jurnal mengajar ustadz per tenant"
+    },
+    "tenants/{tenantId}/bukuTamu": {
+      "schema": "BukuTamu",
+      "description": "Koleksi catatan buku tamu dan ekspedisi pos satpam per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

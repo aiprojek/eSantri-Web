@@ -1,6 +1,38 @@
 
-import { defineConfig } from 'vite';
+import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import fs from 'fs';
+import path from 'path';
+
+function pwaVersionPlugin(buildTimestamp: string): Plugin {
+  return {
+    name: 'pwa-version-plugin',
+    closeBundle() {
+      const distDir = path.resolve(__dirname, 'dist');
+      if (!fs.existsSync(distDir)) return;
+
+      // 1. Generate version.json in dist for live version checking
+      const versionData = {
+        version: buildTimestamp,
+        buildDate: new Date().toISOString(),
+      };
+      fs.writeFileSync(
+        path.join(distDir, 'version.json'),
+        JSON.stringify(versionData, null, 2),
+        'utf8'
+      );
+
+      // 2. Inject build timestamp into dist/sw.js so the service worker bytecode
+      // differs on every build, triggering immediate browser update detection
+      const swDistPath = path.join(distDir, 'sw.js');
+      if (fs.existsSync(swDistPath)) {
+        let swContent = fs.readFileSync(swDistPath, 'utf8');
+        swContent = swContent.replace(/__BUILD_TIMESTAMP__/g, buildTimestamp);
+        fs.writeFileSync(swDistPath, swContent, 'utf8');
+      }
+    },
+  };
+}
 
 const manualChunks = (id: string) => {
   if (!id.includes('node_modules')) return;
@@ -65,7 +97,7 @@ export default defineConfig(({ mode }) => {
   const buildTimestamp = `${pad(now.getDate())}${pad(now.getMonth() + 1)}${now.getFullYear()}.${pad(now.getHours())}${pad(now.getMinutes())}`;
 
   return {
-    plugins: [react()],
+    plugins: [react(), pwaVersionPlugin(buildTimestamp)],
     clearScreen: false,
     define: {
       __APP_VERSION__: JSON.stringify(buildTimestamp),

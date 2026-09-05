@@ -5,7 +5,7 @@ import { useReportConfig } from '../../hooks/useReportConfig';
 import { formatAcademicYearDisplay, getAcademicYearOptions } from '../../utils/academicYear';
 
 const SantriSelector: React.FC<{
-    title: string;
+    title?: string;
     printMode: 'all' | 'selected';
     setPrintMode: (mode: 'all' | 'selected') => void;
     selectedIds: number[];
@@ -13,11 +13,34 @@ const SantriSelector: React.FC<{
     radioGroupName: string;
     filteredSantri: Santri[];
 }> = ({ title, printMode, setPrintMode, selectedIds, setSelectedIds, radioGroupName, filteredSantri }) => {
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const displayedSantri = useMemo(() => {
+        if (!searchTerm.trim()) return filteredSantri;
+        const q = searchTerm.toLowerCase();
+        return filteredSantri.filter(s => 
+            (s.namaLengkap || '').toLowerCase().includes(q) || 
+            (s.nis || '').toLowerCase().includes(q)
+        );
+    }, [filteredSantri, searchTerm]);
+
     const handleSelection = (santriId: number) => {
-        setSelectedIds(prev => prev.includes(santriId) ? prev.filter(id => id !== santriId) : [...prev, santriId]);
+        const numId = Number(santriId);
+        setSelectedIds(prev => {
+            const prevNums = prev.map(Number);
+            return prevNums.includes(numId) ? prevNums.filter(id => id !== numId) : [...prevNums, numId];
+        });
     };
+
+    const isAllDisplayedSelected = displayedSantri.length > 0 && displayedSantri.every(s => selectedIds.map(Number).includes(Number(s.id)));
+
     const handleToggleAll = () => {
-        setSelectedIds(selectedIds.length === filteredSantri.length ? [] : filteredSantri.map(s => s.id));
+        const displayedIds = displayedSantri.map(s => Number(s.id));
+        if (isAllDisplayedSelected) {
+            setSelectedIds(prev => prev.filter(id => !displayedIds.includes(Number(id))));
+        } else {
+            setSelectedIds(prev => [...new Set([...prev.map(Number), ...displayedIds])]);
+        }
     };
 
     return (
@@ -26,23 +49,93 @@ const SantriSelector: React.FC<{
             <div>
                 <label className="block mb-2 text-sm font-medium text-gray-700">Santri yang Akan Dicetak</label>
                 <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex items-center"><input type="radio" id={`${radioGroupName}-all`} name={radioGroupName} value="all" checked={printMode === 'all'} onChange={e => setPrintMode(e.target.value as any)} className="w-4 h-4 text-teal-600"/><label htmlFor={`${radioGroupName}-all`} className="ml-2 text-sm">Cetak Semua Santri Hasil Filter</label></div>
-                    <div className="flex items-center"><input type="radio" id={`${radioGroupName}-select`} name={radioGroupName} value="selected" checked={printMode === 'selected'} onChange={e => setPrintMode(e.target.value as any)} className="w-4 h-4 text-teal-600"/><label htmlFor={`${radioGroupName}-select`} className="ml-2 text-sm">Pilih Santri Tertentu</label></div>
+                    <label className="flex items-center cursor-pointer">
+                        <input 
+                            type="radio" 
+                            id={`${radioGroupName}-all`} 
+                            name={radioGroupName} 
+                            value="all" 
+                            checked={printMode === 'all'} 
+                            onChange={e => setPrintMode(e.target.value as any)} 
+                            className="w-4 h-4 text-teal-600"
+                        />
+                        <span className="ml-2 text-sm">Cetak Semua Santri ({filteredSantri.length})</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                        <input 
+                            type="radio" 
+                            id={`${radioGroupName}-select`} 
+                            name={radioGroupName} 
+                            value="selected" 
+                            checked={printMode === 'selected'} 
+                            onChange={e => setPrintMode(e.target.value as any)} 
+                            className="w-4 h-4 text-teal-600"
+                        />
+                        <span className="ml-2 text-sm">Pilih Santri Tertentu</span>
+                    </label>
                 </div>
             </div>
             {printMode === 'selected' && (
-                 <div>
-                    <div className="flex justify-between items-center mb-2">
-                        <label className="block text-sm font-medium text-gray-700">Pilih Santri ({filteredSantri.length} hasil)</label>
-                        <button onClick={handleToggleAll} className="text-xs font-semibold text-teal-600 hover:underline">{selectedIds.length === filteredSantri.length ? 'Hapus Pilihan' : 'Pilih Semua'}</button>
+                 <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2.5">
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs font-semibold text-gray-700">
+                            {selectedIds.length} dipilih dari {filteredSantri.length} santri
+                        </span>
+                        <button 
+                            type="button" 
+                            onClick={handleToggleAll} 
+                            className="text-xs font-semibold text-teal-600 hover:underline"
+                        >
+                            {isAllDisplayedSelected ? 'Hapus Pilihan' : 'Pilih Semua'}
+                        </button>
                     </div>
-                    <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-2 border bg-white p-3 rounded-md">
-                        {filteredSantri.length > 0 ? filteredSantri.map(santri => (
-                          <div key={santri.id} className="flex items-center">
-                              <input id={`${radioGroupName}-santri-${santri.id}`} type="checkbox" checked={selectedIds.includes(santri.id)} onChange={() => handleSelection(santri.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
-                              <label htmlFor={`${radioGroupName}-santri-${santri.id}`} className="ml-2 text-sm text-gray-700">{santri.namaLengkap}</label>
-                          </div>
-                        )) : <p className="text-sm text-gray-400 col-span-full text-center">Tidak ada santri sesuai filter.</p>}
+
+                    {filteredSantri.length > 5 && (
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Cari nama atau NIS santri..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="w-full bg-white border border-gray-300 rounded-md px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                            />
+                            {searchTerm && (
+                                <button 
+                                    type="button" 
+                                    onClick={() => setSearchTerm('')} 
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-1.5 border bg-white p-2.5 rounded-md">
+                        {displayedSantri.length > 0 ? displayedSantri.map(santri => {
+                            const isChecked = selectedIds.map(Number).includes(Number(santri.id));
+                            return (
+                                <label 
+                                    key={santri.id} 
+                                    className={`flex items-center px-2 py-1.5 rounded cursor-pointer transition-colors ${isChecked ? 'bg-teal-50 text-teal-900 font-medium' : 'hover:bg-gray-50 text-gray-700'}`}
+                                >
+                                    <input 
+                                        id={`${radioGroupName}-santri-${santri.id}`} 
+                                        type="checkbox" 
+                                        checked={isChecked} 
+                                        onChange={() => handleSelection(santri.id)} 
+                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" 
+                                    />
+                                    <span className="ml-2.5 text-xs truncate">
+                                        {santri.namaLengkap} <span className="text-[10px] text-gray-400 font-normal">({santri.nis})</span>
+                                    </span>
+                                </label>
+                            );
+                        }) : (
+                            <p className="text-xs text-gray-400 col-span-full text-center py-2">
+                                {searchTerm ? 'Tidak ada santri yang cocok dengan pencarian.' : 'Tidak ada santri sesuai filter.'}
+                            </p>
+                        )}
                     </div>
                 </div>
             )}
@@ -300,15 +393,19 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
             );
         case ReportType.RekeningKoranSantri:
              const handleRekeningSelection = (santriId: number) => {
-                options.setSelectedRekeningKoranSantriIds(prev => prev.includes(santriId) ? prev.filter(id => id !== santriId) : [...prev, santriId]);
+                const numId = Number(santriId);
+                options.setSelectedRekeningKoranSantriIds(prev => {
+                    const prevNums = prev.map(Number);
+                    return prevNums.includes(numId) ? prevNums.filter(id => id !== numId) : [...prevNums, numId];
+                });
              };
              const handleRekeningToggleAll = () => {
-                const allIds = santriForRekeningSelector.map(s => s.id);
-                const allCurrentlySelected = allIds.length > 0 && allIds.every(id => options.selectedRekeningKoranSantriIds.includes(id));
+                const allIds = santriForRekeningSelector.map(s => Number(s.id));
+                const allCurrentlySelected = allIds.length > 0 && allIds.every(id => options.selectedRekeningKoranSantriIds.map(Number).includes(id));
                 if (allCurrentlySelected) {
-                    options.setSelectedRekeningKoranSantriIds(prev => prev.filter(id => !allIds.includes(id)));
+                    options.setSelectedRekeningKoranSantriIds(prev => prev.filter(id => !allIds.includes(Number(id))));
                 } else {
-                    options.setSelectedRekeningKoranSantriIds(prev => [...new Set([...prev, ...allIds])]);
+                    options.setSelectedRekeningKoranSantriIds(prev => [...new Set([...prev.map(Number), ...allIds])]);
                 }
              };
 
@@ -339,13 +436,13 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                                     <div className="flex justify-between items-center mb-2">
                                         <label className="block text-sm font-medium text-gray-700">Pilih Santri ({santriForRekeningSelector.length} hasil)</label>
                                         <button onClick={handleRekeningToggleAll} className="text-xs font-semibold text-teal-600 hover:underline">
-                                            {santriForRekeningSelector.length > 0 && santriForRekeningSelector.every(s => options.selectedRekeningKoranSantriIds.includes(s.id)) ? 'Hapus Pilihan' : 'Pilih Semua Hasil'}
+                                            {santriForRekeningSelector.length > 0 && santriForRekeningSelector.every(s => options.selectedRekeningKoranSantriIds.map(Number).includes(Number(s.id))) ? 'Hapus Pilihan' : 'Pilih Semua Hasil'}
                                         </button>
                                     </div>
                                     <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-2 border bg-white p-3 rounded-md">
                                         {santriForRekeningSelector.length > 0 ? santriForRekeningSelector.map(santri => (
                                           <div key={santri.id} className="flex items-center">
-                                              <input id={`rekening-santri-${santri.id}`} type="checkbox" checked={options.selectedRekeningKoranSantriIds.includes(santri.id)} onChange={() => handleRekeningSelection(santri.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
+                                              <input id={`rekening-santri-${santri.id}`} type="checkbox" checked={options.selectedRekeningKoranSantriIds.map(Number).includes(Number(santri.id))} onChange={() => handleRekeningSelection(santri.id)} className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
                                               <label htmlFor={`rekening-santri-${santri.id}`} className="ml-2 text-sm text-gray-700">{santri.namaLengkap}</label>
                                           </div>
                                         )) : <p className="text-sm text-gray-400 col-span-full text-center">Tidak ada santri sesuai filter.</p>}
@@ -737,29 +834,15 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                     </div>
 
                     {/* Santri yang Akan Dicetak */}
-                    <div className="border-t pt-4">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Santri yang Akan Dicetak</h4>
-                        <div className="max-h-48 overflow-y-auto border bg-white p-3 rounded-md">
-                            {filteredSantri.length > 0 ? filteredSantri.map(santri => (
-                                <div key={santri.id} className="flex items-center py-1">
-                                    <input
-                                        id={`label-santri-${santri.id}`}
-                                        type="checkbox"
-                                        checked={options.selectedLabelSantriIds.includes(santri.id)}
-                                        onChange={() => {
-                                            if (options.selectedLabelSantriIds.includes(santri.id)) {
-                                                options.setSelectedLabelSantriIds(options.selectedLabelSantriIds.filter(id => id !== santri.id));
-                                            } else {
-                                                options.setSelectedLabelSantriIds([...options.selectedLabelSantriIds, santri.id]);
-                                            }
-                                        }}
-                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500"
-                                    />
-                                    <label htmlFor={`label-santri-${santri.id}`} className="ml-2 text-sm text-gray-700">{santri.namaLengkap}</label>
-                                </div>
-                            )) : <p className="text-sm text-gray-400 text-center">Tidak ada santri.</p>}
-                        </div>
-                    </div>
+                    <SantriSelector 
+                        title="Santri yang Akan Dicetak" 
+                        printMode={options.labelPrintMode} 
+                        setPrintMode={options.setLabelPrintMode} 
+                        selectedIds={options.selectedLabelSantriIds} 
+                        setSelectedIds={options.setSelectedLabelSantriIds} 
+                        radioGroupName="label" 
+                        filteredSantri={filteredSantri} 
+                    />
                 </div>
             );
         case ReportType.LembarNilai:

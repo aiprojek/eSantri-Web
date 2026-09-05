@@ -143,6 +143,7 @@ const Reports: React.FC = () => {
   const [previewContent, setPreviewContent] = useState<React.ReactNode | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [printedSantriList, setPrintedSantriList] = useState<Santri[] | null>(null);
 
   // -- Specific Data for Export --
   const [exportData, setExportData] = useState<any>({});
@@ -154,6 +155,7 @@ const Reports: React.FC = () => {
       // Reset basic filters but keep some if useful? Better reset for clean slate.
       setFilters(f => ({ ...f, jenjangId: '', kelasId: '', rombelId: '', status: '', gedungId: '' })); 
       setPreviewContent(null);
+      setPrintedSantriList(null);
       setPageCount(0);
       setCurrentView('detail');
       // Also reset internal report options
@@ -165,6 +167,7 @@ const Reports: React.FC = () => {
       setCurrentView('home');
       setActiveReportType(null);
       setPreviewContent(null);
+      setPrintedSantriList(null);
   };
 
   const handleFilterChange = (key: string, value: string) => {
@@ -220,21 +223,32 @@ const Reports: React.FC = () => {
               bkSessions: [ReportType.RekapKonseling, ReportType.OperasionalHarian, ReportType.EarlyWarningSantri, ReportType.KelasAsramaBermasalah].includes(activeReportType) ? bkSessions : []
           };
 
-          // Logic for generating preview content (same as before but cleaner call)
+          // Logic for generating preview content
           // Determine list to use based on report type
           let listToUse = filteredSantri;
           
           // Special handling for selection-based reports
           if (activeReportType === ReportType.Biodata && reportConfig.options.biodataPrintMode === 'selected') {
-              listToUse = filteredSantri.filter(s => reportConfig.options.selectedBiodataSantriIds.includes(s.id));
-          } 
-          // ... (Add other specific selection logic if needed, e.g. Cards, Labels) ...
-          if (activeReportType === ReportType.KartuSantri && reportConfig.options.cardPrintMode === 'selected') {
-              listToUse = filteredSantri.filter(s => reportConfig.options.selectedCardSantriIds.includes(s.id));
+              const selectedSet = new Set((reportConfig.options.selectedBiodataSantriIds || []).map(String));
+              listToUse = santriList.filter(s => selectedSet.has(String(s.id)));
+          } else if (activeReportType === ReportType.KartuSantri && reportConfig.options.cardPrintMode === 'selected') {
+              const selectedSet = new Set((reportConfig.options.selectedCardSantriIds || []).map(String));
+              listToUse = santriList.filter(s => selectedSet.has(String(s.id)));
+          } else if (activeReportType === ReportType.LabelSantri && reportConfig.options.labelPrintMode === 'selected') {
+              const selectedSet = new Set((reportConfig.options.selectedLabelSantriIds || []).map(String));
+              listToUse = santriList.filter(s => selectedSet.has(String(s.id)));
+          } else if (activeReportType === ReportType.LembarPembinaan && reportConfig.options.pembinaanPrintMode === 'selected') {
+              const selectedSet = new Set((reportConfig.options.selectedPembinaanSantriIds || []).map(String));
+              listToUse = santriList.filter(s => selectedSet.has(String(s.id)));
+          } else if (activeReportType === ReportType.FormulirIzin && reportConfig.options.izinPrintMode === 'selected') {
+              const selectedSet = new Set((reportConfig.options.selectedIzinSantriIds || []).map(String));
+              listToUse = santriList.filter(s => selectedSet.has(String(s.id)));
+          } else if (activeReportType === ReportType.RekeningKoranSantri && reportConfig.options.rekeningKoranPrintMode === 'selected') {
+              const selectedSet = new Set((reportConfig.options.selectedRekeningKoranSantriIds || []).map(String));
+              listToUse = santriList.filter(s => selectedSet.has(String(s.id)));
           }
-          if (activeReportType === ReportType.LabelSantri && reportConfig.options.labelPrintMode === 'selected') {
-              listToUse = filteredSantri.filter(s => reportConfig.options.selectedLabelSantriIds.includes(s.id));
-          }
+
+          setPrintedSantriList(listToUse);
 
           // Special logic for Rombel grouping (Flattened in hook, but handled here)
           const perRombelReports = [ReportType.DaftarRombel, ReportType.LembarKedatangan, ReportType.LembarNilai, ReportType.LembarAbsensi, ReportType.LembarRapor, ReportType.RaporLengkap, ReportType.JurnalMengajar];
@@ -382,7 +396,7 @@ const Reports: React.FC = () => {
                               isLoading={isGenerating}
                               paperSize={reportConfig.paperSize}
                               onToast={showToast}
-                              filteredSantri={filteredSantri}
+                              filteredSantri={printedSantriList !== null ? printedSantriList : filteredSantri}
                               settings={settings}
                               filters={{
                                   jenjangId: filters.jenjangId,

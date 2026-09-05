@@ -15,6 +15,7 @@ import UpdateNotification from './components/UpdateNotification';
 import { BackupReminderModal } from './components/BackupReminderModal';
 import { LoginScreen } from './components/Login'; 
 import { Page, UserPermissions, SantriFilters } from './types';
+import { APP_VERSION } from './version';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingFallback } from './components/common/LoadingFallback';
 
@@ -277,6 +278,7 @@ const AppContent: React.FC = () => {
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [showWelcomeModal, setShowWelcomeModal] = useState(false);
     const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+    const [hasNewVersion, setHasNewVersion] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showSyncMenu, setShowSyncMenu] = useState(false);
     const [showQuickHelp, setShowQuickHelp] = useState(false);
@@ -309,19 +311,50 @@ const AppContent: React.FC = () => {
             return;
         }
 
-        navigator.serviceWorker.register('/sw.js').then(registration => {
+        // Register with updateViaCache: 'none' to ensure browser checks server directly for sw.js updates
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(registration => {
+            // Check if there is already a waiting service worker from an earlier background download
+            if (registration.waiting) {
+                setWaitingWorker(registration.waiting);
+            }
+
             registration.addEventListener('updatefound', () => {
                 const newWorker = registration.installing;
                 if (newWorker) {
                     newWorker.addEventListener('statechange', () => {
                         if (newWorker.state === 'installed') {
-                            if (registration.waiting) {
-                                setWaitingWorker(registration.waiting);
+                            // Only notify if there is an active controlling worker (i.e. update, not first install)
+                            if (navigator.serviceWorker.controller) {
+                                setWaitingWorker(registration.waiting || newWorker);
                             }
                         }
                     });
                 }
             });
+
+            // Immediately check for updates upon registration
+            registration.update().catch(() => {});
+
+            // Check for updates when user returns to the tab
+            const onVisibilityChange = () => {
+                if (document.visibilityState === 'visible') {
+                    registration.update().catch(() => {});
+                }
+            };
+            document.addEventListener('visibilitychange', onVisibilityChange);
+            window.addEventListener('focus', () => {
+                registration.update().catch(() => {});
+            });
+
+            // Periodic update check every 15 minutes
+            const intervalId = setInterval(() => {
+                registration.update().catch(() => {});
+            }, 15 * 60 * 1000);
+
+            return () => {
+                document.removeEventListener('visibilitychange', onVisibilityChange);
+                clearInterval(intervalId);
+            };
         }).catch(error => {
             console.warn('Service Worker registration failed:', error);
         });
@@ -337,6 +370,34 @@ const AppContent: React.FC = () => {
 
         return () => {
             navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+        };
+    }, []);
+
+    // Periodic live version check against version.json deployed on Cloudflare
+    useEffect(() => {
+        if (import.meta.env.DEV) return;
+
+        const checkLiveVersion = async () => {
+            try {
+                const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.version && data.version !== APP_VERSION && data.version !== '1.0.0-dev') {
+                        console.info(`[AutoUpdate] New version detected: ${data.version} (current: ${APP_VERSION})`);
+                        setHasNewVersion(true);
+                    }
+                }
+            } catch (err) {
+                // Offline or unreachable, ignore
+            }
+        };
+
+        const timer = setTimeout(checkLiveVersion, 4000);
+        const interval = setInterval(checkLiveVersion, 10 * 60 * 1000);
+
+        return () => {
+            clearTimeout(timer);
+            clearInterval(interval);
         };
     }, []);
 
@@ -395,10 +456,21 @@ const AppContent: React.FC = () => {
         setSidebarOpen(false);
     };
     
-    const handleUpdate = () => {
-        if (waitingWorker) {
-            waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+    const handleUpdate = async () => {
+        try {
+            if (waitingWorker) {
+                waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+            // Purge Service Worker CacheStorage so the next load downloads the new assets immediately,
+            // while KEEPING IndexedDB and localStorage completely safe and intact!
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.map(name => caches.delete(name)));
+            }
+        } catch (err) {
+            console.warn('Cache cleanup before update error:', err);
         }
+        window.location.reload();
     };
 
     const handleSyncClick = () => {
@@ -647,7 +719,7 @@ const AppContent: React.FC = () => {
                 onClose={handleCloseWelcomeModal}
                 onGoToGuide={handleGoToGuide}
             />
-            {waitingWorker && <UpdateNotification onUpdate={handleUpdate} />}
+            {(waitingWorker || hasNewVersion) && <UpdateNotification onUpdate={handleUpdate} />}
             <ToastContainer toasts={toasts} onClose={removeToast} />
             <AlertModal 
                 isOpen={alertModal.isOpen}

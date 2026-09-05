@@ -196,6 +196,13 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
                             </p>
                         </div>
                     </div>
+
+                    {/* Footer Kredit Aplikasi */}
+                    <div className="mt-8 pt-2 border-t border-gray-200 text-center">
+                        <p className="text-[10px] text-gray-500 font-medium tracking-wide">
+                            dibuat dengan Esantri Web by AI Projek | aiprojek01.my.id
+                        </p>
+                    </div>
                 </div>
 
                 {/* Footer Modal (Hidden in Print) */}

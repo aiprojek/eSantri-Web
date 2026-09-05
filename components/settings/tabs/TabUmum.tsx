@@ -5,6 +5,7 @@ import { compressImage } from '../../../utils/imageOptimizer';
 import { SectionCard } from '../../common/SectionCard';
 import { useAppContext } from '../../../AppContext';
 import { formatTanggalDokumen, DateFormatMode } from '../../../utils/formatters';
+import { APP_VERSION } from '../../../version';
 
 interface TabUmumProps {
     localSettings: PondokSettings;
@@ -107,6 +108,8 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
     const [openRouterModelQuery, setOpenRouterModelQuery] = useState('');
     const [openRouterModels, setOpenRouterModels] = useState<Array<{ id: string; isFree: boolean }>>([]);
     
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
     useEffect(() => {
         // PWA Install Event Listener
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -122,15 +125,14 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
         if ('caches' in window) {
             try {
                 const cacheNames = await caches.keys();
-                const mainCacheName = cacheNames.find(name => name.includes('esantri-web-local'));
+                const mainCacheName = cacheNames.find(name => name.startsWith('esantri-cache') || name.includes('esantri-web-local'));
                 
                 if (mainCacheName) {
                     const cache = await caches.open(mainCacheName);
-                    const appShell = await cache.match('/');
                     const manifest = await cache.match('/manifest.json');
                     const icon = await cache.match('/icon.svg');
                     
-                    if (appShell && manifest && icon) {
+                    if (manifest && icon) {
                         setIsOfflineReady(true);
                     } else {
                         setIsOfflineReady(false);
@@ -151,11 +153,42 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
         }
     };
 
+    const handleCheckUpdate = async () => {
+        setIsCheckingUpdate(true);
+        try {
+            if ('serviceWorker' in navigator) {
+                const reg = await navigator.serviceWorker.getRegistration();
+                if (reg) {
+                    await reg.update();
+                }
+            }
+            const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.version && data.version !== APP_VERSION && data.version !== '1.0.0-dev') {
+                    showToast(`Versi baru (${data.version}) tersedia! Memperbarui cache aplikasi...`, 'info');
+                    if ('caches' in window) {
+                        const keys = await caches.keys();
+                        await Promise.all(keys.map(k => caches.delete(k)));
+                    }
+                    setTimeout(() => window.location.reload(), 1200);
+                    return;
+                }
+            }
+            showToast("Aplikasi sudah menggunakan versi build terbaru.", "success");
+        } catch (e) {
+            showToast("Gagal memeriksa pembaruan. Pastikan perangkat terhubung internet.", "error");
+        } finally {
+            setIsCheckingUpdate(false);
+        }
+    };
+
     const handleDownloadAssets = async () => {
         setIsDownloadingAssets(true);
         setDownloadProgress(0);
         try {
-            const cacheName = 'esantri-web-local-v3';
+            const cacheNames = await caches.keys();
+            const cacheName = cacheNames.find(name => name.startsWith('esantri-cache')) || 'esantri-cache-local';
             const cache = await caches.open(cacheName);
             
             const baseUrls = [
@@ -430,7 +463,18 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                 </div>
                 
                 <div className="flex flex-col items-end gap-2">
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-2 justify-end">
+                        <button 
+                            type="button"
+                            onClick={handleCheckUpdate} 
+                            disabled={isCheckingUpdate}
+                            className="px-3.5 py-2 bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-sm font-semibold shadow-sm hover:bg-slate-100 flex items-center gap-2 transition-colors disabled:opacity-60"
+                            title="Periksa apakah ada pembaruan versi baru tanpa menghapus data santri"
+                        >
+                            <i className={`bi bi-arrow-clockwise ${isCheckingUpdate ? 'animate-spin text-teal-600' : 'text-slate-500'}`}></i>
+                            {isCheckingUpdate ? 'Memeriksa...' : 'Cek Pembaruan'}
+                        </button>
+
                         {!isOfflineReady && (
                             <button 
                                 onClick={handleDownloadAssets} 

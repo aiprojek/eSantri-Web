@@ -1823,28 +1823,214 @@ export const panduanData: PanduanSectionData[] = [
     {
         id: 'bukutamu',
         badge: 4,
-        badgeColor: 'gray',
-        title: 'Buku Tamu (Satpam)',
+        badgeColor: 'teal',
+        title: 'Buku Tamu & Keamanan Gerbang (Satpam)',
         steps: [
-             {
-                title: 'Check-In & Check-Out',
+            {
+                title: 'SOP Kerja Multi-Admin: Real-Time Sync vs Hub-and-Spoke',
                 content: (
-                    <>
-                        <p className="mb-2 text-sm">Gunakan fitur ini di pos keamanan atau resepsionis.</p>
-                        <ol className="list-decimal pl-5 space-y-1 text-sm">
-                            <li><strong>Check-In:</strong> Klik "Check-In Baru" saat tamu datang. Pilih kategori (Wali/Dinas). Jika Wali Santri, pilih nama santri yang dikunjungi.</li>
-                            <li><strong>Check-Out:</strong> Klik tombol "Check-Out" pada kartu tamu saat mereka pulang. Ini akan mencatat jam keluar dan mengubah status menjadi selesai.</li>
-                        </ol>
-                    </>
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-shield-exclamation text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin di Pos Keamanan (Satpam):</strong>
+                                Pos Satpam beroperasi 24 jam dengan pergantian regu jaga (Shift Pagi, Siang, Malam). Penggunaan akun mandiri dan penerapan arsitektur sinkronisasi yang terstandarisasi memastikan riwayat tamu, titipan identitas fisik, dan paket kurir tercatat tertib tanpa risiko data saling menimpa. Sistem mendukung 2 arsitektur sinkronisasi: <strong>Real-Time Cloud (Firebase)</strong> dan <strong>Hub-and-Spoke (Offline / Dropbox / File Cadangan)</strong>.
+                            </div>
+                        </div>
+
+                        {/* Model A */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Real-Time Live Sync (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Sangat ideal bila pos satpam gerbang utama dan gerbang asrama terjangkau jaringan WiFi pos atau koneksi internet stabil.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-person-badge text-teal-600"></i> Akun Khusus Petugas Satpam
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Admin membuat akun khusus regu keamanan dengan wewenang dibatasi hanya pada modul <strong>Buku Tamu</strong>. Data keuangan SPP, catatan BK rahasia, dan nilai santri tetap terlindungi.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600"></i> Sinkronisasi Detik Itu Juga
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Setiap kali tamu check-in, check-out, atau paket kurir masuk, data langsung tersinkronisasi ke cloud dalam hitungan detik. Pimpinan pondok dan pengasuhan dapat memantau mobilitas gerbang secara langsung.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-shield-check text-teal-600"></i> Partisi Multi-Gerbang &amp; Pos
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Jika pondok memiliki Gerbang Utama (Putra) dan Gerbang Putri/Asrama, petugas di masing-masing pos mencatat tamu secara mandiri dan serentak tanpa bentrok nomor badge.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Solusi terbaik jika pos gerbang berada di area yang sinyal internetnya minim atau saat koneksi WiFi pos padam.
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">A. Peran HUB (Pusat Data Induk di Kantor TU / Kamtib):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Komputer utama di kantor tata usaha atau koordinator ketertiban memegang otoritas basis data induk santri, wali, pengajar, dan arsip riwayat kunjungan.
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">B. Peran SPOKE (Laptop / Tablet Petugas di Pos Satpam):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Petugas keamanan mencatat registrasi tamu, pemberian badge, dan penerimaan paket di peramban pos jaga tanpa memerlukan kuota internet (tersimpan aman di database lokal).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">C. Alur Penggabungan (Merging) Data Tamu &amp; Paket:</strong>
+                                    <div className="mt-1.5 p-2 bg-teal-50/80 border border-teal-200 rounded text-[11px] text-teal-950">
+                                        <strong>⚡ Otomatis Saat Login (Auto-Pull):</strong> Begitu petugas satpam login di awal shift, sistem <em>secara otomatis menarik master data santri terbaru</em> dari Cloud di latar belakang. Kontak wali santri dan data rombel langsung terbarui tanpa perlu menarik manual. Tombol <em>"Ambil Master Data"</em> di modal hanya sebagai cadangan bila koneksi baru tersambung di tengah hari.
+                                    </div>
+                                    <ol className="list-decimal pl-4 mt-2 space-y-1 text-[11px] text-gray-600">
+                                        <li>Petugas mencatat tamu berkunjung, penahanan KTP/SIM, dan penerimaan paket logistik secara mandiri di pos jaga (offline).</li>
+                                        <li>Saat pergantian regu jaga atau ketika laptop terhubung jaringan internet, petugas mengeklik <strong>"Kirim Perubahan (Upload Staff Changes)"</strong> di menu Sinkronisasi.</li>
+                                        <li>Admin Utama di Kantor TU mengeklik <strong>"Gabungkan Perubahan Staff (Merge Changes)"</strong>. Sistem menyatukan seluruh mutasi buku tamu dan paket secara cerdas dan aman tanpa menimpa data modul lain.</li>
+                                        <li>Admin Pusat mengeklik <strong>"Terbitkan Master Data (Publish Master)"</strong> agar seluruh perangkat pos lainnya memperoleh data termutakhir.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SOP Sesi & Audit Trail Satpam */}
+                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1.5">
+                            <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-shield-lock-fill text-amber-700"></i> SOP Keamanan Sesi Akun &amp; Disiplin Pergantian Shift Satpam:
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Setiap pencatatan tamu masuk, serah-terima paket titipan, maupun pengembalian kartu identitas fisik (KTP/SIM) merekam akun petugas aktif sebagai penanggung jawab (*audit trail*). Pada pos jaga yang beroperasi 24 jam dengan sistem regu jaga (Shift Pagi, Siang, Malam), <strong>petugas regu lama WAJIB mengeklik "Logout (Keluar)"</strong> saat serah-terima tugas selesai, dan petugas regu baru login menggunakan akun pribadinya sendiri. Jangan biarkan akun petugas lama tetap aktif untuk regu berikutnya agar akuntabilitas dan jejak pemeriksaan di gerbang tetap akurat saat diaudit pimpinan atau terjadi insiden kehilangan.
+                            </p>
+                        </div>
+
+                        {/* Petunjuk Tambahan Operasional Pos Gerbang */}
+                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-xs">
+                            <h6 className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                                <i className="bi bi-info-circle-fill text-teal-600"></i>
+                                Petunjuk Tambahan Operasional Pos Gerbang 24 Jam &amp; Penanganan Khusus:
+                            </h6>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-gray-700 text-[11px]">
+                                <div className="p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs space-y-1">
+                                    <strong className="text-slate-900 flex items-center gap-1 font-semibold">
+                                        <i className="bi bi-tv text-indigo-600"></i> Pemantauan Live Ruang Komandan &amp; Pengasuhan
+                                    </strong>
+                                    <p className="text-gray-600 leading-relaxed">
+                                        Komandan regu keamanan, pimpinan pondok, dan pengasuhan santri dapat memantau daftar tamu aktif yang masih berada di dalam area pesantren secara real-time dari ruang kerja masing-masing tanpa perlu menelpon atau menginterupsi kesibukan pos jaga.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs space-y-1">
+                                    <strong className="text-slate-900 flex items-center gap-1 font-semibold">
+                                        <i className="bi bi-journal-check text-emerald-600"></i> Pengganti Buku Mutasi Fisik Konvensional
+                                    </strong>
+                                    <p className="text-gray-600 leading-relaxed">
+                                        Seluruh riwayat tamu, status tahanan identitas, hingga log penerimaan dan serah-terima paket kurir tersimpan rapi secara digital. Hal ini mengeliminasi risiko kertas mutasi pos robek, tercecer, atau tulisan tangan petugas tidak terbaca.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="p-2 bg-teal-50 border border-teal-200 rounded-lg text-teal-950 text-[11px] flex items-center gap-2">
+                                <i className="bi bi-wifi-off text-teal-700 shrink-0"></i>
+                                <span><strong>Ketahanan Offline:</strong> Jika jaringan WiFi pos satpam mendadak drop, satpam tetap dapat menginput data tamu dan paket tanpa terganggu. Sistem otomatis mengunggah seluruh antrean data seketika koneksi pulih.</span>
+                            </div>
+                        </div>
+                    </div>
                 )
             },
             {
-                title: 'Desentralisasi Input (Rekomendasi)',
-                color: 'teal',
+                title: 'Alur Registrasi Tamu, Nomor Badge & Tahanan Identitas',
                 content: (
-                    <div className="bg-gray-100 p-3 rounded border border-gray-300 text-sm">
-                        Agar tidak membebani Admin Kantor, <strong>buatkan akun khusus untuk Satpam</strong> dengan akses hanya ke modul 'Buku Tamu'.
-                        <br/>Satpam bisa menggunakan HP/Laptop di pos jaga. Jika menggunakan Cloud Sync, lakukan <strong>Kirim Perubahan</strong> saat pergantian shift. Jika menggunakan <strong>Firebase</strong>, data tersinkron otomatis.
+                    <div className="space-y-3 text-sm">
+                        <ol className="list-decimal pl-5 space-y-2 text-xs text-gray-700 leading-relaxed">
+                            <li>
+                                <strong>Sapa &amp; Verifikasi:</strong> Petugas menyapa tamu dengan ramah dan menanyakan keperluan. Klik <strong>"Registrasi Tamu / Paket"</strong> &gt; pilih jenis <em>"Tamu Berkunjung"</em>.
+                            </li>
+                            <li>
+                                <strong>Pencarian Santri:</strong> Untuk kategori <em>Wali Santri</em>, ketik nama atau NIS santri di kolom pencarian. Sistem otomatis mengisi kontak wali santri dari basis data induk.
+                            </li>
+                            <li>
+                                <strong>Pemberian Badge Visitor (Otomatis Reset Tiap Hari &amp; Manual):</strong>
+                                <ul className="list-disc pl-4 mt-1 space-y-1 text-gray-600">
+                                    <li><strong>Mode Otomatis (Reset Harian):</strong> Sistem otomatis menghitung urutan tamu hari ini (contoh: <code>B-01</code> untuk tamu ke-1, <code>B-02</code> untuk tamu ke-2) dan <em>otomatis reset kembali ke nomor 01 setiap pergantian hari jam 00:00</em>. Tersedia pilihan awalan kode: <code>B-</code> (Standar), <code>VIP-</code> (Dinas/Khusus), <code>W-</code> (Wali), <code>T-</code> (Umum).</li>
+                                    <li><strong>Opsi Slot Fisik Standby:</strong> Jika pos satpam memiliki 10-30 kartu fisik berulang dan tamu sebelumnya sudah check-out, satpam dapat memilih tombol cepat <em>"Pakai slot standby"</em> untuk memanfaatkan kartu fisik yang sedang menganggur di meja pos.</li>
+                                    <li><strong>Mode Manual / Khusus:</strong> Klik toggle <em>"Manual / Khusus"</em> untuk bebas mengetik nomor badge fisik kustom (misal: <code>VIP-01</code>, <code>KONTRAKTOR-A</code>, <code>07</code>). Kolom input nomor badge juga tetap dapat diedit langsung sewaktu-waktu.</li>
+                                </ul>
+                            </li>
+                            <li>
+                                <strong>Tahanan Identitas Fisik:</strong> Wajib meminta dan menahan kartu identitas fisik (KTP/SIM) di kotak penyimpanan pos satpam sampai tamu menyelesaikan kunjungan.
+                            </li>
+                            <li>
+                                <strong>Cetak Tiket Pass Tamu (Kertas A6) &amp; Kirim Badge WA:</strong>
+                                <ul className="list-disc pl-4 mt-1 space-y-1 text-gray-600">
+                                    <li><strong>Standar Cetak Kertas A6 (105 × 148 mm):</strong> Desain tiket pass dikhususkan untuk ukuran A6 (seperempat lembar HVS A4). Sangat hemat kertas, pas diselipkan di saku atau mika gantungan ID card tamu, dan memuat kop lembaga, nomor registrasi, nomor badge, data rombongan, tata tertib, serta tanda tangan petugas.</li>
+                                    <li><strong>Alternatif Tanpa Printer (Kirim Badge via WhatsApp):</strong> Jika pos satpam tidak memiliki printer atau sedang kehabisan kertas/tinta, satpam cukup klik <strong>"Kirim Badge WA"</strong>. Sistem otomatis mengirim pesan resmi berisi Kartu Izin Masuk / Visitor Pass digital lengkap langsung ke nomor WhatsApp tamu atau wali santri.</li>
+                                </ul>
+                            </li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: 'SOP Titipan Paket Logistik & Notifikasi WhatsApp 1-Klik',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-950 text-xs">
+                            <strong className="block font-bold mb-1">
+                                <i className="bi bi-box-seam-fill text-blue-600 mr-1"></i> Alur Penerimaan Paket (Kurir / Wali Santri):
+                            </strong>
+                            Ketika kurir ekspedisi (J&amp;T, SiCepat, Shopee Xpress, Pos, JNE) atau wali santri menitipkan barang:
+                            <ul className="list-disc pl-4 mt-1.5 space-y-1">
+                                <li>Pilih jenis registrasi <strong>"Titipan Paket / Logistik"</strong>.</li>
+                                <li>Cari nama santri atau ustadz penerima, pilih nama kurir ekspedisi, dan masukkan deskripsi barang singkat (misal: pakaian, bekal makanan, buku).</li>
+                                <li>Paket otomatis masuk ke tab <strong>"Titipan Paket Pos"</strong> dengan status <em>"Di Pos Satpam"</em>.</li>
+                                <li>Klik tombol <strong>"Beri Tahu Penerima via WA"</strong> untuk mengirim notifikasi instan ke nomor wali/santri agar segera diambil di pos.</li>
+                                <li>Saat santri datang mengambil barang, klik <strong>"Serahkan (Tandai Sudah Diambil)"</strong> sebagai bukti serah terima resmi.</li>
+                            </ul>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Monitoring Overstay, Pergantian Shift & Ekspor Laporan',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <ul className="list-disc pl-5 space-y-2 text-xs text-gray-700 leading-relaxed">
+                            <li>
+                                <strong>Peringatan Visual Overstay:</strong> Tamu dengan durasi kunjung &gt;2 jam akan ditandai dengan kartu warna kuning waspada, dan jika &gt;3 jam akan muncul label merah berkedip <code>⚠️ OVERSTAY</code>. Petugas wajib menghubungi tamu via WhatsApp atau mengecek lokasi tamu.
+                            </li>
+                            <li>
+                                <strong>Check-Out Tamu:</strong> Saat tamu pulang, klik <strong>"Check-Out (Kembalikan Badge)"</strong>. Pastikan nomor badge visitor diterima kembali dan kartu identitas fisik (KTP/SIM) diserahkan kembali kepada tamu.
+                            </li>
+                            <li>
+                                <strong>Serah Terima Shift Jaga:</strong> Saat pergantian regu, petugas shift lama menyerahkan sisa badge dan identitas yang masih ada di pos kepada petugas shift baru dengan mencocokkan daftar di tab <em>"Tamu Aktif"</em> dan <em>"Titipan Paket"</em>.
+                            </li>
+                            <li>
+                                <strong>Rekapitulasi &amp; Ekspor:</strong> Buka tab <em>"Riwayat &amp; Rekapitulasi"</em> untuk mengekspor rekaman ke <strong>Excel (.xlsx)</strong> atau klik <strong>"Cetak Laporan"</strong> untuk mencetak dokumen buku ekspedisi resmi bertandatangan Komandan Satpam.
+                            </li>
+                        </ul>
                     </div>
                 )
             }

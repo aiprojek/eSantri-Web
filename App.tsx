@@ -62,7 +62,7 @@ const AlertModal: React.FC<AlertModalProps> = ({ isOpen, title, message, onClose
   if (!isOpen) return null;
 
   return (
-    <div className="app-overlay fixed inset-0 z-[150] flex items-center justify-center p-4" aria-modal="true" role="dialog" onClick={onClose}>
+    <div className="app-overlay fixed inset-0 z-[300] flex items-center justify-center p-4" aria-modal="true" role="dialog" onClick={onClose}>
       <div className="app-modal w-full max-w-md rounded-panel" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-app-border p-5">
             <h3 className="text-lg font-semibold text-app-text">{title}</h3>

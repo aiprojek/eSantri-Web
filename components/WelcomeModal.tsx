@@ -38,7 +38,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose, onGoToGuid
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex justify-center items-center p-3 sm:p-4 animate-fade-in" aria-modal="true" role="dialog">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 transform transition-all flex flex-col max-h-[92vh]" role="document">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg sm:max-w-xl overflow-hidden border border-slate-200 transform transition-all flex flex-col max-h-[92vh]" role="document">
                 <div className="p-5 sm:p-7 text-center overflow-y-auto app-scrollbar">
                     <div className="mx-auto flex items-center justify-center h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-teal-50 text-teal-600 border border-teal-100 mb-4 shadow-sm">
                         <i className="bi bi-rocket-takeoff text-2xl sm:text-3xl"></i>
@@ -115,31 +115,31 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose, onGoToGuid
                                     </a>
                                 </div>
                                 <p className="text-slate-600 text-[11px] leading-relaxed">
-                                    Dengan menggunakan aplikasi ini, pengguna menyatakan menyetujui seluruh ketentuan lisensi sumber terbuka (<strong className="text-slate-800 font-semibold">GPL-3.0</strong>) dan perjanjian pengguna. Segala bentuk pelanggaran terhadap lisensi dan amanah ini akan <strong className="text-slate-900 font-semibold">ditanggung penuh oleh pengguna.</strong>.
+                                    Dengan menggunakan aplikasi ini, pengguna menyatakan menyetujui seluruh ketentuan lisensi sumber terbuka (<strong className="text-slate-800 font-semibold">GPL-3.0</strong>) dan perjanjian pengguna. Segala bentuk pelanggaran terhadap lisensi dan amanah ini akan <strong className="text-slate-900 font-semibold">ditanggung penuh oleh pengguna</strong>.
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="px-5 py-3.5 sm:px-6 sm:py-4 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:justify-end sm:items-center gap-2.5">
+                <div className="px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:justify-end sm:items-center gap-2">
                     <button
                         onClick={onClose}
                         type="button"
-                        className="w-full sm:w-auto inline-flex items-center justify-center rounded-xl border border-slate-200 shadow-sm px-4 py-2.5 bg-white text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                        className="w-full sm:w-auto inline-flex items-center justify-center rounded-xl border border-slate-200 shadow-xs px-3.5 py-2 bg-white text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
                     >
-                        <i className="bi bi-arrow-right-circle mr-2 text-slate-500"></i>
-                        Langsung Gunakan Aplikasi
+                        <i className="bi bi-arrow-right-circle mr-1.5 text-slate-500"></i>
+                        <span>Gunakan Langsung</span>
                     </button>
                     <button
                         onClick={onGoToGuide}
                         type="button"
-                        className="relative w-full sm:w-auto inline-flex items-center justify-center rounded-xl border border-teal-500/30 px-4 sm:px-5 py-2.5 bg-teal-600 text-xs sm:text-sm font-bold text-white hover:bg-teal-700 transition-all shadow-md shadow-teal-700/25 ring-2 ring-teal-400/80 ring-offset-1 animate-pulse hover:animate-none"
+                        className="relative w-full sm:w-auto inline-flex items-center justify-center rounded-xl border border-teal-500/30 px-3.5 sm:px-4 py-2 bg-teal-600 text-xs sm:text-sm font-bold text-white hover:bg-teal-700 transition-all shadow-sm shadow-teal-700/25 ring-2 ring-teal-400/80 ring-offset-1 animate-pulse hover:animate-none whitespace-nowrap shrink-0"
                         title="Sangat disarankan membaca panduan agar dapat mengoperasikan sistem dengan optimal"
                     >
-                        <i className="bi bi-book-half mr-2 text-sm sm:text-base"></i>
+                        <i className="bi bi-book-half mr-1.5 text-sm"></i>
                         <span>Baca Panduan Pengguna</span>
-                        <span className="ml-2 px-1.5 py-0.5 text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider bg-amber-300 text-slate-900 rounded shadow-xs">
+                        <span className="ml-1.5 px-1 py-0.5 text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider bg-amber-300 text-slate-900 rounded shadow-xs leading-none">
                             Penting
                         </span>
                     </button>

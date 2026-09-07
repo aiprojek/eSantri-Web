@@ -330,3 +330,80 @@
     background-clip: padding-box;
   }
 }
+
+/* ==========================================================================
+   GLOBAL PRINT CONTROL RULES
+   Ensures browser print does not bleed screen UI, does not render drop
+   shadows, and isolates modal print targets cleanly.
+   ========================================================================== */
+@media print {
+  /* Complete drop shadow and filter elimination across all elements */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+  }
+
+  /* Reset global backgrounds to pure white */
+  html,
+  body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide app navigation, sidebar, topbar, and overlays */
+  .no-print,
+  .app-sidebar,
+  .app-topbar,
+  .app-overlay,
+  header,
+  aside,
+  nav {
+    display: none !important;
+  }
+
+  /* When an isolated modal print target is active, hide main application shell */
+  body:has(.print-modal-target) .app-shell > header,
+  body:has(.print-modal-target) .app-shell > aside,
+  body:has(.print-modal-target) .app-shell > main,
+  body:has(.print-modal-target) #root > .app-shell > main,
+  body.modal-print-open .app-shell > header,
+  body.modal-print-open .app-shell > aside,
+  body.modal-print-open .app-shell > main {
+    display: none !important;
+  }
+
+  /* Modal container resets in print */
+  .print-modal-target {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    box-shadow: none !important;
+  }
+
+  .print-modal-card {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+

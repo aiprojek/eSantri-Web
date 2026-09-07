@@ -375,8 +375,11 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isCalendarPrint = elementId === 'calendar-print-area';
     const isPerpusPrint = ['preview-kartu', 'preview-slip', 'preview-label'].includes(elementId);
+    const isA6BadgePrint = elementId === 'tiket-pass-tamu-print' || paperSize === 'A6';
     const paperDimensions: Record<string, [number, number]> = {
         A4: [21, 29.7],
+        A5: [14.8, 21],
+        A6: [10.5, 14.8],
         F4: [21.5, 33],
         Legal: [21.6, 35.6],
         Letter: [21.59, 27.94]
@@ -410,6 +413,8 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     // Build margin string
     const marginStr = isPerpusPrint
         ? '0'
+        : isA6BadgePrint
+        ? '4mm 5mm'
         : margin
         ? `${margin.top}cm ${margin.right}cm ${margin.bottom}cm ${margin.left}cm`
         : '0';
@@ -543,9 +548,62 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 break-after: auto !important;
             }
 
-            /* Reset card shadows for cleaner printing */
-            .rounded-lg, .rounded-xl, .shadow-lg, .shadow-md, .shadow-xl {
+            /* Visitor Badge A6 Print Styling */
+            #tiket-pass-tamu-print {
+                display: block !important;
+                width: 100% !important;
+                max-width: 95mm !important;
+                margin: 0 auto !important;
+                padding: 4mm !important;
                 box-shadow: none !important;
+                border: 1px dashed #9ca3af !important;
+                border-radius: 8px !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+
+            /* Rekap Buku Tamu Print Styling */
+            #rekap-buku-tamu-print-area {
+                display: block !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                background: white !important;
+            }
+
+            /* Label Pintu Kamar Asrama Print Styling */
+            #label-pintu-kamar-print-area {
+                display: block !important;
+                width: 100% !important;
+                max-width: 21cm !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                background: white !important;
+            }
+
+            /* BK Surat Print Styling */
+            #bk-surat-printable-sheet {
+                display: block !important;
+                width: 100% !important;
+                max-width: 21cm !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                background: white !important;
+            }
+
+            /* Universal and complete shadow removal for clean print */
+            *, *::before, *::after,
+            .rounded-lg, .rounded-xl, .rounded-2xl,
+            .shadow-2xs, .shadow-xs, .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl, .shadow-inner {
+                box-shadow: none !important;
+                -webkit-box-shadow: none !important;
+                text-shadow: none !important;
                 filter: none !important;
             }
             * { transition: none !important; animation: none !important; }

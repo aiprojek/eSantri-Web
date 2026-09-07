@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Kamar, GedungAsrama, Santri, PondokSettings } from '../../types';
+import { printToPdfNative } from '../../utils/pdfGenerator';
 
 interface LabelPintuKamarModalProps {
     isOpen: boolean;
@@ -19,21 +20,67 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
     settings
 }) => {
     const printRef = useRef<HTMLDivElement>(null);
+    const [isPrinting, setIsPrinting] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            document.body.classList.add('modal-print-open');
+            return () => {
+                document.body.classList.remove('modal-print-open');
+            };
+        }
+    }, [isOpen]);
 
     if (!isOpen || !kamar || !gedung) return null;
 
     const musyrif = settings.tenagaPengajar.find(tp => tp.id === kamar.musyrifId);
     const ketuaKamar = penghuni.find(s => s.id === kamar.ketuaKamarId) || (penghuni.length > 0 && kamar.ketuaKamarId ? null : null);
 
-    const handlePrint = () => {
-        window.print();
+    const handlePrint = async () => {
+        try {
+            setIsPrinting(true);
+            const docName = `Label_Pintu_${gedung.nama}_${kamar.nama}`.replace(/\s+/g, '_');
+            await printToPdfNative('label-pintu-kamar-print-area', docName, {
+                paperSize: 'A4',
+                orientation: 'portrait',
+                margin: { top: 0.8, right: 0.8, bottom: 0.8, left: 0.8 }
+            });
+        } catch (err) {
+            console.error('Print error:', err);
+            window.print();
+        } finally {
+            setIsPrinting(false);
+        }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-[70] flex justify-center items-center p-4 overflow-y-auto print:p-0 print:bg-white print:static">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden print:shadow-none print:w-full print:max-w-none print:rounded-none">
+        <div className="print-modal-target fixed inset-0 bg-black/60 z-[70] flex justify-center items-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+            <style>{`
+                @media print {
+                    @page {
+                        size: A4 portrait;
+                        margin: 8mm;
+                    }
+                    *, *::before, *::after {
+                        box-shadow: none !important;
+                        -webkit-box-shadow: none !important;
+                        text-shadow: none !important;
+                        filter: none !important;
+                    }
+                    html, body {
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: #ffffff !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                }
+            `}</style>
+
+            <div className="print-modal-card bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden my-auto print:shadow-none print:w-full print:max-w-none print:rounded-none print:max-h-none print:m-0">
                 {/* Header Modal (Hidden in Print) */}
-                <div className="p-4 bg-teal-800 text-white flex items-center justify-between print:hidden">
+                <div className="p-4 bg-teal-800 text-white flex items-center justify-between shrink-0 print:hidden">
                     <div className="flex items-center gap-2">
                         <i className="bi bi-printer-fill text-xl text-teal-200"></i>
                         <div>
@@ -44,9 +91,11 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handlePrint}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold text-xs rounded-lg transition-colors shadow-sm"
+                            disabled={isPrinting}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold text-xs rounded-lg transition-colors shadow-sm disabled:opacity-50"
                         >
-                            <i className="bi bi-printer"></i> Cetak / Print Sekarang
+                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'}`}></i>
+                            <span>{isPrinting ? 'Menyiapkan...' : 'Cetak / Print Sekarang'}</span>
                         </button>
                         <button
                             onClick={onClose}
@@ -58,7 +107,11 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
                 </div>
 
                 {/* Printable Content Area */}
-                <div ref={printRef} className="p-6 sm:p-8 bg-white text-gray-900 print:p-6 print:m-0">
+                <div
+                    ref={printRef}
+                    id="label-pintu-kamar-print-area"
+                    className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white text-gray-900 print:p-0 print:m-0 print:overflow-visible font-sans shadow-none"
+                >
                     {/* Kop Pesantren */}
                     <div className="border-b-2 border-teal-900 pb-4 mb-4 text-center relative">
                         {settings.logoPonpesUrl && (
@@ -80,7 +133,7 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
                     </div>
 
                     {/* Badge & Room Identification */}
-                    <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border-2 border-teal-800/40 rounded-xl p-4 mb-5 text-center shadow-2xs">
+                    <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border-2 border-teal-800/40 rounded-xl p-4 mb-5 text-center shadow-none">
                         <div className="inline-block px-3 py-1 bg-teal-800 text-white text-[10px] font-bold uppercase tracking-widest rounded-full mb-1">
                             {gedung.jenis === 'Putra' ? 'ASRAMA SANTRIWAN (BANIN)' : 'ASRAMA SANTRIWATI (BANAT)'} &bull; {kamar.lantai || 'Lantai 1'}
                         </div>
@@ -206,9 +259,9 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
                 </div>
 
                 {/* Footer Modal (Hidden in Print) */}
-                <div className="p-4 bg-gray-100 border-t border-gray-200 flex justify-between items-center print:hidden">
+                <div className="p-4 bg-gray-100 border-t border-gray-200 flex justify-between items-center shrink-0 print:hidden">
                     <span className="text-xs text-gray-500">
-                        Tips: Gunakan opsi cetak Landscape/Portrait A4 di dialog browser untuk hasil terbaik.
+                        Tips: Gunakan opsi cetak Portrait A4 di dialog browser untuk hasil label pintu terbaik.
                     </span>
                     <div className="flex items-center gap-2">
                         <button
@@ -219,9 +272,11 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
                         </button>
                         <button
                             onClick={handlePrint}
-                            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"
+                            disabled={isPrinting}
+                            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
                         >
-                            <i className="bi bi-printer"></i> Cetak Dokumen
+                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'}`}></i>
+                            <span>{isPrinting ? 'Menyiapkan...' : 'Cetak Dokumen'}</span>
                         </button>
                     </div>
                 </div>

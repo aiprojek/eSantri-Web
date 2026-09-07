@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BkSession, Santri, PondokSettings } from '../../types';
 import { PrintHeader } from '../common/PrintHeader';
 import { useAppContext } from '../../AppContext';
 import { BkWaModal } from './BkWaModal';
+import { printToPdfNative } from '../../utils/pdfGenerator';
 
 interface BkSuratModalProps {
     isOpen: boolean;
@@ -31,11 +32,34 @@ export const BkSuratModal: React.FC<BkSuratModalProps> = ({
     const [tanggalPertemuan, setTanggalPertemuan] = useState(session.tanggalBerikutnya || new Date().toISOString().split('T')[0]);
     const [tempatPertemuan, setTempatPertemuan] = useState('Ruang Bimbingan & Konseling (BK)');
     const [catatanTambahan, setCatatanTambahan] = useState('');
+    const [isPrinting, setIsPrinting] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            document.body.classList.add('modal-print-open');
+            return () => {
+                document.body.classList.remove('modal-print-open');
+            };
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
-    const handlePrint = () => {
-        window.print();
+    const handlePrint = async () => {
+        try {
+            setIsPrinting(true);
+            const docName = `Surat_BK_${santri.namaLengkap}_${jenisSurat}`.replace(/\s+/g, '_');
+            await printToPdfNative('bk-surat-printable-sheet', docName, {
+                paperSize: 'A4',
+                orientation: 'portrait',
+                margin: { top: 1, right: 1, bottom: 1, left: 1 }
+            });
+        } catch (err) {
+            console.error('Print error:', err);
+            window.print();
+        } finally {
+            setIsPrinting(false);
+        }
     };
 
     const formatDateIndo = (dateStr: string) => {
@@ -52,8 +76,8 @@ export const BkSuratModal: React.FC<BkSuratModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[80] flex justify-center items-center p-2 sm:p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col overflow-hidden my-auto border border-emerald-100">
+        <div className="print-modal-target fixed inset-0 bg-black/60 backdrop-blur-xs z-[80] flex justify-center items-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+            <div className="print-modal-card bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col overflow-hidden my-auto border border-emerald-100 print:border-none print:shadow-none print:w-full print:max-w-none print:m-0">
                 {/* Header (No print) */}
                 <div className="p-4 sm:px-6 sm:py-4 bg-gradient-to-r from-emerald-700 via-emerald-800 to-teal-800 text-white flex justify-between items-center no-print">
                     <div className="flex items-center gap-3">
@@ -78,9 +102,11 @@ export const BkSuratModal: React.FC<BkSuratModalProps> = ({
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer border border-white/20"
+                            disabled={isPrinting}
+                            className="px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer border border-white/20 disabled:opacity-50"
                         >
-                            <i className="bi bi-printer"></i> Cetak / Simpan PDF
+                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'}`}></i>
+                            <span>{isPrinting ? 'Menyiapkan...' : 'Cetak / Simpan PDF'}</span>
                         </button>
                         <button
                             type="button"
@@ -162,7 +188,7 @@ export const BkSuratModal: React.FC<BkSuratModalProps> = ({
 
                 {/* Document Printable Paper Area */}
                 <div className="p-6 sm:p-10 overflow-y-auto flex-grow bg-slate-100 flex justify-center">
-                    <div className="bg-white w-full max-w-[210mm] min-h-[297mm] p-8 sm:p-12 shadow-lg rounded-sm text-black font-serif text-sm leading-relaxed border border-gray-200 print:border-0 print:shadow-none print:p-0 print:m-0 print:w-full">
+                    <div id="bk-surat-printable-sheet" className="bg-white w-full max-w-[210mm] min-h-[297mm] p-8 sm:p-12 shadow-lg rounded-sm text-black font-serif text-sm leading-relaxed border border-gray-200 print:border-0 print:shadow-none print:p-0 print:m-0 print:w-full">
                         
                         {/* 1. SURAT PANGGILAN SANTRI */}
                         {jenisSurat === 'panggilan_santri' && (

@@ -16,6 +16,18 @@ export const TabLisensi: React.FC = () => {
                 </ul>
             </div>
 
+            <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded text-amber-950 text-sm">
+                <div className="flex items-start gap-2">
+                    <i className="bi bi-shield-exclamation text-amber-700 text-lg mt-0.5"></i>
+                    <div>
+                        <strong className="block font-bold mb-1">Amanah &amp; Tanggung Jawab Pengguna:</strong>
+                        <p className="leading-relaxed">
+                            Dengan menggunakan aplikasi ini, pengguna menyetujui seluruh ketentuan lisensi GPL-3.0. Segala bentuk pelanggaran terhadap lisensi dan amanah ini akan <strong>ditanggung oleh pengguna (jika tidak di dunia maka di akhirat)</strong>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-start gap-4">
                     <div className="flex-shrink-0 bg-gray-100 text-gray-600 rounded-full w-12 h-12 flex items-center justify-center">
@@ -24,16 +36,26 @@ export const TabLisensi: React.FC = () => {
                     <div>
                         <h3 className="font-bold text-gray-800 text-lg">Naskah Lengkap Lisensi</h3>
                         <p className="text-gray-600 text-sm mt-1 mb-4">
-                            Untuk membaca naskah hukum lengkap (legal text) dalam Bahasa Inggris, silakan kunjungi situs resmi GNU.
+                            Untuk membaca naskah hukum lengkap (legal text) lisensi open source, silakan kunjungi:
                         </p>
-                        <a
-                            href="https://www.gnu.org/licenses/gpl-3.0.html"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 text-teal-600 font-semibold hover:text-teal-800 hover:underline transition-colors"
-                        >
-                            Baca Lisensi GNU GPL v3 <i className="bi bi-box-arrow-up-right"></i>
-                        </a>
+                        <div className="flex flex-wrap items-center gap-4">
+                            <a
+                                href="https://opensource.org/license/gpl-3.0"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 text-teal-600 font-semibold hover:text-teal-800 hover:underline transition-colors"
+                            >
+                                Open Source Initiative (OSI) GPL-3.0 <i className="bi bi-box-arrow-up-right"></i>
+                            </a>
+                            <a
+                                href="https://www.gnu.org/licenses/gpl-3.0.html"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 text-slate-600 font-semibold hover:text-slate-800 hover:underline transition-colors"
+                            >
+                                Free Software Foundation (FSF) <i className="bi bi-box-arrow-up-right"></i>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>

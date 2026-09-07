@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { BukuTamu as BukuTamuType, PondokSettings, Santri } from '../../types';
+import { printToPdfNative } from '../../utils/pdfGenerator';
 
 interface RekapBukuTamuPrintModalProps {
     isOpen: boolean;
@@ -23,11 +24,33 @@ export const RekapBukuTamuPrintModal: React.FC<RekapBukuTamuPrintModalProps> = (
     selectedCategory
 }) => {
     const printRef = useRef<HTMLDivElement>(null);
+    const [isPrinting, setIsPrinting] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            document.body.classList.add('modal-print-open');
+            return () => {
+                document.body.classList.remove('modal-print-open');
+            };
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
-    const handlePrint = () => {
-        window.print();
+    const handlePrint = async () => {
+        try {
+            setIsPrinting(true);
+            await printToPdfNative('rekap-buku-tamu-print-area', `Rekap_Buku_Tamu_${new Date().toISOString().split('T')[0]}`, {
+                paperSize: 'A4',
+                orientation: 'landscape',
+                margin: { top: 0.8, right: 0.8, bottom: 0.8, left: 0.8 }
+            });
+        } catch (err) {
+            console.error('Print error:', err);
+            window.print();
+        } finally {
+            setIsPrinting(false);
+        }
     };
 
     const getSantriName = (id?: number) => {
@@ -47,8 +70,31 @@ export const RekapBukuTamuPrintModal: React.FC<RekapBukuTamuPrintModalProps> = (
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-[75] flex justify-center items-center p-3 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden my-auto print:shadow-none print:w-full print:max-w-none print:rounded-none print:max-h-none">
+        <div className="print-modal-target fixed inset-0 bg-black/60 z-[75] flex justify-center items-center p-3 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+            <style>{`
+                @media print {
+                    @page {
+                        size: A4 landscape;
+                        margin: 8mm;
+                    }
+                    *, *::before, *::after {
+                        box-shadow: none !important;
+                        -webkit-box-shadow: none !important;
+                        text-shadow: none !important;
+                        filter: none !important;
+                    }
+                    html, body {
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: #ffffff !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                }
+            `}</style>
+
+            <div className="print-modal-card bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden my-auto print:shadow-none print:w-full print:max-w-none print:rounded-none print:max-h-none print:m-0">
                 {/* Header Modal (Hidden in Print) */}
                 <div className="p-4 bg-teal-800 text-white flex items-center justify-between shrink-0 print:hidden">
                     <div className="flex items-center gap-2">
@@ -61,9 +107,11 @@ export const RekapBukuTamuPrintModal: React.FC<RekapBukuTamuPrintModalProps> = (
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handlePrint}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold text-xs rounded-lg transition-colors shadow-sm"
+                            disabled={isPrinting}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold text-xs rounded-lg transition-colors shadow-sm disabled:opacity-50"
                         >
-                            <i className="bi bi-printer"></i> Cetak Laporan (Print)
+                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'}`}></i>
+                            <span>{isPrinting ? 'Menyiapkan...' : 'Cetak Laporan (Print)'}</span>
                         </button>
                         <button
                             onClick={onClose}
@@ -75,7 +123,11 @@ export const RekapBukuTamuPrintModal: React.FC<RekapBukuTamuPrintModalProps> = (
                 </div>
 
                 {/* Printable Document Area */}
-                <div ref={printRef} className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white text-gray-900 print:p-4 print:m-0 print:overflow-visible font-sans">
+                <div
+                    ref={printRef}
+                    id="rekap-buku-tamu-print-area"
+                    className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white text-gray-900 print:p-0 print:m-0 print:overflow-visible font-sans shadow-none"
+                >
                     {/* Kop Pesantren */}
                     <div className="border-b-2 border-teal-950 pb-4 mb-4 text-center relative">
                         {settings.logoPonpesUrl && (
@@ -214,9 +266,11 @@ export const RekapBukuTamuPrintModal: React.FC<RekapBukuTamuPrintModalProps> = (
                         </button>
                         <button
                             onClick={handlePrint}
-                            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"
+                            disabled={isPrinting}
+                            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
                         >
-                            <i className="bi bi-printer"></i> Cetak Laporan
+                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'}`}></i>
+                            <span>{isPrinting ? 'Menyiapkan...' : 'Cetak Laporan'}</span>
                         </button>
                     </div>
                 </div>

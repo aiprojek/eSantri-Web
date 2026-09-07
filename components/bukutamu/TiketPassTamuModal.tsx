@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { BukuTamu as BukuTamuType, PondokSettings, Santri } from '../../types';
 import { useAppContext } from '../../AppContext';
+import { printToPdfNative } from '../../utils/pdfGenerator';
 
 export const generateVisitorBadgeWaMessage = (
     guest: BukuTamuType,
@@ -63,6 +64,17 @@ export const TiketPassTamuModal: React.FC<TiketPassTamuModalProps> = ({
     const [targetPhone, setTargetPhone] = useState<string>(guest?.noHp || '');
     const [showPhoneEditor, setShowPhoneEditor] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [isPrinting, setIsPrinting] = useState(false);
+
+    // Track print modal state on body for print isolation
+    React.useEffect(() => {
+        if (isOpen) {
+            document.body.classList.add('modal-print-open');
+            return () => {
+                document.body.classList.remove('modal-print-open');
+            };
+        }
+    }, [isOpen]);
 
     // Update target phone if guest changes
     React.useEffect(() => {
@@ -75,8 +87,21 @@ export const TiketPassTamuModal: React.FC<TiketPassTamuModalProps> = ({
 
     if (!isOpen || !guest) return null;
 
-    const handlePrint = () => {
-        window.print();
+    const handlePrint = async () => {
+        try {
+            setIsPrinting(true);
+            await printToPdfNative('tiket-pass-tamu-print', `Badge_Visitor_${guest.namaTamu.replace(/\s+/g, '_')}`, {
+                paperSize: 'A6',
+                orientation: 'portrait',
+                margin: { top: 0.4, right: 0.5, bottom: 0.4, left: 0.5 }
+            });
+            showToast('Dialog cetak kartu badge terbuka', 'info');
+        } catch (err) {
+            console.error('Print error:', err);
+            window.print();
+        } finally {
+            setIsPrinting(false);
+        }
     };
 
     const handleSendWhatsApp = (customNumber?: string) => {
@@ -113,13 +138,19 @@ export const TiketPassTamuModal: React.FC<TiketPassTamuModalProps> = ({
     });
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-[75] flex justify-center items-center p-3 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+        <div className="print-modal-target fixed inset-0 bg-black/60 z-[75] flex justify-center items-center p-3 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
             {/* CSS Cetak Khusus Standar Ukuran Kertas A6 */}
             <style>{`
                 @media print {
                     @page {
                         size: A6 portrait;
                         margin: 4mm 5mm;
+                    }
+                    *, *::before, *::after {
+                        box-shadow: none !important;
+                        -webkit-box-shadow: none !important;
+                        text-shadow: none !important;
+                        filter: none !important;
                     }
                     html, body {
                         width: 100% !important;
@@ -142,7 +173,7 @@ export const TiketPassTamuModal: React.FC<TiketPassTamuModalProps> = ({
                 }
             `}</style>
 
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden my-auto print:shadow-none print:w-full print:max-w-none print:rounded-none print:max-h-none print:m-0">
+            <div className="print-modal-card bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden my-auto print:shadow-none print:w-full print:max-w-none print:rounded-none print:max-h-none print:m-0">
                 {/* Header Modal (Hidden in Print) */}
                 <div className="p-4 bg-teal-800 text-white flex items-center justify-between shrink-0 print:hidden">
                     <div className="flex items-center gap-2.5">
@@ -157,10 +188,12 @@ export const TiketPassTamuModal: React.FC<TiketPassTamuModalProps> = ({
                     <div className="flex items-center gap-1.5">
                         <button
                             onClick={handlePrint}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold text-xs rounded-lg transition-colors shadow-sm"
+                            disabled={isPrinting}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold text-xs rounded-lg transition-colors shadow-sm disabled:opacity-50"
                             title="Cetak Tiket ke Kertas Ukuran A6"
                         >
-                            <i className="bi bi-printer"></i> Cetak A6
+                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'}`}></i>
+                            <span>{isPrinting ? 'Menyiapkan...' : 'Cetak A6'}</span>
                         </button>
                         <button
                             onClick={onClose}
@@ -242,7 +275,8 @@ export const TiketPassTamuModal: React.FC<TiketPassTamuModalProps> = ({
                     {/* Preview Kertas A6 (Printable Ticket Area) */}
                     <div
                         ref={printRef}
-                        className="print-ticket-a6 mx-auto bg-white text-gray-900 rounded-xl shadow-md border border-gray-300 p-4 sm:p-5 max-w-[400px] font-sans print:shadow-none print:rounded-none"
+                        id="tiket-pass-tamu-print"
+                        className="print-ticket-a6 mx-auto bg-white text-gray-900 rounded-xl shadow-none sm:shadow-xs border border-gray-300 p-4 sm:p-5 max-w-[400px] font-sans print:shadow-none print:rounded-none"
                     >
                         {/* Kop Pesantren */}
                         <div className="border-b-2 border-dashed border-gray-400 pb-2.5 mb-2.5 text-center relative">
@@ -404,11 +438,12 @@ export const TiketPassTamuModal: React.FC<TiketPassTamuModalProps> = ({
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                            disabled={isPrinting}
+                            className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
                             title="Cetak Tiket Langsung (Format Kertas A6)"
                         >
-                            <i className="bi bi-printer"></i>
-                            <span>Cetak Tiket (A6)</span>
+                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'}`}></i>
+                            <span>{isPrinting ? 'Menyiapkan...' : 'Cetak Tiket (A6)'}</span>
                         </button>
                     </div>
                 </div>

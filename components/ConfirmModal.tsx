@@ -38,7 +38,13 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const selectedIconColor = iconColorClasses[confirmColor as keyof typeof iconColorClasses] || iconColorClasses.red;
 
   return (
-    <div className="app-overlay fixed inset-0 z-[300] flex items-center justify-center p-4" aria-modal="true" role="dialog" onClick={onCancel}>
+    <div 
+      className="app-overlay fixed inset-0 z-[99999] flex items-center justify-center p-4" 
+      style={{ zIndex: 99999 }}
+      aria-modal="true" 
+      role="dialog" 
+      onClick={onCancel}
+    >
       <div className="app-modal w-full max-w-md rounded-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="p-6 text-center">
           <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${selectedIconColor}`}>

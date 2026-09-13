@@ -215,19 +215,81 @@ export const ReportFilterPanel: React.FC<ReportFilterPanelProps> = ({
                 <div className="space-y-3">
                     <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b pb-2">Opsi Laporan</h4>
                     
-                    {/* Paper Settings */}
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div>
-                            <label className="block mb-1 text-xs font-medium text-gray-700">Kertas</label>
-                            <select value={reportConfig.paperSize} onChange={e => reportConfig.setPaperSize(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-xs bg-gray-50">
-                                <option value="A4">A4</option><option value="F4">F4</option><option value="Legal">Legal</option><option value="Letter">Letter</option>
-                            </select>
+                    {/* Paper & Security Settings */}
+                    <div className="space-y-2 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block mb-1 text-xs font-medium text-gray-700">Kertas</label>
+                                <select value={reportConfig.paperSize} onChange={e => reportConfig.setPaperSize(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-xs bg-white">
+                                    <option value="A4">A4</option><option value="F4">F4</option><option value="Legal">Legal</option><option value="Letter">Letter</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block mb-1 text-xs font-medium text-gray-700">Margin</label>
+                                <select value={reportConfig.margin} onChange={e => reportConfig.setMargin(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-xs bg-white">
+                                    <option value="narrow">Tipis</option><option value="normal">Normal</option><option value="wide">Lebar</option>
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            <label className="block mb-1 text-xs font-medium text-gray-700">Margin</label>
-                            <select value={reportConfig.margin} onChange={e => reportConfig.setMargin(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-xs bg-gray-50">
-                                <option value="narrow">Tipis</option><option value="normal">Normal</option><option value="wide">Lebar</option>
-                            </select>
+
+                        {/* Watermark Security Toggle */}
+                        <div className="pt-2 border-t border-gray-200">
+                            <label className="flex items-center justify-between text-xs font-medium text-gray-700 cursor-pointer">
+                                <span className="flex items-center gap-1.5">
+                                    <i className="bi bi-shield-check text-teal-600"></i> Watermark Dokumen
+                                </span>
+                                <input 
+                                    type="checkbox" 
+                                    checked={reportConfig.options.showWatermark} 
+                                    onChange={e => reportConfig.options.setShowWatermark(e.target.checked)} 
+                                    className="rounded text-teal-600 focus:ring-teal-500 h-4 w-4"
+                                />
+                            </label>
+                            
+                            {reportConfig.options.showWatermark && (
+                                <div className="mt-2 space-y-2 pl-1">
+                                    <div>
+                                        <label className="block text-[11px] text-gray-600 mb-0.5">Teks Watermark</label>
+                                        <input 
+                                            type="text" 
+                                            value={reportConfig.options.watermarkText} 
+                                            onChange={e => reportConfig.options.setWatermarkText(e.target.value)} 
+                                            placeholder="Contoh: ASLI, DRAFT, SALINAN" 
+                                            className="w-full border border-gray-300 rounded p-1.5 text-xs bg-white uppercase font-bold"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block text-[11px] text-gray-600 mb-0.5">Preset Cepat</label>
+                                            <select 
+                                                value={reportConfig.options.watermarkText} 
+                                                onChange={e => reportConfig.options.setWatermarkText(e.target.value)} 
+                                                className="w-full border border-gray-300 rounded p-1.5 text-xs bg-white"
+                                            >
+                                                <option value="ASLI">ASLI</option>
+                                                <option value="DRAFT">DRAFT</option>
+                                                <option value="SALINAN">SALINAN</option>
+                                                <option value="RAHASIA">RAHASIA</option>
+                                                <option value="ARSIP">ARSIP</option>
+                                                <option value="LEGALISIR">LEGALISIR</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] text-gray-600 mb-0.5">Kepekatan (Transparansi)</label>
+                                            <select 
+                                                value={reportConfig.options.watermarkOpacity} 
+                                                onChange={e => reportConfig.options.setWatermarkOpacity(parseFloat(e.target.value))} 
+                                                className="w-full border border-gray-300 rounded p-1.5 text-xs bg-white"
+                                            >
+                                                <option value={0.07}>Sangat Halus (7%)</option>
+                                                <option value={0.12}>Normal (12%)</option>
+                                                <option value={0.20}>Jelas (20%)</option>
+                                                <option value={0.30}>Tegas (30%)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 

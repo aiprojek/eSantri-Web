@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ReportType } from '../../types';
 
 interface ReportSelectionHomeProps {
@@ -15,10 +15,13 @@ interface ReportItem {
 }
 
 export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSelectReport }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState<string>('all');
     
     // Define categories and reports
     const categories = useMemo(() => [
         {
+            key: 'utama',
             title: "Laporan Utama & Dashboard",
             color: "text-indigo-600",
             bg: "bg-indigo-50",
@@ -34,6 +37,7 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
             ]
         },
         {
+            key: 'akademik',
             title: "Akademik & Kesiswaan",
             color: "text-teal-600",
             bg: "bg-teal-50",
@@ -55,11 +59,14 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
             ]
         },
         {
+            key: 'keuangan',
             title: "Keuangan & Administrasi",
             color: "text-blue-600",
             bg: "bg-blue-50",
             border: "border-blue-100",
             items: [
+                { id: ReportType.MatriksTunggakanSPP, title: 'Matriks Tunggakan SPP', description: "Matriks status bayar 12 bulan per rombel.", icon: 'bi-grid-3x3-gap-fill', color: 'text-emerald-700' },
+                { id: ReportType.BukuIndukSantri, title: 'Buku Induk Santri', description: "Lembar arsip permanen santri standar EMIS/Kemenag.", icon: 'bi-book-fill', color: 'text-indigo-600' },
                 { id: ReportType.RekeningKoranSantri, title: 'Rekening Koran', description: "Rincian tabungan & tagihan.", icon: 'bi-file-earmark-spreadsheet', color: 'text-blue-600' },
                 { id: ReportType.LaporanArusKas, title: 'Arus Kas Umum', description: "Buku kas pemasukan/pengeluaran.", icon: 'bi-journal-arrow-up', color: 'text-blue-600' },
                 { id: ReportType.KartuSantri, title: 'Kartu Tanda Santri', description: "Cetak ID Card masal.", icon: 'bi-person-vcard', color: 'text-purple-600' },
@@ -67,6 +74,7 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
             ]
         },
         {
+            key: 'penunjang',
             title: "Penunjang & Lainnya",
             color: "text-gray-600",
             bg: "bg-gray-50",
@@ -85,20 +93,121 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
         }
     ], []);
 
+    // Filter categories based on category selection and search query
+    const filteredCategories = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        return categories
+            .filter(cat => selectedCategory === 'all' || cat.key === selectedCategory)
+            .map(cat => {
+                const matchedItems = cat.items.filter(item => {
+                    if (!query) return true;
+                    return item.title.toLowerCase().includes(query) || item.description.toLowerCase().includes(query);
+                });
+                return {
+                    ...cat,
+                    items: matchedItems
+                };
+            })
+            .filter(cat => cat.items.length > 0);
+    }, [categories, searchQuery, selectedCategory]);
+
+    const totalMatchedReports = useMemo(() => {
+        return filteredCategories.reduce((acc, cat) => acc + cat.items.length, 0);
+    }, [filteredCategories]);
+
     return (
-        <div className="space-y-8 animate-fade-in">
-            {categories.map((cat, idx) => (
+        <div className="space-y-6 animate-fade-in">
+            {/* Quick Search & Filter Controls */}
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
+                <div className="relative w-full md:w-80">
+                    <i className="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input
+                        type="text"
+                        placeholder="Cari jenis laporan (e.g. EMIS, Rombel, SPP, Tahfizh)..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            title="Hapus pencarian"
+                        >
+                            <i className="bi bi-x-circle-fill text-xs"></i>
+                        </button>
+                    )}
+                </div>
+
+                {/* Category Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                    {[
+                        { id: 'all', label: 'Semua Kategori' },
+                        { id: 'utama', label: 'Utama' },
+                        { id: 'akademik', label: 'Akademik' },
+                        { id: 'keuangan', label: 'Keuangan' },
+                        { id: 'penunjang', label: 'Penunjang' },
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setSelectedCategory(tab.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                                selectedCategory === tab.id
+                                    ? 'bg-teal-600 text-white shadow-2xs'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Results counter if filtered */}
+            {(searchQuery || selectedCategory !== 'all') && (
+                <div className="flex items-center justify-between text-xs text-gray-500 px-1">
+                    <span>
+                        Ditemukan <strong className="text-gray-800">{totalMatchedReports}</strong> laporan
+                        {searchQuery && <span> untuk kata kunci "<em>{searchQuery}</em>"</span>}
+                    </span>
+                    <button
+                        onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
+                        className="text-teal-600 hover:underline font-medium"
+                    >
+                        Reset Filter
+                    </button>
+                </div>
+            )}
+
+            {/* Empty State */}
+            {filteredCategories.length === 0 && (
+                <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
+                    <i className="bi bi-file-earmark-x text-4xl text-gray-300 mb-2 block"></i>
+                    <h4 className="text-gray-700 font-semibold text-sm">Tidak ada laporan yang cocok</h4>
+                    <p className="text-gray-500 text-xs mt-1">Coba gunakan kata kunci pencarian yang lain atau reset filter kategori.</p>
+                    <button
+                        onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
+                        className="mt-3 px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-lg text-xs font-semibold hover:bg-teal-100"
+                    >
+                        Tampilkan Semua Laporan
+                    </button>
+                </div>
+            )}
+
+            {/* Categories List */}
+            {filteredCategories.map((cat, idx) => (
                 <div key={idx}>
                     <h3 className={`text-lg font-bold mb-4 flex items-center gap-2 ${cat.color}`}>
                         <span className={`w-2 h-6 rounded-full ${cat.bg.replace('bg-', 'bg-').replace('50', '500')}`}></span>
                         {cat.title}
+                        <span className="text-xs font-normal text-gray-400">({cat.items.length})</span>
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {cat.items.map((report) => (
                             <button
                                 key={report.id}
                                 onClick={() => onSelectReport(report.id as ReportType)}
-                                className={`flex flex-col text-left p-4 bg-white border ${cat.border} rounded-xl shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200 group`}
+                                className={`flex flex-col text-left p-4 bg-white border ${cat.border} rounded-xl shadow-xs hover:shadow-md hover:-translate-y-1 transition-all duration-200 group`}
                             >
                                 <div className="flex items-center justify-between w-full mb-3">
                                     <div className={`w-10 h-10 rounded-lg ${cat.bg} flex items-center justify-center ${report.color} text-xl group-hover:scale-110 transition-transform`}>
@@ -116,3 +225,4 @@ export const ReportSelectionHome: React.FC<ReportSelectionHomeProps> = ({ onSele
         </div>
     );
 };
+

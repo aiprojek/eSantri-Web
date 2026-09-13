@@ -25,6 +25,7 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
     // Template State
     const [templateName, setTemplateName] = useState('');
     const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+    const [mobileTab, setMobileTab] = useState<'config' | 'preview'>('config');
 
     const handleGenerate = async () => {
         setIsLoading(true);
@@ -34,6 +35,7 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
             setGeneratedPrompt(prompt);
             setGeneratedImageUrl('');
             setImageSource(null);
+            setMobileTab('preview');
             showToast("Prompt berhasil dibuat! Silakan salin.", "success");
         } catch (error) {
             showToast("Gagal membuat prompt. Pastikan koneksi internet lancar.", "error");
@@ -70,6 +72,7 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
             const result = await generatePosterImage(prompt, ratio);
             setGeneratedImageUrl(result.imageUrl);
             setImageSource(result.source);
+            setMobileTab('preview');
             showToast(
                 result.source === 'openai'
                     ? 'Desain poster dibuat via OpenAI.'
@@ -184,17 +187,49 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
     ];
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)]">
-            <div className="bg-white p-6 rounded-lg shadow-md overflow-y-auto space-y-6">
-                <div className="flex items-center gap-3 border-b pb-4">
-                    <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
-                        <i className="bi bi-stars text-xl"></i>
+        <div className="flex flex-col gap-4">
+            {/* Mobile View Toggle Segmented Control */}
+            <div className="lg:hidden flex items-center p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200 shadow-2xs gap-1.5">
+                <button
+                    type="button"
+                    onClick={() => setMobileTab('config')}
+                    className={`flex-1 min-w-0 py-2.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                        mobileTab === 'config'
+                            ? 'bg-purple-700 text-white shadow-xs ring-1 ring-purple-600/30'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                >
+                    <i className="bi bi-sliders text-sm shrink-0"></i>
+                    <span className="truncate">1. Form Desain</span>
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setMobileTab('preview')}
+                    className={`flex-1 min-w-0 py-2.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                        mobileTab === 'preview'
+                            ? 'bg-purple-700 text-white shadow-xs ring-1 ring-purple-600/30'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                >
+                    <i className="bi bi-image-fill text-sm shrink-0"></i>
+                    <span className="truncate">2. Pratinjau AI</span>
+                    {generatedPrompt && (
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ring-2 ring-purple-700" title="Prompt Sudah Dibuat"></span>
+                    )}
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0 lg:h-[calc(100vh-200px)]">
+                <div className={`bg-white p-4 sm:p-6 rounded-xl shadow-md overflow-y-auto space-y-6 ${mobileTab === 'config' ? 'block' : 'hidden lg:block'} h-auto lg:h-full`}>
+                    <div className="flex items-center gap-3 border-b pb-4">
+                        <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+                            <i className="bi bi-stars text-xl"></i>
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-800">Poster Prompt Maker</h2>
+                            <p className="text-xs text-gray-500">Buat prompt untuk AI Image Generator (Midjourney/DALL-E).</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-800">Poster Prompt Maker</h2>
-                        <p className="text-xs text-gray-500">Buat prompt untuk AI Image Generator (Midjourney/DALL-E).</p>
-                    </div>
-                </div>
 
                 {/* Template Manager */}
                 <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
@@ -248,15 +283,16 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Rasio Ukuran</label>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                             {ratioOptions.map(opt => (
                                 <button
                                     key={opt.val}
+                                    type="button"
                                     onClick={() => setRatio(opt.val)}
-                                    className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-all ${ratio === opt.val ? 'bg-purple-50 border-purple-500 text-purple-700 ring-1 ring-purple-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                                    className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-xl border transition-all text-center min-w-0 ${ratio === opt.val ? 'bg-purple-50 border-purple-500 text-purple-700 ring-1 ring-purple-500 font-bold' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                                 >
-                                    <i className={`bi ${opt.icon} text-lg mb-1`}></i>
-                                    <span className="text-xs font-medium">{opt.label}</span>
+                                    <i className={`bi ${opt.icon} text-base sm:text-lg mb-0.5`}></i>
+                                    <span className="text-[11px] sm:text-xs truncate w-full">{opt.label}</span>
                                 </button>
                             ))}
                         </div>
@@ -295,7 +331,7 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
                 </div>
             </div>
 
-            <div className="bg-gray-800 p-6 rounded-lg shadow-md flex flex-col h-full text-white relative overflow-hidden">
+            <div className={`bg-gray-800 p-4 sm:p-6 rounded-xl shadow-md flex flex-col ${mobileTab === 'preview' ? 'block' : 'hidden lg:block'} h-auto lg:h-full text-white relative overflow-hidden`}>
                 {/* Decoration */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500 rounded-full blur-[100px] opacity-20 -mr-20 -mt-20 pointer-events-none"></div>
                 
@@ -303,11 +339,11 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
                     <i className="bi bi-terminal"></i> Hasil Prompt
                 </h3>
                 
-                <div className="flex-grow bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300 border border-gray-700 relative overflow-y-auto custom-scrollbar">
+                <div className="flex-grow bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300 border border-gray-700 relative overflow-y-auto custom-scrollbar min-h-[140px]">
                     {generatedPrompt ? (
                         <p className="whitespace-pre-wrap leading-relaxed">{generatedPrompt}</p>
                     ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50">
+                        <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 py-8">
                             <i className="bi bi-image text-4xl mb-2"></i>
                             <p>Prompt akan muncul di sini...</p>
                         </div>
@@ -329,7 +365,7 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
                     <button 
                         onClick={copyToClipboard}
                         disabled={!generatedPrompt}
-                        className="px-6 py-2 bg-white text-gray-900 font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2 disabled:bg-gray-600 disabled:text-gray-400"
+                        className="flex-1 sm:flex-initial justify-center px-4 sm:px-6 py-2 bg-white text-gray-900 font-semibold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2 disabled:bg-gray-600 disabled:text-gray-400 text-xs sm:text-sm whitespace-nowrap"
                     >
                         <i className="bi bi-clipboard"></i> Salin Prompt
                     </button>
@@ -339,16 +375,18 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
                     <button
                         onClick={handleGenerateImage}
                         disabled={isGeneratingImage || isLoading}
-                        className="px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-60"
+                        className="flex-1 sm:flex-initial justify-center px-3 sm:px-4 py-2 bg-teal-600 text-white text-xs sm:text-sm font-semibold rounded-lg hover:bg-teal-700 disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap"
                     >
-                        {isGeneratingImage ? 'Membuat Desain...' : 'Generate Desain Poster'}
+                        <i className="bi bi-stars"></i>
+                        <span>{isGeneratingImage ? 'Membuat Desain...' : 'Generate Desain Poster'}</span>
                     </button>
                     <button
                         onClick={handleDownloadImage}
                         disabled={!generatedImageUrl}
-                        className="px-4 py-2 bg-white text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-100 disabled:opacity-60"
+                        className="flex-1 sm:flex-initial justify-center px-3 sm:px-4 py-2 bg-white text-gray-900 text-xs sm:text-sm font-semibold rounded-lg hover:bg-gray-100 disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap"
                     >
-                        Unduh PNG
+                        <i className="bi bi-download"></i>
+                        <span>Unduh PNG</span>
                     </button>
                 </div>
 
@@ -371,6 +409,7 @@ export const PsbPosterMaker: React.FC<PsbPosterMakerProps> = ({ config, settings
                     <p><i className="bi bi-info-circle mr-1"></i> Tips: Salin prompt ini dan tempelkan ke <strong>Midjourney</strong> (/imagine), <strong>Bing Image Creator</strong> (DALL-E 3), atau <strong>Stable Diffusion</strong> untuk membuat gambar.</p>
                 </div>
             </div>
+        </div>
         </div>
     );
 };

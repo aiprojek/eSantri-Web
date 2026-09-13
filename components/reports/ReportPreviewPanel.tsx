@@ -58,6 +58,8 @@ const REPORT_LABELS: Record<ReportType, string> = {
     [ReportType.JurnalMengajar]: 'jurnal-mengajar',
     [ReportType.RekapKesehatan]: 'rekap-kesehatan',
     [ReportType.RekapKonseling]: 'rekap-konseling',
+    [ReportType.BukuIndukSantri]: 'buku-induk-santri',
+    [ReportType.MatriksTunggakanSPP]: 'matriks-tunggakan-spp',
 };
 
 export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewContent, activeReport, pageCount, isLoading, paperSize, onToast, filteredSantri, settings, filters, excelData }) => {

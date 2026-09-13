@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Pendaftar, PondokSettings } from '../../../types';
+import { Pendaftar, PondokSettings, PsbBerkasFisik, PsbNilaiUjian, PendaftarStatus } from '../../../types';
 import { useAppContext } from '../../../AppContext';
 import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntimes';
+import { isFirebaseClientConfigReady } from '../../../firebaseStorage';
+import { getPsbRegistrationNumber, calculatePsbAverageScore } from '../utils/psbUtils';
 
 interface PendaftarModalProps {
     isOpen: boolean;
@@ -14,13 +16,14 @@ interface PendaftarModalProps {
 
 export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose, onSave, onUpdate, pendaftarData, settings }) => {
     const { showAlert } = useAppContext();
-    const [activeTab, setActiveTab] = useState<'dataDiri' | 'alamat' | 'ortu' | 'sekolah' | 'tambahan'>('dataDiri');
+    const [activeTab, setActiveTab] = useState<'dataDiri' | 'alamat' | 'ortu' | 'sekolah' | 'seleksi' | 'tambahan'>('dataDiri');
     
     // State to hold parsed custom data
     const [parsedCustomData, setParsedCustomData] = useState<Record<string, any>>({});
 
     // Use 'any' for formData to allow flat address fields and avoid type conflicts with Pendaftar interface
     const [formData, setFormData] = useState<any>({
+        nomorRegistrasi: '',
         namaLengkap: '',
         nisn: '',
         nik: '',
@@ -70,7 +73,29 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         catatan: '',
         status: 'Baru',
         tanggalDaftar: new Date().toISOString(),
-        customData: '{}'
+        customData: '{}',
+
+        berkasFisik: {
+            kk: false,
+            akta: false,
+            ijazahSkl: false,
+            suratSehat: false,
+            pasFoto: false,
+            catatanBerkas: ''
+        },
+
+        nilaiUjian: {
+            bacaQuran: '',
+            tahfizh: '',
+            akademik: '',
+            wawancara: '',
+            totalSkor: '',
+            rekomendasi: 'Direkomendasikan',
+            penguji: '',
+            ruangUjian: 'Ruang Seleksi Posko 1',
+            tanggalUjian: '',
+            catatanUjian: ''
+        }
     });
 
     const [isUploading, setIsUploading] = useState<string | null>(null);
@@ -82,12 +107,45 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                 const { alamat, ...rest } = pendaftarData;
                 setFormData({
                     ...rest,
+                    nomorRegistrasi: pendaftarData.nomorRegistrasi || '',
                     alamat: alamat?.detail || '',
                     desaKelurahan: alamat?.desaKelurahan || '',
                     kecamatan: alamat?.kecamatan || '',
                     kabupatenKota: alamat?.kabupatenKota || '',
                     provinsi: alamat?.provinsi || '',
                     kodePos: alamat?.kodePos || '',
+                    berkasFisik: pendaftarData.berkasFisik || {
+                        kk: false,
+                        akta: false,
+                        ijazahSkl: false,
+                        suratSehat: false,
+                        pasFoto: false,
+                        catatanBerkas: ''
+                    },
+                    nilaiUjian: pendaftarData.nilaiUjian ? {
+                        ...pendaftarData.nilaiUjian,
+                        bacaQuran: pendaftarData.nilaiUjian.bacaQuran ?? '',
+                        tahfizh: pendaftarData.nilaiUjian.tahfizh ?? '',
+                        akademik: pendaftarData.nilaiUjian.akademik ?? '',
+                        wawancara: pendaftarData.nilaiUjian.wawancara ?? '',
+                        totalSkor: pendaftarData.nilaiUjian.totalSkor ?? '',
+                        rekomendasi: pendaftarData.nilaiUjian.rekomendasi || 'Direkomendasikan',
+                        penguji: pendaftarData.nilaiUjian.penguji || '',
+                        ruangUjian: pendaftarData.nilaiUjian.ruangUjian || 'Ruang Seleksi Posko 1',
+                        tanggalUjian: pendaftarData.nilaiUjian.tanggalUjian ? pendaftarData.nilaiUjian.tanggalUjian.split('T')[0] : '',
+                        catatanUjian: pendaftarData.nilaiUjian.catatanUjian || ''
+                    } : {
+                        bacaQuran: '',
+                        tahfizh: '',
+                        akademik: '',
+                        wawancara: '',
+                        totalSkor: '',
+                        rekomendasi: 'Direkomendasikan',
+                        penguji: '',
+                        ruangUjian: 'Ruang Seleksi Posko 1',
+                        tanggalUjian: '',
+                        catatanUjian: ''
+                    }
                 });
                 try {
                     setParsedCustomData(pendaftarData.customData ? JSON.parse(pendaftarData.customData) : {});
@@ -96,6 +154,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                 }
             } else {
                 setFormData({
+                    nomorRegistrasi: '',
                     namaLengkap: '',
                     nisn: '',
                     nik: '',
@@ -119,7 +178,27 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                     catatan: '',
                     status: 'Baru',
                     tanggalDaftar: new Date().toISOString(),
-                    customData: '{}'
+                    customData: '{}',
+                    berkasFisik: {
+                        kk: false,
+                        akta: false,
+                        ijazahSkl: false,
+                        suratSehat: false,
+                        pasFoto: false,
+                        catatanBerkas: ''
+                    },
+                    nilaiUjian: {
+                        bacaQuran: '',
+                        tahfizh: '',
+                        akademik: '',
+                        wawancara: '',
+                        totalSkor: '',
+                        rekomendasi: 'Direkomendasikan',
+                        penguji: '',
+                        ruangUjian: 'Ruang Seleksi Posko 1',
+                        tanggalUjian: '',
+                        catatanUjian: ''
+                    }
                 });
                 setParsedCustomData({});
             }
@@ -140,26 +219,61 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         setFormData((prev: any) => ({ ...prev, customData: JSON.stringify(updated) }));
     };
 
+    const handleRemoveFile = (fieldName: string) => {
+        const updated = { ...parsedCustomData };
+        delete updated[fieldName];
+        setParsedCustomData(updated);
+        setFormData((prev: any) => ({ ...prev, customData: JSON.stringify(updated) }));
+        showAlert('Dihapus', `Dokumen ${fieldName} telah dihapus.`);
+    };
+
     const handleFileUpload = async (fieldName: string, file: File) => {
-        if (!formData.namaLengkap) {
+        if (!formData.namaLengkap?.trim()) {
             showAlert('Nama Wajib Diisi', 'Mohon isi nama lengkap santri terlebih dahulu untuk penamaan file otomatis.');
+            return;
+        }
+
+        // Check if file is excessively large (> 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            showAlert('File Terlalu Besar', 'Ukuran file melebihi 5MB. Mohon gunakan dokumen atau foto yang telah dikompres (di bawah 5MB).');
             return;
         }
 
         setIsUploading(fieldName);
         try {
-            const { uploadPsbDocument } = await loadFirebasePsbUploadRuntime();
-            const downloadUrl = await uploadPsbDocument({
-                fieldName,
-                santriName: formData.namaLengkap,
-                file,
-            });
+            let fileUrl = '';
+            const isFirebaseReady = isFirebaseClientConfigReady;
+
+            // 1. If Firebase is configured, try uploading to Firebase Storage
+            if (isFirebaseReady) {
+                try {
+                    const { uploadPsbDocument } = await loadFirebasePsbUploadRuntime();
+                    fileUrl = await uploadPsbDocument({
+                        fieldName,
+                        santriName: formData.namaLengkap,
+                        file,
+                    });
+                } catch (fbErr: any) {
+                    console.warn("Firebase upload failed, falling back to local Base64 storage:", fbErr);
+                }
+            }
+
+            // 2. If Firebase is not ready or failed, fallback to local Base64 Data URL (offline/IndexedDB)
+            if (!fileUrl) {
+                fileUrl = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
             
-            handleCustomDataChange(fieldName, downloadUrl);
-            showAlert('Berhasil', `Dokumen ${fieldName} berhasil diunggah.`);
+            handleCustomDataChange(fieldName, fileUrl);
+            const isCloud = fileUrl.startsWith('http');
+            showAlert('Berhasil Disimpan', `Dokumen ${fieldName} berhasil disimpan ${isCloud ? 'ke Firebase Storage (Cloud)' : 'ke Database Lokal (IndexedDB / Base64 Offline)'}.`);
         } catch (error: any) {
             console.error("Upload failed:", error);
-            showAlert('Gagal Unggah', `Gagal mengunggah file: ${error.message}`);
+            showAlert('Gagal Menyimpan', `Gagal memproses berkas: ${error.message}`);
         } finally {
             setIsUploading(null);
         }
@@ -171,8 +285,41 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
             return;
         }
 
+        const jenjangName = settings.jenjang.find(j => j.id === Number(formData.jenjangId))?.nama;
+        const nomorRegistrasi = formData.nomorRegistrasi?.trim() || getPsbRegistrationNumber({
+            id: pendaftarData?.id || Date.now(),
+            tanggalDaftar: formData.tanggalDaftar,
+            nomorRegistrasi: formData.nomorRegistrasi
+        } as any, jenjangName);
+
+        const rawNilai = formData.nilaiUjian || {};
+        const parsedNilai: PsbNilaiUjian = {
+            bacaQuran: rawNilai.bacaQuran !== '' && rawNilai.bacaQuran !== undefined ? Number(rawNilai.bacaQuran) : undefined,
+            tahfizh: rawNilai.tahfizh !== '' && rawNilai.tahfizh !== undefined ? Number(rawNilai.tahfizh) : undefined,
+            akademik: rawNilai.akademik !== '' && rawNilai.akademik !== undefined ? Number(rawNilai.akademik) : undefined,
+            wawancara: rawNilai.wawancara !== '' && rawNilai.wawancara !== undefined ? Number(rawNilai.wawancara) : undefined,
+            rekomendasi: rawNilai.rekomendasi || 'Direkomendasikan',
+            penguji: rawNilai.penguji || '',
+            ruangUjian: rawNilai.ruangUjian || 'Ruang Seleksi Posko 1',
+            tanggalUjian: rawNilai.tanggalUjian || '',
+            catatanUjian: rawNilai.catatanUjian || ''
+        };
+        parsedNilai.totalSkor = calculatePsbAverageScore(parsedNilai);
+
+        const parsedBerkas: PsbBerkasFisik = {
+            kk: !!formData.berkasFisik?.kk,
+            akta: !!formData.berkasFisik?.akta,
+            ijazahSkl: !!formData.berkasFisik?.ijazahSkl,
+            suratSehat: !!formData.berkasFisik?.suratSehat,
+            pasFoto: !!formData.berkasFisik?.pasFoto,
+            catatanBerkas: formData.berkasFisik?.catatanBerkas || ''
+        };
+
         const dataToSave = {
             ...formData,
+            nomorRegistrasi,
+            berkasFisik: parsedBerkas,
+            nilaiUjian: parsedNilai,
             // Reconstruct nested Alamat object
             alamat: {
                 detail: formData.alamat,
@@ -277,7 +424,8 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                         <TabButton id="alamat" label="Alamat" />
                         <TabButton id="ortu" label="Orang Tua" />
                         <TabButton id="sekolah" label="Sekolah" />
-                        <TabButton id="tambahan" label="Data Tambahan & Berkas" />
+                        <TabButton id="seleksi" label="Seleksi & Ujian" />
+                        <TabButton id="tambahan" label="Data Tambahan & Dokumen" />
                     </nav>
                 </div>
 
@@ -503,6 +651,265 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                         </div>
                     )}
 
+                    {/* --- TAB 5: SELEKSI & UJIAN --- */}
+                    {activeTab === 'seleksi' && (
+                        <div className="space-y-6">
+                            {/* Status Pendaftaran & Nomor Registrasi */}
+                            <div className="p-4 bg-teal-50/70 border border-teal-200 rounded-xl space-y-4">
+                                <h4 className="font-bold text-teal-950 text-sm flex items-center gap-2">
+                                    <i className="bi bi-shield-check text-teal-700"></i>
+                                    Status Alur Seleksi & Nomor Registrasi
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block mb-1 text-xs font-semibold text-gray-700">Tahapan / Status Pendaftar</label>
+                                        <select
+                                            value={formData.status || 'Baru'}
+                                            onChange={e => handleChange('status', e.target.value)}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-sm font-semibold text-gray-800 focus:ring-teal-500 focus:border-teal-500"
+                                        >
+                                            <option value="Baru">Baru (Belum Diverifikasi)</option>
+                                            <option value="Verifikasi Berkas">Verifikasi Berkas</option>
+                                            <option value="Ujian Masuk">Ujian Masuk / Seleksi</option>
+                                            <option value="Cadangan">Cadangan</option>
+                                            <option value="Diterima">Diterima (Lulus Seleksi)</option>
+                                            <option value="Ditolak">Tidak Lulus / Ditolak</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-semibold text-gray-700">Nomor Registrasi PSB</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={formData.nomorRegistrasi || ''}
+                                                onChange={e => handleChange('nomorRegistrasi', e.target.value)}
+                                                className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-sm font-mono font-bold text-teal-900"
+                                                placeholder="Contoh: PSB-2025-SMP-0001"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const jenjangName = settings.jenjang.find(j => j.id === Number(formData.jenjangId))?.nama;
+                                                    const autoNo = getPsbRegistrationNumber({
+                                                        id: pendaftarData?.id || Date.now(),
+                                                        tanggalDaftar: formData.tanggalDaftar
+                                                    } as any, jenjangName);
+                                                    handleChange('nomorRegistrasi', autoNo);
+                                                }}
+                                                className="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-medium whitespace-nowrap"
+                                                title="Buat Nomor Registrasi Baru"
+                                            >
+                                                Auto
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Checklist Berkas Fisik */}
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                                    <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <i className="bi bi-file-earmark-check text-slate-700"></i>
+                                        Checklist Kelengkapan Berkas Fisik (Posko)
+                                    </h4>
+                                    <span className="text-xs text-slate-500">Centang dokumen yang diserahkan fisik</span>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                                    <label className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-gray-200 text-xs font-medium cursor-pointer hover:bg-teal-50/50">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!formData.berkasFisik?.kk}
+                                            onChange={e => handleChange('berkasFisik', { ...formData.berkasFisik, kk: e.target.checked })}
+                                            className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-gray-300"
+                                        />
+                                        <span>Fotokopi Kartu Keluarga (KK)</span>
+                                    </label>
+
+                                    <label className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-gray-200 text-xs font-medium cursor-pointer hover:bg-teal-50/50">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!formData.berkasFisik?.akta}
+                                            onChange={e => handleChange('berkasFisik', { ...formData.berkasFisik, akta: e.target.checked })}
+                                            className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-gray-300"
+                                        />
+                                        <span>Fotokopi Akta Kelahiran</span>
+                                    </label>
+
+                                    <label className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-gray-200 text-xs font-medium cursor-pointer hover:bg-teal-50/50">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!formData.berkasFisik?.ijazahSkl}
+                                            onChange={e => handleChange('berkasFisik', { ...formData.berkasFisik, ijazahSkl: e.target.checked })}
+                                            className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-gray-300"
+                                        />
+                                        <span>Fotokopi Ijazah / SKL</span>
+                                    </label>
+
+                                    <label className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-gray-200 text-xs font-medium cursor-pointer hover:bg-teal-50/50">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!formData.berkasFisik?.suratSehat}
+                                            onChange={e => handleChange('berkasFisik', { ...formData.berkasFisik, suratSehat: e.target.checked })}
+                                            className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-gray-300"
+                                        />
+                                        <span>Surat Keterangan Sehat Dokter</span>
+                                    </label>
+
+                                    <label className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-gray-200 text-xs font-medium cursor-pointer hover:bg-teal-50/50">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!formData.berkasFisik?.pasFoto}
+                                            onChange={e => handleChange('berkasFisik', { ...formData.berkasFisik, pasFoto: e.target.checked })}
+                                            className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-gray-300"
+                                        />
+                                        <span>Pas Foto Calon Santri (3x4)</span>
+                                    </label>
+                                </div>
+
+                                <div className="pt-2">
+                                    <label className="block mb-1 text-xs font-medium text-gray-700">Catatan Administrasi Berkas Fisik</label>
+                                    <input
+                                        type="text"
+                                        value={formData.berkasFisik?.catatanBerkas || ''}
+                                        onChange={e => handleChange('berkasFisik', { ...formData.berkasFisik, catatanBerkas: e.target.value })}
+                                        className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs"
+                                        placeholder="Contoh: SKL asli belum dilegalisir, janji serahkan saat daftar ulang"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Lembar Penilaian Ujian Masuk */}
+                            <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-4">
+                                <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
+                                    <h4 className="font-bold text-amber-950 text-sm flex items-center gap-2">
+                                        <i className="bi bi-pencil-square text-amber-800"></i>
+                                        Lembar Penilaian Ujian Masuk & Seleksi
+                                    </h4>
+                                    <span className="text-xs font-bold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full">
+                                        Rata-rata:{' '}
+                                        {calculatePsbAverageScore({
+                                            bacaQuran: formData.nilaiUjian?.bacaQuran ? Number(formData.nilaiUjian.bacaQuran) : undefined,
+                                            tahfizh: formData.nilaiUjian?.tahfizh ? Number(formData.nilaiUjian.tahfizh) : undefined,
+                                            akademik: formData.nilaiUjian?.akademik ? Number(formData.nilaiUjian.akademik) : undefined,
+                                            wawancara: formData.nilaiUjian?.wawancara ? Number(formData.nilaiUjian.wawancara) : undefined
+                                        }) || 0}
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="block mb-1 text-xs font-medium text-gray-700">Tanggal Pelaksanaan Ujian</label>
+                                        <input
+                                            type="date"
+                                            value={formData.nilaiUjian?.tanggalUjian || ''}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, tanggalUjian: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-medium text-gray-700">Ruang / Meja Seleksi</label>
+                                        <input
+                                            type="text"
+                                            value={formData.nilaiUjian?.ruangUjian || ''}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, ruangUjian: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs"
+                                            placeholder="Ruang 1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-medium text-gray-700">Nama Penguji / Asatidz</label>
+                                        <input
+                                            type="text"
+                                            value={formData.nilaiUjian?.penguji || ''}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, penguji: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs"
+                                            placeholder="Ust. Ahmad"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                                    <div>
+                                        <label className="block mb-1 text-xs font-semibold text-gray-700">1. Baca Al-Qur'an (0-100)</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={formData.nilaiUjian?.bacaQuran ?? ''}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, bacaQuran: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm font-bold font-mono text-center"
+                                            placeholder="85"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-semibold text-gray-700">2. Tahfizh/Hafalan (0-100)</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={formData.nilaiUjian?.tahfizh ?? ''}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, tahfizh: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm font-bold font-mono text-center"
+                                            placeholder="80"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-semibold text-gray-700">3. Diniyah/Akademik (0-100)</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={formData.nilaiUjian?.akademik ?? ''}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, akademik: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm font-bold font-mono text-center"
+                                            placeholder="78"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-semibold text-gray-700">4. Wawancara (0-100)</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={formData.nilaiUjian?.wawancara ?? ''}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, wawancara: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm font-bold font-mono text-center"
+                                            placeholder="90"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                                    <div>
+                                        <label className="block mb-1 text-xs font-semibold text-gray-700">Rekomendasi Dewan Penguji</label>
+                                        <select
+                                            value={formData.nilaiUjian?.rekomendasi || 'Direkomendasikan'}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, rekomendasi: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs font-semibold"
+                                        >
+                                            <option value="Sangat Direkomendasikan">Sangat Direkomendasikan</option>
+                                            <option value="Direkomendasikan">Direkomendasikan</option>
+                                            <option value="Dipertimbangkan">Dipertimbangkan (Cadangan)</option>
+                                            <option value="Tidak Direkomendasikan">Tidak Direkomendasikan</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-xs font-semibold text-gray-700">Catatan / Evaluasi Khusus Penguji</label>
+                                        <input
+                                            type="text"
+                                            value={formData.nilaiUjian?.catatanUjian || ''}
+                                            onChange={e => handleChange('nilaiUjian', { ...formData.nilaiUjian, catatanUjian: e.target.value })}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-xs"
+                                            placeholder="Contoh: Makharijul huruf baik, tajwid perlu pembinaan dasar"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* --- TAB 5: DATA TAMBAHAN --- */}
                     {activeTab === 'tambahan' && (
                         <div className="space-y-4">
@@ -527,45 +934,90 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                             )}
 
                             <div className="mt-8 pt-4 border-t border-dashed">
-                                <h5 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
-                                    <i className="bi bi-cloud-upload text-teal-600"></i>
-                                    Unggah Berkas Baru ke Firebase
-                                </h5>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                                    <h5 className="font-bold text-gray-700 flex items-center gap-2 text-sm">
+                                        <i className="bi bi-file-earmark-arrow-up text-teal-600"></i>
+                                        Unggah Dokumen & Berkas Lampiran
+                                    </h5>
+                                    {isFirebaseClientConfigReady ? (
+                                        <span className="text-[11px] bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0">
+                                            <i className="bi bi-cloud-check-fill text-blue-600"></i> Cloud: Firebase Storage Aktif
+                                        </span>
+                                    ) : (
+                                        <span className="text-[11px] bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0">
+                                            <i className="bi bi-hdd-fill text-amber-600"></i> Mode Offline: Disimpan di IndexedDB (Base64)
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    Unggah file berkas calon santri (format JPG, PNG, atau PDF). File tetap tersimpan aman di database lokal aplikasi meskipun tanpa Firebase.
+                                </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {['Kartu Keluarga', 'Akte Kelahiran', 'KTP Orang Tua', 'Ijazah Terakhir', 'Pas Foto'].map(docName => (
-                                        <div key={docName} className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
-                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{docName}</label>
-                                            <div className="flex items-center gap-2">
-                                                <input 
-                                                    type="file" 
-                                                    id={`upload-${docName}`}
-                                                    className="hidden"
-                                                    onChange={(e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (file) handleFileUpload(docName, file);
-                                                    }}
-                                                />
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => document.getElementById(`upload-${docName}`)?.click()}
-                                                    disabled={!!isUploading}
-                                                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition-colors border border-gray-300 disabled:opacity-50"
-                                                >
-                                                    {isUploading === docName ? (
-                                                        <i className="bi bi-arrow-repeat animate-spin"></i>
-                                                    ) : (
-                                                        <i className="bi bi-upload"></i>
+                                    {['Kartu Keluarga', 'Akte Kelahiran', 'KTP Orang Tua', 'Ijazah Terakhir', 'Pas Foto'].map(docName => {
+                                        const fileVal = parsedCustomData[docName];
+                                        return (
+                                            <div key={docName} className="p-3.5 bg-white border border-gray-200 rounded-xl shadow-xs">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <label className="block text-xs font-bold text-gray-700 uppercase">{docName}</label>
+                                                    {fileVal && (
+                                                        <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                            <i className="bi bi-check-circle-fill"></i> Terunggah
+                                                        </span>
                                                     )}
-                                                    {isUploading === docName ? 'Mengunggah...' : `Pilih File ${docName}`}
-                                                </button>
-                                            </div>
-                                            {parsedCustomData[docName] && (
-                                                <div className="mt-2 text-[10px] text-green-600 font-medium flex items-center gap-1">
-                                                    <i className="bi bi-check-circle-fill"></i> Sudah terunggah
                                                 </div>
-                                            )}
-                                        </div>
-                                    ))}
+                                                <div className="flex items-center gap-2">
+                                                    <input 
+                                                        type="file" 
+                                                        id={`upload-${docName}`}
+                                                        className="hidden"
+                                                        accept="image/*,.pdf"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) handleFileUpload(docName, file);
+                                                        }}
+                                                    />
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => document.getElementById(`upload-${docName}`)?.click()}
+                                                        disabled={!!isUploading}
+                                                        className="flex-grow flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors border border-slate-300 disabled:opacity-50"
+                                                    >
+                                                        {isUploading === docName ? (
+                                                            <i className="bi bi-arrow-repeat animate-spin text-teal-600"></i>
+                                                        ) : (
+                                                            <i className="bi bi-upload text-teal-600"></i>
+                                                        )}
+                                                        {isUploading === docName ? 'Memproses...' : fileVal ? 'Ganti Berkas' : `Pilih File`}
+                                                    </button>
+                                                    {fileVal && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (typeof fileVal === 'string') {
+                                                                        const w = window.open();
+                                                                        if (w) w.document.write(`<iframe src="${fileVal}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                                                                    }
+                                                                }}
+                                                                className="px-2.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-semibold"
+                                                                title="Lihat Berkas"
+                                                            >
+                                                                <i className="bi bi-eye"></i>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveFile(docName)}
+                                                                className="px-2.5 py-2 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-lg text-xs font-semibold"
+                                                                title="Hapus Berkas"
+                                                            >
+                                                                <i className="bi bi-trash"></i>
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>

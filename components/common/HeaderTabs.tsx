@@ -47,19 +47,29 @@ export const HeaderTabs = <T extends TabValue>({
 
     return (
         <div className={`w-full ${className}`}>
+            {/* Mobile Rail: Responsive scrollable pill tabs */}
             <div className="md:hidden">
-                <select
-                    value={value}
-                    onChange={(event) => onChange(event.target.value as T)}
-                    className="app-select h-11 w-full rounded-2xl border-app-border bg-white/95 px-4 text-sm font-semibold shadow-sm"
-                    aria-label="Pilih navigasi halaman"
-                >
-                    {tabs.map((tab) => (
-                        <option key={tab.value} value={tab.value}>
-                            {tab.mobileLabel || tab.label}
-                        </option>
-                    ))}
-                </select>
+                <div className="flex w-full items-center gap-1.5 overflow-x-auto rounded-2xl bg-slate-100/90 p-1.5 border border-slate-200/80 shadow-2xs scrollbar-none">
+                    {tabs.map((tab) => {
+                        const isActive = tab.value === value;
+                        return (
+                            <button
+                                key={tab.value}
+                                type="button"
+                                onClick={() => onChange(tab.value)}
+                                className={`flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 text-xs font-semibold transition-all ${
+                                    isActive
+                                        ? 'bg-teal-700 text-white shadow-xs'
+                                        : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/70'
+                                }`}
+                            >
+                                {tab.icon && <i className={`bi ${tab.icon} text-sm`}></i>}
+                                <span>{tab.mobileLabel || tab.label}</span>
+                                {tab.badge}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             <div className="hidden md:block">

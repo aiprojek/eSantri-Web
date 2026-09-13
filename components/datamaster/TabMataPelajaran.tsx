@@ -161,11 +161,31 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({ localSetting
                                             <div className="flex items-center gap-3">
                                                 <input type="checkbox" checked={isSelected} onChange={() => toggleSelectOne(mapel.id)} className="w-4 h-4 text-teal-600 rounded cursor-pointer" />
                                                 <div>
-                                                    <p className="text-sm font-semibold text-gray-800">{mapel.nama}</p>
-                                                    <div className="flex gap-3 mt-1">
-                                                        {mapel.kkm && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-medium">KKM: {mapel.kkm}</span>}
+                                                    <div className="flex items-center gap-2">
+                                                        {mapel.kodeMapel && <span className="text-[10px] font-mono font-bold bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded border">{mapel.kodeMapel}</span>}
+                                                        <p className="text-sm font-semibold text-gray-800">{mapel.nama}</p>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                                        {mapel.rumpun && (
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                                                mapel.rumpun === 'Diniyah' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                                                mapel.rumpun === 'Bahasa' ? 'bg-teal-100 text-teal-800 border border-teal-200' :
+                                                                mapel.rumpun === 'Tahfizh' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                                                mapel.rumpun === 'Umum' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                                                                'bg-purple-100 text-purple-800 border border-purple-200'
+                                                            }`}>
+                                                                {mapel.rumpun}
+                                                            </span>
+                                                        )}
+                                                        {mapel.kkm && <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-medium">KKM: {mapel.kkm}</span>}
+                                                        {mapel.alokasiJamDefault && <span className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100 font-medium">{mapel.alokasiJamDefault} Jam/Pekan</span>}
+                                                        {mapel.targetBabSemester && mapel.targetBabSemester.length > 0 && (
+                                                            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-100 font-medium">
+                                                                <i className="bi bi-list-check mr-1"></i>{mapel.targetBabSemester.length} Target Bab
+                                                            </span>
+                                                        )}
                                                         {((mapel.modulList && mapel.modulList.length > 0) || mapel.modul) && (
-                                                            <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 font-medium">
+                                                            <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200 font-medium truncate max-w-[140px]" title={(mapel.modulList && mapel.modulList.length > 0) ? mapel.modulList.join(', ') : mapel.modul}>
                                                                 <i className="bi bi-book mr-1"></i>
                                                                 {(mapel.modulList && mapel.modulList.length > 0) ? mapel.modulList[0] : mapel.modul}
                                                                 {(mapel.modulList && mapel.modulList.length > 1) ? ` +${mapel.modulList.length - 1}` : ''}

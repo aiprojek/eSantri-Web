@@ -24,6 +24,7 @@ const PANDUAN_ORDER: string[] = [
     'cloud',
     'firebase',
     'admin',
+    'surat',
     'offline',
     'maintenance',
     'fitur',

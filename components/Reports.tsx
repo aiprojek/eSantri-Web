@@ -282,12 +282,38 @@ const Reports: React.FC = () => {
           setPreviewContent(
               <>
                   {generatedPages.map((p, i) => (
-                      <div key={i} className={`bg-white shadow-lg mx-auto ${i < generatedPages.length - 1 ? 'page-break-after' : ''} flex flex-col ${p.orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} ${i < generatedPages.length - 1 ? 'mb-8' : 'mb-2'}`}
+                      <div key={i} className={`bg-white shadow-lg mx-auto ${i < generatedPages.length - 1 ? 'page-break-after' : ''} flex flex-col ${p.orientation === 'landscape' ? 'print-landscape' : 'print-portrait'} ${i < generatedPages.length - 1 ? 'mb-8' : 'mb-2'} relative overflow-hidden`}
                           style={{ 
                               width: p.isFullPage ? 'auto' : `${p.orientation === 'landscape' ? currentPaper.height : currentPaper.width}cm`,
-                              minHeight: p.isFullPage ? '0' : `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`
+                              minHeight: p.isFullPage ? '0' : `${p.orientation === 'landscape' ? currentPaper.width : currentPaper.height}cm`,
+                              position: 'relative'
                           }}>
-                          <div style={{ padding: p.isFullPage ? '0' : `${currentMarginCm}cm ${currentMarginCm}cm ${Math.max(currentMarginCm, 1)}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%', boxSizing: 'border-box', position: 'relative' }}>
+                          {/* Official Security Watermark */}
+                          {options.showWatermark && options.watermarkText && (
+                              <div 
+                                  className="pointer-events-none select-none absolute inset-0 flex items-center justify-center overflow-hidden z-0 print:flex"
+                                  style={{ 
+                                      opacity: options.watermarkOpacity ?? 0.12,
+                                      zIndex: 0
+                                  }}
+                              >
+                                  <div 
+                                      className="font-black tracking-widest uppercase text-center border-4 md:border-8 border-dashed px-6 md:px-12 py-3 md:py-6 rounded-2xl md:rounded-3xl transform -rotate-30 select-none pointer-events-none"
+                                      style={{ 
+                                          fontSize: options.watermarkFontSize ? `${options.watermarkFontSize}pt` : '44pt',
+                                          color: options.watermarkColor || '#4b5563',
+                                          borderColor: options.watermarkColor || '#4b5563',
+                                          lineHeight: 1.1,
+                                          letterSpacing: '0.15em',
+                                          maxWidth: '85%',
+                                          wordBreak: 'break-word'
+                                      }}
+                                  >
+                                      {options.watermarkText}
+                                  </div>
+                              </div>
+                          )}
+                          <div style={{ padding: p.isFullPage ? '0' : `${currentMarginCm}cm ${currentMarginCm}cm ${Math.max(currentMarginCm, 1)}cm`, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%', boxSizing: 'border-box', position: 'relative', zIndex: 1 }}>
                               {p.content}
                           </div>
                       </div>

@@ -1065,3 +1065,585 @@ export const FormulirIzinTemplate: React.FC<{ santri: Santri; settings: PondokSe
         </div>
     );
 };
+
+// --- SURAT KETERANGAN SANTRI AKTIF ---
+export const SuratKeteranganAktifTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
+    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    const gedung = santri.gedungId ? settings.gedungAsrama.find(g => g.id === santri.gedungId) : undefined;
+    const kamar = santri.kamarId ? settings.kamar.find(k => k.id === santri.kamarId) : undefined;
+    const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(options.suratAktifSignatoryId));
+
+    const tanggalSurat = options.suratAktifTanggal ? new Date(options.suratAktifTanggal) : new Date();
+    const tahunSurat = tanggalSurat.getFullYear();
+    const bulanRomawi = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'][tanggalSurat.getMonth()];
+    
+    const defaultNoSurat = `421.1/PP.${(settings.namaPonpes || 'MAHAD').slice(0, 4).toUpperCase().replace(/\s+/g, '')}/TU/${bulanRomawi}/${tahunSurat}`;
+    const displayNoSurat = options.suratAktifNoSurat?.trim() || defaultNoSurat;
+
+    const signatoryTitle = options.suratAktifSignatoryTitle || 'Kepala Madrasah / Mudir';
+    const signatoryName = signatory ? signatory.nama : (settings.namaMudir || '__________________________');
+
+    return (
+        <div className="font-serif text-black flex flex-col h-full justify-between leading-relaxed" style={{ fontSize: '10.5pt' }}>
+            <div>
+                {/* Official Letterhead Header */}
+                <div className="flex items-center justify-between pb-3 border-b-2 border-black">
+                    <div className="w-20 h-20 flex items-center justify-center">
+                        {settings.logoYayasanUrl ? (
+                            <img src={settings.logoYayasanUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                        ) : settings.logoPonpesUrl ? (
+                            <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                            <div className="w-16 h-16 rounded-full border-2 border-black flex items-center justify-center text-xl font-bold font-sans">PP</div>
+                        )}
+                    </div>
+                    <div className="text-center flex-1 px-4">
+                        <div className="text-xs uppercase tracking-wider font-sans font-semibold text-gray-700">Pondok Pesantren / Yayasan</div>
+                        <h2 className="text-xl font-bold uppercase tracking-wide">{settings.namaPonpes}</h2>
+                        <p className="text-xs font-sans mt-0.5">{settings.alamat}</p>
+                        <p className="text-xs font-sans text-gray-700">
+                            {settings.telepon && `Telp: ${settings.telepon}`}
+                            {settings.telepon && settings.website && ' | '}
+                            {settings.website && `Website: ${settings.website}`}
+                            {settings.email && ` | Email: ${settings.email}`}
+                        </p>
+                    </div>
+                    <div className="w-20 h-20 flex items-center justify-center">
+                        {settings.logoPonpesUrl && settings.logoYayasanUrl ? (
+                            <img src={settings.logoPonpesUrl} alt="Logo Ponpes" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                            <div className="w-20"></div>
+                        )}
+                    </div>
+                </div>
+                <div className="border-t border-black mt-0.5 mb-6"></div>
+
+                {/* Document Title & Number */}
+                <div className="text-center mb-6">
+                    <h3 className="text-lg font-bold uppercase tracking-wider underline underline-offset-4">
+                        SURAT KETERANGAN SANTRI AKTIF
+                    </h3>
+                    <p className="text-sm font-sans mt-1">
+                        Nomor: <span className="font-mono">{displayNoSurat}</span>
+                    </p>
+                </div>
+
+                {/* Opening Clause */}
+                <div className="space-y-4">
+                    <p className="text-justify indent-8">
+                        Yang bertanda tangan di bawah ini, <strong>{signatoryTitle}</strong> {settings.namaPonpes}, menerangkan dengan sebenarnya bahwa:
+                    </p>
+
+                    {/* Santri Data Identity Table */}
+                    <div className="pl-6 pr-2">
+                        <table className="w-full text-sm">
+                            <tbody>
+                                <tr>
+                                    <td className="w-48 py-1 align-top font-medium">Nama Lengkap</td>
+                                    <td className="w-4 py-1 align-top">:</td>
+                                    <td className="py-1 align-top font-bold uppercase tracking-wide">{santri.namaLengkap}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Nomor Induk Santri (NIS)</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top font-mono">{santri.nis}</td>
+                                </tr>
+                                {santri.nisn && (
+                                    <tr>
+                                        <td className="py-1 align-top font-medium">NISN</td>
+                                        <td className="py-1 align-top">:</td>
+                                        <td className="py-1 align-top font-mono">{santri.nisn}</td>
+                                    </tr>
+                                )}
+                                {santri.nik && (
+                                    <tr>
+                                        <td className="py-1 align-top font-medium">NIK</td>
+                                        <td className="py-1 align-top">:</td>
+                                        <td className="py-1 align-top font-mono">{santri.nik}</td>
+                                    </tr>
+                                )}
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Tempat, Tanggal Lahir</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{santri.tempatLahir}, {formatDate(santri.tanggalLahir)}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Jenis Kelamin</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{santri.jenisKelamin || 'Laki-laki'}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Tingkat / Kelas / Rombel</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{jenjang?.nama ? `${jenjang.nama} - ` : ''}{kelas?.nama || '-'} ({rombel?.nama || '-'})</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Gedung / Asrama</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{gedung?.nama || 'Asrama Pondok'}{kamar?.nama ? ` / Kamar: ${kamar.nama}` : ''}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Nama Orang Tua / Wali</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{santri.namaAyah || santri.namaWali || santri.namaIbu || '-'}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Alamat Orang Tua</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{formatAlamat(santri) || '-'}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Active Confirmation Clause */}
+                    <p className="text-justify indent-8 leading-relaxed">
+                        Adalah benar yang bersangkutan merupakan <strong>santri aktif</strong> yang terdaftar dan bermukim di asrama pondok pesantren <strong>{settings.namaPonpes}</strong> pada <strong>Tahun Ajaran {options.tahunAjaran || 'berjalan'}</strong>.
+                    </p>
+
+                    {/* Purpose Clause */}
+                    <p className="text-justify indent-8 leading-relaxed">
+                        Surat keterangan ini diterbitkan atas permohonan yang bersangkutan sebagai kelengkapan dokumen administrasi untuk keperluan:
+                    </p>
+                    <div className="mx-6 p-3 bg-gray-50 border border-gray-300 rounded font-sans text-sm font-semibold text-center">
+                        "{options.suratAktifKeperluan || 'Pengajuan Tunjangan Gaji Orang Tua (PNS/TNI/POLRI/BUMN)'}"
+                    </div>
+
+                    {/* Closing Clause */}
+                    <p className="text-justify indent-8 leading-relaxed">
+                        Demikian surat keterangan ini kami buat dengan sebenarnya agar dapat dipergunakan sebagaimana mestinya oleh pihak yang berkepentingan.
+                    </p>
+                </div>
+
+                {/* Signatory Section */}
+                <div className="flex justify-between items-end mt-12 px-6" style={{ breakInside: 'avoid' }}>
+                    <div className="text-center w-52">
+                        <div className="border border-dashed border-gray-400 w-24 h-32 mx-auto flex items-center justify-center text-xs text-gray-400 font-sans">
+                            Foto Santri<br/>3 x 4 cm
+                        </div>
+                    </div>
+                    <div className="text-center w-64">
+                        <p className="font-sans text-xs">
+                            {settings.kabupatenKota || 'Ditetapkan di Pesantren'}, {formatDate(options.suratAktifTanggal || new Date().toISOString())}
+                        </p>
+                        <p className="font-bold text-sm mt-1">{signatoryTitle},</p>
+                        <div className="h-20 flex items-center justify-center">
+                            <span className="text-[10px] text-gray-400 font-sans italic">[Tanda Tangan & Cap Lembaga]</span>
+                        </div>
+                        <p className="font-bold underline uppercase text-sm">{signatoryName}</p>
+                        {signatory?.nip && <p className="font-mono text-xs text-gray-700">NIP/NIY: {signatory.nip}</p>}
+                    </div>
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- SURAT KETERANGAN BERKELAKUAN BAIK (SYAHADAH HUSNUS SULUK) ---
+export const SuratBerkelakuanBaikTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
+    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(options.suratBaikSignatoryId));
+
+    const tanggalSurat = options.suratBaikTanggal ? new Date(options.suratBaikTanggal) : new Date();
+    const tahunSurat = tanggalSurat.getFullYear();
+    const bulanRomawi = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'][tanggalSurat.getMonth()];
+    
+    const defaultNoSurat = `421.2/PP.${(settings.namaPonpes || 'MAHAD').slice(0, 4).toUpperCase().replace(/\s+/g, '')}/BK/${bulanRomawi}/${tahunSurat}`;
+    const displayNoSurat = options.suratBaikNoSurat?.trim() || defaultNoSurat;
+
+    const signatoryTitle = options.suratBaikSignatoryTitle || 'Kepala Bagian Pengasuhan / Mudir';
+    const signatoryName = signatory ? signatory.nama : (settings.namaMudir || '__________________________');
+
+    return (
+        <div className="font-serif text-black flex flex-col h-full justify-between leading-relaxed" style={{ fontSize: '10.5pt' }}>
+            <div>
+                {/* Official Letterhead Header */}
+                <div className="flex items-center justify-between pb-3 border-b-2 border-black">
+                    <div className="w-20 h-20 flex items-center justify-center">
+                        {settings.logoYayasanUrl ? (
+                            <img src={settings.logoYayasanUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                        ) : settings.logoPonpesUrl ? (
+                            <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                            <div className="w-16 h-16 rounded-full border-2 border-black flex items-center justify-center text-xl font-bold font-sans">PP</div>
+                        )}
+                    </div>
+                    <div className="text-center flex-1 px-4">
+                        <div className="text-xs uppercase tracking-wider font-sans font-semibold text-gray-700">Pondok Pesantren / Yayasan</div>
+                        <h2 className="text-xl font-bold uppercase tracking-wide">{settings.namaPonpes}</h2>
+                        <p className="text-xs font-sans mt-0.5">{settings.alamat}</p>
+                        <p className="text-xs font-sans text-gray-700">
+                            {settings.telepon && `Telp: ${settings.telepon}`}
+                            {settings.telepon && settings.website && ' | '}
+                            {settings.website && `Website: ${settings.website}`}
+                            {settings.email && ` | Email: ${settings.email}`}
+                        </p>
+                    </div>
+                    <div className="w-20 h-20 flex items-center justify-center">
+                        {settings.logoPonpesUrl && settings.logoYayasanUrl ? (
+                            <img src={settings.logoPonpesUrl} alt="Logo Ponpes" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                            <div className="w-20"></div>
+                        )}
+                    </div>
+                </div>
+                <div className="border-t border-black mt-0.5 mb-6"></div>
+
+                {/* Document Title & Number */}
+                <div className="text-center mb-6">
+                    <h3 className="text-lg font-bold uppercase tracking-wider underline underline-offset-4">
+                        SURAT KETERANGAN BERKELAKUAN BAIK
+                    </h3>
+                    <div className="text-base font-medium mt-0.5 text-gray-800">
+                        (شَهَادَةُ حُسْنِ السِّيْرَةِ وَالسُّلُوْكِ)
+                    </div>
+                    <p className="text-sm font-sans mt-1">
+                        Nomor: <span className="font-mono">{displayNoSurat}</span>
+                    </p>
+                </div>
+
+                {/* Opening Clause */}
+                <div className="space-y-4">
+                    <p className="text-justify indent-8">
+                        Yang bertanda tangan di bawah ini, <strong>{signatoryTitle}</strong> {settings.namaPonpes}, setelah meneliti dan memeriksa buku catatan kedisiplinan dan pembinaan santri, dengan ini menerangkan bahwa:
+                    </p>
+
+                    {/* Identity Table */}
+                    <div className="pl-6 pr-2">
+                        <table className="w-full text-sm">
+                            <tbody>
+                                <tr>
+                                    <td className="w-48 py-1 align-top font-medium">Nama Lengkap</td>
+                                    <td className="w-4 py-1 align-top">:</td>
+                                    <td className="py-1 align-top font-bold uppercase tracking-wide">{santri.namaLengkap}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Nomor Induk Santri (NIS)</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top font-mono">{santri.nis}</td>
+                                </tr>
+                                {santri.nik && (
+                                    <tr>
+                                        <td className="py-1 align-top font-medium">NIK</td>
+                                        <td className="py-1 align-top">:</td>
+                                        <td className="py-1 align-top font-mono">{santri.nik}</td>
+                                    </tr>
+                                )}
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Tempat, Tanggal Lahir</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{santri.tempatLahir}, {formatDate(santri.tanggalLahir)}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Jenis Kelamin</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{santri.jenisKelamin || 'Laki-laki'}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Kelas / Rombel Terakhir</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{jenjang?.nama ? `${jenjang.nama} - ` : ''}{kelas?.nama || '-'} ({rombel?.nama || '-'})</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-1 align-top font-medium">Alamat Asal</td>
+                                    <td className="py-1 align-top">:</td>
+                                    <td className="py-1 align-top">{formatAlamat(santri) || '-'}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Conduct Points */}
+                    <p className="text-justify indent-8 leading-relaxed">
+                        Menerangkan bahwa santri tersebut di atas selama menempuh pendidikan dan tinggal di lingkungan Pondok Pesantren <strong>{settings.namaPonpes}</strong>:
+                    </p>
+
+                    <div className="pl-6 pr-2 space-y-2 text-sm">
+                        <div className="flex items-start gap-2">
+                            <span className="font-bold font-sans">1.</span>
+                            <p className="text-justify">
+                                Senantiasa <strong>berkelakuan baik</strong>, santun, menjaga akhlakul karimah (<em>husnus suluk</em>), serta mematuhi seluruh tata tertib dan syariat yang berlaku di pesantren.
+                            </p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <span className="font-bold font-sans">2.</span>
+                            <p className="text-justify">
+                                <strong>Tidak pernah terlibat</strong> dalam tindakan kriminal, penyalahgunaan narkotika/miras, perkelahian/tawuran, asusila, maupun pelanggaran berat lainnya.
+                            </p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                            <span className="font-bold font-sans">3.</span>
+                            <p className="text-justify">
+                                Istiqomah dalam menjalankan ibadah shalat berjamaah, ta'lim, pengajian, dan kegiatan ubudiyah pesantren lainnya.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Purpose Clause */}
+                    <p className="text-justify indent-8 leading-relaxed">
+                        Surat keterangan ini diberikan atas permohonan santri/wali santri untuk dipergunakan sebagai:
+                    </p>
+                    <div className="mx-6 p-2.5 bg-gray-50 border border-gray-300 rounded font-sans text-sm font-semibold text-center">
+                        "{options.suratBaikKeperluan || 'Kelengkapan Pendaftaran Masuk Perguruan Tinggi / Beasiswa'}"
+                    </div>
+
+                    {/* Closing Clause */}
+                    <p className="text-justify indent-8 leading-relaxed">
+                        Demikian surat keterangan ini kami berikan dengan sesungguhnya untuk dapat dipergunakan sebagaimana mestinya.
+                    </p>
+                </div>
+
+                {/* Signatory Section */}
+                <div className="flex justify-between items-end mt-10 px-6" style={{ breakInside: 'avoid' }}>
+                    <div className="text-center w-52">
+                        <div className="border border-dashed border-gray-400 w-24 h-32 mx-auto flex items-center justify-center text-xs text-gray-400 font-sans">
+                            Foto Santri<br/>3 x 4 cm
+                        </div>
+                    </div>
+                    <div className="text-center w-64">
+                        <p className="font-sans text-xs">
+                            {settings.kabupatenKota || 'Ditetapkan di Pesantren'}, {formatDate(options.suratBaikTanggal || new Date().toISOString())}
+                        </p>
+                        <p className="font-bold text-sm mt-1">{signatoryTitle},</p>
+                        <div className="h-20 flex items-center justify-center">
+                            <span className="text-[10px] text-gray-400 font-sans italic">[Tanda Tangan & Cap Lembaga]</span>
+                        </div>
+                        <p className="font-bold underline uppercase text-sm">{signatoryName}</p>
+                        {signatory?.nip && <p className="font-mono text-xs text-gray-700">NIP/NIY: {signatory.nip}</p>}
+                    </div>
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+// --- SYAHADAH / PIAGAM KELULUSAN TAHFIZH RESMI ---
+export const SyahadahTahfizhTemplate: React.FC<{
+    santri: Santri;
+    settings: PondokSettings;
+    options: any;
+}> = ({ santri, settings, options }) => {
+    const theme = options?.syahadahTheme || 'emerald';
+    
+    // Theme palette mappings
+    const themeConfig = {
+        emerald: {
+            outerBorder: 'border-emerald-800',
+            innerBorder: 'border-amber-600',
+            bgTint: 'bg-gradient-to-br from-emerald-50/40 via-amber-50/20 to-white',
+            accentText: 'text-emerald-800',
+            badgeBg: 'bg-emerald-900 text-amber-300 border-amber-500',
+            arabicColor: 'text-emerald-950',
+            sealBorder: 'border-amber-600 text-amber-700 bg-amber-50',
+        },
+        gold: {
+            outerBorder: 'border-amber-700',
+            innerBorder: 'border-amber-500',
+            bgTint: 'bg-gradient-to-br from-amber-50/50 via-yellow-50/30 to-white',
+            accentText: 'text-amber-800',
+            badgeBg: 'bg-amber-900 text-yellow-200 border-amber-400',
+            arabicColor: 'text-amber-950',
+            sealBorder: 'border-amber-600 text-amber-800 bg-amber-50',
+        },
+        royal_blue: {
+            outerBorder: 'border-blue-900',
+            innerBorder: 'border-amber-600',
+            bgTint: 'bg-gradient-to-br from-blue-50/40 via-sky-50/20 to-white',
+            accentText: 'text-blue-900',
+            badgeBg: 'bg-blue-950 text-amber-300 border-amber-500',
+            arabicColor: 'text-blue-950',
+            sealBorder: 'border-blue-700 text-blue-800 bg-blue-50',
+        },
+        monochrome: {
+            outerBorder: 'border-gray-900',
+            innerBorder: 'border-gray-600',
+            bgTint: 'bg-white',
+            accentText: 'text-black',
+            badgeBg: 'bg-black text-white border-gray-600',
+            arabicColor: 'text-black',
+            sealBorder: 'border-black text-black bg-gray-50',
+        }
+    }[theme as 'emerald' | 'gold' | 'royal_blue' | 'monochrome'] || {
+        outerBorder: 'border-emerald-800',
+        innerBorder: 'border-amber-600',
+        bgTint: 'bg-gradient-to-br from-emerald-50/40 via-amber-50/20 to-white',
+        accentText: 'text-emerald-800',
+        badgeBg: 'bg-emerald-900 text-amber-300 border-amber-500',
+        arabicColor: 'text-emerald-950',
+        sealBorder: 'border-amber-600 text-amber-700 bg-amber-50',
+    };
+
+    const tingkatJuz = options?.syahadahTingkatJuz || options?.syahadahJenis || '30 Juz (Khatam Bil-Ghaib)';
+    const predikat = options?.syahadahPredikat || 'Mumtaz (Sangat Baik Sekali)';
+    const rasm = options?.syahadahRasm || "Riwayat Hafsh 'an 'Ashim Thariq Asy-Syathibiyyah";
+    const nomorSurat = options?.syahadahNomorSurat || options?.syahadahNomor || `SYH/${new Date().getFullYear()}/${santri.nis}`;
+    const tanggalMasehi = options?.syahadahTanggalMasehi ? formatDate(options.syahadahTanggalMasehi) : (options?.syahadahTanggal ? formatDate(options.syahadahTanggal) : formatDate(new Date().toISOString()));
+    const tanggalHijriyah = options?.syahadahTanggalHijriyah || options?.syahadahManualHijri || '15 Sya\'ban 1446 H';
+
+    const sig1 = settings.tenagaPengajar.find(p => p.id === parseInt(options?.syahadahSignatory1Id));
+    const sig2 = settings.tenagaPengajar.find(p => p.id === parseInt(options?.syahadahSignatory2Id));
+    const title1 = options?.syahadahSignatory1Title || options?.syahadahRoleBottom || 'Musyrif / Penguji Tahfizh';
+    const title2 = options?.syahadahSignatory2Title || 'Pengasuh Pondok Pesantren';
+    const name1 = sig1 ? sig1.nama : (options?.syahadahMuhaffizhName || '__________________________');
+
+    return (
+        <div className={`font-serif text-black h-full flex flex-col justify-between p-6 ${themeConfig.bgTint} select-none relative box-border`} style={{ minHeight: '100%' }}>
+            {/* Ornate Double Border */}
+            <div className={`absolute inset-3 border-4 ${themeConfig.outerBorder} pointer-events-none rounded-sm`}></div>
+            <div className={`absolute inset-4 border ${themeConfig.innerBorder} pointer-events-none rounded-sm`}></div>
+            <div className={`absolute inset-5 border-2 border-dashed ${themeConfig.innerBorder} opacity-40 pointer-events-none`}></div>
+
+            {/* Corner Ornaments */}
+            <div className={`absolute top-5 left-5 w-8 h-8 border-t-2 border-l-2 ${themeConfig.outerBorder} pointer-events-none`}></div>
+            <div className={`absolute top-5 right-5 w-8 h-8 border-t-2 border-r-2 ${themeConfig.outerBorder} pointer-events-none`}></div>
+            <div className={`absolute bottom-5 left-5 w-8 h-8 border-b-2 border-l-2 ${themeConfig.outerBorder} pointer-events-none`}></div>
+            <div className={`absolute bottom-5 right-5 w-8 h-8 border-b-2 border-r-2 ${themeConfig.outerBorder} pointer-events-none`}></div>
+
+            {/* Inner Content */}
+            <div className="relative z-10 px-8 py-2 flex flex-col h-full justify-between">
+                <div>
+                    {/* Header Syahadah */}
+                    <div className="text-center pt-2">
+                        {/* Bismillah Calligraphy */}
+                        <div className={`text-2xl font-bold font-arabic mb-1 tracking-widest ${themeConfig.arabicColor}`}>
+                            بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+                        </div>
+
+                        <div className="flex items-center justify-center gap-4 my-1">
+                            {settings.logoYayasanUrl ? (
+                                <img src={settings.logoYayasanUrl} alt="Logo" className="w-12 h-12 object-contain" referrerPolicy="no-referrer" />
+                            ) : settings.logoPonpesUrl ? (
+                                <img src={settings.logoPonpesUrl} alt="Logo" className="w-12 h-12 object-contain" referrerPolicy="no-referrer" />
+                            ) : null}
+                            <div>
+                                <h3 className="text-xs font-sans uppercase font-bold tracking-widest text-gray-600">
+                                    Lembaga Tahfizh & Pengajian Al-Qur'an
+                                </h3>
+                                <h2 className="text-base font-sans uppercase font-extrabold tracking-wider text-gray-900">
+                                    {settings.namaPonpes}
+                                </h2>
+                            </div>
+                        </div>
+
+                        {/* Title Plaque */}
+                        <div className="mt-2 mb-1">
+                            <h1 className={`text-2xl font-extrabold uppercase tracking-widest font-sans ${themeConfig.accentText}`}>
+                                SYAHADAH TAHFIZH AL-QUR'AN
+                            </h1>
+                            <div className="text-sm font-arabic font-semibold text-gray-700">
+                                شَهَادَةُ حِفْظِ الْقُرْآنِ الْكَرِيمِ
+                            </div>
+                            <div className="text-[9pt] font-sans font-mono text-gray-600 mt-0.5">
+                                Nomor: {nomorSurat}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Body Narrative */}
+                    <div className="text-center mt-3 space-y-2">
+                        <p className="text-xs font-sans italic text-gray-700">
+                            Dewan Asatidz & Penguji Tahfizh Al-Qur'an menerangkan dengan sesungguhnya bahwa:
+                        </p>
+
+                        {/* Santri Name Hero */}
+                        <div className="py-1 border-b-2 border-t-2 border-amber-600/30 inline-block px-12 my-1">
+                            <h2 className="text-xl font-bold uppercase tracking-wider text-gray-950 font-sans">
+                                {santri.namaLengkap}
+                            </h2>
+                            <div className="flex justify-center gap-6 text-[8.5pt] font-sans text-gray-600 mt-0.5">
+                                <span>NIS: <strong className="font-mono">{santri.nis}</strong></span>
+                                {santri.nisn && <span>NISN: <strong className="font-mono">{santri.nisn}</strong></span>}
+                                <span>Tempat & Tgl Lahir: <strong>{santri.tempatLahir}, {formatDate(santri.tanggalLahir)}</strong></span>
+                            </div>
+                        </div>
+
+                        <p className="text-xs font-sans text-gray-800 leading-relaxed max-w-2xl mx-auto">
+                            Telah berhasil menyelesaikan tasmi' ujian hafalan Al-Qur'anul Karim dan dinyatakan lulus dalam kategori:
+                        </p>
+
+                        {/* Category & Grade Plaque */}
+                        <div className="flex justify-center items-center gap-4 my-2">
+                            <div className={`px-6 py-1.5 rounded-full border shadow-sm font-sans font-extrabold text-sm uppercase tracking-wide ${themeConfig.badgeBg}`}>
+                                ✦ {tingkatJuz} ✦
+                            </div>
+                            <div className="px-4 py-1 rounded border border-gray-400 bg-white/90 text-xs font-sans font-bold text-gray-800 shadow-sm">
+                                Predikat: <span className={themeConfig.accentText}>{predikat}</span>
+                            </div>
+                        </div>
+
+                        <div className="text-[8.5pt] font-sans text-gray-600">
+                            Riwayat / Thariq: <strong className="text-gray-900">{rasm}</strong>
+                        </div>
+
+                        {options?.syahadahKeteranganTambahan && (
+                            <p className="text-[8pt] font-sans italic text-gray-500 max-w-xl mx-auto">
+                                "{options.syahadahKeteranganTambahan}"
+                            </p>
+                        )}
+
+                        {/* Quranic Verse / Quote */}
+                        <div className="pt-2 text-center">
+                            <p className="text-xs font-arabic text-emerald-950 font-bold">
+                                « خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ »
+                            </p>
+                            <p className="text-[7.5pt] font-sans italic text-gray-500">
+                                "Sebaik-baik kalian adalah orang yang belajar Al-Qur'an dan mengajarkannya." (HR. Al-Bukhari)
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Signatures & Seal Section */}
+                <div className="mt-4 pt-2 flex justify-between items-end px-6 font-sans" style={{ breakInside: 'avoid' }}>
+                    {/* Signatory 1 */}
+                    <div className="text-center w-56">
+                        <p className="text-[8.5pt] text-gray-600">Penguji / Musyrif,</p>
+                        <p className="font-bold text-xs mt-0.5">{title1}</p>
+                        <div className="h-16 flex items-center justify-center">
+                            <span className="text-[8pt] text-gray-400 italic">[Tanda Tangan]</span>
+                        </div>
+                        <p className="font-bold underline text-xs">{name1}</p>
+                        {sig1?.nip && <p className="font-mono text-[7pt] text-gray-600">NIP/NIY: {sig1.nip}</p>}
+                    </div>
+
+                    {/* Official Seal Emblem */}
+                    <div className="flex flex-col items-center justify-center">
+                        <div className={`w-20 h-20 rounded-full border-2 border-dashed flex flex-col items-center justify-center shadow-inner ${themeConfig.sealBorder}`}>
+                            <span className="text-[7pt] font-bold uppercase tracking-widest text-center">CAP RESMI</span>
+                            <span className="text-[6pt] text-center font-serif">PESANTREN</span>
+                        </div>
+                        <div className="text-[7pt] text-gray-500 font-mono mt-1">
+                            {settings.kabupatenKota || 'Pusat'}
+                        </div>
+                    </div>
+
+                    {/* Signatory 2 */}
+                    <div className="text-center w-56">
+                        <p className="text-[8.5pt] text-gray-600">
+                            {tanggalHijriyah} / {tanggalMasehi}
+                        </p>
+                        <p className="font-bold text-xs mt-0.5">{title2}</p>
+                        <div className="h-16 flex items-center justify-center">
+                            <span className="text-[8pt] text-gray-400 italic">[Tanda Tangan & Stempel]</span>
+                        </div>
+                        <p className="font-bold underline text-xs">{sig2 ? sig2.nama : (settings.namaMudir || '__________________________')}</p>
+                        {sig2?.nip && <p className="font-mono text-[7pt] text-gray-600">NIP/NIY: {sig2.nip}</p>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const generateSyahadahReports = (data: Santri[], settings: PondokSettings, options: any) => {
+    return data.map(santri => ({
+        content: <SyahadahTahfizhTemplate santri={santri} settings={settings} options={options} />,
+        orientation: 'landscape' as const
+    }));
+};

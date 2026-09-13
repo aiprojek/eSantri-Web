@@ -1,5 +1,6 @@
 
-import React, { Suspense, useState, useEffect } from 'react';
+import React, { Suspense, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useAppContext } from '../AppContext';
 import { Pendaftar, PsbConfig } from '../types';
 import { db } from '../db';
@@ -16,7 +17,10 @@ const PsbPosterMaker = React.lazy(() => import('./psb/PsbPosterMaker').then((mod
 const PSB: React.FC = () => {
     const { settings, onSaveSettings, showToast, currentUser } = useAppContext();
     const [activeTab, setActiveTab] = useState<'dashboard' | 'rekap' | 'form' | 'poster'>('dashboard');
-    const [pendaftarList, setPendaftarList] = useState<Pendaftar[]>([]);
+    
+    // Reactive live query ensures Firebase Realtime updates from Hub replicate to UI instantly
+    const livePendaftarList = useLiveQuery(() => db.pendaftar.toArray(), []);
+    const pendaftarList = livePendaftarList || [];
 
     // Permission Check
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.psb === 'write';
@@ -24,18 +28,9 @@ const PSB: React.FC = () => {
     // Fallback Config (Safe access)
     const psbConfig = settings.psbConfig || initialSettings.psbConfig;
 
-    const fetchPendaftar = async () => {
-        try {
-            const data = await db.pendaftar.toArray();
-            setPendaftarList(data);
-        } catch (error) {
-            console.error("Failed to fetch pendaftar:", error);
-        }
+    const fetchPendaftar = () => {
+        // useLiveQuery handles reactive updates automatically
     };
-
-    useEffect(() => {
-        fetchPendaftar();
-    }, []);
 
     const handleSaveConfig = async (newConfig: PsbConfig) => {
         if (!canWrite) {

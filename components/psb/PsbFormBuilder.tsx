@@ -32,9 +32,11 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const [submissionMethod, setSubmissionMethod] = useState<PsbSubmissionMethod>(normalizeSubmissionMethod(config.submissionMethod));
     const [googleScriptUrl, setGoogleScriptUrl] = useState(config.googleScriptUrl || '');
     const [showScriptHelper, setShowScriptHelper] = useState(false);
+    const [copiedScript, setCopiedScript] = useState(false);
     const previewViewportRef = useRef<HTMLDivElement | null>(null);
     const [manualZoom, setManualZoom] = useState(1);
     const [smartZoomScale, setSmartZoomScale] = useState(1);
+    const [mobileTab, setMobileTab] = useState<'config' | 'preview'>('config');
 
     const styles: {id: PsbDesignStyle, label: string}[] = [
         { id: 'classic', label: 'Klasik Tradisional' },
@@ -43,6 +45,46 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         { id: 'dark', label: 'Premium Dark' },
         { id: 'ceria', label: 'Ceria (TPQ/TK)' }
     ];
+
+    // Default hint for each standard field
+    const DEFAULT_FIELD_HINTS: Record<string, string> = {
+        namaLengkap: 'Isi nama lengkap calon santri sesuai ijazah terakhir / akta kelahiran',
+        namaHijrah: 'Nama panggilan akrab sehari-hari di rumah / sekolah',
+        nisn: '10 digit Nomor Induk Siswa Nasional dari sekolah asal',
+        nik: '16 digit NIK santri sesuai Kartu Keluarga (KK)',
+        jenisKelamin: 'Pilih jenis kelamin calon santri',
+        tempatLahir: 'Kota/Kabupaten tempat lahir sesuai akta kelahiran',
+        tanggalLahir: 'Tanggal, bulan, dan tahun lahir calon santri',
+        kewarganegaraan: 'WNI (Warga Negara Indonesia) atau WNA',
+        statusKeluarga: 'Contoh: Anak Kandung / Anak Angkat / Yatim / Piatu',
+        anakKe: 'Urutan kelahiran anak dalam keluarga (angka)',
+        jumlahSaudara: 'Total jumlah saudara kandung / tiri (angka)',
+        alamat: 'Nama jalan, gang, nomor rumah, RT/RW atau dusun',
+        desaKelurahan: 'Nama kelurahan atau desa domisili saat ini',
+        kecamatan: 'Kecamatan tempat tinggal saat ini',
+        kabupatenKota: 'Kabupaten atau Kota domisili saat ini',
+        provinsi: 'Provinsi tempat tinggal',
+        kodePos: '5 digit kode pos domisili',
+        namaAyah: 'Nama lengkap ayah kandung (tanpa gelar disarankan)',
+        nikAyah: '16 digit NIK ayah kandung sesuai Kartu Keluarga',
+        statusAyah: 'Masih Hidup atau Meninggal Dunia',
+        pekerjaanAyah: 'Contoh: PNS, Wiraswasta, Petani, Guru, Karyawan',
+        pendidikanAyah: 'Pendidikan terakhir: SD / SMP / SMA / S1 / S2 / S3',
+        penghasilanAyah: 'Rata-rata per bulan (Contoh: Rp 3.000.000 - Rp 5.000.000)',
+        teleponAyah: 'Nomor WhatsApp aktif ayah untuk konfirmasi seleksi',
+        namaIbu: 'Nama lengkap ibu kandung sesuai KTP / KK',
+        nikIbu: '16 digit NIK ibu kandung sesuai Kartu Keluarga',
+        statusIbu: 'Masih Hidup atau Meninggal Dunia',
+        pekerjaanIbu: 'Pekerjaan ibu (atau Ibu Rumah Tangga / IRT)',
+        pendidikanIbu: 'Pendidikan terakhir: SD / SMP / SMA / S1 / S2 / S3',
+        penghasilanIbu: 'Rata-rata per bulan (atau Rp 0 jika IRT)',
+        teleponIbu: 'Nomor WhatsApp aktif ibu untuk koordinasi panitia',
+        namaWali: 'Nama lengkap wali jika tinggal bersama wali',
+        nomorHpWali: 'Nomor WhatsApp aktif wali murid',
+        hubunganWali: 'Contoh: Paman, Kakek, Kakak Kandung',
+        asalSekolah: 'Nama sekolah / madrasah sebelumnya (misal: SD Negeri 1 / MI Al-Hikmah)',
+        alamatSekolahAsal: 'Alamat atau kota sekolah asal calon santri'
+    };
     
     // Field Groups 
     const fieldGroups = [
@@ -185,7 +227,8 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             requiredDocuments: localConfig.requiredDocuments,
             customFields: localConfig.customFields || [],
             submissionMethod: normalizeSubmissionMethod(submissionMethod),
-            googleScriptUrl 
+            googleScriptUrl,
+            fieldHints: localConfig.fieldHints ? { ...localConfig.fieldHints } : {}
         };
 
         let updatedTemplates;
@@ -214,6 +257,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                     requiredStandardFields: tpl.requiredStandardFields ? [...tpl.requiredStandardFields] : [...tpl.activeFields],
                     requiredDocuments: [...tpl.requiredDocuments],
                     customFields: [...(tpl.customFields || [])],
+                    fieldHints: tpl.fieldHints ? { ...tpl.fieldHints } : prev.fieldHints,
                     templates: prev.templates
                 }));
                 // Update specific states for method
@@ -248,9 +292,14 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         showToast('Mode template baru. Silakan beri nama baru untuk menyimpan sebagai salinan.', 'info');
     };
 
-    const googleAppsScriptCode = `
-/* GOOGLE APPS SCRIPT FOR ESANTRI WEB - SMART VERSION */
-// [Kode sama seperti sebelumnya...]
+    const handleCopyGasScript = () => {
+        navigator.clipboard.writeText(googleAppsScriptCode.trim());
+        setCopiedScript(true);
+        showToast('Kode Script GAS (Code.gs) berhasil disalin ke clipboard!', 'success');
+        setTimeout(() => setCopiedScript(false), 2500);
+    };
+
+    const googleAppsScriptCode = `/* GOOGLE APPS SCRIPT FOR ESANTRI WEB - SMART VERSION */
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheets = ss.getSheets();
@@ -391,10 +440,11 @@ function doPost(e) {
         const targetSheetName = templateName ? templateName : `Pendaftar ${jenjangName}`;
         
         // Helper to generate inputs based on theme
-        const renderInput = (label: string, name: string, type: string = 'text', placeholder: string = '', required: boolean = false) => {
+        const renderInput = (label: string, name: string, type: string = 'text', placeholder: string = '', required: boolean = false, hint: string = '') => {
             const commonPrint = `border-none border-b border-gray-400 bg-transparent rounded-none px-0`;
             const reqStar = required ? '<span class="text-red-500">*</span>' : '';
             const reqAttr = required ? 'required' : '';
+            const hintHtml = hint ? `<p class="text-[11px] text-gray-500 mb-1.5 italic font-normal print:text-gray-600 print:text-[10px] leading-snug">${hint}</p>` : '';
 
             // Handling file input logic
             if (type === 'file') {
@@ -402,7 +452,8 @@ function doPost(e) {
                     // Plain WA method: Cannot send files easily
                     return `
                     <div class="mb-4 break-inside-avoid">
-                        <label class="block text-gray-600 text-sm font-bold mb-1 print:text-black">${label} ${reqStar}</label>
+                        <label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black">${label} ${reqStar}</label>
+                        ${hintHtml}
                         <div class="p-3 bg-blue-50 border border-blue-100 rounded text-xs text-blue-800">
                             <i class="bi bi-info-circle-fill"></i> Lampirkan file ini secara manual di chat WhatsApp setelah klik Kirim.
                         </div>
@@ -411,7 +462,8 @@ function doPost(e) {
                     // Google Sheet OR Hybrid mode: Use real file input for Drive upload
                     return `
                     <div class="mb-4 break-inside-avoid">
-                        <label class="block text-gray-600 text-sm font-bold mb-1 print:text-black">${label} ${reqStar}</label>
+                        <label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black">${label} ${reqStar}</label>
+                        ${hintHtml}
                         <input type="file" name="${name}" accept="image/*,application/pdf" ${reqAttr} class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition" />
                         <p class="text-[10px] text-gray-400 mt-1">Maks 5MB. PDF atau Foto.</p>
                     </div>`;
@@ -422,31 +474,36 @@ function doPost(e) {
              if (style === 'classic') {
                 return `
                 <div class="mb-5 break-inside-avoid">
-                    <label class="block text-[#1B4D3E] text-sm font-bold mb-1 print:text-black font-serif">${label} ${reqStar}</label>
+                    <label class="block text-[#1B4D3E] text-sm font-bold mb-0.5 print:text-black font-serif">${label} ${reqStar}</label>
+                    ${hintHtml}
                     <input type="${type}" name="${name}" ${reqAttr} class="w-full border-b-2 border-gray-300 focus:border-[#1B4D3E] outline-none py-2 bg-transparent transition font-serif placeholder-gray-400 print:${commonPrint} print:border-black" placeholder="${placeholder}">
                 </div>`;
             } else if (style === 'modern') {
                 return `
                 <div class="mb-4 break-inside-avoid">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1 print:text-black">${label} ${reqStar}</label>
+                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-0.5 print:text-black">${label} ${reqStar}</label>
+                    ${hintHtml}
                     <input type="${type}" name="${name}" ${reqAttr} class="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none placeholder-gray-400 print:${commonPrint} print:text-black" placeholder="${placeholder}">
                 </div>`;
             } else if (style === 'bold') {
                 return `
                 <div class="mb-4 border-b border-gray-100 pb-2 break-inside-avoid">
-                    <label class="font-bold text-gray-700 block mb-1 print:text-black">${label} ${reqStar}</label>
+                    <label class="font-bold text-gray-700 block mb-0.5 print:text-black">${label} ${reqStar}</label>
+                    ${hintHtml}
                     <input type="${type}" name="${name}" ${reqAttr} class="w-full bg-gray-50 border-0 border-b-2 border-gray-300 focus:border-red-600 focus:bg-white px-2 py-2 transition outline-none placeholder-gray-400 print:${commonPrint} print:text-black" placeholder="${placeholder}">
                 </div>`;
             } else if (style === 'dark') {
                 return `
                 <div class="mb-6 group break-inside-avoid">
-                    <label class="block text-xs text-amber-500 uppercase tracking-widest mb-2 group-focus-within:text-white transition print:text-black">${label} ${reqStar}</label>
+                    <label class="block text-xs text-amber-500 uppercase tracking-widest mb-0.5 group-focus-within:text-white transition print:text-black">${label} ${reqStar}</label>
+                    ${hint ? `<p class="text-[11px] text-slate-400 mb-1.5 italic font-normal print:text-gray-600 print:text-[10px] leading-snug">${hint}</p>` : ''}
                     <input type="${type}" name="${name}" ${reqAttr} class="w-full bg-slate-800 border-b border-slate-600 focus:border-amber-500 px-0 py-3 text-white outline-none transition placeholder-slate-600 print:bg-white print:text-black print:border-gray-400" placeholder="${placeholder}">
                 </div>`;
             } else { // ceria
                  return `
                  <div class="mb-4 break-inside-avoid">
-                    <label class="block text-gray-500 text-xs font-bold uppercase mb-1 ml-1 print:text-black">${label} ${reqStar}</label>
+                    <label class="block text-gray-500 text-xs font-bold uppercase mb-0.5 ml-1 print:text-black">${label} ${reqStar}</label>
+                    ${hintHtml}
                     <input type="${type}" name="${name}" ${reqAttr} class="w-full bg-orange-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-300 outline-none font-bold text-gray-700 placeholder-gray-400 print:bg-white print:border-b print:border-gray-400 print:rounded-none print:text-black" placeholder="${placeholder}">
                  </div>`;
             }
@@ -465,34 +522,41 @@ function doPost(e) {
 
             const fieldsHtml = groupFields.map(f => {
                 const isRequired = (localConfig.requiredStandardFields || []).includes(f.key);
+                const hint = (localConfig.fieldHints && localConfig.fieldHints[f.key] !== undefined)
+                    ? localConfig.fieldHints[f.key]
+                    : (DEFAULT_FIELD_HINTS[f.key] || '');
+                const hintHtml = hint ? `<p class="text-[11px] text-gray-500 mb-1.5 italic font-normal print:text-gray-600 print:text-[10px] leading-snug">${hint}</p>` : '';
                 
                 if (f.key === 'jenisKelamin') {
                      // Simple radio logic
                      return `
                      <div class="mb-4 break-inside-avoid">
-                        <label class="block text-sm font-bold mb-1 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenis Kelamin ${isRequired ? '<span class="text-red-500">*</span>' : ''}</label>
+                        <label class="block text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenis Kelamin ${isRequired ? '<span class="text-red-500">*</span>' : ''}</label>
+                        ${hintHtml}
                         <div class="flex gap-4 mt-1 ${style === 'classic' ? 'font-serif' : ''}">
                             <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="jenisKelamin" value="Laki-laki" ${isRequired ? 'required' : ''}> Laki-laki</label>
                             <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="jenisKelamin" value="Perempuan" ${isRequired ? 'required' : ''}> Perempuan</label>
                         </div>
                      </div>`;
                 }
-                return renderInput(f.label, f.key, f.key.toLowerCase().includes('tanggal') ? 'date' : 'text', '', isRequired);
+                return renderInput(f.label, f.key, f.key.toLowerCase().includes('tanggal') ? 'date' : 'text', '', isRequired, hint);
             }).join('');
 
             return [`<section class="mb-8 break-inside-avoid">${header}<div class="grid grid-cols-1 md:grid-cols-2 gap-6 px-2">${fieldsHtml}</div></section>`];
         }).join('');
 
         const customFieldsHtml = localConfig.customFields?.map(field => {
+            const hint = field.hint || '';
+            const hintHtml = hint ? `<p class="text-[11px] text-gray-500 mb-1.5 italic font-normal print:text-gray-600 print:text-[10px] leading-snug">${hint}</p>` : '';
             if (field.type === 'section') return `<h4 class="font-bold text-lg mt-6 mb-3 border-b-2 border-gray-300 pb-1 break-after-avoid print:text-black print:border-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif uppercase border-[#1B4D3E]/30' : ''}">${field.label}</h4>`;
             if (field.type === 'statement') return `<div class="mb-4 text-sm text-justify leading-relaxed print:text-black ${style === 'classic' ? 'font-serif' : ''}">${field.label}</div>`;
-            if (field.type === 'text') return renderInput(field.label, `custom_${field.id}`, 'text', '', field.required);
-            if (field.type === 'file') return renderInput(field.label, `custom_${field.id}`, 'file', '', field.required);
-            if (field.type === 'paragraph') return `<div class="mb-4 break-inside-avoid"><label class="block text-gray-600 text-sm font-bold mb-1 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label><textarea name="custom_${field.id}" rows="3" ${field.required ? 'required' : ''} class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 outline-none print:bg-white print:border-black ${style === 'classic' ? 'bg-transparent border-b-2 rounded-none border-gray-300 focus:border-[#1B4D3E] font-serif' : ''}"></textarea></div>`;
+            if (field.type === 'text') return renderInput(field.label, `custom_${field.id}`, 'text', '', field.required, hint);
+            if (field.type === 'file') return renderInput(field.label, `custom_${field.id}`, 'file', '', field.required, hint);
+            if (field.type === 'paragraph') return `<div class="mb-4 break-inside-avoid"><label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label>${hintHtml}<textarea name="custom_${field.id}" rows="3" ${field.required ? 'required' : ''} class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 outline-none print:bg-white print:border-black ${style === 'classic' ? 'bg-transparent border-b-2 rounded-none border-gray-300 focus:border-[#1B4D3E] font-serif' : ''}"></textarea></div>`;
             if (field.type === 'radio' || field.type === 'checkbox') {
                 const opts = field.options?.filter(o => o.trim() !== '') || [];
                 const optionsHtml = opts.map(opt => `<label class="flex items-center gap-2 cursor-pointer p-1"><input type="${field.type}" name="custom_${field.id}${field.type==='checkbox'?'[]':''}" value="${opt}" class="w-4 h-4 text-teal-600" ${field.required && field.type === 'radio' ? 'required' : ''}> <span class="text-sm">${opt}</span></label>`).join('');
-                return `<div class="mb-4 break-inside-avoid"><label class="block text-gray-600 text-sm font-bold mb-1 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label><div class="space-y-1 mt-1 ${style === 'classic' ? 'font-serif' : ''}">${optionsHtml}</div></div>`;
+                return `<div class="mb-4 break-inside-avoid"><label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label>${hintHtml}<div class="space-y-1 mt-1 ${style === 'classic' ? 'font-serif' : ''}">${optionsHtml}</div></div>`;
             }
             return '';
         }).join('') || '';
@@ -667,8 +731,37 @@ async function submitForm(){const form=document.getElementById('psbForm');if(!fo
 
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-200px)]">
-            <div className="lg:col-span-4 bg-white p-6 rounded-lg shadow-md overflow-y-auto h-auto lg:h-full space-y-6 text-sm">
+        <div className="flex flex-col gap-4">
+            {/* Mobile View Toggle */}
+            <div className="lg:hidden flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
+                <button
+                    type="button"
+                    onClick={() => setMobileTab('config')}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                        mobileTab === 'config'
+                            ? 'bg-teal-700 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                >
+                    <i className="bi bi-sliders text-sm"></i>
+                    <span>Desain &amp; Pengaturan</span>
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setMobileTab('preview')}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                        mobileTab === 'preview'
+                            ? 'bg-teal-700 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                >
+                    <i className="bi bi-eye-fill text-sm"></i>
+                    <span>Pratinjau Live Form</span>
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 lg:h-[calc(100vh-200px)]">
+                <div className={`lg:col-span-4 bg-white p-4 sm:p-6 rounded-xl shadow-md overflow-y-auto ${mobileTab === 'config' ? 'block' : 'hidden lg:block'} h-auto lg:h-full space-y-6 text-sm`}>
                 
                 {/* 1. CONFIG UTAMA */}
                 <div>
@@ -715,14 +808,102 @@ async function submitForm(){const form=document.getElementById('psbForm');if(!fo
                         </div>
 
                         {submissionMethod !== 'whatsapp' && (
-                            <div className="p-2 bg-gray-50 rounded border text-xs">
-                                <label className="font-bold block mb-1">URL Google Script</label>
-                                <input type="text" value={googleScriptUrl} onChange={e => setGoogleScriptUrl(e.target.value)} placeholder="https://script.google.com/..." className="w-full border rounded p-1 mb-1" />
-                                {googleScriptUrl.trim() && !isScriptUrlValid(googleScriptUrl) && (
-                                    <p className="text-[10px] text-red-600 mb-1">URL belum valid. Gunakan URL deployment Web App yang berakhiran <code>/exec</code>.</p>
-                                )}
-                                <button onClick={() => setShowScriptHelper(!showScriptHelper)} className="text-blue-600 underline">Lihat Kode Script</button>
-                                {showScriptHelper && <textarea readOnly value={googleAppsScriptCode} className="w-full h-24 mt-1 border text-[10px]" />}
+                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-2.5">
+                                <div>
+                                    <label className="font-bold block text-gray-700 mb-1">
+                                        URL Google Apps Script (Web App)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={googleScriptUrl}
+                                        onChange={e => setGoogleScriptUrl(e.target.value)}
+                                        placeholder="https://script.google.com/macros/s/.../exec"
+                                        className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
+                                    />
+                                    {googleScriptUrl.trim() && !isScriptUrlValid(googleScriptUrl) && (
+                                        <p className="text-[10px] text-red-600 mt-1">
+                                            ⚠️ URL belum valid. Gunakan URL deployment Web App yang berakhiran <code>/exec</code>.
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowScriptHelper(!showScriptHelper)}
+                                        className="w-full flex items-center justify-between px-3 py-2 bg-teal-50 hover:bg-teal-100/70 border border-teal-200 rounded-lg text-teal-900 font-semibold text-xs transition-colors"
+                                    >
+                                        <span className="flex items-center gap-1.5">
+                                            <i className="bi bi-code-slash text-teal-700"></i>
+                                            <span>Kode Script GAS (Code.gs) &amp; Panduan Alur</span>
+                                        </span>
+                                        <i className={`bi ${showScriptHelper ? 'bi-chevron-up' : 'bi-chevron-down'} text-teal-600`}></i>
+                                    </button>
+
+                                    {showScriptHelper && (
+                                        <div className="mt-2.5 space-y-3 bg-white p-3 rounded-xl border border-teal-200 shadow-2xs">
+                                            {/* Panduan Singkat Alur */}
+                                            <div className="bg-teal-50/60 p-2.5 rounded-lg border border-teal-200/70 text-[11px] text-teal-950 space-y-1.5">
+                                                <div className="font-bold flex items-center gap-1 text-teal-900 text-xs">
+                                                    <i className="bi bi-lightning-charge-fill text-amber-500"></i>
+                                                    Panduan Singkat Alur Integrasi Google Sheets:
+                                                </div>
+                                                <ol className="list-decimal pl-4 space-y-1 text-gray-700">
+                                                    <li>Buka Google Spreadsheet baru panitia &gt; klik menu <strong>Ekstensi &gt; Apps Script</strong>.</li>
+                                                    <li>Hapus kode default di file <code>Code.gs</code>, lalu tempelkan seluruh kode script di bawah ini.</li>
+                                                    <li><strong>Folder Drive (Disarankan):</strong> Buat folder khusus di Google Drive Anda (cth: "Berkas PSB 2026"), salin ID Foldernya dari URL browser, lalu ganti baris <code>var folderId = "..."</code>.</li>
+                                                    <li><strong>Deploy Web App:</strong> Klik tombol biru <strong>Deploy &gt; Deployment Baru</strong> &gt; pilih jenis <strong>Aplikasi Web</strong> &gt; atur Akses: <strong>Siapa Saja (Anyone)</strong>.</li>
+                                                    <li>Salin URL hasil deployment (berakhiran <code>/exec</code>) ke kotak input URL di atas.</li>
+                                                </ol>
+                                                <p className="text-[10px] text-teal-800 italic pt-0.5">
+                                                    * Panduan komprehensif, tutorial bergambar &amp; hak akses Drive lengkap tersedia di menu <strong>Sistem &gt; Panduan Sistem &gt; Penerimaan Santri Baru (PSB)</strong>.
+                                                </p>
+                                            </div>
+
+                                            {/* Kode Script Lengkap (Rapi & Responsif) */}
+                                            <div className="rounded-xl border border-slate-700/80 overflow-hidden bg-slate-900 shadow-sm mt-2">
+                                                <div className="bg-slate-800 px-3 py-2.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <span className="w-6 h-6 rounded bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                                                            <i className="bi bi-file-earmark-code-fill text-xs"></i>
+                                                        </span>
+                                                        <div className="min-w-0">
+                                                            <div className="font-bold text-slate-100 text-xs flex items-center gap-1.5 truncate">
+                                                                <span>Kode Backend</span>
+                                                                <code className="text-amber-300 font-mono text-[11px] bg-amber-500/10 px-1 rounded">Code.gs</code>
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-400">Google Apps Script Siap Pakai</div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCopyGasScript}
+                                                        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
+                                                            copiedScript
+                                                                ? 'bg-emerald-600 text-white'
+                                                                : 'bg-teal-600 hover:bg-teal-500 text-white active:scale-95'
+                                                        }`}
+                                                        title="Salin seluruh kode program ke clipboard"
+                                                    >
+                                                        <i className={`bi ${copiedScript ? 'bi-check2-all text-sm' : 'bi-clipboard'}`}></i>
+                                                        <span>{copiedScript ? 'Tersalin!' : 'Salin Kode Script'}</span>
+                                                    </button>
+                                                </div>
+                                                <textarea
+                                                    readOnly
+                                                    value={googleAppsScriptCode}
+                                                    rows={8}
+                                                    className="w-full bg-slate-950 text-emerald-300 font-mono text-[11px] p-3 border-0 focus:ring-0 focus:outline-hidden resize-y leading-relaxed"
+                                                    placeholder="// Kode script Google Apps Script..."
+                                                />
+                                                <div className="bg-slate-900/90 px-3 py-1.5 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+                                                    <span>💡 Klik textarea lalu tekan Ctrl+A jika ingin memilih manual</span>
+                                                    <span className="text-teal-400 font-mono font-semibold">v2.4 Smart Multi-Sheet</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                          <div className="flex gap-2 mt-2">
@@ -754,31 +935,80 @@ async function submitForm(){const form=document.getElementById('psbForm');if(!fo
                         {fieldGroups.map((group, gIdx) => (
                             <div key={gIdx} className="border-b pb-2 mb-2 last:border-0">
                                 <h4 className="font-bold text-[10px] text-teal-700 mb-1 uppercase tracking-tight">{group.title}</h4>
-                                <div className="space-y-1">
+                                <div className="space-y-1.5">
                                     {group.fields.map(f => {
                                         const isActive = localConfig.activeFields.includes(f.key);
                                         const isRequired = (localConfig.requiredStandardFields || []).includes(f.key);
+                                        const currentHint = (localConfig.fieldHints && localConfig.fieldHints[f.key] !== undefined)
+                                            ? localConfig.fieldHints[f.key]
+                                            : (DEFAULT_FIELD_HINTS[f.key] || '');
                                         return (
-                                            <div key={f.key} className="flex items-center justify-between hover:bg-gray-100 p-1.5 rounded">
-                                                <label className="flex items-center gap-2 cursor-pointer flex-grow">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={isActive} 
-                                                        onChange={() => toggleField(f.key)} 
-                                                        className="text-teal-600 rounded w-4 h-4"
-                                                    />
-                                                    <span className="text-xs text-gray-700">{f.label}</span>
-                                                </label>
-                                                {isActive && (
-                                                    <label className="flex items-center gap-1 cursor-pointer bg-white px-1.5 py-0.5 rounded border border-gray-200 hover:border-red-300">
+                                            <div key={f.key} className="p-1.5 rounded hover:bg-gray-100/80 bg-white/50 border border-gray-100">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="flex items-center gap-2 cursor-pointer flex-grow">
                                                         <input 
                                                             type="checkbox" 
-                                                            checked={isRequired} 
-                                                            onChange={() => toggleRequired(f.key)} 
-                                                            className="text-red-600 rounded w-3.5 h-3.5 focus:ring-red-500"
+                                                            checked={isActive} 
+                                                            onChange={() => toggleField(f.key)} 
+                                                            className="text-teal-600 rounded w-4 h-4"
                                                         />
-                                                        <span className={`text-[10px] ${isRequired ? 'text-red-600 font-bold' : 'text-gray-400'}`}>Wajib?</span>
+                                                        <span className="text-xs text-gray-700 font-medium">{f.label}</span>
                                                     </label>
+                                                    {isActive && (
+                                                        <label className="flex items-center gap-1 cursor-pointer bg-white px-1.5 py-0.5 rounded border border-gray-200 hover:border-red-300">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isRequired} 
+                                                                onChange={() => toggleRequired(f.key)} 
+                                                                className="text-red-600 rounded w-3.5 h-3.5 focus:ring-red-500"
+                                                            />
+                                                            <span className={`text-[10px] ${isRequired ? 'text-red-600 font-bold' : 'text-gray-400'}`}>Wajib?</span>
+                                                        </label>
+                                                    )}
+                                                </div>
+
+                                                {/* Hint input for active field */}
+                                                {isActive && (
+                                                    <div className="mt-1.5 pl-6 pr-0.5 flex items-center gap-1.5">
+                                                        <span className="text-[10px] text-teal-700 font-semibold shrink-0 flex items-center gap-1">
+                                                            <i className="bi bi-info-circle text-[11px]"></i> Hint:
+                                                        </span>
+                                                        <input
+                                                            type="text"
+                                                            value={currentHint}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setLocalConfig(prev => ({
+                                                                    ...prev,
+                                                                    fieldHints: {
+                                                                        ...(prev.fieldHints || {}),
+                                                                        [f.key]: val
+                                                                    }
+                                                                }));
+                                                            }}
+                                                            placeholder={`Petunjuk pengisian ${f.label.toLowerCase()}...`}
+                                                            className="flex-1 bg-white border border-gray-200 rounded px-2 py-0.5 text-[11px] text-gray-700 placeholder-gray-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none"
+                                                            title="Teks petunjuk yang muncul tepat di bawah pertanyaan/permintaan data"
+                                                        />
+                                                        {currentHint !== (DEFAULT_FIELD_HINTS[f.key] || '') && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setLocalConfig(prev => ({
+                                                                        ...prev,
+                                                                        fieldHints: {
+                                                                            ...(prev.fieldHints || {}),
+                                                                            [f.key]: DEFAULT_FIELD_HINTS[f.key] || ''
+                                                                        }
+                                                                    }));
+                                                                }}
+                                                                className="text-[10px] text-gray-400 hover:text-teal-700 p-0.5 shrink-0"
+                                                                title="Reset ke petunjuk standar"
+                                                            >
+                                                                <i className="bi bi-arrow-counterclockwise"></i>
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         );
@@ -819,7 +1049,7 @@ async function submitForm(){const form=document.getElementById('psbForm');if(!fo
                 </div>
             </div>
             
-            <div className="lg:col-span-8 flex flex-col h-[62vh] min-h-[420px] lg:h-full bg-gray-200 rounded-lg overflow-hidden border border-gray-300">
+            <div className={`lg:col-span-8 flex flex-col h-[70vh] min-h-[420px] lg:h-full bg-gray-200 rounded-xl overflow-hidden border border-gray-300 ${mobileTab === 'preview' ? 'flex' : 'hidden lg:flex'}`}>
                 <div className="bg-white p-3 border-b shadow-sm">
                     <div className="flex flex-col gap-3">
                         <div className="flex flex-col">
@@ -879,5 +1109,6 @@ async function submitForm(){const form=document.getElementById('psbForm');if(!fo
                 </div>
             </div>
         </div>
+    </div>
     );
 };

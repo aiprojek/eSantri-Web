@@ -750,6 +750,19 @@ export const BukuTamu: React.FC = () => {
         );
     };
 
+    const handleDeleteRecord = (item: BukuTamuType) => {
+        if (!canWrite) return;
+        showConfirmation(
+            'Hapus Catatan Buku Tamu',
+            `Apakah Anda yakin ingin menghapus catatan ${item.tipeEntri === 'Titipan Paket' ? 'paket' : 'kunjungan'} dari "${item.namaTamu}"?\n\nTindakan ini akan menghapus data dari sistem secara permanen.`,
+            async () => {
+                await db.bukuTamu.delete(item.id);
+                showToast('Catatan buku tamu berhasil dihapus.', 'success');
+            },
+            { confirmColor: 'red', confirmText: 'Ya, Hapus Data' }
+        );
+    };
+
     const getDurationText = (startStr: string) => {
         const start = new Date(startStr);
         const now = new Date();
@@ -1044,12 +1057,21 @@ export const BukuTamu: React.FC = () => {
                                         </div>
 
                                         {canWrite && (
-                                            <button
-                                                onClick={() => handleCheckOut(guest)}
-                                                className="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
-                                            >
-                                                <i className="bi bi-box-arrow-right"></i> Check-Out (Kembalikan Badge)
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleCheckOut(guest)}
+                                                    className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                                                >
+                                                    <i className="bi bi-box-arrow-right"></i> Check-Out (Kembalikan Badge)
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteRecord(guest)}
+                                                    className="p-2 bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-700 text-xs rounded-xl border border-gray-200 transition-colors"
+                                                    title="Hapus / batalkan entri tamu ini"
+                                                >
+                                                    <i className="bi bi-trash"></i>
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -1139,12 +1161,21 @@ export const BukuTamu: React.FC = () => {
                                             <i className="bi bi-whatsapp"></i> Beri Tahu Penerima via WA
                                         </button>
                                         {canWrite && (
-                                            <button
-                                                onClick={() => handleMarkPackageReceived(pkg)}
-                                                className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
-                                            >
-                                                <i className="bi bi-check2-circle"></i> Serahkan (Tandai Sudah Diambil)
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleMarkPackageReceived(pkg)}
+                                                    className="flex-1 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                                                >
+                                                    <i className="bi bi-check2-circle"></i> Serahkan (Tandai Sudah Diambil)
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteRecord(pkg)}
+                                                    className="p-2 bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-700 text-xs rounded-xl border border-gray-200 transition-colors"
+                                                    title="Hapus entri paket ini"
+                                                >
+                                                    <i className="bi bi-trash"></i>
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -1257,6 +1288,7 @@ export const BukuTamu: React.FC = () => {
                                     <th className="py-2.5 px-3 text-center">Masuk</th>
                                     <th className="py-2.5 px-3 text-center">Keluar</th>
                                     <th className="py-2.5 px-3">Petugas</th>
+                                    <th className="py-2.5 px-3 text-center">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 text-gray-800">
@@ -1312,13 +1344,35 @@ export const BukuTamu: React.FC = () => {
                                             <td className="py-2 px-3 text-gray-500 text-[11px] truncate max-w-[90px]">
                                                 {item.petugas}
                                             </td>
+                                            <td className="py-2 px-3 text-center whitespace-nowrap">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    {item.tipeEntri !== 'Titipan Paket' && (
+                                                        <button
+                                                            onClick={() => setSelectedGuestForTicket(item)}
+                                                            className="p-1.5 text-gray-600 hover:text-teal-800 hover:bg-teal-50 rounded-lg transition-colors"
+                                                            title="Cetak Ulang Tiket Pass Tamu"
+                                                        >
+                                                            <i className="bi bi-printer"></i>
+                                                        </button>
+                                                    )}
+                                                    {canWrite && (
+                                                        <button
+                                                            onClick={() => handleDeleteRecord(item)}
+                                                            className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title="Hapus Catatan Ini"
+                                                        >
+                                                            <i className="bi bi-trash"></i>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
                                         </tr>
                                     );
                                 })}
 
                                 {historyRecords.length === 0 && (
                                     <tr>
-                                        <td colSpan={9} className="p-6 text-center text-gray-500">
+                                        <td colSpan={10} className="p-6 text-center text-gray-500">
                                             <EmptyState
                                                 icon="bi-clock-history"
                                                 title="Tidak Ada Catatan Riwayat"
@@ -1372,6 +1426,25 @@ export const BukuTamu: React.FC = () => {
                                         <div className="text-red-800 text-right">
                                             Keluar: <span className="font-mono font-bold">{jamKeluar}</span>
                                         </div>
+                                    </div>
+
+                                    <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                                        {item.tipeEntri !== 'Titipan Paket' && (
+                                            <button
+                                                onClick={() => setSelectedGuestForTicket(item)}
+                                                className="px-2.5 py-1 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center gap-1 border border-teal-200"
+                                            >
+                                                <i className="bi bi-printer"></i> Tiket
+                                            </button>
+                                        )}
+                                        {canWrite && (
+                                            <button
+                                                onClick={() => handleDeleteRecord(item)}
+                                                className="px-2.5 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg flex items-center gap-1 border border-red-200"
+                                            >
+                                                <i className="bi bi-trash"></i> Hapus
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             );

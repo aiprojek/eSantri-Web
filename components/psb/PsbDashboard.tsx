@@ -1,9 +1,11 @@
 
-import React, { useMemo } from 'react';
-import { Pendaftar, PsbConfig, PondokSettings } from '../../types';
+import React, { useMemo, useState } from 'react';
+import { Pendaftar, PsbConfig, PondokSettings, PendaftarStatus } from '../../types';
 import { PrintHeader } from '../common/PrintHeader';
 import { SectionCard } from '../common/SectionCard';
 import { EmptyState } from '../common/EmptyState';
+import { PsbDashboardReportModal } from './modals/PsbDashboardReportModal';
+import { PsbAnnouncementModal } from './modals/PsbAnnouncementModal';
 
 interface PsbDashboardProps {
     pendaftarList: Pendaftar[];
@@ -48,9 +50,18 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
     const maxDaily = Math.max(...dailyTrend.map(d => d.count), 1);
 
     const statusStats = useMemo(() => {
-        const counts = { Baru: 0, Diterima: 0, Cadangan: 0, Ditolak: 0 };
+        const counts: Record<PendaftarStatus, number> = {
+            'Baru': 0,
+            'Verifikasi Berkas': 0,
+            'Ujian Masuk': 0,
+            'Cadangan': 0,
+            'Diterima': 0,
+            'Ditolak': 0
+        };
         pendaftarList.forEach(p => {
-            if (counts[p.status] !== undefined) counts[p.status]++;
+            if (counts[p.status] !== undefined) {
+                counts[p.status]++;
+            }
         });
         return counts;
     }, [pendaftarList]);
@@ -58,7 +69,8 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
     const todayStr = new Date().toISOString().split('T')[0];
     const pendaftarHariIni = pendaftarList.filter(p => p.tanggalDaftar.startsWith(todayStr)).length;
 
-    const handlePrint = () => { window.print(); };
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
 
     return (
         <div className="space-y-6">
@@ -67,9 +79,24 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
                     <h2 className="text-xl font-black tracking-tight text-app-text">Analitik Pendaftaran Santri Baru</h2>
                     <p className="mt-1 text-sm app-text-muted">Pantau laju pendaftar, distribusi jenjang, dan hasil seleksi dari dashboard PSB.</p>
                 </div>
-                <button onClick={handlePrint} className="app-button-secondary px-4 py-2.5 text-sm">
-                    <i className="bi bi-printer-fill"></i> Cetak Laporan
-                </button>
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                    <button
+                        onClick={() => setIsAnnouncementModalOpen(true)}
+                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 transition-colors shadow-2xs"
+                        title="Ekspor daftar pengumuman santri diterima & tidak diterima dalam format PDF siap cetak"
+                    >
+                        <i className="bi bi-megaphone-fill text-teal-600"></i>
+                        <span>Pengumuman Hasil (PDF)</span>
+                    </button>
+                    <button
+                        onClick={() => setIsReportModalOpen(true)}
+                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white hover:bg-slate-700 transition-colors shadow-2xs"
+                        title="Cetak tabel laporan rekapitulasi data dashboard dalam format PDF rapi"
+                    >
+                        <i className="bi bi-file-earmark-bar-graph-fill text-teal-300"></i>
+                        <span>Cetak Laporan Tabel (PDF)</span>
+                    </button>
+                </div>
             </div>
             <div className="hidden print:block mb-8">
                 <PrintHeader settings={settings} title="LAPORAN DASHBOARD PENERIMAAN SANTRI BARU" />
@@ -139,6 +166,24 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
                     </div>
                 </SectionCard>
             </div>
+
+            {/* Modal Pengumuman Hasil Seleksi (PDF) */}
+            <PsbAnnouncementModal
+                isOpen={isAnnouncementModalOpen}
+                onClose={() => setIsAnnouncementModalOpen(false)}
+                pendaftarList={pendaftarList}
+                settings={settings}
+                config={config}
+            />
+
+            {/* Modal Laporan Tabel Dashboard (PDF) */}
+            <PsbDashboardReportModal
+                isOpen={isReportModalOpen}
+                onClose={() => setIsReportModalOpen(false)}
+                pendaftarList={pendaftarList}
+                settings={settings}
+                config={config}
+            />
         </div>
     );
 };

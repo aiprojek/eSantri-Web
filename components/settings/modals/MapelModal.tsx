@@ -21,6 +21,8 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
     const [linkUnduhText, setLinkUnduhText] = useState('');
     const [linkPembelianText, setLinkPembelianText] = useState('');
 
+    const [targetBabText, setTargetBabText] = useState('');
+
     const normalizeList = (input: string): string[] =>
         input
             .split('\n')
@@ -31,6 +33,9 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
         if (isOpen) {
             setMapel(item || {
                 nama: '',
+                kodeMapel: '',
+                rumpun: 'Diniyah',
+                alokasiJamDefault: 2,
                 modul: '',
                 linkUnduh: '',
                 linkPembelian: '',
@@ -46,9 +51,11 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
             const beliItems = (source.linkPembelianList && source.linkPembelianList.length > 0)
                 ? source.linkPembelianList
                 : (source.linkPembelian ? [source.linkPembelian] : []);
+            const babItems = source.targetBabSemester || [];
             setModulText(modulItems.join('\n'));
             setLinkUnduhText(unduhItems.join('\n'));
             setLinkPembelianText(beliItems.join('\n'));
+            setTargetBabText(babItems.join('\n'));
         }
     }, [isOpen, item]);
 
@@ -63,6 +70,9 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
         const newItem: MataPelajaran = {
             id: item?.id || Date.now(),
             nama: mapel.nama.trim(),
+            kodeMapel: mapel.kodeMapel?.trim() || undefined,
+            rumpun: (mapel.rumpun as any) || 'Diniyah',
+            alokasiJamDefault: mapel.alokasiJamDefault ? Number(mapel.alokasiJamDefault) : undefined,
             jenjangId: jenjangId,
             modul: normalizeList(modulText)[0] || '',
             linkUnduh: normalizeList(linkUnduhText)[0] || '',
@@ -70,6 +80,7 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
             modulList: normalizeList(modulText),
             linkUnduhList: normalizeList(linkUnduhText),
             linkPembelianList: normalizeList(linkPembelianText),
+            targetBabSemester: normalizeList(targetBabText),
             kkm: mapel.kkm
         };
         
@@ -83,39 +94,90 @@ export const MapelModal: React.FC<MapelModalProps> = ({ isOpen, onClose, onSave,
                     <h3 className="text-lg font-semibold text-gray-800">{mode === 'add' ? 'Tambah' : 'Edit'} Mata Pelajaran</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><i className="bi bi-x-lg"></i></button>
                 </div>
-                <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-                    <div>
-                        <label className="block mb-1 text-sm font-medium text-gray-700">Nama Mata Pelajaran</label>
-                        <input 
-                            type="text" 
-                            value={mapel.nama || ''} 
-                            onChange={(e) => setMapel({...mapel, nama: e.target.value})} 
-                            autoFocus 
-                            placeholder="Contoh: Fiqih, Tauhid, dll"
-                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block mb-1 text-sm font-medium text-gray-700">KKM (Kriteria Ketuntasan Minimal)</label>
+                <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className="col-span-2">
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Nama Mata Pelajaran *</label>
                             <input 
-                                type="number" 
-                                value={mapel.kkm || ''} 
-                                onChange={(e) => setMapel({...mapel, kkm: parseInt(e.target.value)})} 
+                                type="text" 
+                                value={mapel.nama || ''} 
+                                onChange={(e) => setMapel({...mapel, nama: e.target.value})} 
+                                autoFocus 
+                                placeholder="Contoh: Fiqih, Nahwu, Matematika"
                                 className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
                             />
                         </div>
-                        <div className="col-span-2">
-                            <label className="block mb-1 text-sm font-medium text-gray-700">Nama Modul/Kitab (boleh lebih dari satu)</label>
-                            <textarea
-                                value={modulText}
-                                onChange={(e) => setModulText(e.target.value)}
-                                rows={3}
-                                placeholder={"Contoh:\nSafinatun Najah\nFathul Qarib"}
-                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Kode Mapel</label>
+                            <input 
+                                type="text" 
+                                value={mapel.kodeMapel || ''} 
+                                onChange={(e) => setMapel({...mapel, kodeMapel: e.target.value.toUpperCase()})} 
+                                placeholder="FQH, MTK"
+                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5 font-mono uppercase" 
                             />
-                            <p className="mt-1 text-[11px] text-gray-500">Satu baris = satu modul/kitab.</p>
                         </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Rumpun Kurikulum</label>
+                            <select
+                                value={mapel.rumpun || 'Diniyah'}
+                                onChange={(e) => setMapel({...mapel, rumpun: e.target.value as any})}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"
+                            >
+                                <option value="Diniyah">Diniyah / Kitab</option>
+                                <option value="Umum">Umum / Nasional</option>
+                                <option value="Bahasa">Bahasa</option>
+                                <option value="Tahfizh">Tahfizh Al-Qur'an</option>
+                                <option value="Muatan Lokal">Muatan Lokal</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">KKM Minimal</label>
+                            <input 
+                                type="number" 
+                                value={mapel.kkm || ''} 
+                                onChange={(e) => setMapel({...mapel, kkm: parseInt(e.target.value) || 0})} 
+                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Alokasi Jam/Minggu</label>
+                            <input 
+                                type="number" 
+                                min="1"
+                                max="10"
+                                value={mapel.alokasiJamDefault || 2} 
+                                onChange={(e) => setMapel({...mapel, alokasiJamDefault: parseInt(e.target.value) || 1})} 
+                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block mb-1 text-sm font-medium text-gray-700">Target Silabus / Pokok Bahasan Semester</label>
+                        <textarea
+                            value={targetBabText}
+                            onChange={(e) => setTargetBabText(e.target.value)}
+                            rows={3}
+                            placeholder={"Contoh:\nBab 1: Muqaddimah & Thaharah\nBab 2: Wudhu dan Tayammum\nBab 3: Shalat Fardhu dan Sunnah"}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5 font-sans"
+                        />
+                        <p className="mt-1 text-[11px] text-gray-500">Satu baris = satu target bab/fashal. Digunakan untuk memantau capaian materi di Jurnal Mengajar.</p>
+                    </div>
+
+                    <div>
+                        <label className="block mb-1 text-sm font-medium text-gray-700">Nama Modul/Kitab Rujukan</label>
+                        <textarea
+                            value={modulText}
+                            onChange={(e) => setModulText(e.target.value)}
+                            rows={2}
+                            placeholder={"Contoh:\nSafinatun Najah\nFathul Qarib"}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"
+                        />
+                        <p className="mt-1 text-[11px] text-gray-500">Satu baris = satu modul/kitab.</p>
                     </div>
                     <div>
                         <label className="block mb-1 text-sm font-medium text-gray-700">Link Unduh Modul (boleh lebih dari satu)</label>

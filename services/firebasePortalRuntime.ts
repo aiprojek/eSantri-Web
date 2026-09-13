@@ -18,11 +18,32 @@ export const submitPortalPsbRegistration = async ({
     config,
     fields,
 }: SubmitPortalPsbRegistrationInput) => {
+    const pendaftarId = Date.now().toString();
+    const year = new Date().getFullYear();
+    const regNumber = `PSB-${year}-REG-${pendaftarId.slice(-4)}`;
+
     const pendaftarData: Partial<Pendaftar> = {
+        nomorRegistrasi: regNumber,
         ...fields,
         tanggalDaftar: new Date().toISOString(),
+        tanggalMasuk: new Date().toISOString(),
         status: 'Baru',
-        gelombang: config.activeGelombang,
+        jalurPendaftaran: (fields.jalurPendaftaran as string) || 'Reguler',
+        gelombang: config.activeGelombang || 1,
+        berkasFisik: {
+            kk: false,
+            akta: false,
+            ijazahSkl: false,
+            suratSehat: false,
+            pasFoto: false,
+            catatanBerkas: 'Pendaftaran Online via Portal Publik'
+        },
+        nilaiUjian: {
+            rekomendasi: 'Dipertimbangkan',
+            ruangUjian: 'Posko PSB',
+            catatanUjian: 'Pendaftaran online via portal publik (menunggu jadwal seleksi)',
+        },
+        lastModified: Date.now(),
     };
 
     const customData: Record<string, unknown> = {};
@@ -57,7 +78,6 @@ export const submitPortalPsbRegistration = async ({
     await Promise.all(uploadPromises);
 
     pendaftarData.customData = JSON.stringify(customData);
-    const pendaftarId = Date.now().toString();
 
     await setDoc(doc(liteDb, `tenants/${tenantId}/pendaftar`, pendaftarId), {
         ...pendaftarData,

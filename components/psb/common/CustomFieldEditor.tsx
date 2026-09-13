@@ -67,6 +67,21 @@ export const CustomFieldEditor: React.FC<{ fields: PsbCustomField[], onChange: (
                                 className="w-full border rounded p-1.5 text-sm"
                             />
                         </div>
+                        {field.type !== 'section' && field.type !== 'statement' && (
+                            <div>
+                                <label className="block text-xs font-medium text-teal-700 mb-1 flex items-center gap-1">
+                                    <i className="bi bi-info-circle"></i>
+                                    <span>Petunjuk / Hint (Tampil di bawah pertanyaan)</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    value={field.hint || ''} 
+                                    onChange={(e) => updateField(index, { hint: e.target.value })}
+                                    className="w-full border rounded p-1.5 text-sm placeholder-gray-400 bg-white"
+                                    placeholder="Contoh: Format jawaban, petunjuk khusus, atau batas maksimal"
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {(field.type === 'radio' || field.type === 'checkbox') && (

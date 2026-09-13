@@ -199,14 +199,28 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
     ], []);
 
     const availableCardFields = useMemo(() => [
-        { id: 'foto', label: 'Foto Santri (jika tidak dicentang akan pakai placeholder)' }, 
-        { id: 'namaLengkap', label: 'Nama Lengkap' }, 
-        { id: 'nis', label: 'NIS' },
-        { id: 'jenjang', label: 'Jenjang / Kelas' }, 
-        { id: 'rombel', label: 'Rombel' }, 
-        { id: 'ttl', label: 'TTL' },
-        { id: 'alamat', label: 'Alamat' },
-        { id: 'ayahWali', label: 'Orang Tua / Wali' },
+        // Identitas Pokok
+        { id: 'foto', label: 'Foto Santri (otomatis placeholder jika kosong)', category: 'Identitas Pokok' }, 
+        { id: 'namaLengkap', label: 'Nama Lengkap Santri', category: 'Identitas Pokok' }, 
+        { id: 'namaHijrah', label: 'Nama Hijrah / Panggilan', category: 'Identitas Pokok' },
+        { id: 'nis', label: 'NIS (Nomor Induk Santri Pondok)', category: 'Identitas Pokok' },
+        { id: 'nisn', label: 'NISN (Nasional Kemdikbud/Kemenag)', category: 'Identitas Pokok' },
+        { id: 'nik', label: 'NIK Santri (Kependudukan)', category: 'Identitas Pokok' },
+
+        // Akademik & Domisili
+        { id: 'jenjang', label: 'Jenjang Pendidikan (MI / MTs / MA / PDF dll)', category: 'Akademik & Domisili' }, 
+        { id: 'kelas', label: 'Tingkat / Kelas (Kelas VII, 1, X dll)', category: 'Akademik & Domisili' }, 
+        { id: 'rombel', label: 'Rombel / Kelompok Belajar', category: 'Akademik & Domisili' }, 
+        { id: 'asrama', label: 'Gedung Asrama & Kamar Santri', category: 'Akademik & Domisili' },
+        { id: 'jenisSantri', label: 'Status Santri (Mukim / Non-Mukim / Mondok)', category: 'Akademik & Domisili' },
+        { id: 'tahunMasuk', label: 'Tahun Masuk / Angkatan Santri', category: 'Akademik & Domisili' },
+
+        // Data Personal, Medis & Kontak
+        { id: 'ttl', label: 'Tempat & Tanggal Lahir (TTL)', category: 'Personal & Kontak Darurat' },
+        { id: 'golonganDarah', label: 'Golongan Darah (A / B / AB / O)', category: 'Personal & Kontak Darurat' },
+        { id: 'ayahWali', label: 'Nama Orang Tua / Wali', category: 'Personal & Kontak Darurat' },
+        { id: 'teleponWali', label: 'No. HP / Kontak Darurat Ortu', category: 'Personal & Kontak Darurat' },
+        { id: 'alamat', label: 'Alamat Asal Lengkap', category: 'Personal & Kontak Darurat' },
     ], []);
 
     const cardDesigns = useMemo(() => [
@@ -217,42 +231,96 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         { id: 'ceria', label: 'Ceria / TPQ (Landscape)' },
     ], []);
 
+    const [rombelColSearch, setRombelColSearch] = useState('');
+    const [rombelColCategory, setRombelColCategory] = useState<'all' | 'santri' | 'ortu' | 'wali' | 'akademik' | 'alamat' | 'fisik'>('all');
+
     const daftarRombelColumns = useMemo(() => ([
-        { id: 'no', label: 'No' },
-        { id: 'nis', label: 'NIS' },
-        { id: 'nisn', label: 'NISN' },
-        { id: 'nik', label: 'NIK' },
-        { id: 'namaLengkap', label: 'Nama Lengkap' },
-        { id: 'namaHijrah', label: 'Nama Hijrah' },
-        { id: 'lp', label: 'L/P' },
-        { id: 'tempatLahir', label: 'Tempat Lahir' },
-        { id: 'tanggalLahir', label: 'Tanggal Lahir' },
-        { id: 'ttl', label: 'TTL' },
-        { id: 'kewarganegaraan', label: 'Kewarganegaraan' },
-        { id: 'ayah', label: 'Nama Ayah' },
-        { id: 'ibu', label: 'Nama Ibu' },
-        { id: 'wali', label: 'Ayah / Wali / Ibu' },
-        { id: 'telepon', label: 'No. Telepon Utama' },
-        { id: 'teleponAyah', label: 'Telepon Ayah' },
-        { id: 'teleponIbu', label: 'Telepon Ibu' },
-        { id: 'teleponWali', label: 'Telepon Wali' },
-        { id: 'jenjang', label: 'Jenjang' },
-        { id: 'kelas', label: 'Kelas' },
-        { id: 'rombel', label: 'Rombel' },
-        { id: 'status', label: 'Status Santri' },
-        { id: 'jenisSantri', label: 'Jenis Santri' },
-        { id: 'tanggalMasuk', label: 'Tanggal Masuk' },
-        { id: 'alamat', label: 'Alamat Lengkap' },
-        { id: 'desa', label: 'Desa/Kelurahan' },
-        { id: 'kecamatan', label: 'Kecamatan' },
-        { id: 'kabupaten', label: 'Kabupaten/Kota' },
-        { id: 'provinsi', label: 'Provinsi' },
-        { id: 'kodePos', label: 'Kode Pos' },
-        { id: 'sekolahAsal', label: 'Sekolah Asal' },
-        { id: 'anakKe', label: 'Anak Ke-' },
-        { id: 'jumlahSaudara', label: 'Jumlah Saudara' },
-        { id: 'tinggiBadan', label: 'Tinggi Badan' },
-        { id: 'beratBadan', label: 'Berat Badan' },
+        // --- Data Pokok & Kependudukan Santri ---
+        { id: 'no', label: 'No', category: 'santri' },
+        { id: 'nis', label: 'NIS', category: 'santri' },
+        { id: 'nisn', label: 'NISN', category: 'santri' },
+        { id: 'nik', label: 'NIK Santri', category: 'santri' },
+        { id: 'namaLengkap', label: 'Nama Lengkap', category: 'santri' },
+        { id: 'namaHijrah', label: 'Nama Hijrah / Panggilan', category: 'santri' },
+        { id: 'lp', label: 'L/P', category: 'santri' },
+        { id: 'tempatLahir', label: 'Tempat Lahir', category: 'santri' },
+        { id: 'tanggalLahir', label: 'Tanggal Lahir', category: 'santri' },
+        { id: 'ttl', label: 'TTL (Tempat, Tgl Lahir)', category: 'santri' },
+        { id: 'kewarganegaraan', label: 'Kewarganegaraan', category: 'santri' },
+        { id: 'statusKeluarga', label: 'Status dalam Keluarga', category: 'santri' },
+        { id: 'anakKe', label: 'Anak Ke-', category: 'santri' },
+        { id: 'jumlahSaudara', label: 'Jumlah Saudara', category: 'santri' },
+
+        // --- Akademik, Keasramaan & Tahfizh ---
+        { id: 'jenjang', label: 'Jenjang', category: 'akademik' },
+        { id: 'kelas', label: 'Kelas', category: 'akademik' },
+        { id: 'rombel', label: 'Rombel', category: 'akademik' },
+        { id: 'status', label: 'Status Santri', category: 'akademik' },
+        { id: 'tanggalStatus', label: 'Tanggal Status/Mutasi', category: 'akademik' },
+        { id: 'jenisSantri', label: 'Jenis Santri (Mondok/Laju)', category: 'akademik' },
+        { id: 'tanggalMasuk', label: 'Tanggal Masuk', category: 'akademik' },
+        { id: 'kamar', label: 'Kamar Asrama', category: 'akademik' },
+        { id: 'gedungAsrama', label: 'Gedung Asrama', category: 'akademik' },
+        { id: 'halaqah', label: 'Kelompok Halaqah Tahfizh', category: 'akademik' },
+        { id: 'targetJuz', label: 'Target Hafalan (Juz)', category: 'akademik' },
+
+        // --- Alamat Santri & Sekolah Asal ---
+        { id: 'alamat', label: 'Alamat Lengkap Santri', category: 'alamat' },
+        { id: 'jalan', label: 'Jalan / RT / RW', category: 'alamat' },
+        { id: 'desa', label: 'Desa / Kelurahan', category: 'alamat' },
+        { id: 'kecamatan', label: 'Kecamatan', category: 'alamat' },
+        { id: 'kabupaten', label: 'Kabupaten / Kota', category: 'alamat' },
+        { id: 'provinsi', label: 'Provinsi', category: 'alamat' },
+        { id: 'kodePos', label: 'Kode Pos', category: 'alamat' },
+        { id: 'sekolahAsal', label: 'Sekolah Asal', category: 'alamat' },
+        { id: 'alamatSekolahAsal', label: 'Alamat Sekolah Asal', category: 'alamat' },
+
+        // --- Data Orang Tua (Ayah & Ibu) ---
+        { id: 'ayah', label: 'Nama Ayah Kandung', category: 'ortu' },
+        { id: 'statusAyah', label: 'Status Ayah (Hidup/Wafat/Cerai)', category: 'ortu' },
+        { id: 'nikAyah', label: 'NIK Ayah', category: 'ortu' },
+        { id: 'ttlAyah', label: 'TTL Ayah', category: 'ortu' },
+        { id: 'tempatLahirAyah', label: 'Tempat Lahir Ayah', category: 'ortu' },
+        { id: 'tanggalLahirAyah', label: 'Tanggal Lahir Ayah', category: 'ortu' },
+        { id: 'pendidikanAyah', label: 'Pendidikan Ayah', category: 'ortu' },
+        { id: 'pekerjaanAyah', label: 'Pekerjaan Ayah', category: 'ortu' },
+        { id: 'penghasilanAyah', label: 'Penghasilan Ayah', category: 'ortu' },
+        { id: 'teleponAyah', label: 'No. Telepon/HP Ayah', category: 'ortu' },
+        { id: 'alamatAyah', label: 'Alamat Ayah', category: 'ortu' },
+
+        { id: 'ibu', label: 'Nama Ibu Kandung', category: 'ortu' },
+        { id: 'statusIbu', label: 'Status Ibu (Hidup/Wafat/Cerai)', category: 'ortu' },
+        { id: 'nikIbu', label: 'NIK Ibu', category: 'ortu' },
+        { id: 'ttlIbu', label: 'TTL Ibu', category: 'ortu' },
+        { id: 'tempatLahirIbu', label: 'Tempat Lahir Ibu', category: 'ortu' },
+        { id: 'tanggalLahirIbu', label: 'Tanggal Lahir Ibu', category: 'ortu' },
+        { id: 'pendidikanIbu', label: 'Pendidikan Ibu', category: 'ortu' },
+        { id: 'pekerjaanIbu', label: 'Pekerjaan Ibu', category: 'ortu' },
+        { id: 'penghasilanIbu', label: 'Penghasilan Ibu', category: 'ortu' },
+        { id: 'teleponIbu', label: 'No. Telepon/HP Ibu', category: 'ortu' },
+        { id: 'alamatIbu', label: 'Alamat Ibu', category: 'ortu' },
+
+        // --- Data Wali ---
+        { id: 'wali', label: 'Nama Wali', category: 'wali' },
+        { id: 'statusWali', label: 'Hubungan Wali', category: 'wali' },
+        { id: 'statusHidupWali', label: 'Status Hidup Wali', category: 'wali' },
+        { id: 'ttlWali', label: 'TTL Wali', category: 'wali' },
+        { id: 'tempatLahirWali', label: 'Tempat Lahir Wali', category: 'wali' },
+        { id: 'tanggalLahirWali', label: 'Tanggal Lahir Wali', category: 'wali' },
+        { id: 'pendidikanWali', label: 'Pendidikan Wali', category: 'wali' },
+        { id: 'pekerjaanWali', label: 'Pekerjaan Wali', category: 'wali' },
+        { id: 'penghasilanWali', label: 'Penghasilan Wali', category: 'wali' },
+        { id: 'teleponWali', label: 'No. Telepon/HP Wali', category: 'wali' },
+        { id: 'alamatWali', label: 'Alamat Wali', category: 'wali' },
+        { id: 'telepon', label: 'No. Telepon Utama (Gabungan)', category: 'wali' },
+
+        // --- Data Fisik & Kesehatan ---
+        { id: 'tinggiBadan', label: 'Tinggi Badan (cm)', category: 'fisik' },
+        { id: 'beratBadan', label: 'Berat Badan (kg)', category: 'fisik' },
+        { id: 'jarakKePondok', label: 'Jarak ke Pondok', category: 'fisik' },
+        { id: 'berkebutuhanKhusus', label: 'Kebutuhan Khusus (ABK)', category: 'fisik' },
+        { id: 'riwayatPenyakit', label: 'Riwayat Penyakit', category: 'fisik' },
+        { id: 'hobi', label: 'Hobi', category: 'fisik' },
     ]), []);
 
     const handleRombelColumnToggle = (columnId: string) => {
@@ -286,6 +354,20 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         );
     };
 
+    const handleApplyCardPreset = (preset: 'standar' | 'lengkap' | 'minimal' | 'semua' | 'reset') => {
+        if (preset === 'standar') {
+            options.setCardFields(['foto', 'namaLengkap', 'nis', 'jenjang', 'kelas', 'rombel']);
+        } else if (preset === 'lengkap') {
+            options.setCardFields(['foto', 'namaLengkap', 'nis', 'nisn', 'jenjang', 'kelas', 'rombel', 'asrama', 'ttl', 'golonganDarah', 'ayahWali', 'teleponWali', 'alamat']);
+        } else if (preset === 'minimal') {
+            options.setCardFields(['foto', 'namaLengkap', 'nis', 'kelas', 'rombel']);
+        } else if (preset === 'semua') {
+            options.setCardFields(availableCardFields.map(f => f.id));
+        } else if (preset === 'reset') {
+            options.setCardFields(['foto', 'namaLengkap', 'nis', 'jenjang', 'kelas', 'rombel', 'ttl', 'alamat', 'ayahWali']);
+        }
+    };
+
     const handleCardDesignChange = (designId: string) => {
         options.setCardDesign(designId);
         // Automatically switch width/height based on design orientation
@@ -298,11 +380,19 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
         }
     };
 
-    const AcademicYearSelect = ({ id }: { id?: string }) => (
+    const AcademicYearSelect = ({
+        id,
+        value,
+        onChange,
+    }: {
+        id?: string;
+        value?: string;
+        onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+    }) => (
         <select
             id={id}
-            value={options.tahunAjaran}
-            onChange={e => options.setTahunAjaran(e.target.value)}
+            value={value !== undefined ? value : options.tahunAjaran}
+            onChange={onChange || (e => options.setTahunAjaran(e.target.value))}
             className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
         >
             {availableAcademicYears.map((year) => (
@@ -532,25 +622,81 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                     </div>
 
                     <div>
-                        <label className="block mb-2 text-sm font-medium text-gray-700">Data yang Ditampilkan</label>
-                        <div className="grid grid-cols-1 gap-2 border bg-white p-3 rounded-md">
-                            {availableCardFields.map(field => (
-                                <div key={field.id} className="flex items-center">
-                                    <input 
-                                        id={`card-field-${field.id}`} 
-                                        type="checkbox" 
-                                        checked={options.cardFields.includes(field.id)} 
-                                        onChange={() => handleCardFieldChange(field.id)} 
-                                        className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" 
-                                    />
-                                    <label htmlFor={`card-field-${field.id}`} className="ml-2 text-sm text-gray-700">
-                                        {field.label}
-                                    </label>
-                                </div>
-                            ))}
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                            <label className="block text-sm font-medium text-gray-700">Data Strategis pada Kartu</label>
+                            <div className="flex flex-wrap items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => handleApplyCardPreset('standar')}
+                                    className="px-2 py-0.5 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium transition-colors"
+                                    title="Nama, NIS, Jenjang, Kelas, Rombel"
+                                >
+                                    Standar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleApplyCardPreset('lengkap')}
+                                    className="px-2 py-0.5 text-[11px] bg-teal-100 hover:bg-teal-200 text-teal-800 rounded font-medium transition-colors"
+                                    title="Lengkap: Asrama, Darah, Kontak Ortu, NISN, dll"
+                                >
+                                    Lengkap
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleApplyCardPreset('semua')}
+                                    className="px-2 py-0.5 text-[11px] bg-blue-50 hover:bg-blue-100 text-blue-700 rounded font-medium transition-colors"
+                                >
+                                    Pilih Semua
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleApplyCardPreset('reset')}
+                                    className="px-2 py-0.5 text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-600 rounded font-medium transition-colors"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="border bg-white rounded-lg p-3 space-y-3 max-h-[340px] overflow-y-auto">
+                            {['Identitas Pokok', 'Akademik & Domisili', 'Personal & Kontak Darurat'].map(category => {
+                                const fieldsInCategory = availableCardFields.filter(f => f.category === category);
+                                return (
+                                    <div key={category} className="space-y-1.5">
+                                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded flex items-center justify-between">
+                                            <span>{category}</span>
+                                            <span className="text-[10px] font-normal text-slate-400">
+                                                {fieldsInCategory.filter(f => options.cardFields.includes(f.id)).length}/{fieldsInCategory.length} aktif
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-1">
+                                            {fieldsInCategory.map(field => {
+                                                const isChecked = options.cardFields.includes(field.id);
+                                                return (
+                                                    <label 
+                                                        key={field.id} 
+                                                        className={`flex items-center gap-2 p-1.5 rounded cursor-pointer transition-colors text-xs ${
+                                                            isChecked ? 'bg-teal-50/60 text-teal-900 font-medium' : 'hover:bg-slate-50 text-slate-700'
+                                                        }`}
+                                                    >
+                                                        <input 
+                                                            id={`card-field-${field.id}`} 
+                                                            type="checkbox" 
+                                                            checked={isChecked} 
+                                                            onChange={() => handleCardFieldChange(field.id)} 
+                                                            className="w-3.5 h-3.5 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 shrink-0" 
+                                                        />
+                                                        <span className="leading-tight">{field.label}</span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                         <p className="text-xs text-gray-500 mt-1 italic">
-                            Catatan: Opsi "Foto Santri" jika tidak dicentang akan menampilkan placeholder (gambar kartun).
+                            Tip: Opsi Jenjang dan Tingkat/Kelas dapat dicentang terpisah atau bersamaan. Font akan beradaptasi cerdas agar muat rapi di kartu.
                         </p>
                     </div>
 
@@ -765,6 +911,74 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                                             <option value="#d97706">Emas / Kuning (#d97706)</option>
                                         </select>
                                     </div>
+                                </div>
+
+                                {/* Quotes Customization Box */}
+                                <div className="pt-2 border-t border-gray-200 bg-amber-50/60 p-2.5 rounded-lg border border-amber-200/70">
+                                    <div className="flex items-center justify-between">
+                                        <label className="flex items-center gap-1.5 text-xs font-semibold text-amber-950 cursor-pointer">
+                                            <i className="bi bi-chat-quote-fill text-amber-600"></i>
+                                            Kutipan / Kata Mutiara Muka Belakang
+                                        </label>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={options.cardShowQuote ?? true} 
+                                                onChange={e => options.setCardShowQuote(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+                                        </label>
+                                    </div>
+
+                                    {(options.cardShowQuote ?? true) && (
+                                        <div className="mt-2 space-y-2 pt-2 border-t border-amber-200/50">
+                                            <div>
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <label className="text-[11px] font-medium text-amber-900">Preset Hadits & Mahfudzot</label>
+                                                    {options.cardCustomQuote && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => options.setCardCustomQuote('')}
+                                                            className="text-[10px] text-amber-700 hover:text-amber-900 underline flex items-center gap-0.5"
+                                                        >
+                                                            <i className="bi bi-arrow-counterclockwise"></i> Reset ke Default Desain
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <select
+                                                    value={options.cardCustomQuote || ''}
+                                                    onChange={e => options.setCardCustomQuote(e.target.value)}
+                                                    className="w-full bg-white border border-amber-300 text-gray-800 text-xs rounded-md p-1.5 focus:ring-1 focus:ring-amber-500"
+                                                >
+                                                    <option value="">-- Sesuai Bawaan Tema Kartu yang Aktif --</option>
+                                                    <option value="Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain.">Hadits: Sebaik-baik manusia adalah yang paling bermanfaat bagi sesama</option>
+                                                    <option value="Menuntut ilmu adalah kewajiban bagi setiap muslim.">Hadits: Menuntut ilmu adalah kewajiban setiap muslim</option>
+                                                    <option value="Man jadda wajada (Barangsiapa bersungguh-sungguh, dia akan berhasil).">Mahfudzot: Man jadda wajada (Siapa bersungguh-sungguh pasti berhasil)</option>
+                                                    <option value="Adab dan akhlak mulia mendahului ketinggian ilmu.">Adab & Ilmu: Adab dan akhlak mulia mendahului ketinggian ilmu</option>
+                                                    <option value="Disiplin dan adab adalah kunci keberkahan ilmu.">Karakter: Disiplin dan adab adalah kunci keberkahan ilmu</option>
+                                                    <option value="Rajin mengaji, santun berbudi, berbakti pada orang tua & guru.">TPQ/Santri Cilik: Rajin mengaji, santun berbudi, berbakti pada ortu & guru</option>
+                                                    <option value="Al-Waqtu kassaif, in lam taqtha'hu qatha'aka (Waktu laksana pedang).">Mahfudzot: Waktu laksana pedang</option>
+                                                    <option value="Man shobaro zhofiro (Barangsiapa yang bersabar, dia akan beruntung).">Mahfudzot: Siapa bersabar pasti beruntung</option>
+                                                    <option value="Tholabul 'ilmi minal mahdi ilal lahdi (Menuntut ilmu dari buaian hingga liang lahad).">Mahfudzot: Belajar dari buaian hingga liang lahad</option>
+                                                </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[11px] font-medium text-amber-900 mb-0.5">Teks Kutipan / Kata Mutiara Kustom</label>
+                                                <input
+                                                    type="text"
+                                                    value={options.cardCustomQuote || ''}
+                                                    onChange={e => options.setCardCustomQuote(e.target.value)}
+                                                    placeholder="Tulis kata mutiara, motto santri, hadits, atau slogan pondok..."
+                                                    className="w-full bg-white border border-amber-300 text-gray-900 text-xs rounded-md p-2 focus:ring-1 focus:ring-amber-500"
+                                                />
+                                                <p className="text-[10px] text-amber-800/80 mt-0.5">
+                                                    *Kosongkan untuk otomatis menggunakan kata mutiara default sesuai desain kartu. Nonaktifkan toggle di atas jika ingin kartu tanpa quotes.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="space-y-3 pt-2 border-t border-gray-200">
@@ -1097,47 +1311,132 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                             <button
                                 type="button"
                                 onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'lp', 'ttl', 'wali', 'telepon', 'alamat'])}
-                                className="text-[11px] px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 font-medium"
+                                className="text-[11px] px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded hover:bg-teal-100 font-medium transition-colors"
                             >
                                 Standar (Data Pokok)
                             </button>
                             <button
                                 type="button"
                                 onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'nisn', 'nik', 'namaLengkap', 'lp', 'ttl', 'jenjang', 'kelas', 'rombel', 'jenisSantri', 'status', 'wali', 'telepon', 'alamat'])}
-                                className="text-[11px] px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 font-medium"
+                                className="text-[11px] px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 font-medium transition-colors"
                             >
                                 Lengkap (Akademik & Domisili)
                             </button>
                             <button
                                 type="button"
-                                onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'ayah', 'ibu', 'wali', 'teleponAyah', 'teleponIbu', 'teleponWali', 'alamat'])}
-                                className="text-[11px] px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100 font-medium"
+                                onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'ayah', 'nikAyah', 'ttlAyah', 'pekerjaanAyah', 'teleponAyah', 'ibu', 'nikIbu', 'ttlIbu', 'pekerjaanIbu', 'teleponIbu', 'alamat'])}
+                                className="text-[11px] px-2 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 font-medium transition-colors"
                             >
-                                Kontak Wali
+                                Data Orang Tua Lengkap
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'wali', 'statusWali', 'ttlWali', 'pekerjaanWali', 'teleponWali', 'alamatWali', 'telepon'])}
+                                className="text-[11px] px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100 font-medium transition-colors"
+                            >
+                                Kontak & Wali
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'namaLengkap', 'rombel', 'jenisSantri', 'gedungAsrama', 'kamar', 'halaqah', 'targetJuz', 'telepon'])}
+                                className="text-[11px] px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 font-medium transition-colors"
+                            >
+                                Asrama & Tahfizh
                             </button>
                             <button
                                 type="button"
                                 onClick={() => options.setRombelVisibleColumns(daftarRombelColumns.map(c => c.id))}
-                                className="text-[11px] px-2 py-1 bg-gray-100 text-gray-700 border border-gray-200 rounded hover:bg-gray-200"
+                                className="text-[11px] px-2 py-1 bg-gray-100 text-gray-700 border border-gray-200 rounded hover:bg-gray-200 font-medium transition-colors"
                             >
-                                Pilih Semua
+                                Pilih Semua ({daftarRombelColumns.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => options.setRombelVisibleColumns(['no', 'nis', 'namaLengkap'])}
+                                className="text-[11px] px-2 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded hover:bg-rose-100 font-medium transition-colors"
+                            >
+                                Minimal
                             </button>
                         </div>
 
-                        <div className="max-h-56 overflow-y-auto border bg-white p-2.5 rounded-lg space-y-1 divide-y divide-gray-100">
-                            {daftarRombelColumns.map((col) => (
-                                <label key={col.id} className="flex items-center p-1.5 text-xs text-gray-700 hover:bg-teal-50 rounded cursor-pointer transition-colors">
-                                    <input
-                                        type="checkbox"
-                                        checked={options.rombelVisibleColumns.includes(col.id)}
-                                        onChange={() => handleRombelColumnToggle(col.id)}
-                                        className="mr-2 h-4 w-4 text-teal-600 rounded"
-                                    />
-                                    <span className={options.rombelVisibleColumns.includes(col.id) ? "font-medium text-teal-900" : "text-gray-600"}>
-                                        {col.label}
-                                    </span>
-                                </label>
-                            ))}
+                        {/* Search & Category Filter */}
+                        <div className="space-y-2 mb-2">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={rombelColSearch}
+                                    onChange={e => setRombelColSearch(e.target.value)}
+                                    placeholder="Cari kolom (misal: NIK, Ayah, TTL, Kamar)..."
+                                    className="flex-1 text-xs border border-gray-300 rounded px-2.5 py-1.5 focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                                />
+                                {rombelColSearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setRombelColSearch('')}
+                                        className="text-xs text-gray-400 hover:text-gray-600 px-2"
+                                    >
+                                        Bersihkan
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 text-[10px]">
+                                {[
+                                    { id: 'all', label: 'Semua' },
+                                    { id: 'santri', label: 'Santri' },
+                                    { id: 'ortu', label: 'Orang Tua' },
+                                    { id: 'wali', label: 'Wali' },
+                                    { id: 'akademik', label: 'Akademik/Asrama' },
+                                    { id: 'alamat', label: 'Alamat' },
+                                    { id: 'fisik', label: 'Fisik/ABK' },
+                                ].map(cat => (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        onClick={() => setRombelColCategory(cat.id as any)}
+                                        className={`px-2 py-0.5 rounded-full border transition-colors ${
+                                            rombelColCategory === cat.id
+                                                ? 'bg-teal-600 text-white border-teal-600 font-medium'
+                                                : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        {cat.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="max-h-60 overflow-y-auto border bg-white p-2.5 rounded-lg space-y-1 divide-y divide-gray-100">
+                            {daftarRombelColumns
+                                .filter(col => {
+                                    if (rombelColCategory !== 'all' && col.category !== rombelColCategory) return false;
+                                    if (rombelColSearch.trim()) {
+                                        const query = rombelColSearch.toLowerCase();
+                                        return col.label.toLowerCase().includes(query) || col.id.toLowerCase().includes(query);
+                                    }
+                                    return true;
+                                })
+                                .map((col) => {
+                                    const isChecked = options.rombelVisibleColumns.includes(col.id);
+                                    return (
+                                        <label key={col.id} className="flex items-center justify-between p-1.5 text-xs text-gray-700 hover:bg-teal-50 rounded cursor-pointer transition-colors">
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={() => handleRombelColumnToggle(col.id)}
+                                                    className="h-4 w-4 text-teal-600 rounded"
+                                                />
+                                                <span className={isChecked ? "font-medium text-teal-900" : "text-gray-600"}>
+                                                    {col.label}
+                                                </span>
+                                            </div>
+                                            <span className="text-[10px] text-gray-400 uppercase font-mono tracking-wider">
+                                                {col.category}
+                                            </span>
+                                        </label>
+                                    );
+                                })}
                         </div>
                     </div>
 
@@ -1326,6 +1625,129 @@ export const ReportOptions: React.FC<ReportOptionsProps> = ({ config, filteredSa
                             *Pastikan data nilai sudah diimpor di menu Akademik untuk periode yang dipilih.
                         </p>
                     )}
+                </div>
+            );
+        case ReportType.BukuIndukSantri:
+            return (
+                <div className="pt-4 border-t space-y-4">
+                    <div className="p-3.5 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-start gap-3">
+                        <i className="bi bi-info-circle-fill text-indigo-600 text-lg mt-0.5"></i>
+                        <div className="text-xs text-indigo-900 leading-relaxed">
+                            <strong className="block font-semibold mb-0.5">Lembar Buku Induk Santri Resmi (2 Halaman per Santri):</strong>
+                            Dokumen arsip permanen kesiswaan standar EMIS 4.0 / Ditpdpontren Kemenag. Terdiri dari Lembar A (Biodata Siswa & Riwayat Pendidikan Sebelumnya) dan Lembar B (Riwayat Lengkap Orang Tua, Wali, serta Riwayat Mutasi/Kelulusan).
+                        </div>
+                    </div>
+
+                    <SantriSelector
+                        title="Pilih Santri Buku Induk"
+                        printMode={options.bukuIndukPrintMode}
+                        setPrintMode={options.setBukuIndukPrintMode}
+                        selectedIds={options.selectedBukuIndukSantriIds}
+                        setSelectedIds={options.setSelectedBukuIndukSantriIds}
+                        radioGroupName="bukuInduk"
+                        filteredSantri={filteredSantri}
+                    />
+
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-4">
+                        <h4 className="text-sm font-semibold text-gray-800">Opsi Pengesahan Lembar Induk</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Jabatan Pengesah</label>
+                                <input
+                                    type="text"
+                                    value={options.bukuIndukSignatoryTitle}
+                                    onChange={e => options.setBukuIndukSignatoryTitle(e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                    placeholder="Contoh: Kepala Madrasah / Staf Tata Usaha"
+                                />
+                            </div>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Nama Pengesah</label>
+                                <select
+                                    value={options.bukuIndukSignatoryId}
+                                    onChange={e => options.setBukuIndukSignatoryId(e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                >
+                                    <option value="">-- Pilih Penanda Tangan --</option>
+                                    {settings.tenagaPengajar.map(p => (
+                                        <option key={p.id} value={p.id.toString()}>{p.nama} {p.nip ? `(${p.nip})` : ''}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        case ReportType.MatriksTunggakanSPP:
+            return (
+                <div className="pt-4 border-t space-y-4">
+                    <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-start gap-3">
+                        <i className="bi bi-grid-3x3-gap-fill text-emerald-700 text-lg mt-0.5"></i>
+                        <div className="text-xs text-emerald-950 leading-relaxed">
+                            <strong className="block font-semibold mb-0.5">Matriks 12 Bulan Pembayaran SPP Rombel:</strong>
+                            Menampilkan grid status pembayaran 12 bulan (Juli s.d. Juni) santri per rombel secara horizontal (Landscape), total tagihan, nominal terbayar, sisa tunggakan, dan persentase ketercapaian pembayaran.
+                        </div>
+                    </div>
+
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-4">
+                        <h4 className="text-sm font-semibold text-gray-800">1. Filter Periode Pembayaran</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Tahun Ajaran</label>
+                                <AcademicYearSelect
+                                    value={options.matriksTahunAjaran || options.tahunAjaran}
+                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                                        if (options.setMatriksTahunAjaran) options.setMatriksTahunAjaran(e.target.value);
+                                        options.setTahunAjaran(e.target.value);
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        <h4 className="text-sm font-semibold text-gray-800 pt-3 border-t">2. Tanda Tangan Pengesahan</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="block text-xs font-semibold text-gray-600">Pihak 1 (Wali Kelas / Asatidz)</label>
+                                <input
+                                    type="text"
+                                    value={options.matriksSignatory1Title}
+                                    onChange={e => options.setMatriksSignatory1Title(e.target.value)}
+                                    placeholder="Wali Kelas"
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                />
+                                <select
+                                    value={options.matriksSignatory1Id}
+                                    onChange={e => options.setMatriksSignatory1Id(e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                >
+                                    <option value="">-- Pilih Wali Kelas / Asatidz --</option>
+                                    {settings.tenagaPengajar.map(p => (
+                                        <option key={p.id} value={p.id.toString()}>{p.nama}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="block text-xs font-semibold text-gray-600">Pihak 2 (Bendahara / Mudir)</label>
+                                <input
+                                    type="text"
+                                    value={options.matriksSignatory2Title}
+                                    onChange={e => options.setMatriksSignatory2Title(e.target.value)}
+                                    placeholder="Bendahara Pesantren"
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                />
+                                <select
+                                    value={options.matriksSignatory2Id}
+                                    onChange={e => options.setMatriksSignatory2Id(e.target.value)}
+                                    className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"
+                                >
+                                    <option value="">-- Pilih Bendahara / Mudir --</option>
+                                    {settings.tenagaPengajar.map(p => (
+                                        <option key={p.id} value={p.id.toString()}>{p.nama}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             );
         default:

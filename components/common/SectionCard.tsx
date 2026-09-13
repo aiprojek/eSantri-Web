@@ -20,7 +20,7 @@ export const SectionCard: React.FC<SectionCardProps> = ({
     return (
         <section className={`app-panel overflow-hidden rounded-panel ${className}`}>
             {(title || description || actions) && (
-                <div className="border-b border-app-border px-5 py-4 sm:px-6">
+                <div className="shrink-0 border-b border-app-border px-5 py-4 sm:px-6">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                             {title && <h2 className="text-lg font-black tracking-tight text-app-text">{title}</h2>}

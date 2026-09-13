@@ -57,7 +57,7 @@ export const useReportConfig = (
     const [cardTheme, setCardTheme] = useState<string>(predefinedCardThemes['Biru']);
     const [cardValidityMode, setCardValidityMode] = useState<'date' | 'forever' | 'none'>('date');
     const [cardValidUntil, setCardValidUntil] = useState<string>('2028-07-31');
-    const [cardFields, setCardFields] = useState<string[]>(['foto', 'namaLengkap', 'nis', 'jenjang', 'rombel', 'ttl', 'alamat', 'ayahWali']);
+    const [cardFields, setCardFields] = useState<string[]>(['foto', 'namaLengkap', 'nis', 'jenjang', 'kelas', 'rombel', 'ttl', 'alamat', 'ayahWali']);
     const [cardWidth, setCardWidth] = useState<number>(8.56);
     const [cardHeight, setCardHeight] = useState<number>(5.398);
     const [cardBacksideLayout, setCardBacksideLayout] = useState<'none' | 'side-by-side' | 'separate'>('side-by-side');
@@ -70,6 +70,8 @@ export const useReportConfig = (
     const [cardQRPlacement, setCardQRPlacement] = useState<'replace_photo' | 'with_photo'>('with_photo');
     const [cardRulesFontSize, setCardRulesFontSize] = useState<'auto' | 'small' | 'normal' | 'large'>('auto');
     const [cardRulesCustomColor, setCardRulesCustomColor] = useState<string>('');
+    const [cardShowQuote, setCardShowQuote] = useState<boolean>(true);
+    const [cardCustomQuote, setCardCustomQuote] = useState<string>('');
     
     const defaultCardRules = `Kartu ini adalah tanda pengenal resmi santri {NamaPonpes}.
 Santri wajib membawa kartu ini selama berada di lingkungan pesantren atau saat mengikuti kegiatan resmi.
@@ -128,6 +130,62 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
     const [tahfizhEndDate, setTahfizhEndDate] = useState<string>(mutasiEndDate);
     const [tahfizhTipeFilter, setTahfizhTipeFilter] = useState<string[]>(['Ziyadah', 'Murojaah', "Tasmi'", 'Ujian Hafalan']);
 
+    // Watermark Settings (Universal for printed documents/reports)
+    const [showWatermark, setShowWatermark] = useState<boolean>(false);
+    const [watermarkText, setWatermarkText] = useState<string>('ASLI');
+    const [watermarkOpacity, setWatermarkOpacity] = useState<number>(0.12);
+    const [watermarkColor, setWatermarkColor] = useState<string>('#4b5563');
+    const [watermarkFontSize, setWatermarkFontSize] = useState<number>(44);
+
+    // --- 1. Surat Keterangan Santri Aktif ---
+    const [suratAktifPrintMode, setSuratAktifPrintMode] = useState<'all' | 'selected'>('all');
+    const [selectedSuratAktifSantriIds, setSelectedSuratAktifSantriIds] = useState<number[]>([]);
+    const [suratAktifNoSurat, setSuratAktifNoSurat] = useState<string>('');
+    const [suratAktifKeperluan, setSuratAktifKeperluan] = useState<string>('Pengajuan Tunjangan Gaji Orang Tua (PNS/TNI/POLRI/BUMN)');
+    const [suratAktifSignatoryTitle, setSuratAktifSignatoryTitle] = useState<string>('Kepala Madrasah / Mudir');
+    const [suratAktifSignatoryId, setSuratAktifSignatoryId] = useState<string>('');
+    const [suratAktifTanggal, setSuratAktifTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
+
+    // --- 2. Surat Keterangan Berkelakuan Baik ---
+    const [suratBaikPrintMode, setSuratBaikPrintMode] = useState<'all' | 'selected'>('all');
+    const [selectedSuratBaikSantriIds, setSelectedSuratBaikSantriIds] = useState<number[]>([]);
+    const [suratBaikNoSurat, setSuratBaikNoSurat] = useState<string>('');
+    const [suratBaikKeperluan, setSuratBaikKeperluan] = useState<string>('Kelengkapan Pendaftaran Masuk Perguruan Tinggi / Beasiswa');
+    const [suratBaikSignatoryTitle, setSuratBaikSignatoryTitle] = useState<string>('Kepala Bagian Pengasuhan / Mudir');
+    const [suratBaikSignatoryId, setSuratBaikSignatoryId] = useState<string>('');
+    const [suratBaikTanggal, setSuratBaikTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
+
+    // --- 3. Buku Induk Santri ---
+    const [bukuIndukPrintMode, setBukuIndukPrintMode] = useState<'all' | 'selected'>('all');
+    const [selectedBukuIndukSantriIds, setSelectedBukuIndukSantriIds] = useState<number[]>([]);
+    const [bukuIndukSignatoryTitle, setBukuIndukSignatoryTitle] = useState<string>('Kepala Madrasah / Staf Tata Usaha');
+    const [bukuIndukSignatoryId, setBukuIndukSignatoryId] = useState<string>('');
+
+    // --- 4. Matriks Tunggakan SPP Rombel ---
+    const [matriksTahunAjaran, setMatriksTahunAjaran] = useState<string>(defaultAcademicYear);
+    const [matriksSignatory1Title, setMatriksSignatory1Title] = useState<string>('Wali Kelas');
+    const [matriksSignatory1Id, setMatriksSignatory1Id] = useState<string>('');
+    const [matriksSignatory2Title, setMatriksSignatory2Title] = useState<string>('Bendahara Pesantren');
+    const [matriksSignatory2Id, setMatriksSignatory2Id] = useState<string>('');
+
+    // --- 5. Syahadah Tahfizh ---
+    const [syahadahPrintMode, setSyahadahPrintMode] = useState<'all' | 'selected'>('all');
+    const [selectedSyahadahSantriIds, setSelectedSyahadahSantriIds] = useState<number[]>([]);
+    const [syahadahTheme, setSyahadahTheme] = useState<'emerald' | 'gold' | 'royal_blue' | 'monochrome' | 'classic' | 'modern' | 'vertical' | 'dark' | 'ceria'>('emerald');
+    const [syahadahJenis, setSyahadahJenis] = useState<string>("30 Juz (Khatam Bil-Ghaib)");
+    const [syahadahPredikat, setSyahadahPredikat] = useState<string>("Mumtaz (Sangat Baik Sekali)");
+    const [syahadahNomor, setSyahadahNomor] = useState<string>('');
+    const [syahadahTanggal, setSyahadahTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [syahadahFormatMode, setSyahadahFormatMode] = useState<'masehi' | 'hijriah_masehi' | 'hijriah'>('masehi');
+    const [syahadahManualHijri, setSyahadahManualHijri] = useState<string>("15 Sya'ban 1446 H");
+    const [syahadahMuhaffizhName, setSyahadahMuhaffizhName] = useState<string>('');
+    const [syahadahLabelTop, setSyahadahLabelTop] = useState<string>('Mengetahui,');
+    const [syahadahRoleBottom, setSyahadahRoleBottom] = useState<string>('Musyrif / Penguji Tahfizh');
+    const [syahadahSignatory1Title, setSyahadahSignatory1Title] = useState<string>('Musyrif / Penguji Tahfizh');
+    const [syahadahSignatory1Id, setSyahadahSignatory1Id] = useState<string>('');
+    const [syahadahSignatory2Title, setSyahadahSignatory2Title] = useState<string>('Pengasuh Pondok Pesantren');
+    const [syahadahSignatory2Id, setSyahadahSignatory2Id] = useState<string>('');
+    const [syahadahRasm, setSyahadahRasm] = useState<string>("Riwayat Hafsh 'an 'Ashim Thariq Asy-Syathibiyyah");
 
     const isFinancialReport = activeReport === ReportType.LaporanArusKas || activeReport === ReportType.RekeningKoranSantri;
 
@@ -229,6 +287,10 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
                 return izinPrintMode === 'all' || (izinPrintMode === 'selected' && selectedIzinSantriIds.length > 0);
             case ReportType.RekeningKoranSantri:
                  return rekeningKoranPrintMode === 'all' || (rekeningKoranPrintMode === 'selected' && selectedRekeningKoranSantriIds.length > 0);
+            case ReportType.BukuIndukSantri:
+                return bukuIndukPrintMode === 'all' || (bukuIndukPrintMode === 'selected' && selectedBukuIndukSantriIds.length > 0);
+            case ReportType.MatriksTunggakanSPP:
+                return true;
             case ReportType.LaporanArusKas:
                 return true;
             case ReportType.LaporanAsrama:
@@ -238,7 +300,7 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             default:
                 return true;
         }
-    }, [activeReport, santriList.length, filteredSantri.length, biodataPrintMode, selectedBiodataSantriIds, pembinaanPrintMode, selectedPembinaanSantriIds, cardPrintMode, selectedCardSantriIds, labelPrintMode, selectedMapelIds, izinPrintMode, selectedIzinSantriIds, rekeningKoranPrintMode, selectedRekeningKoranSantriIds, isFinancialReport]);
+    }, [activeReport, santriList.length, filteredSantri.length, biodataPrintMode, selectedBiodataSantriIds, pembinaanPrintMode, selectedPembinaanSantriIds, cardPrintMode, selectedCardSantriIds, labelPrintMode, selectedMapelIds, izinPrintMode, selectedIzinSantriIds, rekeningKoranPrintMode, selectedRekeningKoranSantriIds, bukuIndukPrintMode, selectedBukuIndukSantriIds, isFinancialReport]);
 
     return {
         activeReport, setActiveReport,
@@ -282,6 +344,8 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             cardRules, setCardRules,
             cardRulesFontSize, setCardRulesFontSize,
             cardRulesCustomColor, setCardRulesCustomColor,
+            cardShowQuote, setCardShowQuote,
+            cardCustomQuote, setCardCustomQuote,
             cardPrintMode, setCardPrintMode,
             selectedCardSantriIds, setSelectedCardSantriIds,
             cardSignatoryTitle, setCardSignatoryTitle,
@@ -333,6 +397,56 @@ Kartu ini berlaku sebagai akses (jika terintegrasi) untuk peminjaman perpustakaa
             tahfizhStartDate, setTahfizhStartDate,
             tahfizhEndDate, setTahfizhEndDate,
             tahfizhTipeFilter, setTahfizhTipeFilter,
+            showWatermark, setShowWatermark,
+            watermarkText, setWatermarkText,
+            watermarkOpacity, setWatermarkOpacity,
+            watermarkColor, setWatermarkColor,
+            watermarkFontSize, setWatermarkFontSize,
+            // 1. Surat Keterangan Aktif
+            suratAktifPrintMode, setSuratAktifPrintMode,
+            selectedSuratAktifSantriIds, setSelectedSuratAktifSantriIds,
+            suratAktifNoSurat, setSuratAktifNoSurat,
+            suratAktifKeperluan, setSuratAktifKeperluan,
+            suratAktifSignatoryTitle, setSuratAktifSignatoryTitle,
+            suratAktifSignatoryId, setSuratAktifSignatoryId,
+            suratAktifTanggal, setSuratAktifTanggal,
+            // 2. Surat Keterangan Berkelakuan Baik
+            suratBaikPrintMode, setSuratBaikPrintMode,
+            selectedSuratBaikSantriIds, setSelectedSuratBaikSantriIds,
+            suratBaikNoSurat, setSuratBaikNoSurat,
+            suratBaikKeperluan, setSuratBaikKeperluan,
+            suratBaikSignatoryTitle, setSuratBaikSignatoryTitle,
+            suratBaikSignatoryId, setSuratBaikSignatoryId,
+            suratBaikTanggal, setSuratBaikTanggal,
+            // 3. Buku Induk Santri
+            bukuIndukPrintMode, setBukuIndukPrintMode,
+            selectedBukuIndukSantriIds, setSelectedBukuIndukSantriIds,
+            bukuIndukSignatoryTitle, setBukuIndukSignatoryTitle,
+            bukuIndukSignatoryId, setBukuIndukSignatoryId,
+            // 4. Matriks Tunggakan SPP Rombel
+            matriksTahunAjaran, setMatriksTahunAjaran,
+            matriksSignatory1Title, setMatriksSignatory1Title,
+            matriksSignatory1Id, setMatriksSignatory1Id,
+            matriksSignatory2Title, setMatriksSignatory2Title,
+            matriksSignatory2Id, setMatriksSignatory2Id,
+            // 5. Syahadah Tahfizh
+            syahadahPrintMode, setSyahadahPrintMode,
+            selectedSyahadahSantriIds, setSelectedSyahadahSantriIds,
+            syahadahTheme, setSyahadahTheme,
+            syahadahJenis, setSyahadahJenis,
+            syahadahPredikat, setSyahadahPredikat,
+            syahadahNomor, setSyahadahNomor,
+            syahadahTanggal, setSyahadahTanggal,
+            syahadahFormatMode, setSyahadahFormatMode,
+            syahadahManualHijri, setSyahadahManualHijri,
+            syahadahMuhaffizhName, setSyahadahMuhaffizhName,
+            syahadahLabelTop, setSyahadahLabelTop,
+            syahadahRoleBottom, setSyahadahRoleBottom,
+            syahadahSignatory1Title, setSyahadahSignatory1Title,
+            syahadahSignatory1Id, setSyahadahSignatory1Id,
+            syahadahSignatory2Title, setSyahadahSignatory2Title,
+            syahadahSignatory2Id, setSyahadahSignatory2Id,
+            syahadahRasm, setSyahadahRasm,
         }
     };
 };

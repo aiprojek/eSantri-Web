@@ -152,6 +152,7 @@ export interface Santri {
 
     // Wali
     namaWali?: string;
+    nikWali?: string;
     statusWali?: string; // Hubungan
     statusHidupWali?: string;
     pekerjaanWali?: string;
@@ -186,12 +187,28 @@ export interface Santri {
     statusKeluarga?: string;
     
     sekolahAsal?: string;
+    asalSekolah?: string;
     alamatSekolahAsal?: string;
+    nomorIjazahSebelumnya?: string;
+    tahunLulusSebelumnya?: string;
     
+    namaPanggilan?: string;
+    agama?: string;
+    statusAnak?: string;
+    golonganDarah?: string;
+    gedungId?: number;
     kamarId?: number;
     halaqahId?: number;
     targetJuz?: number;
     telepon?: string;
+    noHp?: string;
+    noHpAyah?: string;
+    noHpIbu?: string;
+    noHpWali?: string;
+    desaKelurahan?: string;
+    kecamatan?: string;
+    kabupatenKota?: string;
+    kodePos?: string;
 
     riwayatStatus?: RiwayatStatus[];
     prestasi?: Prestasi[];
@@ -252,8 +269,10 @@ export interface KetersediaanPengajar {
 export interface TenagaPengajar {
     id: number;
     nama: string;
+    nip?: string;
     telepon?: string;
     email?: string;
+    status?: string;
     kodeGuru?: string; // Kode guru untuk legenda jadwal
     riwayatJabatan: RiwayatJabatan[];
     ketersediaanPengajar?: KetersediaanPengajar[];
@@ -264,6 +283,8 @@ export interface TenagaPengajar {
     kompetensiMapelIds?: number[];
     configGaji?: ConfigGaji;
 }
+
+export type RumpunMapel = 'Diniyah' | 'Umum' | 'Bahasa' | 'Tahfizh' | 'Muatan Lokal';
 
 export interface MataPelajaran {
     id: number;
@@ -276,6 +297,10 @@ export interface MataPelajaran {
     linkUnduhList?: string[];
     linkPembelianList?: string[];
     kkm?: number;
+    rumpun?: RumpunMapel;
+    kodeMapel?: string;
+    alokasiJamDefault?: number; // Target alokasi jam tatap muka per pekan
+    targetBabSemester?: string[]; // Target pokok bahasan / silabus bab per semester
 }
 
 export interface Biaya {
@@ -454,6 +479,7 @@ export interface PsbCustomField {
     label: string;
     required: boolean;
     options?: string[]; // for radio/checkbox
+    hint?: string; // Petunjuk / format pengisian di bawah pertanyaan
 }
 
 export interface PsbFormTemplate {
@@ -467,6 +493,7 @@ export interface PsbFormTemplate {
     customFields?: PsbCustomField[];
     submissionMethod?: PsbSubmissionMethod;
     googleScriptUrl?: string;
+    fieldHints?: Record<string, string>;
 }
 
 export interface PsbPosterTemplate {
@@ -501,6 +528,7 @@ export interface PsbConfig {
     submissionMethod?: PsbSubmissionMethod;
     googleScriptUrl?: string;
     registrationDeadline?: string;
+    fieldHints?: Record<string, string>;
 }
 
 export type AcademicYearCalendarType = 'Masehi' | 'Hijriah';
@@ -592,7 +620,19 @@ export interface WaTemplate {
     id: string;
     name: string;
     content: string;
+    audience?: 'santri' | 'psb' | 'all';
     lastModified?: number;
+}
+
+export type WaGatewayProvider = 'manual' | 'fonnte' | 'wablas' | 'custom';
+
+export interface WaGatewayConfig {
+    provider: WaGatewayProvider;
+    apiKey?: string;
+    endpointUrl?: string;
+    senderNumber?: string;
+    autoSendReceipt?: boolean;
+    autoSendInvoice?: boolean;
 }
 
 export interface DigitalAsset {
@@ -619,6 +659,10 @@ export interface PondokSettings {
     stempelPonpesUrl?: string;
     
     mudirAamId?: number;
+    namaMudir?: string;
+    namaBendahara?: string;
+    kabupatenKota?: string;
+    tahunAjaranAktif?: string;
     
     jenjang: Jenjang[];
     kelas: Kelas[];
@@ -642,6 +686,7 @@ export interface PondokSettings {
     academicYears?: AcademicYearConfig[];
     portalConfig?: PortalConfig;
     waTemplates?: WaTemplate[];
+    waGatewayConfig?: WaGatewayConfig;
     
     raporTemplates?: RaporTemplate[];
     
@@ -733,12 +778,19 @@ export interface TransaksiKas {
     lastModified?: number;
 }
 
+export type SignatoryMode = 'auto' | 'manual';
+export type SignatorySourceType = 'mudir' | 'guru' | 'wali_kelas' | 'musyrif' | 'digital_asset' | 'custom';
+
 export interface SuratSignatory {
     id: string;
+    mode?: SignatoryMode;
+    sourceType?: SignatorySourceType;
+    sourceId?: string | number;
     jabatan: string;
     nama: string;
     nip?: string;
     signatureUrl?: string;
+    showNip?: boolean;
 }
 
 export interface MengetahuiConfig {
@@ -770,6 +822,7 @@ export interface SuratTemplate {
     id: number;
     nama: string;
     kategori: 'Resmi' | 'Pemberitahuan' | 'Izin' | 'Lainnya';
+    kodeSurat?: string; // e.g. "SKA", "SIP", "SKB", "UND", "REK", "MUT"
     judul: string; // Kop/Header
     konten: string; // HTML Content
     signatories?: SuratSignatory[];
@@ -778,6 +831,8 @@ export interface SuratTemplate {
     marginConfig?: MarginConfig;
     stampConfig?: StampConfig;
     showJudul?: boolean;
+    usePrePrintedKop?: boolean;
+    kopMarginTop?: number;
     deleted?: boolean;
     lastModified?: number;
 }
@@ -800,20 +855,54 @@ export interface ArsipSurat {
     marginConfig?: MarginConfig;
     stampSnapshot?: StampConfig;
     showJudulSnapshot?: boolean;
+    usePrePrintedKopSnapshot?: boolean;
+    nomorHpTujuan?: string;
+    santriId?: number;
 
     deleted?: boolean;
     lastModified?: number;
 }
 
+export interface PsbBerkasFisik {
+    kk?: boolean;
+    akta?: boolean;
+    ijazahSkl?: boolean;
+    suratSehat?: boolean;
+    pasFoto?: boolean;
+    catatanBerkas?: string;
+}
+
+export interface PsbNilaiUjian {
+    bacaQuran?: number; // 0-100
+    tahfizh?: number; // 0-100
+    akademik?: number; // 0-100
+    wawancara?: number; // 0-100
+    totalSkor?: number;
+    rekomendasi?: 'Sangat Direkomendasikan' | 'Direkomendasikan' | 'Dipertimbangkan' | 'Tidak Direkomendasikan';
+    penguji?: string;
+    catatanUjian?: string;
+    tanggalUjian?: string;
+    ruangUjian?: string;
+}
+
+export type PendaftarStatus = 'Baru' | 'Verifikasi Berkas' | 'Ujian Masuk' | 'Cadangan' | 'Diterima' | 'Ditolak';
+
 export interface Pendaftar extends Omit<Santri, 'id' | 'status' | 'riwayatStatus' | 'prestasi' | 'pelanggaran' | 'kamarId' | 'fotoUrl'> {
     id: number;
+    nomorRegistrasi?: string; // e.g. PSB-2025-SMP-001
     tanggalDaftar: string;
-    status: 'Baru' | 'Diterima' | 'Cadangan' | 'Ditolak';
+    status: PendaftarStatus;
     catatan?: string;
     jalurPendaftaran?: string; // Reguler, Prestasi, Beasiswa
     gelombang?: number;
     customData?: string; // JSON string for flexible additional fields
     
+    // Checklist Berkas Fisik Posko
+    berkasFisik?: PsbBerkasFisik;
+
+    // Penilaian Ujian Masuk
+    nilaiUjian?: PsbNilaiUjian;
+
     // Inherited from Santri but re-declared for clarity in Pendaftar context
     namaAyah: string;
     namaIbu: string;
@@ -823,6 +912,7 @@ export interface Pendaftar extends Omit<Santri, 'id' | 'status' | 'riwayatStatus
     // Mapping back to Santri props if accepted
     fotoUrl?: string;
     kamarId?: number;
+    lastModified?: number;
 }
 
 export interface AuditLog {
@@ -1153,6 +1243,7 @@ export interface JadwalPelajaran {
     jamKe: number;
     mapelId?: number;
     guruId?: number;
+    ruangan?: string;
     keterangan?: string; // Istirahat, Upacara
     lastModified?: number;
 }
@@ -1165,6 +1256,27 @@ export interface ArsipJadwal {
     jenjangId: number;
     tanggalArsip: string;
     dataJSON: string; // Stringified JadwalPelajaran[]
+    lastModified?: number;
+}
+
+export interface JadwalUjian {
+    id: number;
+    jenjangId: number;
+    rombelId: number;
+    jenisUjian: string; // e.g. 'PTS', 'PAS', 'PAT', 'Ujian Diniyah', 'Munaqosyah'
+    tahunAjaran?: string;
+    semester?: 'Ganjil' | 'Genap';
+    tanggal: string; // YYYY-MM-DD
+    hari: number; // 0=Ahad, 1=Senin, ..., 6=Sabtu
+    hariKe?: number;
+    sesiKe: number; // 1, 2, 3
+    jamMulai: string; // e.g. "07:30"
+    jamSelesai: string; // e.g. "09:00"
+    mapelId?: number;
+    pengawasId?: number; // Tenaga Pengajar
+    pengawas2Id?: number;
+    ruangan?: string;
+    keterangan?: string;
     lastModified?: number;
 }
 
@@ -1402,6 +1514,8 @@ export enum ReportType {
   JurnalMengajar = 'JurnalMengajar',
   RekapKesehatan = 'RekapKesehatan',
   RekapKonseling = 'RekapKonseling',
+  BukuIndukSantri = 'BukuIndukSantri',
+  MatriksTunggakanSPP = 'MatriksTunggakanSPP',
 }
 
 // --- NEW GLOBAL STATE TYPES ---

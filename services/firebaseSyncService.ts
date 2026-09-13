@@ -5,4 +5,5 @@ export {
     syncLocalToFirebase,
     deleteFromFirebase,
     pushAllToFirebase,
+    syncPsbWithFirebaseHub,
 } from './firebaseRealtimeRuntime';

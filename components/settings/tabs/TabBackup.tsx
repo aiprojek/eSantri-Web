@@ -104,6 +104,7 @@ const HealthDashboard: React.FC = () => {
                 'Rapor': await db.raporRecords.count(),
                 'Absensi': await db.absensi.count(),
                 'Konseling (BK)': await db.bkSessions.count(),
+                'Buku Tamu': await db.bukuTamu.count(),
                 'Arsip Surat': await db.arsipSurat.count(),
                 'Tahfizh': await db.tahfizh.count(),
                 'Inventaris': await db.inventaris.count(),

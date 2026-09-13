@@ -548,30 +548,75 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                 tanggalLahir: 'Tanggal Lahir',
                 ttl: 'Tempat, Tgl Lahir',
                 kewarganegaraan: 'Kewarganegaraan',
-                ayah: 'Nama Ayah',
-                ibu: 'Nama Ibu',
-                wali: 'Ayah / Wali / Ibu',
-                telepon: 'No. Telepon',
-                teleponAyah: 'Telepon Ayah',
-                teleponIbu: 'Telepon Ibu',
-                teleponWali: 'Telepon Wali',
+                statusKeluarga: 'Status Keluarga',
+                anakKe: 'Anak Ke-',
+                jumlahSaudara: 'Jml Sdr',
+
                 jenjang: 'Jenjang',
                 kelas: 'Kelas',
                 rombel: 'Rombel',
-                status: 'Status',
+                status: 'Status Santri',
+                tanggalStatus: 'Tgl Status',
                 jenisSantri: 'Jenis Santri',
                 tanggalMasuk: 'Tgl Masuk',
+                kamar: 'Kamar Asrama',
+                gedungAsrama: 'Gedung Asrama',
+                halaqah: 'Halaqah Tahfizh',
+                targetJuz: 'Target Juz',
+
                 alamat: 'Alamat Lengkap',
+                jalan: 'Jalan / RT-RW',
                 desa: 'Desa/Kel.',
                 kecamatan: 'Kecamatan',
                 kabupaten: 'Kab./Kota',
                 provinsi: 'Provinsi',
                 kodePos: 'Kode Pos',
                 sekolahAsal: 'Sekolah Asal',
-                anakKe: 'Anak Ke-',
-                jumlahSaudara: 'Jml Sdr',
+                alamatSekolahAsal: 'Alamat Sekolah Asal',
+
+                ayah: 'Nama Ayah',
+                statusAyah: 'Status Ayah',
+                nikAyah: 'NIK Ayah',
+                ttlAyah: 'TTL Ayah',
+                tempatLahirAyah: 'Tempat Lahir Ayah',
+                tanggalLahirAyah: 'Tgl Lahir Ayah',
+                pendidikanAyah: 'Pendidikan Ayah',
+                pekerjaanAyah: 'Pekerjaan Ayah',
+                penghasilanAyah: 'Penghasilan Ayah',
+                teleponAyah: 'Telepon Ayah',
+                alamatAyah: 'Alamat Ayah',
+
+                ibu: 'Nama Ibu',
+                statusIbu: 'Status Ibu',
+                nikIbu: 'NIK Ibu',
+                ttlIbu: 'TTL Ibu',
+                tempatLahirIbu: 'Tempat Lahir Ibu',
+                tanggalLahirIbu: 'Tgl Lahir Ibu',
+                pendidikanIbu: 'Pendidikan Ibu',
+                pekerjaanIbu: 'Pekerjaan Ibu',
+                penghasilanIbu: 'Penghasilan Ibu',
+                teleponIbu: 'Telepon Ibu',
+                alamatIbu: 'Alamat Ibu',
+
+                wali: 'Nama Wali',
+                statusWali: 'Hubungan Wali',
+                statusHidupWali: 'Status Hidup Wali',
+                ttlWali: 'TTL Wali',
+                tempatLahirWali: 'Tempat Lahir Wali',
+                tanggalLahirWali: 'Tgl Lahir Wali',
+                pendidikanWali: 'Pendidikan Wali',
+                pekerjaanWali: 'Pekerjaan Wali',
+                penghasilanWali: 'Penghasilan Wali',
+                teleponWali: 'Telepon Wali',
+                alamatWali: 'Alamat Wali',
+                telepon: 'No. Telepon Utama',
+
                 tinggiBadan: 'TB (cm)',
                 beratBadan: 'BB (kg)',
+                jarakKePondok: 'Jarak Pondok',
+                berkebutuhanKhusus: 'ABK / Khusus',
+                riwayatPenyakit: 'Riwayat Penyakit',
+                hobi: 'Hobi',
             };
             return labels[id] || id;
         };
@@ -584,36 +629,81 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                 nis: 'border border-black px-2 py-1.5 text-center w-20',
                 nisn: 'border border-black px-2 py-1.5 text-center w-24',
                 nik: 'border border-black px-2 py-1.5 text-center w-28',
+                nikAyah: 'border border-black px-2 py-1.5 text-center w-28',
+                nikIbu: 'border border-black px-2 py-1.5 text-center w-28',
                 namaLengkap: 'border border-black px-2 py-1.5 font-medium',
                 namaHijrah: 'border border-black px-2 py-1.5',
                 tempatLahir: 'border border-black px-2 py-1.5',
                 tanggalLahir: 'border border-black px-2 py-1.5 text-center',
                 ttl: 'border border-black px-2 py-1.5',
                 kewarganegaraan: 'border border-black px-2 py-1.5 text-center',
-                ayah: 'border border-black px-2 py-1.5',
-                ibu: 'border border-black px-2 py-1.5',
-                wali: 'border border-black px-2 py-1.5',
-                telepon: 'border border-black px-2 py-1.5 text-center',
-                teleponAyah: 'border border-black px-2 py-1.5 text-center',
-                teleponIbu: 'border border-black px-2 py-1.5 text-center',
-                teleponWali: 'border border-black px-2 py-1.5 text-center',
+                statusKeluarga: 'border border-black px-2 py-1.5',
+                anakKe: 'border border-black px-1 py-1.5 text-center w-12',
+                jumlahSaudara: 'border border-black px-1 py-1.5 text-center w-12',
+
                 jenjang: 'border border-black px-2 py-1.5 text-center',
                 kelas: 'border border-black px-2 py-1.5 text-center',
                 rombel: 'border border-black px-2 py-1.5 text-center',
                 status: 'border border-black px-2 py-1.5 text-center',
+                tanggalStatus: 'border border-black px-2 py-1.5 text-center',
                 jenisSantri: 'border border-black px-2 py-1.5 text-center',
                 tanggalMasuk: 'border border-black px-2 py-1.5 text-center',
+                kamar: 'border border-black px-2 py-1.5 text-center',
+                gedungAsrama: 'border border-black px-2 py-1.5 text-center',
+                halaqah: 'border border-black px-2 py-1.5 text-center',
+                targetJuz: 'border border-black px-2 py-1.5 text-center',
+
                 alamat: 'border border-black px-2 py-1.5',
+                jalan: 'border border-black px-2 py-1.5',
                 desa: 'border border-black px-2 py-1.5',
                 kecamatan: 'border border-black px-2 py-1.5',
                 kabupaten: 'border border-black px-2 py-1.5',
                 provinsi: 'border border-black px-2 py-1.5',
                 kodePos: 'border border-black px-2 py-1.5 text-center',
                 sekolahAsal: 'border border-black px-2 py-1.5',
-                anakKe: 'border border-black px-1 py-1.5 text-center',
-                jumlahSaudara: 'border border-black px-1 py-1.5 text-center',
-                tinggiBadan: 'border border-black px-1 py-1.5 text-center',
-                beratBadan: 'border border-black px-1 py-1.5 text-center',
+                alamatSekolahAsal: 'border border-black px-2 py-1.5',
+
+                ayah: 'border border-black px-2 py-1.5',
+                statusAyah: 'border border-black px-2 py-1.5 text-center',
+                ttlAyah: 'border border-black px-2 py-1.5',
+                tempatLahirAyah: 'border border-black px-2 py-1.5',
+                tanggalLahirAyah: 'border border-black px-2 py-1.5 text-center',
+                pendidikanAyah: 'border border-black px-2 py-1.5 text-center',
+                pekerjaanAyah: 'border border-black px-2 py-1.5',
+                penghasilanAyah: 'border border-black px-2 py-1.5',
+                teleponAyah: 'border border-black px-2 py-1.5 text-center',
+                alamatAyah: 'border border-black px-2 py-1.5',
+
+                ibu: 'border border-black px-2 py-1.5',
+                statusIbu: 'border border-black px-2 py-1.5 text-center',
+                ttlIbu: 'border border-black px-2 py-1.5',
+                tempatLahirIbu: 'border border-black px-2 py-1.5',
+                tanggalLahirIbu: 'border border-black px-2 py-1.5 text-center',
+                pendidikanIbu: 'border border-black px-2 py-1.5 text-center',
+                pekerjaanIbu: 'border border-black px-2 py-1.5',
+                penghasilanIbu: 'border border-black px-2 py-1.5',
+                teleponIbu: 'border border-black px-2 py-1.5 text-center',
+                alamatIbu: 'border border-black px-2 py-1.5',
+
+                wali: 'border border-black px-2 py-1.5',
+                statusWali: 'border border-black px-2 py-1.5',
+                statusHidupWali: 'border border-black px-2 py-1.5 text-center',
+                ttlWali: 'border border-black px-2 py-1.5',
+                tempatLahirWali: 'border border-black px-2 py-1.5',
+                tanggalLahirWali: 'border border-black px-2 py-1.5 text-center',
+                pendidikanWali: 'border border-black px-2 py-1.5 text-center',
+                pekerjaanWali: 'border border-black px-2 py-1.5',
+                penghasilanWali: 'border border-black px-2 py-1.5',
+                teleponWali: 'border border-black px-2 py-1.5 text-center',
+                alamatWali: 'border border-black px-2 py-1.5',
+                telepon: 'border border-black px-2 py-1.5 text-center',
+
+                tinggiBadan: 'border border-black px-1 py-1.5 text-center w-14',
+                beratBadan: 'border border-black px-1 py-1.5 text-center w-14',
+                jarakKePondok: 'border border-black px-2 py-1.5 text-center',
+                berkebutuhanKhusus: 'border border-black px-2 py-1.5 text-center',
+                riwayatPenyakit: 'border border-black px-2 py-1.5',
+                hobi: 'border border-black px-2 py-1.5',
             };
             return widthMap[id] || baseClass;
         };
@@ -622,9 +712,33 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             const currentRombel = settings.rombel.find(r => r.id === s.rombelId);
             const currentKelas = settings.kelas.find(k => k.id === s.kelasId);
             const currentJenjang = settings.jenjang.find(j => j.id === s.jenjangId);
+            const currentKamar = settings.kamar?.find(k => k.id === s.kamarId);
+            const currentGedung = currentKamar?.gedungId ? settings.gedungAsrama?.find(g => g.id === currentKamar.gedungId) : undefined;
+            const currentHalaqah = settings.kelompokHalaqah?.find(h => h.id === s.halaqahId);
+
             const wali = s.namaWali || s.namaAyah || s.namaIbu || '-';
             const telepon = s.teleponWali || (s as any).nomorHpWali || s.teleponAyah || s.teleponIbu || '-';
             const alamat = formatAlamat(s.alamat) || '-';
+
+            // Detailed Jalan/RT/RW
+            const jalanParts: string[] = [];
+            if (s.alamat?.detail) jalanParts.push(s.alamat.detail);
+            const rtRw = [(s.alamat as any)?.rt ? `RT ${(s.alamat as any).rt}` : '', (s.alamat as any)?.rw ? `RW ${(s.alamat as any).rw}` : ''].filter(Boolean).join('/');
+            if (rtRw) jalanParts.push(rtRw);
+            const jalan = jalanParts.join(', ') || '-';
+
+            const ttlAyah = (s.tempatLahirAyah || s.tanggalLahirAyah)
+                ? `${s.tempatLahirAyah || '-'}${s.tanggalLahirAyah ? `, ${formatDate(s.tanggalLahirAyah)}` : ''}`
+                : '-';
+            const ttlIbu = (s.tempatLahirIbu || s.tanggalLahirIbu)
+                ? `${s.tempatLahirIbu || '-'}${s.tanggalLahirIbu ? `, ${formatDate(s.tanggalLahirIbu)}` : ''}`
+                : '-';
+            const ttlWali = (s.tempatLahirWali || s.tanggalLahirWali)
+                ? `${s.tempatLahirWali || '-'}${s.tanggalLahirWali ? `, ${formatDate(s.tanggalLahirWali)}` : ''}`
+                : '-';
+
+            const hobiStr = Array.isArray(s.hobi) ? s.hobi.join(', ') : (s.hobi || '-');
+
             const valueMap: Record<string, string> = {
                 no: String(i + 1),
                 nis: s.nis || '-',
@@ -637,30 +751,75 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                 tanggalLahir: s.tanggalLahir ? formatDate(s.tanggalLahir) : '-',
                 ttl: `${s.tempatLahir || '-'}, ${s.tanggalLahir ? formatDate(s.tanggalLahir) : '-'}`,
                 kewarganegaraan: s.kewarganegaraan || '-',
-                ayah: s.namaAyah || '-',
-                ibu: s.namaIbu || '-',
-                wali,
-                telepon,
-                teleponAyah: s.teleponAyah || '-',
-                teleponIbu: s.teleponIbu || '-',
-                teleponWali: s.teleponWali || ((s as any).nomorHpWali || '-'),
+                statusKeluarga: s.statusKeluarga || '-',
+                anakKe: typeof s.anakKe === 'number' ? String(s.anakKe) : (s.anakKe || '-'),
+                jumlahSaudara: typeof s.jumlahSaudara === 'number' ? String(s.jumlahSaudara) : (s.jumlahSaudara || '-'),
+
                 jenjang: currentJenjang?.nama || '-',
                 kelas: currentKelas?.nama || '-',
                 rombel: currentRombel?.nama || '-',
                 status: s.status || '-',
+                tanggalStatus: s.tanggalStatus ? formatDate(s.tanggalStatus) : '-',
                 jenisSantri: s.jenisSantri || '-',
                 tanggalMasuk: s.tanggalMasuk ? formatDate(s.tanggalMasuk) : '-',
+                kamar: currentKamar?.nama || '-',
+                gedungAsrama: currentGedung?.nama || '-',
+                halaqah: currentHalaqah?.nama || '-',
+                targetJuz: typeof s.targetJuz === 'number' && s.targetJuz > 0 ? `${s.targetJuz} Juz` : (s.targetJuz ? String(s.targetJuz) : '-'),
+
                 alamat,
+                jalan,
                 desa: s.alamat?.desaKelurahan || '-',
                 kecamatan: s.alamat?.kecamatan || '-',
                 kabupaten: s.alamat?.kabupatenKota || '-',
                 provinsi: s.alamat?.provinsi || '-',
                 kodePos: s.alamat?.kodePos || '-',
                 sekolahAsal: s.sekolahAsal || '-',
-                anakKe: typeof s.anakKe === 'number' ? String(s.anakKe) : '-',
-                jumlahSaudara: typeof s.jumlahSaudara === 'number' ? String(s.jumlahSaudara) : '-',
-                tinggiBadan: typeof s.tinggiBadan === 'number' ? String(s.tinggiBadan) : '-',
-                beratBadan: typeof s.beratBadan === 'number' ? String(s.beratBadan) : '-',
+                alamatSekolahAsal: s.alamatSekolahAsal || '-',
+
+                ayah: s.namaAyah || '-',
+                statusAyah: s.statusAyah || '-',
+                nikAyah: s.nikAyah || '-',
+                ttlAyah,
+                tempatLahirAyah: s.tempatLahirAyah || '-',
+                tanggalLahirAyah: s.tanggalLahirAyah ? formatDate(s.tanggalLahirAyah) : '-',
+                pendidikanAyah: s.pendidikanAyah || '-',
+                pekerjaanAyah: s.pekerjaanAyah || '-',
+                penghasilanAyah: s.penghasilanAyah || '-',
+                teleponAyah: s.teleponAyah || '-',
+                alamatAyah: formatAlamat(s.alamatAyah) || '-',
+
+                ibu: s.namaIbu || '-',
+                statusIbu: s.statusIbu || '-',
+                nikIbu: s.nikIbu || '-',
+                ttlIbu,
+                tempatLahirIbu: s.tempatLahirIbu || '-',
+                tanggalLahirIbu: s.tanggalLahirIbu ? formatDate(s.tanggalLahirIbu) : '-',
+                pendidikanIbu: s.pendidikanIbu || '-',
+                pekerjaanIbu: s.pekerjaanIbu || '-',
+                penghasilanIbu: s.penghasilanIbu || '-',
+                teleponIbu: s.teleponIbu || '-',
+                alamatIbu: formatAlamat(s.alamatIbu) || '-',
+
+                wali,
+                statusWali: s.statusWali || '-',
+                statusHidupWali: s.statusHidupWali || '-',
+                ttlWali,
+                tempatLahirWali: s.tempatLahirWali || '-',
+                tanggalLahirWali: s.tanggalLahirWali ? formatDate(s.tanggalLahirWali) : '-',
+                pendidikanWali: s.pendidikanWali || '-',
+                pekerjaanWali: s.pekerjaanWali || '-',
+                penghasilanWali: s.penghasilanWali || '-',
+                teleponWali: s.teleponWali || ((s as any).nomorHpWali || '-'),
+                alamatWali: formatAlamat(s.alamatWali) || '-',
+                telepon,
+
+                tinggiBadan: typeof s.tinggiBadan === 'number' ? String(s.tinggiBadan) : (s.tinggiBadan || '-'),
+                beratBadan: typeof s.beratBadan === 'number' ? String(s.beratBadan) : (s.beratBadan || '-'),
+                jarakKePondok: s.jarakKePondok || '-',
+                berkebutuhanKhusus: s.berkebutuhanKhusus || '-',
+                riwayatPenyakit: s.riwayatPenyakit || '-',
+                hobi: hobiStr,
             };
             
             return (

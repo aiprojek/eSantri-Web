@@ -306,3 +306,60 @@ export const pushAllToFirebase = async (tenantId: string) => {
         await syncPublicPortalConfig(tenantId, settings[0] as PondokSettings);
     }
 };
+
+export const syncPsbWithFirebaseHub = async (tenantId: string) => {
+    isSyncingFromCloud = true;
+    let pulledCount = 0;
+    let pushedCount = 0;
+
+    try {
+        const path = `tenants/${tenantId}/pendaftar`;
+        const snapshot = await getDocs(collection(fdb, path));
+        const cloudItems = snapshot.docs.map((d) => d.data() as any);
+        const localItems = await db.pendaftar.toArray();
+
+        const localMap = new Map(localItems.map((item) => [item.id, item]));
+        const cloudMap = new Map(cloudItems.map((item) => [item.id, item]));
+
+        // 1. Pull & Merge from Cloud to Local (LWW)
+        for (const cloudItem of cloudItems) {
+            if (!cloudItem.id) continue;
+            const localItem = localMap.get(cloudItem.id);
+            const cloudTime = getTime(cloudItem.lastModified);
+            const localTime = localItem ? getTime(localItem.lastModified) : 0;
+
+            if (!localItem) {
+                await db.pendaftar.put(cloudItem);
+                pulledCount++;
+            } else if (cloudTime > localTime) {
+                await db.pendaftar.put({ ...localItem, ...cloudItem });
+                pulledCount++;
+            }
+        }
+
+        // 2. Push any Local Items that are newer or missing in Cloud
+        for (const localItem of localItems) {
+            if (!localItem.id) continue;
+            const cloudItem = cloudMap.get(localItem.id);
+            const localTime = getTime(localItem.lastModified);
+            const cloudTime = cloudItem ? getTime(cloudItem.lastModified) : 0;
+
+            if (!cloudItem || localTime > cloudTime) {
+                await setDoc(doc(fdb, path, localItem.id.toString()), {
+                    ...localItem,
+                    lastModified: localItem.lastModified || Date.now(),
+                }, { merge: true });
+                pushedCount++;
+            }
+        }
+
+        const total = await db.pendaftar.count();
+        return { pulledCount, pushedCount, total };
+    } catch (error) {
+        console.error('Error syncing PSB with Firebase Hub:', error);
+        throw error;
+    } finally {
+        isSyncingFromCloud = false;
+    }
+};
+

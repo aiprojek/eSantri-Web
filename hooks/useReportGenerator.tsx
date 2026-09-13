@@ -1,9 +1,9 @@
 
 import React from 'react';
 import { Santri, PondokSettings, ReportType, RiwayatStatus } from '../types';
-import { generateBiodataReports, generateCardReports, generateLabelReports } from '../components/reports/modules/IdentityReports';
+import { generateBiodataReports, generateCardReports, generateLabelReports, generateBukuIndukReports } from '../components/reports/modules/IdentityReports';
 import { generateNilaiReports, generateTableReport, generateRaporLengkapReports, JurnalMengajarTemplate, KesehatanRekapTemplate, KonselingRekapTemplate } from '../components/reports/modules/AcademicReports';
-import { FinanceSummaryTemplate, LaporanArusKasTemplate, RekeningKoranSantriTemplate } from '../components/reports/modules/FinancialReports';
+import { FinanceSummaryTemplate, LaporanArusKasTemplate, RekeningKoranSantriTemplate, MatriksTunggakanSPPTemplate } from '../components/reports/modules/FinancialReports';
 import {
     DaftarWaliKelasTemplate,
     LaporanKontakTemplate,
@@ -202,6 +202,24 @@ export const useReportGenerator = (settings: PondokSettings) => {
                             <p className="text-gray-600 mt-2">Data telah disiapkan dalam format Excel yang kompatibel dengan EMIS.</p>
                             <p className="text-sm text-gray-500 mt-4">Silakan klik tombol <strong>Unduh &gt; Excel (.xlsx)</strong> di pojok kanan atas.</p>
                         </div>
+                    ),
+                    orientation: 'landscape'
+                });
+                break;
+            case ReportType.BukuIndukSantri:
+                previews = generateBukuIndukReports(data, settings, options);
+                break;
+            case ReportType.MatriksTunggakanSPP:
+                previews.push({
+                    content: (
+                        <MatriksTunggakanSPPTemplate
+                            santriList={data}
+                            tagihanList={options.tagihanList || []}
+                            pembayaranList={options.pembayaranList || []}
+                            settings={settings}
+                            options={options}
+                            filters={options.filters}
+                        />
                     ),
                     orientation: 'landscape'
                 });

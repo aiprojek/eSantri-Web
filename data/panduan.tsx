@@ -1415,14 +1415,20 @@ export const panduanData: PanduanSectionData[] = [
                 )
             },
             {
-                title: 'Opsi Kustomisasi Desain Sisi Depan',
+                title: 'Opsi Kustomisasi Data Strategis Sisi Depan (Fleksibilitas Penuh)',
                 content: (
                     <div className="space-y-2 text-sm">
-                        <p>Menu Laporan Kartu Santri memberikan opsi layout yang sangat fleksibel:</p>
-                        <ol className="list-decimal pl-5 space-y-1 bg-gray-50 p-2 rounded">
-                            <li><strong>Variasi Data Latar:</strong> Anda bisa memilih untuk memunculkan (atau menyembunyikan) Foto Santri, Barcode NIS, Logo Tut Wuri / DEPAG, serta detail kelas dan alamat.</li>
+                        <p>Menu Laporan Kartu Santri menyediakan kustomisasi data yang sangat fleksibel untuk kebutuhan resmi maupun internal:</p>
+                        <ul className="list-disc pl-5 space-y-1 bg-gray-50 p-2.5 rounded-xl border border-gray-200 text-xs text-gray-700">
+                            <li><strong>Pemisahan Jenjang &amp; Kelas:</strong> Anda dapat menampilkan Jenjang (misal: MTs/MA) dan Kelas (misal: VII/A) secara terpisah atau digabung sesuai format yang diinginkan.</li>
+                            <li><strong>Identitas Kependudukan &amp; Akademik:</strong> Pilihan menampilkan NIS, NISN (Kemdikbud), NIK (Dukcapil), dan Nama Hijrah / Kunyah santri.</li>
+                            <li><strong>Informasi Keasramaan:</strong> Menampilkan Gedung Asrama &amp; Kamar tempat santri bermukim.</li>
+                            <li><strong>Data Kesehatan &amp; Pribadi:</strong> Pilihan memunculkan Tempat Tanggal Lahir (TTL), Golongan Darah, dan Status Santri (Mukim / Non-Mukim).</li>
+                            <li><strong>Kontak &amp; Wali:</strong> Menampilkan nama Orang Tua / Wali beserta nomor kontak darurat / HP wali santri.</li>
+                            <li><strong>Tahun Masuk &amp; Angkatan:</strong> Menampilkan tahun angkatan santri secara otomatis dari data tanggal masuk.</li>
+                            <li><strong>Smart Font Scaling:</strong> Semua data diproteksi dengan algoritma penskalaan ukuran teks otomatis sehingga tidak bertumpuk atau terpotong pada semua 5 variasi desain kartu (Klasik, Modern, ID Card Vertikal, Dark Premium, Ceria).</li>
                             <li><strong>Masa Berlaku (Valid Until):</strong> Kartu dapat diset mencetak label "Berlaku Selama Menjadi Santri", atau hingga masa kelulusan (otomatis dihitung).</li>
-                        </ol>
+                        </ul>
                     </div>
                 )
             },
@@ -2784,11 +2790,62 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Menyusun Jadwal Pelajaran', 
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                         <li>Buka menu <strong>Akademik &gt; Jadwal Pelajaran</strong>.</li>
-                         <li>Atur durasi jam pelajaran di panel kiri (Klik Simpan).</li>
+                         <li>Buka menu <strong>Pendidikan &gt; Kurikulum</strong> (atau menu Akademik).</li>
+                         <li>Atur durasi jam pelajaran di panel konfigurasi waktu.</li>
                          <li>Pilih Jenjang & Rombel. Klik kotak grid kosong untuk mengisi Mapel & Guru.</li>
                          <li>Gunakan fitur <strong>"Salin Jadwal Dari..."</strong> untuk menduplikasi jadwal dari kelas lain (misal dari 7A ke 7B).</li>
                     </ul>
+                )
+            },
+            {
+                title: 'Matriks Jadwal Induk Ruang Guru & Kalkulator RPE Semester',
+                color: 'teal',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <p>Menu <strong>Kurikulum &gt; Matriks Induk &amp; RPE</strong> menyediakan dua instrumen strategis:</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            <div className="bg-white p-3 rounded-lg border border-teal-200 shadow-2xs">
+                                <h5 className="font-bold text-teal-800 flex items-center gap-1 mb-1">
+                                    <i className="bi bi-grid-3x3 text-teal-600"></i> Matriks Jadwal Induk (Master Board)
+                                </h5>
+                                <p className="text-gray-600">Menampilkan seluruh rombel dalam satu hari sekaligus (Sumbu X: Rombel, Sumbu Y: Jam Ke). Otomatis mendeteksi bentrok guru dengan badge peringatan merah. Siap dicetak format mading ruang guru A4 Landscape.</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-teal-200 shadow-2xs">
+                                <h5 className="font-bold text-teal-800 flex items-center gap-1 mb-1">
+                                    <i className="bi bi-calculator text-teal-600"></i> Rencana Pekan Efektif (RPE)
+                                </h5>
+                                <p className="text-gray-600">Kalkulator otomatis untuk menghitung pekan efektif KBM setelah dikurangi libur awal/akhir, ujian, dan kegiatan pondok. Mengalikan jam alokasi tiap mapel untuk mengetahui total Jam Efektif (JP) per semester.</p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Analisis Beban Mengajar Guru & Cetak Slip Saku (A5)',
+                color: 'indigo',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <p>Di tab <strong>Beban Mengajar &amp; Slip</strong>, pimpinan dan bagian kurikulum dapat memantau distribusi jam:</p>
+                        <ul className="list-disc pl-5 space-y-1 text-xs text-gray-700 bg-indigo-50/70 p-2.5 rounded-lg border border-indigo-200">
+                            <li><strong>Metrik Kunci:</strong> Total Jam Tatap Muka (JTM) pondok, rata-rata jam per ustadz, dan klasifikasi beban (Ideal 12-24 jam, Tinggi &gt;24 jam, Rendah &lt;12 jam).</li>
+                            <li><strong>Cetak Slip Saku Ustadz (A5):</strong> Klik tombol <em>"Slip"</em> pada baris guru untuk mencetak jadwal mengajar mingguan ustadz lengkap dengan rincian hari, jam, kelas, dan mapel dalam format A5 rapi.</li>
+                            <li><strong>Ekspor Excel (.xlsx):</strong> Rekapitulasi beban seluruh tenaga pendidik siap diunduh untuk keperluan administrasi dan pelaporan yayasan.</li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: 'Rumpun Kurikulum (Diniyah/Salaf, Tahfizh, Umum) & Target Silabus',
+                color: 'orange',
+                content: (
+                    <div className="space-y-2 text-sm">
+                        <p>Tab <strong>Mata Pelajaran &amp; Silabus</strong> memungkinkan pengelompokan kurikulum pesantren yang komprehensif:</p>
+                        <ul className="list-disc pl-5 space-y-1 text-xs text-gray-700 bg-orange-50/70 p-2.5 rounded-lg border border-orange-200">
+                            <li><strong>Rumpun Pelajaran:</strong> Tandai mata pelajaran ke dalam rumpun <em>Diniyah / Kitab Kuning</em>, <em>Tahfizh &amp; Tajwid</em>, <em>Bahasa (Arab/Inggris)</em>, <em>Umum / Nasional</em>, atau <em>Muatan Lokal</em>.</li>
+                            <li><strong>Target Bab / Silabus Semester:</strong> Tentukan daftar bab pokok atau kitab yang ditargetkan tuntas dalam satu semester.</li>
+                            <li><strong>Integrasi Jurnal Mengajar:</strong> Saat guru mengisi jurnal kelas, tombol chip target bab dapat langsung diklik untuk mempercepat pencatatan materi KBM.</li>
+                        </ul>
+                    </div>
                 )
             },
             {
@@ -3170,48 +3227,869 @@ export const panduanData: PanduanSectionData[] = [
     {
         id: 'admin',
         badge: 11,
-        badgeColor: 'green',
-        title: 'PSB & Surat Menyurat',
+        badgeColor: 'teal',
+        title: 'Penerimaan Santri Baru (PSB)',
         steps: [
             {
-                title: 'Penerimaan Santri Baru (PSB)',
+                title: 'Ikhtisar Arsitektur Penerimaan Santri Baru (PSB)',
                 content: (
-                    <>
-                        <div className="mb-2">Gunakan menu <strong>PSB</strong> untuk mengelola pendaftaran santri baru secara online/offline.</div>
-                        <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                             <li><strong>Hybrid (Google Sheet + WA Backup):</strong> Form pendaftaran mengirim data ke Google Sheet/Drive sekaligus menyiapkan backup notifikasi ke WhatsApp admin.</li>
-                             <li><strong>Upload Berkas:</strong> Berkas yang diunggah pendaftar otomatis direname ke pola <code>dokumen-nama-santri-waktu.[ext]</code> agar arsip lebih rapi.</li>
-                             <li><strong>Desain Formulir:</strong> Buat formulir pendaftaran custom di menu <em>Desain Formulir Online</em>.</li>
-                             <li><strong>Smart Script:</strong> Jika menggunakan Google Spreadsheet, Anda cukup menggunakan satu script untuk banyak jenis formulir.</li>
-                             <li><strong>Catatan Multi Formulir:</strong> Form bisa lebih dari satu, tetapi sinkron rekap Google Sheet membaca URL GAS aktif global. Untuk operasional paling stabil, gunakan <strong>satu GAS utama</strong> dan bedakan data per <code>sheetName</code>.</li>
-                             <li><strong>Metode WhatsApp:</strong> Multi formulir tetap bisa via copy-paste kode <code>PSB_START...PSB_END</code> atau <code>PSB_BACKUP_START...PSB_BACKUP_END</code> ke menu Impor WA.</li>
-                             <li><strong>Rekap & Seleksi:</strong> Kelola data masuk di menu <em>Rekap Pendaftar</em>. Klik tombol "Terima" untuk memindahkan pendaftar resmi menjadi Santri Aktif secara otomatis.</li>
-                        </ul>
-                    </>
-                )
-            },
-            {
-                title: 'Kerja Tim Panitia PSB (Multi-User)',
-                color: 'green',
-                content: (
-                     <div className="bg-green-50 p-3 rounded border border-green-200 text-sm">
-                        <strong>Rekomendasi Panitia:</strong> Jangan kerjakan sendiri. Aktifkan <strong>Multi-User</strong> dan bagikan tugas:
-                        <ul className="list-disc pl-5 mt-1">
-                            <li><strong>Meja 1:</strong> Input Data & Wawancara.</li>
-                            <li><strong>Meja 2:</strong> Terima Pembayaran & Seragam.</li>
-                        </ul>
-                        Semua laptop panitia terhubung ke data pusat via Cloud.
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="bg-teal-50 p-4 rounded-xl border border-teal-200 text-xs text-teal-950 space-y-2.5">
+                            <h5 className="font-bold flex items-center gap-2 text-teal-900 text-sm">
+                                <i className="bi bi-compass-fill text-teal-700 text-base"></i>
+                                Alur 6 Tahap Penerimaan Santri Baru di Pesantren
+                            </h5>
+                            <p className="leading-relaxed text-gray-700">
+                                Modul PSB eSantri Web dirancang untuk menangani pendaftaran santri baru secara fleksibel (Offline di posko pondok, Online via Google Sheets &amp; Drive, maupun Semi-Online via WhatsApp):
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-6 gap-2 pt-1 text-center font-medium">
+                                <div className="bg-white p-2 rounded-lg border border-teal-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">1</span>
+                                    <strong className="text-teal-950 block text-[11px]">Desain Form</strong>
+                                    <span className="text-[10px] text-gray-500">Susun Kolom &amp; Tema</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-teal-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">2</span>
+                                    <strong className="text-teal-950 block text-[11px]">Deploy Script</strong>
+                                    <span className="text-[10px] text-gray-500">Spreadsheet &amp; GAS</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-teal-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">3</span>
+                                    <strong className="text-teal-950 block text-[11px]">Publikasi Form</strong>
+                                    <span className="text-[10px] text-gray-500">File HTML Mandiri</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-teal-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">4</span>
+                                    <strong className="text-teal-950 block text-[11px]">Tarik Data</strong>
+                                    <span className="text-[10px] text-gray-500">Sync Google Sheet</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-teal-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">5</span>
+                                    <strong className="text-teal-950 block text-[11px]">Cetak &amp; Ujian</strong>
+                                    <span className="text-[10px] text-gray-500">Kartu &amp; Berkas F-PSB</span>
+                                </div>
+                                <div className="bg-white p-2 rounded-lg border border-teal-200 shadow-2xs">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold mb-1">6</span>
+                                    <strong className="text-teal-950 block text-[11px]">Kelulusan</strong>
+                                    <span className="text-[10px] text-gray-500">Konversi ke Santri</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 text-xs">
+                                    <i className="bi bi-cloud-arrow-up-fill text-teal-600"></i> Mode Hybrid (Rekomendasi)
+                                </span>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Data formulir tersimpan otomatis ke Google Spreadsheet panitia, berkas digital (KK, Foto, Akta) masuk ke Google Drive, dan konfirmasi pendaftaran disiapkan via WhatsApp.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 text-xs">
+                                    <i className="bi bi-file-earmark-spreadsheet-fill text-teal-600"></i> Mode Google Sheet Murni
+                                </span>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Cocok jika panitia hanya ingin menerima data langsung ke tabel Google Spreadsheet tanpa mewajibkan pengiriman notifikasi WhatsApp ke HP panitia.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 text-xs">
+                                    <i className="bi bi-whatsapp text-emerald-600"></i> Mode WhatsApp / Offline
+                                </span>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Pendaftar mengirimkan kode teks <code>PSB_START...PSB_END</code> ke WhatsApp resmi pondok, lalu panitia memasukkannya via tombol <em>Impor WA</em> di aplikasi.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 )
             },
             {
-                title: 'Surat Menyurat & Arsip',
+                title: '1. Desain Formulir Online & Pembuatan File HTML Mandiri',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Template Editor:</strong> Buat template surat (Izin, Undangan, Keterangan) dengan editor teks lengkap. Gunakan variabel <code>{'{NAMA_SANTRI}'}</code> agar data terisi otomatis.</li>
-                        <li><strong>Magic Draft (AI):</strong> Gunakan fitur AI untuk membuatkan draf bahasa surat yang sopan dan formal secara instan.</li>
-                        <li><strong>Cetak Massal:</strong> Cetak surat untuk satu kelas sekaligus (Mail Merge) dengan satu klik.</li>
-                    </ul>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p>
+                            Menu <strong>PSB &gt; Desain Formulir Online</strong> memungkinkan panitia menyusun formulir pendaftaran interaktif yang dapat dibagikan kepada calon wali santri:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
+                                <strong className="text-gray-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-sliders2 text-teal-700"></i> Kustomisasi Bidang &amp; Berkas
+                                </strong>
+                                <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
+                                    <li>Pilih kolom aktif (Biodata Santri, NISN, NIK, Tempat/Tanggal Lahir, Alamat).</li>
+                                    <li>Pilih identitas orang tua/wali dan nomor WhatsApp untuk notifikasi.</li>
+                                    <li><strong>Petunjuk Isian (Field Hints):</strong> Tentukan teks petunjuk di bawah setiap pertanyaan (contoh: <em>"10 digit angka NISN resmi"</em>, <em>"Nomor WhatsApp aktif wali untuk konfirmasi berkas"</em>) agar format isian wali santri seragam.</li>
+                                    <li>Atur dokumen yang wajib diunggah (Kartu Keluarga, Akta Kelahiran, Pas Foto 3x4, Ijazah, KIP/PKH).</li>
+                                    <li>Gunakan <strong>Template Formulir</strong> berbeda per jenjang pendidikan (misal: Form MTs vs Form MA).</li>
+                                </ul>
+                            </div>
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
+                                <strong className="text-gray-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-palette-fill text-teal-700"></i> Tema Desain &amp; File Standalone
+                                </strong>
+                                <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
+                                    <li>Pilih tema tampilan formulir: <em>Klasik Tradisional</em>, <em>Modern Tech</em>, <em>Bold Clean</em>, atau <em>Ceria (TPQ/TK)</em>.</li>
+                                    <li>Klik tombol <strong>Download Formulir (.html)</strong> untuk mendapatkan 1 file mandiri.</li>
+                                    <li>File HTML mandiri dapat diupload ke website resmi pondok, disematkan dalam iframe, atau dibagikan langsung ke grup WhatsApp wali calon santri tanpa perlu sewa server web berbayar.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '2. Panduan Pasang Google Apps Script (GAS) Web App',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="bg-teal-50 p-3.5 rounded-xl border border-teal-200 text-xs text-teal-950 space-y-1.5">
+                            <div className="font-bold flex items-center gap-1.5 text-teal-900">
+                                <i className="bi bi-shield-lock-fill text-teal-700"></i>
+                                Mengapa Menggunakan Google Apps Script?
+                            </div>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Google Apps Script (GAS) berfungsi sebagai jembatan gratis dan aman antara formulir online HTML dengan Google Spreadsheet &amp; Google Drive panitia. Satu script GAS dapat melayani banyak jenis formulir pendaftaran sekaligus tanpa repot.
+                            </p>
+                        </div>
+
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5 space-y-2.5 text-xs">
+                            <h6 className="font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <i className="bi bi-list-ol text-teal-700"></i> Langkah Demi Langkah Pemasangan:
+                            </h6>
+                            <ol className="list-decimal pl-4 space-y-2 text-gray-700 text-[11px] leading-relaxed">
+                                <li>
+                                    <strong>Buka Spreadsheet Panitia:</strong> Buat 1 Google Spreadsheet kosong di akun Google panitia PSB (misal bernama <em>"Database PSB eSantri 2026"</em>).
+                                </li>
+                                <li>
+                                    <strong>Buka Script Editor:</strong> Klik menu <strong>Ekstensi (Extensions) &gt; Apps Script</strong>.
+                                </li>
+                                <li>
+                                    <strong>Salin Kode Script:</strong> Buka tab <strong>Desain Formulir Online</strong> di aplikasi eSantri, klik <em>Kode Script GAS &amp; Panduan Alur</em>, lalu klik <strong>Salin Kode Script</strong>. Hapus semua kode default di file <code>Code.gs</code> Google Spreadsheet, lalu tempelkan kode yang telah disalin.
+                                </li>
+                                <li>
+                                    <strong>Deployment sebagai Web App:</strong>
+                                    <div className="mt-1 p-2.5 bg-white rounded-lg border border-gray-300 space-y-1 text-gray-800">
+                                        <p>• Klik tombol biru <strong>Deploy &gt; Deployment Baru (New Deployment)</strong> di pojok kanan atas.</p>
+                                        <p>• Pada ikon gerigi jenis deployment, pilih <strong>Aplikasi Web (Web App)</strong>.</p>
+                                        <p>• Kolom <em>Deskripsi</em>: Isi dengan <code>Web App PSB Pesantren</code>.</p>
+                                        <p>• Kolom <em>Jalankan sebagai (Execute as)</em>: Pilih <strong>Saya (email akun Google Anda)</strong>.</p>
+                                        <p>• Kolom <em>Siapa yang memiliki akses (Who has access)</em>: Wajib pilih <strong className="text-teal-900 bg-teal-100 px-1 rounded">Siapa Saja (Anyone)</strong>.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <strong>Otorisasi Akses:</strong> Klik <strong>Deploy</strong>. Jika muncul jendela <em>Authorization Required</em>, klik <em>Review Permissions</em> &gt; pilih akun Google Anda &gt; klik <em>Advanced (Lanjutan)</em> &gt; klik <em>Go to ... (unsafe) / Buka script</em> &gt; klik <strong>Allow (Izinkan)</strong>.
+                                </li>
+                                <li>
+                                    <strong>Salin URL Deployment:</strong> Salin URL Web App yang berakhiran <code>/exec</code>, lalu tempelkan ke kolom URL di tab <em>Desain Formulir</em> atau modal <em>Koneksi Google Sheet</em> di tab Rekap.
+                                </li>
+                            </ol>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '3. Konfigurasi Folder Google Drive untuk Berkas Pendaftar',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-xs text-amber-950 space-y-1.5">
+                            <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                                <i className="bi bi-folder-symlink-fill text-amber-600"></i>
+                                Mengapa Perlu Menentukan Folder Khusus di Google Drive?
+                            </div>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Secara bawaan, jika ID folder tidak ditentukan, berkas yang diunggah calon santri (KK, Ijazah, Foto, Akta) akan tersimpan di halaman utama <em>"Drive Saya"</em>. Menentukan folder khusus (misal <code>Berkas PSB 2026</code>) membuat arsip pendaftaran rapi, mudah dibagikan kepada sesama panitia posko, dan tidak tercampur berkas pribadi.
+                            </p>
+                        </div>
+
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5 space-y-2 text-xs">
+                            <h6 className="font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <i className="bi bi-gear-wide-connected text-teal-700"></i> Cara Mengarahkan Berkas ke Folder Tertentu:
+                            </h6>
+                            <ol className="list-decimal pl-4 space-y-2 text-gray-700 text-[11px]">
+                                <li>
+                                    Buka Google Drive (<a href="https://drive.google.com" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">drive.google.com</a>) dengan akun Google yang sama.
+                                </li>
+                                <li>
+                                    Klik <strong>Baru &gt; Folder Baru</strong>, beri nama misalnya <strong>"Berkas PSB 2026"</strong>.
+                                </li>
+                                <li>
+                                    Buka folder tersebut, lalu perhatikan address bar browser Anda. Salin serangkaian kode unik setelah <code>folders/</code>:
+                                    <div className="mt-1 p-2 bg-white rounded-lg border border-gray-300 font-mono text-[11px] text-gray-800 break-all">
+                                        drive.google.com/drive/folders/<span className="bg-amber-100 font-bold text-amber-950 px-1 rounded">1a2B3c4D5e_CONTOH_ID_FOLDER_6f7G</span>
+                                    </div>
+                                </li>
+                                <li>
+                                    Kembali ke editor Google Apps Script (<code>Code.gs</code>), cari baris di bagian atas fungsi <code>doPost</code>:
+                                    <div className="mt-1 p-2 bg-slate-900 text-emerald-300 font-mono text-[11px] rounded-lg">
+                                        var folderId = <span className="text-amber-300">"1a2B3c4D5e_CONTOH_ID_FOLDER_6f7G"</span>;
+                                    </div>
+                                </li>
+                                <li>
+                                    Klik <strong>Simpan (ikon disket)</strong>, lalu klik <strong>Deploy &gt; Kelola Deployment &gt; Edit (ikon pensil) &gt; Versi: Baru &gt; Deploy</strong> agar perubahan folder aktif.
+                                </li>
+                            </ol>
+                        </div>
+
+                        <div className="bg-teal-50 p-3 rounded-xl border border-teal-200 text-xs space-y-1">
+                            <span className="font-bold text-teal-900 flex items-center gap-1.5">
+                                <i className="bi bi-magic text-teal-700"></i> Otomasi Cerdas Berkas Pendaftar:
+                            </span>
+                            <ul className="list-disc pl-4 text-[11px] text-teal-950 space-y-1">
+                                <li><strong>Penamaan Otomatis (Smart Naming):</strong> Berkas otomatis direname rapi sesuai jenis dokumen dan nama santri, misal <code>kk-muhammad-fauzi-20260908-143022.pdf</code>.</li>
+                                <li><strong>Izin Akses Terbuka (Public View):</strong> Tautan berkas otomatis disetel agar dapat dibuka langsung oleh panitia di modal verifikasi formulir fisik tanpa hambatan login akun.</li>
+                            </ul>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '4. Sinkronisasi & Penarikan Data Pendaftar (Tarik Google Sheet)',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p>
+                            Setelah calon santri mengisi formulir online, data akan tersimpan di Google Spreadsheet. Panitia dapat menarik data tersebut ke dalam aplikasi eSantri Web kapan saja:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-1.5">
+                                <strong className="text-gray-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-arrow-repeat text-teal-700"></i> Tombol "Tarik Google Sheet"
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Buka tab <strong>Rekap PSB</strong>, lalu klik tombol <em>"Tarik Google Sheet"</em>. Sistem akan menghubungi Web App Google Apps Script dan mengunduh seluruh baris data baru secara real-time.
+                                </p>
+                            </div>
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-1.5">
+                                <strong className="text-gray-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-database-check text-teal-700"></i> Dukungan Kolom Kustom (Custom Fields)
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Jika formulir pendaftaran Anda memuat pertanyaan khusus (seperti <em>Ukuran Seragam, Riwayat Penyakit, Golongan Darah, Catatan Khusus</em>), data tersebut otomatis disimpan ke properti <code>customData</code> dan ikut tercetak di lembar formulir fisik.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-xs text-blue-950">
+                            <strong>💡 Keamanan Anti-Duplikasi:</strong> Sistem eSantri secara cerdas memeriksa NISN dan NIK pendaftar. Jika pendaftar sudah pernah ditarik sebelumnya, data pendaftar tidak akan terduplikasi di aplikasi.
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '5. Cetak Berkas Fisik (F-PSB) & Kartu Ujian Masuk',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p>
+                            Untuk kebutuhan operasional posko pendaftaran di pesantren, eSantri menyediakan fitur cetak dokumen resmi berstandar cetak:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-1.5">
+                                <strong className="text-gray-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-file-earmark-text-fill text-teal-700"></i> Formulir Resmi Pendaftaran (F-PSB)
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Klik tombol cetak formulir pada baris pendaftar. Menghasilkan lembar F-PSB lengkap dengan kop pesantren, nomor registrasi, pas foto, biodata santri &amp; wali, tabel data tambahan kustom, serta <strong>Checklist Verifikasi Berkas Fisik</strong> untuk panitia meja verifikasi.
+                                </p>
+                            </div>
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-1.5">
+                                <strong className="text-gray-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-card-heading text-teal-700"></i> Kartu Peserta Ujian Masuk
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menghasilkan kartu tanda peserta ujian seleksi berukuran saku. Memuat nomor tes, ruang ujian, jadwal materi ujian (Baca Kitab, Tahfizh, Potensi Akademik), pas foto, barcode registrasi, dan kolom paraf penguji.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '6. Standar Alur Kerja Multi-Admin (Arsitektur Hub & Spoke & SOP Firebase Realtime)',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3.5 text-sm text-gray-700">
+                        {/* Hub and Spoke Architecture Diagram & Concept */}
+                        <div className="bg-gradient-to-br from-teal-900 to-slate-900 p-4 rounded-xl text-white space-y-3 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <span className="px-2.5 py-0.5 rounded-full bg-teal-400/20 text-teal-300 text-[10px] font-mono font-bold tracking-wide uppercase border border-teal-400/30">
+                                    Arsitektur Sistem Terdistribusi
+                                </span>
+                                <span className="text-[11px] text-teal-200/80 flex items-center gap-1">
+                                    <i className="bi bi-broadcast"></i> WebSocket Real-Time Sync
+                                </span>
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-base text-white flex items-center gap-2">
+                                    <i className="bi bi-diagram-3-fill text-teal-400"></i> Topologi Hub &amp; Spoke Multi-Admin PSB
+                                </h4>
+                                <p className="text-xs text-slate-300 leading-relaxed mt-1">
+                                    Untuk menangani ratusan pendaftar serentak tanpa tabrakan data, eSantri Web menerapkan model <strong>Hub and Spoke</strong> terhubung ke cloud database real-time:
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-xs">
+                                <div className="bg-white/10 p-3 rounded-lg border border-white/15 space-y-1.5 backdrop-blur-xs">
+                                    <div className="flex items-center gap-1.5 text-teal-300 font-bold">
+                                        <i className="bi bi-hdd-network-fill text-sm"></i>
+                                        <span>HUB (Pusat Data &amp; Server Realtime)</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                                        Berperan sebagai <em>Single Source of Truth (SSOT)</em>. Menerima mutasi data secara stream dari semua posko, memvalidasi kuota jenjang, mengelola counter nomor registrasi atomik, dan menyalurkan delta-update ke seluruh spoke dalam &lt; 100ms.
+                                    </p>
+                                </div>
+                                <div className="bg-white/10 p-3 rounded-lg border border-white/15 space-y-1.5 backdrop-blur-xs">
+                                    <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                                        <i className="bi bi-laptop-fill text-sm"></i>
+                                        <span>SPOKES (Terminal Laptop/Tablet Posko)</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                                        Setiap meja/staf (Resepsionis, Verifikator Berkas, Penguji Ujian, Bendahara) adalah <em>Spoke Node</em> mandiri. Didukung <em>Offline-First Cache</em> (IndexedDB/LocalStorage) sehingga jika internet pondok goyang, input formulir dan nilai tetap lancar tanpa macet.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Matriks Peran Multi-Admin */}
+                        <div className="bg-teal-50 p-4 rounded-xl border border-teal-200 text-xs space-y-3">
+                            <strong className="text-teal-900 font-bold block text-sm flex items-center gap-2">
+                                <i className="bi bi-people-fill text-teal-700"></i> Matriks Peran &amp; Pembagian Kerja Tim Posko PSB
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Pembagian peran terarah memastikan setiap admin memiliki wewenang fokus sesuai meja pelayanannya:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                <div className="bg-white p-3 rounded-lg border border-teal-200 shadow-2xs space-y-1">
+                                    <span className="font-bold text-teal-950 flex items-center gap-1.5 text-xs">
+                                        <i className="bi bi-person-badge-fill text-teal-700"></i> 1. Ketua / Koordinator PSB (Hub Master)
+                                    </span>
+                                    <ul className="list-disc pl-4 text-[11px] text-gray-600 space-y-0.5">
+                                        <li>Menentukan kuota penerimaan per jenjang dan batas tanggal gelombang pendaftaran.</li>
+                                        <li>Mengonfigurasi skrip sync Google Sheets / cloud realtime database.</li>
+                                        <li>Menetapkan ambang kelulusan seleksi, menandatangani SK resmi, dan ekspor laporan final.</li>
+                                    </ul>
+                                </div>
+                                <div className="bg-white p-3 rounded-lg border border-teal-200 shadow-2xs space-y-1">
+                                    <span className="font-bold text-teal-950 flex items-center gap-1.5 text-xs">
+                                        <i className="bi bi-clipboard2-check-fill text-blue-700"></i> 2. Meja Verifikasi &amp; Resepsionis Posko
+                                    </span>
+                                    <ul className="list-disc pl-4 text-[11px] text-gray-600 space-y-0.5">
+                                        <li>Menerima wali santri di posko, mencocokkan kelengkapan berkas fisik (KK, Akta, Ijazah).</li>
+                                        <li>Mencetak formulir pendaftaran fisik F-PSB dan Kartu Tanda Peserta Ujian Seleksi.</li>
+                                        <li>Melakukan approval berkas dan mengirim notifikasi konfirmasi via WhatsApp panitia.</li>
+                                    </ul>
+                                </div>
+                                <div className="bg-white p-3 rounded-lg border border-teal-200 shadow-2xs space-y-1">
+                                    <span className="font-bold text-teal-950 flex items-center gap-1.5 text-xs">
+                                        <i className="bi bi-journal-bookmark-fill text-purple-700"></i> 3. Meja Penguji Seleksi &amp; Asatidz (Examiner)
+                                    </span>
+                                    <ul className="list-disc pl-4 text-[11px] text-gray-600 space-y-0.5">
+                                        <li>Menguji materi: Tahfizh Qur'an, Tajwid, Fashahah, Baca Kitab/Imla, dan Potensi Akademik.</li>
+                                        <li>Menginput nilai ujian seleksi per mata uji (kalkulasi rata-rata otomatis terupdate ke Hub).</li>
+                                        <li>Memberikan catatan rekomendasi penempatan asrama/halaqah khusus santri berprestasi.</li>
+                                    </ul>
+                                </div>
+                                <div className="bg-white p-3 rounded-lg border border-teal-200 shadow-2xs space-y-1">
+                                    <span className="font-bold text-teal-950 flex items-center gap-1.5 text-xs">
+                                        <i className="bi bi-cash-coin text-emerald-700"></i> 4. Meja Kasir &amp; Bendahara PSB
+                                    </span>
+                                    <ul className="list-disc pl-4 text-[11px] text-gray-600 space-y-0.5">
+                                        <li>Memverifikasi bukti transfer infak formulir dari pendaftaran online.</li>
+                                        <li>Menerima pembayaran tunai biaya pendaftaran dan uang pangkal daftar ulang di kasir posko.</li>
+                                        <li>Mencetak kuitansi pembayaran resmi berkode registrasi santri.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SOP Real-Time Multi-Admin */}
+                        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 text-xs">
+                            <strong className="text-gray-900 font-bold block text-sm flex items-center gap-2">
+                                <i className="bi bi-shield-check text-emerald-600 text-base"></i> Standar Operasional Prosedur (SOP) Sinkronisasi Real-Time
+                            </strong>
+                            
+                            <div className="space-y-2.5">
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                                    <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                                        <span className="w-5 h-5 rounded-full bg-teal-700 text-white flex items-center justify-center text-[11px] font-bold">1</span>
+                                        SOP Pencegahan Tabrakan Nomor Registrasi (Anti-Collision ID)
+                                    </span>
+                                    <p className="text-[11px] text-gray-600 pl-6 leading-relaxed">
+                                        Nomor registrasi diterbitkan dengan format terstandar berurutan berbasis tahun, jenjang, dan sequence counter di tingkat Hub (misal: <code>REG-2026-MTS-0089</code>). Saat dua posko mendaftarkan calon santri di detik yang sama, sistem menggunakan timestamp UNIX berpresisi milidetik sehingga tidak terjadi duplikasi registrasi.
+                                    </p>
+                                </div>
+
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                                    <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                                        <span className="w-5 h-5 rounded-full bg-teal-700 text-white flex items-center justify-center text-[11px] font-bold">2</span>
+                                        SOP Penanganan Konflik Data (Field-Level Patching &amp; LWW)
+                                    </span>
+                                    <p className="text-[11px] text-gray-600 pl-6 leading-relaxed">
+                                        Sistem menggunakan metode perbaruan tingkat field (Field-Level Patching), bukan menimpa satu baris penuh. Jika Meja Verifikasi mengupdate status berkas sementara Meja Penguji menginput nilai ujian santri yang sama, kedua pembaruan otomatis digabungkan tanpa saling menimpa. Jika field yang sama diubah bersamaan, timestamp terakhir (Last Write Wins) dengan riwayat jejak audit (Audit Trail) diberlakukan.
+                                    </p>
+                                </div>
+
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                                    <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                                        <span className="w-5 h-5 rounded-full bg-teal-700 text-white flex items-center justify-center text-[11px] font-bold">3</span>
+                                        SOP Rekonsiliasi Akhir Hari (End-of-Day Reconciliation)
+                                    </span>
+                                    <p className="text-[11px] text-gray-600 pl-6 leading-relaxed">
+                                        Setiap hari kerja pada pukul 17.00 WIB sebelum posko tutup, Koordinator PSB melakukan rekonsiliasi dengan menekan tombol <strong>Tarik Sheet</strong> untuk memastikan seluruh data Google Spreadsheet selaras, mencocokkan rekap kas masuk bendahara, lalu menekan <strong>Unduh Arsip ZIP</strong> untuk membuat backup harian berkas digital.
+                                    </p>
+                                </div>
+
+                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                                    <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                                        <span className="w-5 h-5 rounded-full bg-teal-700 text-white flex items-center justify-center text-[11px] font-bold">4</span>
+                                        Protokol Darurat Kegagalan Internet Posko (Offline Failover)
+                                    </span>
+                                    <p className="text-[11px] text-gray-600 pl-6 leading-relaxed">
+                                        Jika jaringan internet posko pondok padam total, seluruh terminal Spoke tetap dapat menerima pendaftaran dan menginput nilai secara offline di browser. Saat internet kembali aktif, terminal secara otomatis mem-push antrean data lokal ke Hub cloud database secara transparan.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Konversi Otomatis */}
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 space-y-1.5 text-xs">
+                            <strong className="text-emerald-950 font-bold flex items-center gap-1.5">
+                                <i className="bi bi-check2-circle text-emerald-700 text-base"></i> Konversi Otomatis Menjadi Santri Aktif &amp; Keuangan
+                            </strong>
+                            <p className="text-[11px] text-emerald-900 leading-relaxed">
+                                Begitu proses seleksi tuntas dan pendaftar dinyatakan lulus, satu klik tombol <strong>"Terima Santri"</strong> di tab Rekap akan:
+                            </p>
+                            <ol className="list-decimal pl-4 text-[11px] text-emerald-900 space-y-1">
+                                <li>Memasukkan calon santri ke <strong>Database Master Santri Aktif</strong> lengkap dengan NIS baru.</li>
+                                <li>Menerbitkan tagihan uang pangkal / daftar ulang di Modul Keuangan santri baru.</li>
+                                <li>Membuka draf pengumuman kelulusan resmi via WhatsApp kepada wali santri secara otomatis.</li>
+                            </ol>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '7. Export Laporan Pengumuman Hasil Seleksi (PDF) & Kustomisasi Catatan',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Untuk keperluan publikasi pengumuman hasil seleksi kepada calon wali santri dan arsip resmi posko, eSantri Web menyediakan fitur <strong>Dokumen Pengumuman Kelulusan PDF</strong> berstandar cetak:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                            <div className="bg-white p-3 rounded-xl border border-teal-200 shadow-2xs space-y-1">
+                                <strong className="text-teal-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-check-fill text-teal-600"></i> Tabel Santri DITERIMA
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan daftar peserta lulus, nomor registrasi, asal sekolah, nilai ujian, serta petunjuk daftar ulang dan narahubung panitia.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs space-y-1">
+                                <strong className="text-amber-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-clock-history text-amber-600"></i> Tabel CADANGAN
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan peserta cadangan yang berpeluang dipanggil jika terdapat kuota yang mengundurkan diri beserta tenggat waktu konfirmasi.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-xl border border-red-200 shadow-2xs space-y-1">
+                                <strong className="text-red-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-x-fill text-red-600"></i> Tabel TIDAK DITERIMA
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan calon santri yang belum memenuhi kriteria dengan redaksi santun, doa, dan arahan gelombang berikutnya atau pengembalian berkas.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3.5 space-y-2 text-xs">
+                            <strong className="text-amber-950 font-bold flex items-center gap-1.5">
+                                <i className="bi bi-pencil-square text-amber-600"></i> Fitur Kustomisasi Catatan Pengumuman (Editable Notes)
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Klik tombol <strong>"Edit Catatan Tabel"</strong> pada bagian atas modal dokumen pengumuman untuk menyesuaikan isi catatan resmi:
+                            </p>
+                            <ul className="list-disc pl-4 text-[11px] text-gray-700 space-y-1">
+                                <li><strong>Poin Petunjuk Santri Diterima:</strong> Bebas menambah, mengedit, atau menghapus poin jadwal pembayaran, berkas yang wajib dibawa saat sowan, dan kontak narahubung posko.</li>
+                                <li><strong>Catatan Santri Cadangan &amp; Ditolak:</strong> Redaksi dapat disesuaikan dengan kultur dan kebijakan pesantren.</li>
+                                <li><strong>Catatan Tambahan Panitia:</strong> Kolom catatan bebas untuk informasi pengarahan wali santri atau jadwal kedatangan santri ke asrama.</li>
+                            </ul>
+                        </div>
+
+                        <ul className="list-disc pl-5 space-y-1 text-xs text-gray-600">
+                            <li><strong>Filter Terarah:</strong> Cetak per jenjang (MTs, MA, dll.), per gelombang, atau gabungan seluruh pendaftar.</li>
+                            <li><strong>Urutan Fleksibel:</strong> Urutkan berdasarkan Ranking Nilai Ujian (tertinggi ke terendah), Nomor Registrasi, atau Nama Santri (A-Z).</li>
+                            <li><strong>Legalitas Pesantren:</strong> Dilengkapi Kop Surat Resmi Pondok Pesantren, Nomor Surat Keputusan, dan kolom tanda tangan Ketua Panitia serta Pimpinan Lembaga.</li>
+                        </ul>
+                    </div>
+                )
+            }
+        ]
+    },
+    {
+        id: 'surat',
+        badge: 14,
+        badgeColor: 'blue',
+        title: 'Surat Menyurat & Tata Kelola Dokumen',
+        steps: [
+            {
+                title: '1. Standardisasi Template Resmi, Variabel Cerdas & Magic AI Draft',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Modul <strong>Surat Menyurat</strong> dirancang khusus untuk mempercepat tata kelola administrasi korespondensi resmi pondok pesantren, menghilangkan ketik berulang dan menjamin konsistensi format kedinasan:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-blue-900 text-xs flex items-center gap-1.5 font-semibold">
+                                    <i className="bi bi-collection-fill text-blue-600"></i> Template Baku Pesantren
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Tersedia template baku bawaan: Surat Izin Pulang, Keterangan Aktif Santri, Panggilan Wali, Keterangan Berkelakuan Baik, Permohonan Dispensasi, Rekomendasi Beasiswa, Cuti Belajar, Peringatan Kedisiplinan, dan Undangan Pertemuan.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-blue-900 text-xs flex items-center gap-1.5 font-semibold">
+                                    <i className="bi bi-123 text-emerald-600"></i> Smart Auto-Numbering
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Pola penomoran baku <code>NOMOR/KODE/NAMA-PONDOK/BULAN-ROMAWI/TAHUN</code>. Sistem menghitung nomor urut dari arsip bulan berjalan otomatis serta menyediakan tombol regenerasi nomor sewaktu-waktu.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-blue-900 text-xs flex items-center gap-1.5 font-semibold">
+                                    <i className="bi bi-magic text-purple-600"></i> Variable Inserter &amp; AI
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Panel chip variabel terkategori (Data Santri, Akademik, Asrama, Orang Tua/Wali, Kelembagaan) yang dapat disisipkan dalam 1 klik, didukung fitur Magic Draft berbasis AI untuk menyusun redaksi resmi secara instan.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5 text-xs text-blue-950">
+                            <strong className="font-semibold flex items-center gap-1.5 text-blue-900">
+                                <i className="bi bi-tags-fill text-blue-600"></i> Variabel Otomatis Populer yang Tersedia:
+                            </strong>
+                            <div className="flex flex-wrap gap-1.5 text-[11px]">
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{NAMA_SANTRI}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{NIS}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{TTL}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{KELAS}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{ASRAMA}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{KAMAR}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{ORTU_WALI}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{NO_HP}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{NOMOR_SURAT}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{PIMPINAN_PONDOK}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{WALI_KELAS}'}</span>
+                                <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 text-blue-800 font-mono font-medium">{'{MUSYRIF}'}</span>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '2. Studio Surat Interaktif (In-Paper Studio), Zoom Presisi & Drawer Pengaturan',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Editor surat kini menggunakan layout <strong>In-Paper Studio</strong> modern dengan kanvas A4 proporsional penuh, menghilangkan ruang sempit dan tombol berhimpitan:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-2">
+                                <h5 className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-pencil-square text-teal-600"></i> Edit Langsung pada Kertas (WYSIWYG)
+                                </h5>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Klik langsung pada area nomor surat, perihal/judul, paragraf isi, hingga kalimat penutup di lembar kertas. Dilengkapi floating format toolbar (Bold, Italic, Underline, Bullet/Number List, Rata Kiri/Tengah/Kanan/Justify).
+                                </p>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-2">
+                                <h5 className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-zoom-in text-blue-600"></i> Zoom Controller Multi-Skala
+                                </h5>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Atur tingkat perbesaran kanvas (75%, 90%, 100%, 125%, 150%, atau Sesuaikan Lebar Layar) untuk kenyamanan mengetik. Zoom hanya mempengaruhi tampilan kerja di monitor dan secara otomatis di-reset saat cetak/ekspor PDF sehingga hasil tetap tajam dan presisi 100% ukuran A4.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-2">
+                                <h5 className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-sliders2-vertical text-purple-600"></i> Drawer Pengaturan Format Slide-Over
+                                </h5>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Pengaturan teknis dokumen dibuka melalui panel laci geser (Drawer) di sisi kanan tanpa memotong atau memperkecil kertas kerja. Berisi pengaturan nomor, kota/tanggal surat, margin cetak, kop blanko, penanda tangan, stempel, dan mengetahui.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '3. Penanda Tangan Cerdas: Mode Otomatis (Data Master Pesantren) vs Manual & TTD Digital',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Penetapan penanda tangan surat kini mendukung mode <strong>Otomatis (Ambil dari Data)</strong> dan <strong>Manual (Tulis Bebas)</strong> untuk fleksibilitas maksimal:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                            <div className="bg-teal-50/50 p-3.5 rounded-xl border border-teal-200 shadow-2xs space-y-2">
+                                <h5 className="font-semibold text-teal-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-person-check-fill text-teal-600"></i> Mode Otomatis (Terhubung ke Data Master)
+                                </h5>
+                                <ul className="list-disc pl-4 space-y-1 text-[11px] text-teal-950 leading-relaxed">
+                                    <li><strong>Pimpinan Pondok / Mudir 'Aam:</strong> Otomatis mengambil nama lengkap dan NIP pimpinan dari profil Pengaturan Pesantren.</li>
+                                    <li><strong>Ustadz / Tenaga Pengajar:</strong> Pilih langsung dari daftar ustadz terdaftar; nama, gelar, dan NIP otomatis sinkron.</li>
+                                    <li><strong>Wali Kelas Dinamis:</strong> Otomatis mendeteksi wali kelas berdasarkan rombel santri terkait (sangat ampuh saat cetak massal satu kelas).</li>
+                                    <li><strong>Musyrif Asrama Dinamis:</strong> Otomatis mendeteksi ustadz pembina asrama/kamar tempat santri tinggal.</li>
+                                    <li><strong>Aset TTD Digital:</strong> Sistem otomatis mendeteksi dan menautkan tanda tangan digital dari modul <em>Aset Digital</em> yang cocok dengan nama pejabat.</li>
+                                    <li><strong>Toggle NIP:</strong> Opsi menyembunyikan atau menampilkan baris NIP di bawah nama pejabat.</li>
+                                </ul>
+                            </div>
+                            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2">
+                                <h5 className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-pencil-fill text-amber-600"></i> Mode Manual (Tulis Bebas) &amp; Tata Letak
+                                </h5>
+                                <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-700 leading-relaxed">
+                                    <li><strong>Input Kustom:</strong> Tulis bebas nama pejabat eksternal, gelar, jabatan khusus, maupun nomor identitas kustom (NIK/NUPTK/NIP).</li>
+                                    <li><strong>Unggah TTD Mandiri:</strong> Opsi mengunggah gambar tanda tangan transparan langsung untuk surat terkait.</li>
+                                    <li><strong>Preset Tata Letak Pejabat:</strong> Tersedia pilihan 1 Penanda Tangan (kanan bawah), 2 Penanda Tangan (kiri &amp; kanan berdampingan), atau 3 Penanda Tangan proporsional.</li>
+                                    <li><strong>Kolom "Mengetahui":</strong> Pilihan opsional menampilkan tanda tangan Mengetahui (Wali Santri, Kepala Asrama, Ketua Yayasan) di tengah atas.</li>
+                                    <li><strong>Stempel Lembaga Digital:</strong> Pilihan stempel resmi pondok dari Aset Digital dengan penempatan otomatis pada pejabat terkait berotasi kedinasan natural (-12°).</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '4. Fleksibilitas Kop Blanko (Pre-Printed Paper) & Cetak Massal (Mail Merge)',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Mendukung beragam kebutuhan fisik percetakan di pesantren, baik pencetakan digital dari kertas polos maupun pencetakan pada kertas resmi yang telah memiliki kop fisik berwarna:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-2">
+                                <h5 className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-break-fill text-indigo-600"></i> Mode Cetak Kop Blanko (Pre-Printed)
+                                </h5>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Jika pesantren menggunakan kertas fisik berkop cetak warna/foil, aktifkan opsi <strong>"Kop Blanko"</strong> pada Drawer Format. Kop digital pada layar akan disembunyikan saat dicetak, dan jarak margin atas (<em>top margin offset</em>) dapat disesuaikan dalam satuan sentimeter (cm) dengan slider presisi agar naskah surat tepat berada di bawah kop fisik.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-2">
+                                <h5 className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                                    <i className="bi bi-filetype-pdf text-rose-600"></i> Multi-Format Export Berstandar Tinggi
+                                </h5>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Mendukung cetak langsung peramban (Native Print), ekspor PDF beresolusi tinggi (PDF Generator), unduh naskah Dokumen Microsoft Word (<em>.docx</em>) untuk pengeditan lanjutan di desktop, dan salinan halaman web statis (<em>.html</em>).
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-2">
+                            <strong className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                <i className="bi bi-printer-fill text-blue-600"></i> Prosedur Cetak Massal (Mail Merge):
+                            </strong>
+                            <ol className="list-decimal pl-5 space-y-1 text-[11px] text-gray-600">
+                                <li>Pilih template surat yang diinginkan pada daftar template.</li>
+                                <li>Pilih mode <strong>"Surat Massal (Per Rombel/Kelas/Asrama)"</strong> lalu centang daftar santri sasaran.</li>
+                                <li>Klik tombol <strong>"Tinjau &amp; Cetak Surat"</strong>. Sistem akan merender halaman masing-masing santri secara otomatis termasuk menyesuaikan nama wali kelas atau musyrif santri terkait.</li>
+                                <li>Pilih cetak langsung atau simpan sebagai PDF gabungan beresolusi tinggi dengan batas margin A4 presisi.</li>
+                            </ol>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '5. Pengelolaan Buku Agenda Surat Keluar & Pencatatan Otomatis (Auto-Archive)',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Setiap kali surat dicetak atau diterbitkan, sistem secara otomatis mengabadikan salinannya ke dalam <strong>Buku Agenda Surat Keluar</strong> untuk menjamin tertib administrasi tanpa perlu input ganda:
+                        </p>
+                        
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1.5 text-emerald-950">
+                            <strong className="font-bold flex items-center gap-1.5 text-emerald-900">
+                                <i className="bi bi-journal-check text-emerald-600 text-sm"></i> Pencatatan Otomatis saat Cetak &amp; Unduh Dokumen:
+                            </strong>
+                            <p className="leading-relaxed text-emerald-900/90">
+                                Saat Anda menekan tombol <strong>Cetak</strong> atau mengunduh berkas (<strong>PDF, Word, HTML</strong>), sistem otomatis memasukkan nomor surat, perihal, nama santri/penerima, tanggal, dan naskah lengkap ke dalam tabel Agenda Surat Keluar. Anda dapat melihat dan mengatur fitur ini melalui tombol toggle <strong>"Agenda Otomatis"</strong> di toolbar atas. Sistem cerdas juga mencegah duplikasi jika nomor surat dan santri yang sama sudah terdaftar.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-slate-900 text-xs flex items-center gap-1.5 font-semibold">
+                                    <i className="bi bi-journal-bookmark-fill text-emerald-600"></i> Buku Agenda Digital Lengkap
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Merekam nomor urut, kode surat, perihal, tujuan, tanggal pembuatan, snapshot tanda tangan terselesaikan, hingga naskah lengkap saat surat diterbitkan.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-slate-900 text-xs flex items-center gap-1.5 font-semibold">
+                                    <i className="bi bi-file-earmark-excel-fill text-emerald-700"></i> Ekspor Excel &amp; Cetak Agenda
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Dapat mencetak Buku Register Tata Usaha format resmi berkop lembaga dan mengekspor seluruh rekaman buku agenda ke berkas Excel (.xlsx) sekali klik.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-slate-900 text-xs flex items-center gap-1.5 font-semibold">
+                                    <i className="bi bi-whatsapp text-emerald-600"></i> Notifikasi WhatsApp Terpadu
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Setelah surat tercatat di arsip, Anda dapat langsung mengirim pemberitahuan resmi instan ke nomor HP santri, ayah, ibu, atau wali dengan naskah dinamis.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '6. SOP Kerja Multi-Admin: Real-Time Sync (Firebase) vs Hub-and-Spoke',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3.5 text-sm text-gray-700">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-shield-check text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya SOP Multi-Admin Surat Menyurat Pesantren:</strong>
+                                Di lingkungan pesantren, pembuatan surat sering dilakukan oleh divisi berbeda secara simultan (misal: <em>Tata Usaha Pusat</em> membuat Surat Keterangan Santri, <em>Musyrif Asrama</em> menerbitkan Surat Izin Pulang, dan <em>Guru BK</em> membuat Surat Panggilan Wali). Agar nomor surat tidak bertabrakan (duplikasi nomor) dan buku agenda selalu terpadu, patuhi SOP arsitektur kerja di bawah ini.
+                            </div>
+                        </div>
+
+                        {/* Model A */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">A</span>
+                                    Model A: Cloud Real-Time (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold uppercase tracking-wider">Disarankan / Online Penuh</span>
+                            </div>
+                            <p className="text-xs text-gray-600 leading-relaxed">
+                                Seluruh unit (TU Pusat, Asrama Putra, Asrama Putri, Pos Satpam, Ruang BK) terhubung ke internet dan masuk ke akun staff masing-masing.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+                                <div className="bg-white p-2.5 rounded-lg border border-teal-200/80 space-y-1 shadow-2xs">
+                                    <strong className="text-teal-900 font-semibold flex items-center gap-1 text-[11px]">
+                                        <i className="bi bi-arrow-repeat text-teal-600"></i> Alur Kerja &amp; Integritas Penomoran
+                                    </strong>
+                                    <ul className="list-disc pl-4 space-y-1 text-[10px] text-gray-600 leading-relaxed">
+                                        <li>Generator nomor membaca koleksi <code>arsipSurat</code> langsung dari cloud database.</li>
+                                        <li>Saat Musyrif menerbitkan Surat Izin Pulang di asrama, nomor langsung tercatat dan nomor berikutnya otomatis terpakai untuk staf lain.</li>
+                                        <li>Buku agenda di laptop Kepala TU dan Pos Satpam langsung terbarui secara instan tanpa reload browser.</li>
+                                    </ul>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-lg border border-teal-200/80 space-y-1 shadow-2xs">
+                                    <strong className="text-teal-900 font-semibold flex items-center gap-1 text-[11px]">
+                                        <i className="bi bi-exclamation-octagon text-amber-600"></i> Prosedur Saat Internet Terputus
+                                    </strong>
+                                    <ul className="list-disc pl-4 space-y-1 text-[10px] text-gray-600 leading-relaxed">
+                                        <li>Sistem beralih ke IndexedDB lokal offline; staf tetap dapat mencetak surat mendesak.</li>
+                                        <li>Begitu perangkat kembali tersambung ke WiFi/internet, sistem otomatis menyinkronkan rekaman arsip ke cloud tanpa intervensi manual.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">B</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Dropbox / File Cadangan)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase tracking-wider">Hybrid / Tanpa Internet Rutin</span>
+                            </div>
+                            <p className="text-xs text-gray-600 leading-relaxed">
+                                Diterapkan jika kantor asrama atau pos jaga tidak memiliki koneksi internet kontinu. Komputer Tata Usaha Pusat bertindak sebagai <strong>HUB (Pusat)</strong>, sedangkan komputer pos jaga/asrama bertindak sebagai <strong>SPOKE (Cabang)</strong>.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+                                <div className="bg-white p-2.5 rounded-lg border border-indigo-200/80 space-y-1 shadow-2xs">
+                                    <strong className="text-indigo-900 font-semibold flex items-center gap-1 text-[11px]">
+                                        <i className="bi bi-hash text-indigo-600"></i> Aturan Sub-Kode Penomoran Unik
+                                    </strong>
+                                    <p className="text-[10px] text-gray-600 leading-relaxed">
+                                        Untuk menghindari tabrakan nomor urut saat bekerja offline, tetapkan kode klasifikasi surat yang berbeda untuk tiap unit:
+                                    </p>
+                                    <ul className="list-disc pl-4 space-y-0.5 text-[10px] text-gray-600 font-mono">
+                                        <li>TU Pusat: .../TU/PP-AI/...</li>
+                                        <li>Pengasuhan Asrama: .../ASR/PP-AI/...</li>
+                                        <li>Bimbingan Konseling: .../BK/PP-AI/...</li>
+                                        <li>Pos Keamanan / Izin: .../KMN/PP-AI/...</li>
+                                    </ul>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-lg border border-indigo-200/80 space-y-1 shadow-2xs">
+                                    <strong className="text-indigo-900 font-semibold flex items-center gap-1 text-[11px]">
+                                        <i className="bi bi-clock-history text-indigo-600"></i> SOP Rekonsiliasi Harian
+                                    </strong>
+                                    <ol className="list-decimal pl-4 space-y-1 text-[10px] text-gray-600 leading-relaxed">
+                                        <li><strong>Pagi (07.30):</strong> Staf Spoke melakukan <em>"Tarik Data Master"</em> dari cloud/flashdisk.</li>
+                                        <li><strong>Sepanjang Hari:</strong> Pelayanan cetak surat izin &amp; pengarsipan berjalan offline.</li>
+                                        <li><strong>Sore (16.00):</strong> Staf Spoke mengunggah file perubahan (<em>"Upload Staff Changes"</em>).</li>
+                                        <li><strong>Tutup Kantor:</strong> Admin Pusat mengecek inbox data dan melakukan <em>"Publish Master"</em>.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '7. Matriks Wewenang & Rekomendasi Alur Surat Pesantren',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed text-xs">
+                            Panduan pembagian kewenangan (RACI) penerbitan dokumen resmi di lingkungan pondok pesantren:
+                        </p>
+                        <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-2xs bg-white text-xs">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-gray-200 text-slate-700 font-semibold text-[11px]">
+                                        <th className="p-2.5">Jenis Surat</th>
+                                        <th className="p-2.5">Unit Pembuat</th>
+                                        <th className="p-2.5">Penanda Tangan</th>
+                                        <th className="p-2.5">Tembusan Wajib</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 text-[11px] text-gray-600">
+                                    <tr>
+                                        <td className="p-2.5 font-medium text-slate-800">Surat Keterangan Aktif / Pindah</td>
+                                        <td className="p-2.5">Tata Usaha Pusat</td>
+                                        <td className="p-2.5">Kepala Madrasah / Mudir</td>
+                                        <td className="p-2.5">Arsip TU, Wali Santri</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2.5 font-medium text-slate-800">Surat Izin Pulang / Sakit</td>
+                                        <td className="p-2.5">Pengasuhan / Musyrif</td>
+                                        <td className="p-2.5">Kepala Asrama / Poskestren</td>
+                                        <td className="p-2.5">Pos Satpam, Wali Santri via WA</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2.5 font-medium text-slate-800">Surat Panggilan Orang Tua</td>
+                                        <td className="p-2.5">Guru BK / Kedisiplinan</td>
+                                        <td className="p-2.5">Guru BK &amp; Pengasuh</td>
+                                        <td className="p-2.5">Wali Kelas, Kepala Asrama</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2.5 font-medium text-slate-800">Undangan Pertemuan Wali</td>
+                                        <td className="p-2.5">Sekretariat Pimpinan</td>
+                                        <td className="p-2.5">Pimpinan Pondok Pesantren</td>
+                                        <td className="p-2.5">Buku Agenda, WhatsApp Center</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="p-3 bg-slate-100 rounded-xl text-slate-700 text-xs flex items-center gap-2">
+                            <i className="bi bi-info-circle-fill text-blue-600 text-base shrink-0"></i>
+                            <span>
+                                <strong>Tips Pengarsipan:</strong> Disarankan untuk mencetak Buku Agenda Surat Keluar setiap akhir bulan dan menyimpannya bersama berkas fisik bernomor di ordner arsip kantor tata usaha.
+                            </span>
+                        </div>
+                    </div>
                 )
             }
         ]
@@ -3483,74 +4361,222 @@ export const panduanData: PanduanSectionData[] = [
         id: 'laporan_lanjutan',
         badge: 'UPDATE',
         badgeColor: 'indigo',
-        title: 'Modul Laporan & Cetak Kartu Santri',
+        title: 'Modul Laporan Umum & Dokumen Administrasi',
         steps: [
             {
-                title: 'Cetak Kartu Santri & ID Card Vertikal (Auto-Fit Font & Presisi)',
+                title: '1. Struktur 4 Kategori Laporan & Ekosistem Dokumen Pesantren',
                 color: 'teal',
                 content: (
-                    <div className="space-y-3 text-sm">
-                        <div className="bg-teal-50 p-3.5 rounded-lg border border-teal-200 text-xs text-teal-950 space-y-2">
-                            <h5 className="font-bold flex items-center gap-1.5"><i className="bi bi-person-badge text-teal-700"></i> Desain Kartu Identitas Santri Modern</h5>
-                            <p>Modul Laporan & Identitas mendukung pembuatan Kartu Santri (Landscape 2 Muka) dan Kartu ID Santri Vertikal (Portrait) siap cetak.</p>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Modul <strong>Laporan</strong> mengintegrasikan seluruh data operasional pesantren ke dalam format cetak resmi dan ekspor digital yang terbagi ke dalam 4 kategori utama:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                            <div className="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-200 text-xs space-y-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5">
+                                    <i className="bi bi-speedometer2 text-indigo-600 text-sm"></i> 1. Laporan Utama &amp; Dashboard Eksekutif
+                                </h5>
+                                <ul className="list-disc pl-4 space-y-1 text-indigo-950/90 leading-relaxed">
+                                    <li><strong>Snapshot Operasional Harian:</strong> Ringkasan 1 lembar untuk Mudir/Pimpinan mencakup absensi, layanan kesehatan, kas harian, dan mutasi santri.</li>
+                                    <li><strong>Early Warning Santri:</strong> Deteksi dini santri berisiko tinggi dari kombinasi absensi, pelanggaran BK, kesehatan, dan tunggakan.</li>
+                                    <li><strong>Ringkasan Dashboard &amp; Keuangan:</strong> Rekap grafik santri aktif, kamar asrama terisi, dan arus kas berjalan.</li>
+                                    <li><strong>Cohort Santri:</strong> Analisis retensi dan ketahanan santri per tahun masuk/angkatan.</li>
+                                    <li><strong>Kinerja Pengajar:</strong> Rekap kepatuhan pengisian jurnal kelas dan jam mengajar ustadz.</li>
+                                    <li><strong>Laporan Mutasi:</strong> Rekap mutasi masuk, pindah cabang, keluar, dan alumni kelulusan.</li>
+                                </ul>
+                            </div>
+
+                            <div className="bg-teal-50/60 p-3.5 rounded-xl border border-teal-200 text-xs space-y-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5">
+                                    <i className="bi bi-mortarboard-fill text-teal-600 text-sm"></i> 2. Akademik &amp; Kesiswaan
+                                </h5>
+                                <ul className="list-disc pl-4 space-y-1 text-teal-950/90 leading-relaxed">
+                                    <li><strong>Daftar Santri &amp; Biodata Lengkap:</strong> Lembar data profil lengkap santri berfoto siap cetak.</li>
+                                    <li><strong>Lembar Absensi Bulanan (Grid 1-31):</strong> Format presisi absensi kelas harian tanggal 1 sampai 31.</li>
+                                    <li><strong>Rekap Jurnal Mengajar:</strong> Matriks materi pelajaran, kehadiran guru, dan catatan kelas.</li>
+                                    <li><strong>Perkembangan Tahfizh:</strong> Rekap target juz, total setoran lancar, dan mutaba’ah hafalan.</li>
+                                    <li><strong>Rekap Kesehatan &amp; BK:</strong> Riwayat keluhan medis, diagnosis klinik, dan catatan konseling santri.</li>
+                                    <li><strong>Rapor Lengkap (PDF) &amp; Serah Terima:</strong> Cetak buku rapor resmi dan tanda terima wali santri.</li>
+                                    <li><strong>Kepatuhan Administrasi:</strong> Audit kelengkapan berkas fisik &amp; data induk santri.</li>
+                                </ul>
+                            </div>
+
+                            <div className="bg-blue-50/60 p-3.5 rounded-xl border border-blue-200 text-xs space-y-1.5">
+                                <h5 className="font-bold text-blue-900 flex items-center gap-1.5">
+                                    <i className="bi bi-cash-stack text-blue-600 text-sm"></i> 3. Keuangan &amp; Administrasi Permanen
+                                </h5>
+                                <ul className="list-disc pl-4 space-y-1 text-blue-950/90 leading-relaxed">
+                                    <li><strong>Matriks Tunggakan SPP:</strong> Matriks status bayar 12 bulan (Juli-Juni) per rombel dengan rekap nominal lunas/tertunggak.</li>
+                                    <li><strong>Buku Induk Santri:</strong> Lembar arsip permanen santri berstandar EMIS Kemenag lengkap dari riwayat ayah, ibu, hingga riwayat kesehatan.</li>
+                                    <li><strong>Rekening Koran Santri:</strong> Rincian transaksi tabungan, saku digital, dan tagihan berkala.</li>
+                                    <li><strong>Buku Arus Kas Umum:</strong> Rekap pemasukan dan pengeluaran kas pesantren berstandar akuntansi.</li>
+                                    <li><strong>Kartu Santri &amp; Stiker Label:</strong> Pembuatan kartu tanda santri dan label nama berpola stiker.</li>
+                                </ul>
+                            </div>
+
+                            <div className="bg-slate-100 p-3.5 rounded-xl border border-slate-300 text-xs space-y-1.5">
+                                <h5 className="font-bold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-box-seam-fill text-slate-700 text-sm"></i> 4. Penunjang, Asrama &amp; Ekspor EMIS
+                                </h5>
+                                <ul className="list-disc pl-4 space-y-1 text-slate-800 leading-relaxed">
+                                    <li><strong>Ekspor Format EMIS Kemenag:</strong> Berkas Excel (.xlsx) dengan pemetaan kolom yang disesuaikan untuk diunggah ke portal EMIS Kemenag.</li>
+                                    <li><strong>Data Penghuni Asrama &amp; Kamar:</strong> Distribusi santri per gedung asrama, musyrif pembina, dan kapasitas kamar.</li>
+                                    <li><strong>Surat Izin Pulang:</strong> Formulir resmi izin libur / kepulangan santri dengan QR verifikasi pos keamanan.</li>
+                                    <li><strong>Ekspor Kontak Wali (CSV/Excel):</strong> Daftar kontak nomor HP wali santri untuk diimpor ke Google Contacts atau kontak smartphone broadcast.</li>
+                                    <li><strong>Funnel Efektivitas PSB:</strong> Rasio konversi pendaftaran baru dari status mendaftar, seleksi, lunas, hingga resmi mukim.</li>
+                                </ul>
+                            </div>
                         </div>
+                    </div>
+                )
+            },
+            {
+                title: '2. Filter Cerdas, Kustomisasi Data & Pencarian Fleksibel',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Panel filter di sebelah kiri menyediakan penyaringan data berjenjang untuk menghasilkan dokumen yang akurat dan terfokus:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-funnel-fill text-teal-600"></i> Filter Hirarki Pendidikan
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed text-[11px]">
+                                    Pilih <strong>Jenjang (Marhalah)</strong>, <strong>Tingkat Kelas</strong>, dan <strong>Rombel</strong> secara otomatis berantai (dependen). Pilihan rombel hanya akan menampilkan kelas yang sesuai jenjang terpilih.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-person-gear text-indigo-600"></i> Filter Demografi &amp; Status
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed text-[11px]">
+                                    Filter berdasarkan <strong>Gender</strong> (Putra / Putri), <strong>Status Santri</strong> (Aktif, Mutasi, Lulus, Dikeluarkan), <strong>Jenis Santri</strong> (Mukim Asrama / Non-Mukim Pulang-Pergi), dan <strong>Gedung Asrama</strong>.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-sort-alpha-down text-purple-600"></i> Pengurutan &amp; Pencarian
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed text-[11px]">
+                                    Urutkan data berdasarkan Nama Lengkap (A-Z), NIS, atau Kelas. Kolom pencarian instan memudahkan menemukan santri atau data tertentu tanpa perlu scroll panjang.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '3. Pratinjau Dokumen Cerdas (Smart Zoom, Fit to Width & Page Count)',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Panel pratinjau lembar kerja dilengkapi mesin penampil dokumen presisi:
+                        </p>
                         <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
                             <li>
-                                <strong>Ukuran Font Dinamis (Anti-Elipsis):</strong> Judul dan nama lembaga secara otomatis menyesuaikan ukuran font (dinamis) sehingga tidak akan terpotong (...) meskipun nama pesantren sangat panjang.
+                                <strong>Smart Fit to Width:</strong> Dokumen otomatis menyesuaikan lebar viewport monitor saat pertama kali dibuka, menjamin dokumen terbaca jelas baik di layar laptop 13 inci maupun monitor desktop lebar.
                             </li>
                             <li>
-                                <strong>Tata Letak Tata Tertib Bersih:</strong> Pada kartu vertikal, teks tata tertib diposisikan secara presisi di bawah margin latar merah header sehingga kontras keterbacaan sempurna.
+                                <strong>Zoom Controller Multi-Tingkat:</strong> Pengguna dapat memperbesar/memperkecil skala tampilan (75%, 100%, 125%) secara bebas tanpa merusak layout asli cetak. Saat diekspor ke PDF atau dicetak, sistem otomatis mengembalikan skala ke 100% ukuran fisik.
                             </li>
                             <li>
-                                <strong>Penempatan Presisi Barcode / QR Code & Nomor Seri:</strong> Nomor seri unik dan barcode/QR diletakkan di slot khusus muka belakang tanpa menumpuk atau menutupi teks header.
-                            </li>
-                            <li>
-                                <strong>Layout Cetak Massal:</strong> Mendukung cetak otomatis per rombel atau seluruh santri dalam format kertas standar A4 dengan batas potong (cutting marks).
+                                <strong>Indikator Estimasi Halaman (Page Counter):</strong> Panel atas menampilkan total estimasi lembar dokumen yang akan tercetak, membantu staf menghitung kebutuhan kertas fisik sebelum proses print dijalankan.
                             </li>
                         </ul>
                     </div>
                 )
             },
             {
-                title: 'Daftar Laporan & Fungsinya',
+                title: '4. Multi-Format Ekspor Berstandar Tinggi (Print, PDF Vektor, Excel & CSV)',
+                color: 'teal',
                 content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm">
-                        <li><strong>Laporan Santri & Identitas:</strong> daftar santri, buku induk, kartu santri, kelengkapan data, dan arsip status.</li>
-                        <li><strong>Laporan Akademik:</strong> rekap nilai, rapor, jurnal mengajar, progres pembelajaran, dan dokumen pendukung kelas.</li>
-                        <li><strong>Laporan Tahfizh:</strong> mutaba’ah setoran, progres hafalan per santri, dan ringkasan capaian per rombel.</li>
-                        <li><strong>Laporan Absensi & Kedisiplinan:</strong> rekap hadir/izin/sakit/alfa per periode dan ringkasan kedisiplinan kelas.</li>
-                        <li><strong>Laporan Keuangan:</strong> tunggakan, status pembayaran, arus kas, payroll, uang saku, dan ringkasan setoran.</li>
-                        <li><strong>Laporan PSB:</strong> rekap pendaftar, status seleksi, efektivitas funnel, serta arsip formulir/berkas.</li>
-                        <li><strong>Laporan Sarpras & Aset:</strong> daftar inventaris, kondisi aset, aset bergerak, dan ringkasan valuasi.</li>
-                        <li><strong>Laporan Administratif:</strong> buku tamu, surat menyurat, dan dokumen administrasi operasional.</li>
-                        <li><strong>Snapshot Operasional Harian:</strong> ringkasan 1 halaman untuk pimpinan (absensi, layanan, kas, dan PSB harian).</li>
-                        <li><strong>Early Warning Santri:</strong> deteksi dini santri berisiko dari kombinasi absensi, BK, kesehatan, dan tunggakan.</li>
-                        <li><strong>Perkembangan Tahfizh:</strong> rekap total setoran dan persentase kelancaran per santri.</li>
-                        <li><strong>Kinerja Pengajar:</strong> ringkasan performa berdasarkan jurnal mengajar yang terisi.</li>
-                        <li><strong>Kelas/Asrama Bermasalah:</strong> peringkat rombel/gedung dengan indikator masalah tertinggi.</li>
-                        <li><strong>Cohort Santri:</strong> retensi dan outcome santri berdasarkan tahun masuk.</li>
-                        <li><strong>Kepatuhan Administrasi:</strong> daftar santri yang data intinya belum lengkap.</li>
-                        <li><strong>Efektivitas PSB:</strong> funnel status pendaftar dan distribusi jalur/gelombang.</li>
-                    </ul>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Menu <strong>"Unduh / Cetak"</strong> menyediakan berbagai format keluaran sesuai kebutuhan administrasi:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-printer-fill text-blue-600"></i> Cetak Langsung (Native Print) &amp; PDF Visual (Vektor)
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed text-[11px]">
+                                    Pilih opsi ini untuk mencetak langsung ke mesin printer atau menyimpan via dialog peramban <em>"Save as PDF"</em>. Menghasilkan naskah vektor beresolusi tinggi dengan teks tajam yang dapat diseleksi dan tidak buram/pecah saat dizoom.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-excel-fill text-emerald-700"></i> Ekspor Excel (.xlsx) Siap Pakai
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed text-[11px]">
+                                    Tersedia untuk Laporan EMIS, Arus Kas Umum, Ringkasan Keuangan, Daftar Santri, Kontak Wali, dan Matriks Tunggakan. Berkas Excel diformat rapi dengan judul kolom, garis kisi tabel, dan format angka mata uang otomatis.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-filetype-csv text-teal-600"></i> Ekspor Kontak CSV (Smartphone Sync)
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed text-[11px]">
+                                    Menghasilkan berkas CSV standar vCard/Google Contacts untuk mengekspor nomor HP seluruh wali santri sekali klik sehingga dapat diimpor langsung ke kontak HP admin/musyrif.
+                                </p>
+                            </div>
+                            <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-image text-rose-600"></i> PDF Gambar (Raster Standar)
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed text-[11px]">
+                                    Opsi alternatif pembuatan PDF berbasis render gambar instan langsung dari peramban jika perangkat tidak memiliki driver printer PDF bawaan.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 )
             },
             {
-                title: 'Cara Pakai Cepat',
+                title: '5. Kustomisasi Kartu Santri & ID Card (Fleksibilitas Data Strategis)',
                 content: (
-                    <ol className="list-decimal pl-5 space-y-1 text-sm bg-gray-50 p-3 rounded border border-gray-200">
-                        <li>Buka menu <strong>Laporan</strong>, pilih kategori laporan yang dibutuhkan.</li>
-                        <li>Gunakan filter Marhalah/Kelas/Rombel untuk laporan berbasis santri (misalnya Early Warning atau Tahfizh).</li>
-                        <li>Klik <strong>Tampilkan Preview</strong> untuk melihat hasil.</li>
-                        <li>Untuk hasil paling presisi, gunakan <strong>Unduh &gt; PDF Visual (Akurat)</strong> atau <strong>Cetak</strong> lalu pilih Save as PDF.</li>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Pencetakan Kartu Identitas Santri kini dirancang dengan fleksibilitas data maksimal dan tata letak cerdas:
+                        </p>
+                        <div className="bg-teal-50/70 p-3.5 rounded-xl border border-teal-200 text-xs space-y-2">
+                            <strong className="font-bold text-teal-950 flex items-center gap-1.5">
+                                <i className="bi bi-person-vcard-fill text-teal-700 text-sm"></i> Keunggulan Fitur Kartu Santri Terbaru:
+                            </strong>
+                            <ul className="list-disc pl-4 space-y-1 text-teal-900 text-[11px] leading-relaxed">
+                                <li><strong>Pemisahan Jenjang &amp; Kelas:</strong> Anda dapat menampilkan Jenjang (misal: MTs/MA) dan Kelas (misal: VII/A) secara terpisah atau digabung sesuai format yang diinginkan.</li>
+                                <li><strong>Data Strategis Lengkap:</strong> Pilihan mandiri memunculkan NIS, NISN, NIK, Nama Hijrah / Kunyah, Asrama &amp; Kamar, TTL, Golongan Darah, Status Mukim/Non-Mukim, Orang Tua/Wali, Kontak Darurat, dan Tahun Masuk/Angkatan.</li>
+                                <li><strong>Smart Font Scaling:</strong> Algoritma kalkulasi ukuran font dinamis memastikan teks panjang pada nama pesantren, nama santri, maupun alamat domisili tidak akan terpotong (...) atau menabrak batas kartu.</li>
+                                <li><strong>5 Desain Visual Modern:</strong> Tersedia desain <em>Klasik Elegan, Modern Minimalis, ID Card Vertikal (Portrait), Dark Premium,</em> dan <em>Ceria / TPQ</em>.</li>
+                                <li><strong>Layout 2 Sisi Fleksibel:</strong> Pilihan format cetak berdampingan (untuk plastik ID Card) atau halaman terpisah depan-belakang (untuk mesin cetak PVC Duplex).</li>
+                            </ul>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '6. SOP Pembuatan Laporan & Cetak Massal yang Efektif',
+                content: (
+                    <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-700 bg-gray-50 p-3.5 rounded-xl border border-gray-200 leading-relaxed">
+                        <li>Buka menu <strong>Laporan</strong>, pilih kategori dan jenis laporan yang dibutuhkan pada halaman pemilihan.</li>
+                        <li>Tentukan filter <strong>Tahun Ajaran</strong>, <strong>Jenjang</strong>, dan <strong>Rombel</strong> pada panel filter sisi kiri.</li>
+                        <li>Periksa opsi khusus pada tab <em>Pilihan Laporan</em> (misal: centang data yang ingin ditampilkan pada kartu santri, atau pilih format tanda tangan).</li>
+                        <li>Klik <strong>Tampilkan Preview</strong> untuk memuat lembar kerja dan periksa hasilnya pada panel pratinjau.</li>
+                        <li>Gunakan tombol <strong>Cetak / Unduh</strong> di toolbar atas: pilih <em>Cetak Langsung</em> atau <em>PDF Visual</em> untuk hasil terbaik, atau pilih <em>Ekspor Excel</em> untuk pengolahan angka lanjutan di spreadsheet.</li>
                     </ol>
                 )
             },
             {
-                title: 'Catatan Interpretasi',
+                title: 'Catatan Interpretasi Data Strategis',
                 color: 'orange',
                 content: (
-                    <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm text-orange-900">
-                        Laporan strategis bersifat <strong>indikatif</strong> untuk membantu prioritas pembinaan. Keputusan final tetap perlu musyawarah tim pengasuhan, wali kelas, dan pimpinan pondok.
+                    <div className="bg-orange-50 p-3 rounded-xl border border-orange-200 text-xs text-orange-950 space-y-1">
+                        <strong className="font-bold flex items-center gap-1.5 text-orange-900">
+                            <i className="bi bi-info-circle-fill text-orange-600"></i> Panduan Pengambilan Keputusan:
+                        </strong>
+                        <p className="leading-relaxed">
+                            Laporan strategis seperti <em>Early Warning Santri</em>, <em>Kelas/Asrama Bermasalah</em>, dan <em>Snapshot Operasional</em> bersifat <strong>indikatif analitis</strong> untuk membantu pimpinan memetakan prioritas pembinaan. Tindakan lanjutan tetap mengedepankan musyawarah terpadu antara dewan pengasuhan, wali kelas, guru BK, dan orang tua santri.
+                        </p>
                     </div>
                 )
             }
@@ -3558,64 +4584,339 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'whatsapp',
-        badge: 'NEW',
-        badgeColor: 'green',
-        title: 'Smart WhatsApp Automation',
+        badge: 'PRO',
+        badgeColor: 'teal',
+        title: 'WhatsApp Communication Center & SOP Multi-Admin',
         steps: [
             {
-                title: 'Konsep & Cara Kerja',
+                title: 'Arsitektur Saluran: Mode Manual (wa.me) vs Gateway API',
+                color: 'teal',
                 content: (
-                    <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500 text-sm text-gray-700 space-y-3">
-                        <p>
-                            <strong>Komunikasi Efektif:</strong> Fitur ini memungkinkan Anda mengirimkan pesan otomatis ke wali santri tanpa harus mengetik ulang atau menyimpan nomor satu per satu.
-                        </p>
-                        <p>
-                            <strong>Metode Semi-Otomatis (Redirect):</strong> Aplikasi menyusun pesan cerdas (menggunakan variabel), lalu mengarahkan Anda ke WhatsApp Web/Desktop. Anda tinggal menekan tombol <em>Send</em>. Metode ini 100% aman karena tidak menggunakan API ilegal yang berisiko blokir.
-                        </p>
-                        <p>
-                            <strong>Indikator WA Redirect Ready:</strong> Menunjukkan perangkat Anda sedang online dan siap membuka redirect WhatsApp. Jika offline, tombol kirim akan dinonaktifkan.
-                        </p>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="bg-teal-50 p-4 rounded-xl border border-teal-200 space-y-2">
+                            <h4 className="font-bold text-teal-900 flex items-center gap-2">
+                                <i className="bi bi-gear-wide-connected text-teal-600"></i>
+                                Konsep Saluran Komunikasi Ganda (Hybrid Routing)
+                            </h4>
+                            <p className="leading-relaxed">
+                                Sistem menyediakan dua jalur pengiriman pesan yang dapat dipilih sesuai kebutuhan operasional lembaga:
+                            </p>
+                            <ul className="list-disc pl-5 space-y-1.5 text-xs text-teal-900">
+                                <li>
+                                    <strong>1. Jalur Manual (wa.me / WhatsApp Web / Desktop):</strong> Default sistem. Pesan otomatis disusun dengan data riil lalu diarahkan ke aplikasi WhatsApp Anda. 100% gratis, aman tanpa risiko pemblokiran nomor, dan tidak membutuhkan API pihak ketiga.
+                                </li>
+                                <li>
+                                    <strong>2. Jalur Gateway API (Fonnte, Wablas, atau Custom REST API):</strong> Mengirim pesan secara otomatis di latar belakang melalui server gateway berizin resmi. Cocok untuk pengiriman massal ratusan pesan tanpa perlu membuka jendela browser satu per satu.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2">
+                            <h5 className="font-bold text-gray-800 text-xs uppercase tracking-wider">Cara Mengatur WhatsApp Gateway:</h5>
+                            <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-600">
+                                <li>Klik tombol <strong>Saluran: Manual / API</strong> di sudut kanan atas halaman WhatsApp Center.</li>
+                                <li>Pilih penyedia gateway yang Anda gunakan (<strong>Fonnte</strong>, <strong>Wablas</strong>, atau <strong>Custom REST API</strong>).</li>
+                                <li>Masukkan <strong>API Key / Token Otentikasi</strong> dan <strong>Nomor WhatsApp Pengirim (Sender)</strong>.</li>
+                                <li>Klik tombol <strong>Uji Koneksi Gateway</strong> untuk memverifikasi apakah token Anda aktif dan terhubung.</li>
+                                <li>Klik <strong>Simpan Pengaturan</strong>. Jika gateway aktif, seluruh pengiriman otomatis diarahkan via API. Jika gateway dinonaktifkan atau gagal koneksi, sistem otomatis melakukan fallback aman ke mode manual (wa.me).</li>
+                            </ol>
+                        </div>
+
+                        <div className="bg-amber-50 p-3 rounded-lg border-l-4 border-amber-500 text-xs text-amber-800">
+                            <strong>Normalisasi Otomatis Nomor:</strong> Sistem secara otomatis membersihkan dan mengubah format nomor telepon lokal (misal: <code>0812-3456-7890</code> atau <code>+62 812...</code>) menjadi format internasional standar WhatsApp (<code>6281234567890</code>).
+                        </div>
                     </div>
                 )
             },
             {
-                title: 'Penggunaan Template Cerdas',
+                title: 'Manajemen Audiens: Santri Aktif & Tagihan vs Pendaftar PSB',
+                color: 'blue',
                 content: (
-                    <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-800">Anda dapat menggunakan variabel di dalam pesan agar teks berubah otomatis sesuai data santri:</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div className="bg-white p-2 border rounded text-xs">
-                                <code className="text-teal-600">[nama_santri]</code>
-                                <p className="text-gray-500 mt-1">Nama lengkap santri.</p>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            WhatsApp Center kini memisahkan target komunikasi menjadi dua tab audiens yang terisolasi secara rapi:
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-white p-3.5 rounded-xl border border-blue-200 shadow-2xs space-y-2">
+                                <div className="flex items-center gap-2 text-blue-700 font-bold text-sm">
+                                    <i className="bi bi-people-fill"></i>
+                                    <span>Tab 1: Santri Aktif & Tagihan</span>
+                                </div>
+                                <p className="text-xs text-gray-600 leading-relaxed">
+                                    Dikhususkan untuk komunikasi wali santri aktif. Terhubung langsung dengan basis data keuangan riil (<code>db.tagihan</code>).
+                                </p>
+                                <ul className="list-disc pl-4 space-y-1 text-xs text-gray-600">
+                                    <li>Filter presisi: Status Santri, Marhalah/Jenjang, Kelas, Rombel.</li>
+                                    <li>Menghitung otomatis akumulasi tunggakan belum lunas per santri.</li>
+                                    <li>Lencana status: <strong>Rp 0 (Lunas)</strong> atau total nominal tunggakan beserta rincian item tagihan.</li>
+                                </ul>
                             </div>
-                            <div className="bg-white p-2 border rounded text-xs">
-                                <code className="text-teal-600">[ortu]</code>
-                                <p className="text-gray-500 mt-1">Nama Ayah atau Ibu santri.</p>
-                            </div>
-                            <div className="bg-white p-2 border rounded text-xs">
-                                <code className="text-teal-600">[nominal]</code>
-                                <p className="text-gray-500 mt-1">Nilai uang (misal: Tagihan/Saldo).</p>
-                            </div>
-                            <div className="bg-white p-2 border rounded text-xs">
-                                <code className="text-teal-600">[bulan]</code>
-                                <p className="text-gray-500 mt-1">Nama bulan saat ini.</p>
+
+                            <div className="bg-white p-3.5 rounded-xl border border-emerald-200 shadow-2xs space-y-2">
+                                <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
+                                    <i className="bi bi-person-badge-fill"></i>
+                                    <span>Tab 2: Pendaftar PSB Baru</span>
+                                </div>
+                                <p className="text-xs text-gray-600 leading-relaxed">
+                                    Dikhususkan untuk calon santri dan wali pendaftar. Terhubung langsung dengan basis data pendaftaran PSB (<code>db.pendaftar</code>).
+                                </p>
+                                <ul className="list-disc pl-4 space-y-1 text-xs text-gray-600">
+                                    <li>Filter khusus: Status PSB (Baru, Terverifikasi, Ujian, Lulus, Diterima), Gelombang, Jalur Masuk, dan Kelengkapan Berkas Fisik (Lengkap 5/5).</li>
+                                    <li>Mendukung notifikasi jadwal & ruang ujian seleksi, pengingat berkas fisik posko, dan pengumuman kelulusan.</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
                 )
             },
             {
-                title: 'Broadcast / Pengiriman Massal',
+                title: 'Template Cerdas, Variabel Dinamis & Chip Sisipan',
+                color: 'green',
                 content: (
-                    <ol className="list-decimal pl-5 space-y-2 text-sm mt-1 bg-gray-50 p-3 rounded border">
-                        <li>Buka menu <strong>WhatsApp Center</strong>.</li>
-                        <li>Pilih <strong>Template Pesan</strong> atau ketik pesan kustom.</li>
-                        <li>Gunakan <strong>Filter</strong> (Marhalah, Kelas, Rombel) di bagian atas tabel untuk mempersempit target penerima.</li>
-                        <li>Centang santri yang akan dikirimi pesan (atau centang header untuk pilih semua yang tampil).</li>
-                        <li>Klik tombol <strong>Kirim Ke [X] Santri</strong> di pojok kanan atas.</li>
-                        <li>Sistem akan membuka tab WhatsApp satu per satu. Anda cukup klik <strong>Send</strong> di setiap jendela yang terbuka.</li>
-                        <li>Untuk pengumuman umum atau grup, gunakan menu <strong>Siaran Umum / Grup</strong> lalu klik <strong>Buka Composer WA</strong>.</li>
-                    </ol>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="bg-green-50 p-3 rounded-xl border border-green-200 text-xs text-green-900 leading-relaxed">
+                            <strong>Tombol Chip Variabel:</strong> Anda tidak perlu menghafal atau mengetik manual tag kurung siku. Cukup klik tombol chip variabel di atas kotak editor teks, maka variabel akan otomatis tersisip tepat di posisi kursor Anda.
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-left border-collapse border border-gray-200 rounded-lg overflow-hidden">
+                                <thead className="bg-gray-100 text-gray-700 font-bold">
+                                    <tr>
+                                        <th className="p-2 border border-gray-200">Kategori</th>
+                                        <th className="p-2 border border-gray-200">Tag Variabel</th>
+                                        <th className="p-2 border border-gray-200">Data Pengganti Riil</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    <tr>
+                                        <td className="p-2 font-medium text-gray-900 border border-gray-200" rowSpan={3}>Identitas Santri</td>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[nama_santri], [nis]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Nama lengkap & Nomor Induk Santri</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[ortu]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Nama Ayah, Ibu, atau Wali yang terdata</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[kelas], [rombel], [asrama]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Kelas, rombel, dan gedung/kamar asrama santri</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-medium text-gray-900 border border-gray-200" rowSpan={3}>Keuangan & Tagihan</td>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[tunggakan], [nominal]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Total nominal tunggakan belum lunas (format Rupiah)</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[rincian_tagihan]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Daftar nama pos tagihan yang belum dibayar</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[bulan], [tanggal]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Nama bulan kalender & tanggal saat ini</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-medium text-gray-900 border border-gray-200" rowSpan={3}>Penerimaan Santri (PSB)</td>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[no_reg], [status_psb]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Nomor registrasi pendaftaran & status seleksi</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[jalur], [gelombang]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Jalur pendaftaran & gelombang masuk</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-teal-700 border border-gray-200">[status_berkas], [ruang_ujian], [tanggal_ujian]</td>
+                                        <td className="p-2 text-gray-600 border border-gray-200">Kelengkapan berkas fisik & jadwal ujian masuk</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Wizard Antrean Pengiriman Massal (Dispatch Queue Modal)',
+                color: 'purple',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 space-y-2">
+                            <h4 className="font-bold text-purple-900 flex items-center gap-2">
+                                <i className="bi bi-stack text-purple-600"></i>
+                                Mengapa Menggunakan Dispatch Queue?
+                            </h4>
+                            <p className="text-xs text-purple-900 leading-relaxed">
+                                Fitur lama yang membuka puluhan tab browser sekaligus sering diblokir oleh sistem anti-popup browser (hanya tab pertama yang terbuka) dan menyebabkan memori komputer penuh. <strong>Dispatch Queue Wizard</strong> memproses pengiriman satu per satu secara teratur, aman, dan transparan.
+                            </p>
+                        </div>
+
+                        <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2">
+                            <h5 className="font-bold text-gray-800 text-xs uppercase tracking-wider">Alur Kerja Antrean Pengiriman:</h5>
+                            <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-600">
+                                <li>Centang santri atau calon santri yang akan dihubungi, lalu klik tombol <strong>Kirim Ke [X] Penerima</strong>.</li>
+                                <li>Modal antrean akan terbuka menampilkan <strong>Progress Bar</strong>, nomor urut penerima aktif, dan pratinjau pesan lengkap.</li>
+                                <li>
+                                    <strong>Tombol "Kirim & Lanjut":</strong> Mengirim pesan ke penerima saat ini dan langsung berpindah ke penerima berikutnya dalam antrean.
+                                </li>
+                                <li>
+                                    <strong>Tombol "Lewati":</strong> Melewati kontak saat ini jika nomor bermasalah atau belum ingin dihubungi tanpa membatalkan antrean penerima lainnya.
+                                </li>
+                                <li>
+                                    <strong>Tombol "Tutup":</strong> Menghentikan antrean kapan saja jika ingin menyelesaikan sisa kontak di waktu lain.
+                                </li>
+                            </ol>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'Riwayat Terakhir & Audit Trail Pengiriman',
+                color: 'indigo',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Untuk menjaga transparansi dan akuntabilitas komunikasi lembaga, setiap pesan yang dikirimkan (baik via manual wa.me maupun gateway API) otomatis direkam ke sistem audit:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="bg-gray-50 p-3 rounded-lg border text-xs space-y-1">
+                                <span className="font-bold text-gray-800 block">Lencana Riwayat Kontak di Tabel</span>
+                                <p className="text-gray-600">
+                                    Kolom <strong>Riwayat Terakhir</strong> di tabel kontak menampilkan lencana waktu (misal: <em>Hari ini 09:15</em> atau <em>12 Agt</em>) beserta saluran yang digunakan. Arahkan kursor untuk melihat nama petugas pengirim.
+                                </p>
+                            </div>
+                            <div className="bg-gray-50 p-3 rounded-lg border text-xs space-y-1">
+                                <span className="font-bold text-gray-800 block">Log Audit Sistem Terpusat</span>
+                                <p className="text-gray-600">
+                                    Tercatat otomatis di modul audit (<code>whatsapp_logs</code>) meliputi nama penerima, nomor tujuan, saluran pengiriman, draf pesan, serta username admin yang mengeksekusi.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: 'SOP Multi-Admin: Protokol Sinkronisasi Cloud Real-Time & Hub-and-Spoke',
+                color: 'orange',
+                content: (
+                    <div className="space-y-4 text-sm text-gray-700">
+                        <div className="bg-orange-50 p-4 rounded-xl border border-orange-200 space-y-2">
+                            <h4 className="font-bold text-orange-950 flex items-center gap-2">
+                                <i className="bi bi-diagram-3-fill text-orange-600"></i>
+                                Penyelarasan Multi-Admin: Real-Time Cloud vs Hub-and-Spoke
+                            </h4>
+                            <p className="text-xs text-orange-900 leading-relaxed">
+                                Pengiriman WhatsApp Center melibatkan koordinasi antar-divisi (Bendahara, Panitia PSB, Wali Kelas, Musyrif). eSantri Web mendukung dua arsitektur kerja multi-admin: <strong>Model A: Cloud Real-Time (Firebase)</strong> dan <strong>Model B: Hub-and-Spoke (Offline-First / Hybrid)</strong>. Ikuti tata kelola di bawah ini agar data tagihan akurat dan tidak terjadi pengiriman pesan ganda.
+                            </p>
+                        </div>
+
+                        {/* Model A: Cloud Real-Time */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">A</span>
+                                    Model A: Cloud Real-Time (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Diterapkan jika seluruh komputer admin dan posko terhubung internet / WiFi pondok secara stabil.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs space-y-1">
+                                    <strong className="text-teal-950 block font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600"></i> Lencana Riwayat Kontak Instan
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                                        Saat Admin Keuangan mengirim tagihan ke Santri A, log riwayat (<code>whatsapp_logs</code>) langsung tersinkronisasi ke Cloud. Laptop staf lain langsung menampilkan lencana <em>"Dihubungi Hari ini"</em> detik itu juga, sehingga mencegah duplikasi pengiriman.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs space-y-1">
+                                    <strong className="text-teal-950 block font-semibold">
+                                        <i className="bi bi-wallet2 text-teal-600"></i> Nilai Tagihan Terkini (No Fake Debt)
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                                        Pembayaran yang diinput kasir langsung terbarui secara real-time. Variabel <code>[tunggakan]</code> di perangkat staf manapun otomatis menampilkan saldo lunas, menghindari risiko menagih santri yang sudah membayar.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B: Hub-and-Spoke */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">B</span>
+                                    Model B: Hub-and-Spoke (Offline-First / Hybrid / File Sync)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Diterapkan jika posko PSB, asrama, atau kelas berada di area tanpa koneksi internet kontinu, atau pondok menggunakan sinkronisasi berkala via file/Dropbox.
+                            </p>
+                            <div className="space-y-2 text-xs">
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">1. Peran Komputer HUB (Pusat di Kantor TU / Keuangan):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        <strong>Pusatkan Broadcast Massal di HUB.</strong> Pengiriman siaran ratusan tagihan SPP bulanan atau maklumat akbar wajib dieksekusi dari komputer HUB yang memegang master data tunggakan paling mutakhir.
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950">2. Peran Laptop SPOKE (Posko PSB, Ruang BK, Kamar Asrama):</strong>
+                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                        Perangkat Spoke hanya mengirim pesan personal operasional (misal: panitia di meja posko mengabari 1 calon santri yang sedang mendaftar, atau ustadz mengabari 1 santri sakit).
+                                    </p>
+                                </div>
+                                <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-950 space-y-1">
+                                    <strong>⚡ Aturan Sinkronisasi Spoke (Tarik Dulu, Baru Kirim, Lalu Unggah):</strong>
+                                    <ol className="list-decimal pl-4 space-y-0.5 text-gray-700">
+                                        <li><strong>Sebelum Broadcast:</strong> Spoke wajib klik <em>"Ambil Master Data (Auto-Pull)"</em> agar data tagihan dan nomor kontak bukan versi kedaluwarsa.</li>
+                                        <li><strong>Setelah Broadcast:</strong> Spoke wajib membuka Pusat Sinkronisasi dan klik <em>"Kirim Perubahan (Upload Staff Changes)"</em> agar riwayat kontak terkirim ke HUB dan tidak dihubungi ulang oleh staf lain.</li>
+                                        <li><strong>Admin HUB:</strong> Melakukan <em>"Gabungkan Perubahan (Merge Changes)"</em> dan menerbitkan Master Data terbaru.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 4 Pilar Operasional Umum */}
+                        <div className="space-y-2.5">
+                            <h5 className="font-bold text-gray-800 text-xs uppercase tracking-wider">4 Pilar Disiplin Komunikasi Pesantren:</h5>
+
+                            <div className="border border-gray-200 rounded-xl p-3 bg-white space-y-1 text-xs">
+                                <strong className="text-teal-700 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-clock-history"></i> 1. Jam Kirim & Quiet Hours
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    Siaran massal, tagihan SPP, dan informasi pendaftaran hanya dikirim pada rentang <strong>08.00 – 16.30 WIB</strong> di hari kerja. Dilarang mengirimkan notifikasi keuangan di malam hari atau saat jam ibadah santri.
+                                </p>
+                            </div>
+
+                            <div className="border border-gray-200 rounded-xl p-3 bg-white space-y-1 text-xs">
+                                <strong className="text-teal-700 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-person-check-fill"></i> 2. Matriks Peran & Hak Akses Template
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    Bendahara berwenang atas template <code>TAGIHAN</code> dan <code>KWITANSI</code>; Panitia PSB atas formulir dan ujian; Wali Kelas/Asrama atas <code>ABSENSI</code> dan <code>TAHFIZH</code>; serta Pimpinan/Humas atas <code>PENGUMUMAN</code> umum.
+                                </p>
+                            </div>
+
+                            <div className="border border-gray-200 rounded-xl p-3 bg-white space-y-1 text-xs">
+                                <strong className="text-teal-700 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-check-circle-fill"></i> 3. Checklist Sebelum Kirim
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    Cek lencana riwayat kontak di tabel, pastikan target penerima telah difilter dengan tepat, dan lakukan uji coba 1 pesan ke nomor internal sebelum menjalankan antrean massal.
+                                </p>
+                            </div>
+
+                            <div className="border border-gray-200 rounded-xl p-3 bg-white space-y-1 text-xs">
+                                <strong className="text-teal-700 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-headset"></i> 4. Penanganan Balasan Wali Santri
+                                </strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    Tentukan petugas piket yang memegang ponsel fisik nomor pengirim WhatsApp untuk merespons pertanyaan wali santri secara cepat, santun, dan mengedepankan tabayyun.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 )
             }
         ]

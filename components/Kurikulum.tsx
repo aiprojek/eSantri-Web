@@ -5,6 +5,10 @@ import { HeaderTabs } from './common/HeaderTabs';
 
 const TabJadwalPelajaran = lazy(() => import('./akademik/TabJadwalPelajaran').then((module) => ({ default: module.TabJadwalPelajaran })));
 const TabJurnalMengajar = lazy(() => import('./akademik/TabJurnalMengajar').then((module) => ({ default: module.TabJurnalMengajar })));
+const TabBebanMengajar = lazy(() => import('./akademik/TabBebanMengajar').then((module) => ({ default: module.TabBebanMengajar })));
+const MatriksJadwalInduk = lazy(() => import('./akademik/MatriksJadwalInduk').then((module) => ({ default: module.MatriksJadwalInduk })));
+const TabKurikulumMapel = lazy(() => import('./akademik/TabKurikulumMapel').then((module) => ({ default: module.TabKurikulumMapel })));
+const TabJadwalUjian = lazy(() => import('./akademik/TabJadwalUjian').then((module) => ({ default: module.TabJadwalUjian })));
 
 const TabLoadingFallback = () => (
     <div className="flex h-48 items-center justify-center">
@@ -12,7 +16,7 @@ const TabLoadingFallback = () => (
     </div>
 );
 
-type KurikulumTabId = 'jadwal' | 'jurnal';
+type KurikulumTabId = 'jadwal' | 'matriks' | 'ujian' | 'beban_guru' | 'jurnal' | 'mapel';
 
 const Kurikulum: React.FC = () => {
     const { currentUser } = useAppContext();
@@ -37,14 +41,18 @@ const Kurikulum: React.FC = () => {
             <PageHeader
                 eyebrow="Pendidikan"
                 title="Kurikulum"
-                description="Kelola jadwal pelajaran dan jurnal mengajar dalam satu workspace yang fokus."
+                description="Kelola jadwal pelajaran, matriks induk, jadwal ujian, beban mengajar guru, jurnal KBM, dan silabus mata pelajaran dalam satu workspace terpadu."
                 tabs={
                     <HeaderTabs
                         value={activeTab}
                         onChange={(next) => setActiveTab(next as KurikulumTabId)}
                         tabs={[
                             { value: 'jadwal', label: 'Jadwal Pelajaran', icon: 'bi-calendar-week' },
+                            { value: 'matriks', label: 'Matriks Induk & RPE', icon: 'bi-grid-3x3' },
+                            { value: 'ujian', label: 'Jadwal & Generator Ujian', icon: 'bi-file-earmark-ruled' },
+                            { value: 'beban_guru', label: 'Beban Mengajar & Slip', icon: 'bi-person-check' },
                             { value: 'jurnal', label: 'Jurnal Mengajar (Log)', icon: 'bi-journal-text' },
+                            { value: 'mapel', label: 'Mata Pelajaran & Silabus', icon: 'bi-book' },
                         ]}
                     />
                 }
@@ -52,7 +60,11 @@ const Kurikulum: React.FC = () => {
             <div className="app-panel rounded-panel p-6">
                 <Suspense fallback={<TabLoadingFallback />}>
                     {activeTab === 'jadwal' && <TabJadwalPelajaran />}
+                    {activeTab === 'matriks' && <MatriksJadwalInduk />}
+                    {activeTab === 'ujian' && <TabJadwalUjian />}
+                    {activeTab === 'beban_guru' && <TabBebanMengajar />}
                     {activeTab === 'jurnal' && <TabJurnalMengajar />}
+                    {activeTab === 'mapel' && <TabKurikulumMapel />}
                 </Suspense>
             </div>
         </div>

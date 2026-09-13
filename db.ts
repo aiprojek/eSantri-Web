@@ -1,6 +1,6 @@
 
 import Dexie, { Table } from 'dexie';
-import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang, Warehouse, StockTransfer, DigitalAsset } from './types';
+import { Santri, PondokSettings, Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, SuratTemplate, ArsipSurat, Pendaftar, AuditLog, User, SyncHistory, RaporRecord, AbsensiRecord, JurnalMengajarRecord, TahfizhRecord, Inventaris, CalendarEvent, Buku, Sirkulasi, Obat, KesehatanRecord, BkSession, BukuTamu, JadwalPelajaran, ArsipJadwal, JadwalUjian, PayrollRecord, PiketSchedule, ProdukKoperasi, TransaksiKoperasi, RiwayatStok, KeuanganKoperasi, PendingOrder, ChartOfAccount, Diskon, Supplier, PembayaranHutang, Warehouse, StockTransfer, DigitalAsset } from './types';
 
 export interface PondokSettingsWithId extends PondokSettings {
   id?: number;
@@ -35,6 +35,7 @@ export class ESantriDatabase extends Dexie {
   bukuTamu!: Table<BukuTamu, number>; 
   jadwalPelajaran!: Table<JadwalPelajaran, number>;
   arsipJadwal!: Table<ArsipJadwal, number>;
+  jadwalUjian!: Table<JadwalUjian, number>;
   payrollRecords!: Table<PayrollRecord, number>;
   piketSchedules!: Table<PiketSchedule, number>;
   produkKoperasi!: Table<ProdukKoperasi, number>; 
@@ -51,7 +52,7 @@ export class ESantriDatabase extends Dexie {
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(50).stores({ // Bump version
+    (this as any).version(51).stores({ // Bump version
       santri: '++id, nis, namaLengkap, kamarId, lastModified',
       settings: '++id, lastModified',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status, lastModified',
@@ -80,6 +81,7 @@ export class ESantriDatabase extends Dexie {
       bukuTamu: '++id, tanggal, status, namaTamu, lastModified',
       jadwalPelajaran: '++id, rombelId, [rombelId+hari+jamKe], guruId, lastModified',
       arsipJadwal: '++id, tahunAjaran, semester, jenjangId, lastModified',
+      jadwalUjian: '++id, jenjangId, rombelId, [jenjangId+jenisUjian], tanggal, hari, sesiKe, pengawasId, lastModified',
       payrollRecords: '++id, guruId, [bulan+tahun], tanggalBayar, lastModified',
       piketSchedules: '++id, tanggal, sholat, lastModified',
       produkKoperasi: '++id, nama, barcode, kategori, supplierId, lastModified',

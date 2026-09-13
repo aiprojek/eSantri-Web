@@ -217,28 +217,171 @@ const CardBarcodeView: React.FC<{ value: string; width?: number; height?: number
 
 const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
     const { cardDesign, cardValidUntil, cardFields, cardWidth, cardHeight, cardValidityMode, cardShowQRCode, cardQRPlacement = 'with_photo' } = options || {};
-    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    const rombel = settings.rombel?.find(r => r.id === santri.rombelId);
+    const kelas = rombel ? settings.kelas?.find(k => k.id === rombel.kelasId) : (santri.kelasId ? settings.kelas?.find(k => k.id === santri.kelasId) : undefined);
+    const jenjang = kelas ? settings.jenjang?.find(j => j.id === kelas.jenjangId) : (santri.jenjangId ? settings.jenjang?.find(j => j.id === santri.jenjangId) : undefined);
+    const gedung = santri.gedungId ? settings.gedungAsrama?.find(g => g.id === santri.gedungId) : undefined;
+    const kamar = santri.kamarId ? settings.kamar?.find(k => k.id === santri.kamarId) : undefined;
 
     const showPhoto = cardFields.includes('foto');
     const showNama = cardFields.includes('namaLengkap');
+    const showNamaHijrah = cardFields.includes('namaHijrah');
     const showNis = cardFields.includes('nis');
+    const showNisn = cardFields.includes('nisn');
+    const showNik = cardFields.includes('nik');
     const showJenjang = cardFields.includes('jenjang');
+    const showKelas = cardFields.includes('kelas');
     const showRombel = cardFields.includes('rombel');
+    const showAsrama = cardFields.includes('asrama');
     const showTtl = cardFields.includes('ttl');
-    const showAlamat = cardFields.includes('alamat');
+    const showGolDarah = cardFields.includes('golonganDarah');
+    const showJenisSantri = cardFields.includes('jenisSantri');
     const showAyahWali = cardFields.includes('ayahWali');
+    const showTeleponWali = cardFields.includes('teleponWali');
+    const showTahunMasuk = cardFields.includes('tahunMasuk');
+    const showAlamat = cardFields.includes('alamat');
 
     const nama = santri.namaLengkap;
+    const namaHijrah = santri.namaHijrah || santri.namaPanggilan || '';
     const nis = santri.nis;
+    const nisn = santri.nisn || '';
+    const nik = santri.nik || '';
     const nisValue = santri?.nis || (santri?.id ? `SAN${santri.id}` : '');
-    const jenjangKelas = `${jenjang?.nama?.split(' ')[0] || ''} / ${kelas?.nama || ''}`; 
-    const rombelNama = rombel?.nama || 'N/A';
-    const ttl = `${santri.tempatLahir}, ${formatDate(santri.tanggalLahir)}`;
-    const ayahWali = santri.namaAyah || santri.namaWali || '-';
+    const jenjangNama = jenjang?.nama || '-';
+    const kelasNama = kelas?.nama || '-';
+    // Backwards compatibility: if jenjang is checked without kelas, display combined format if available
+    const jenjangDisplay = (showJenjang && !showKelas)
+        ? (jenjang?.nama ? `${jenjang.nama.split(' ')[0]} / ${kelas?.nama || ''}`.replace(/^ \/ | \/ $/g, '') : jenjangNama)
+        : jenjangNama;
+    const rombelNama = rombel?.nama || '-';
+    const asramaText = (gedung && kamar) ? `${gedung.nama} / ${kamar.nama}` : (gedung?.nama || kamar?.nama || '-');
+    const ttl = `${santri.tempatLahir || '-'}, ${formatDate(santri.tanggalLahir)}`;
+    const golonganDarah = santri.golonganDarah || '-';
+    const jenisSantri = santri.jenisSantri || '-';
+    const ayahWali = santri.namaAyah || santri.namaWali || santri.namaIbu || '-';
+    const teleponWali = santri.teleponWali || santri.teleponAyah || santri.teleponIbu || santri.telepon || '-';
+    const tahunMasuk = santri.tanggalMasuk ? santri.tanggalMasuk.split('-')[0] : ((santri as any).tahunMasuk ? String((santri as any).tahunMasuk) : '-');
     const alamat = formatAlamat(santri.alamat) || '-';
     
+    // Helper functions: Smart Font Sizing across all Santri Data
+    // Determines row density based on how many fields are active
+    const activeRowCount = [
+        showNis,
+        showNisn && Boolean(nisn),
+        showNik && Boolean(nik),
+        showNamaHijrah && Boolean(namaHijrah),
+        showJenjang,
+        showKelas,
+        showRombel,
+        showAsrama,
+        showTtl,
+        showGolDarah && Boolean(santri.golonganDarah),
+        showJenisSantri,
+        showAyahWali,
+        showTeleponWali && Boolean(teleponWali !== '-'),
+        showTahunMasuk,
+        showAlamat
+    ].filter(Boolean).length;
+
+    // Smart Font Sizing for Nama Lengkap
+    const getSmartNamaStyle = (text: string, basePt: number = 9.8): React.CSSProperties => {
+        const len = (text || '').trim().length;
+        let sizePt = basePt;
+        let lineHeight = 1.15;
+        if (len > 38) {
+            sizePt = Math.max(6.2, basePt - 3.2);
+            lineHeight = 1.02;
+        } else if (len > 28) {
+            sizePt = Math.max(7.2, basePt - 2.2);
+            lineHeight = 1.08;
+        } else if (len > 20) {
+            sizePt = Math.max(8.2, basePt - 1.3);
+            lineHeight = 1.12;
+        } else if (len > 15) {
+            sizePt = Math.max(8.9, basePt - 0.7);
+            lineHeight = 1.14;
+        }
+        return {
+            fontSize: `${sizePt.toFixed(1)}pt`,
+            lineHeight: lineHeight,
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+        };
+    };
+
+    // Smart Font Sizing for standard fields (NIS, Jenjang, Kelas, Rombel, Asrama, TTL, Wali)
+    const getSmartFieldStyle = (text: string, basePt: number = 6.8): React.CSSProperties => {
+        const len = (text || '').trim().length;
+        const densityAdjust = activeRowCount >= 9 ? -1.2 : activeRowCount >= 7 ? -0.7 : activeRowCount >= 5 ? -0.3 : activeRowCount <= 3 ? 0.3 : 0;
+        const effectiveBase = basePt + densityAdjust;
+        let sizePt = effectiveBase;
+        let lineHeight = 1.15;
+
+        if (len > 40) {
+            sizePt = Math.max(4.2, effectiveBase - 1.8);
+            lineHeight = 1.02;
+        } else if (len > 28) {
+            sizePt = Math.max(4.8, effectiveBase - 1.2);
+            lineHeight = 1.06;
+        } else if (len > 18) {
+            sizePt = Math.max(5.4, effectiveBase - 0.7);
+            lineHeight = 1.1;
+        }
+
+        return {
+            fontSize: `${sizePt.toFixed(1)}pt`,
+            lineHeight: lineHeight,
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+        };
+    };
+
+    // Smart Font Sizing for NIS badge / number
+    const getSmartNisStyle = (text: string, basePt: number = 7.5): React.CSSProperties => {
+        const len = (text || '').trim().length;
+        let sizePt = basePt;
+        if (len > 20) {
+            sizePt = Math.max(5.5, basePt - 2.0);
+        } else if (len > 14) {
+            sizePt = Math.max(6.2, basePt - 1.1);
+        }
+        return {
+            fontSize: `${sizePt.toFixed(1)}pt`,
+            wordBreak: 'break-all',
+            letterSpacing: len > 14 ? '0.01em' : '0.04em'
+        };
+    };
+
+    // Smart Font Sizing for Alamat & multi-line long text without ellipsis
+    const getSmartAlamatStyle = (text: string, basePt: number = 6.5): React.CSSProperties => {
+        const len = (text || '').trim().length;
+        const densityAdjust = activeRowCount >= 9 ? -1.2 : activeRowCount >= 7 ? -0.7 : activeRowCount >= 5 ? -0.3 : 0;
+        const effectiveBase = basePt + densityAdjust;
+        let sizePt = effectiveBase;
+        let lineHeight = 1.16;
+        if (len > 120) {
+            sizePt = Math.max(3.8, effectiveBase - 2.6);
+            lineHeight = 1.04;
+        } else if (len > 80) {
+            sizePt = Math.max(4.4, effectiveBase - 2.0);
+            lineHeight = 1.08;
+        } else if (len > 50) {
+            sizePt = Math.max(5.0, effectiveBase - 1.4);
+            lineHeight = 1.12;
+        } else if (len > 30) {
+            sizePt = Math.max(5.7, effectiveBase - 0.7);
+            lineHeight = 1.15;
+        }
+        return {
+            fontSize: `${sizePt.toFixed(1)}pt`,
+            lineHeight: lineHeight,
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+        };
+    };
+
+    const getSmartTextStyle = getSmartFieldStyle;
+
     // Logic for Validity Text
     const validityText = cardValidityMode === 'forever' 
         ? 'Berlaku Selama Menjadi Santri' 
@@ -387,13 +530,22 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                         })}
                     </div>
                     <div className="flex-grow text-[7pt] space-y-0.5 z-10 flex flex-col justify-center">
-                        {showNama && <div className="font-bold text-[#D4AF37] text-[10pt] border-b border-[#D4AF37]/30 pb-0.5 mb-1">{nama}</div>}
-                        {showNis && <div className="grid grid-cols-[35px_1fr]"><span>NIS</span><span>: {nis}</span></div>}
-                        {showJenjang && <div className="grid grid-cols-[35px_1fr]"><span>Jenjang</span><span>: {jenjangKelas}</span></div>}
-                        {showRombel && <div className="grid grid-cols-[35px_1fr]"><span>Rombel</span><span>: {rombelNama}</span></div>}
-                        {showTtl && <div className="grid grid-cols-[35px_1fr]"><span>TTL</span><span>: {ttl}</span></div>}
-                        {showAyahWali && <div className="grid grid-cols-[35px_1fr]"><span>Wali</span><span>: {ayahWali}</span></div>}
-                        {showAlamat && <div className="grid grid-cols-[35px_1fr] items-start"><span>Alamat</span><span className="leading-tight line-clamp-2">: {alamat}</span></div>}
+                        {showNama && <div className="font-bold text-[#D4AF37] border-b border-[#D4AF37]/30 pb-0.5 mb-1" style={getSmartNamaStyle(nama, 9.8)}>{nama}</div>}
+                        {showNamaHijrah && Boolean(namaHijrah) && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(namaHijrah, 6.5)}><span>Hijrah</span><span>: {namaHijrah}</span></div>}
+                        {showNis && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(nis, 6.8)}><span>NIS</span><span style={getSmartNisStyle(nis, 6.8)}>: {nis}</span></div>}
+                        {showNisn && Boolean(nisn) && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(nisn, 6.5)}><span>NISN</span><span>: {nisn}</span></div>}
+                        {showNik && Boolean(nik) && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(nik, 6.5)}><span>NIK</span><span>: {nik}</span></div>}
+                        {showJenjang && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(jenjangDisplay, 6.8)}><span>Jenjang</span><span>: {jenjangDisplay}</span></div>}
+                        {showKelas && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(kelasNama, 6.8)}><span>Kelas</span><span>: {kelasNama}</span></div>}
+                        {showRombel && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(rombelNama, 6.8)}><span>Rombel</span><span>: {rombelNama}</span></div>}
+                        {showAsrama && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(asramaText, 6.5)}><span>Asrama</span><span>: {asramaText}</span></div>}
+                        {showTtl && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(ttl, 6.8)}><span>TTL</span><span>: {ttl}</span></div>}
+                        {showGolDarah && Boolean(santri.golonganDarah) && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(golonganDarah, 6.5)}><span>Darah</span><span>: {golonganDarah}</span></div>}
+                        {showJenisSantri && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(jenisSantri, 6.5)}><span>Status</span><span>: {jenisSantri}</span></div>}
+                        {showAyahWali && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(ayahWali, 6.8)}><span>Wali</span><span>: {ayahWali}</span></div>}
+                        {showTeleponWali && Boolean(teleponWali !== '-') && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(teleponWali, 6.5)}><span>Kontak</span><span>: {teleponWali}</span></div>}
+                        {showTahunMasuk && <div className="grid grid-cols-[42px_1fr]" style={getSmartFieldStyle(tahunMasuk, 6.5)}><span>Angkatan</span><span>: {tahunMasuk}</span></div>}
+                        {showAlamat && <div className="grid grid-cols-[42px_1fr] items-start" style={getSmartAlamatStyle(alamat, 6.3)}><span>Alamat</span><span>: {alamat}</span></div>}
                     </div>
                     
                     {/* Pattern Overlay */}
@@ -446,15 +598,24 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     </div>
                     <div className="text-right flex-grow pl-2 pt-1 flex flex-col items-end">
                         <div className="text-[6pt] text-gray-400 tracking-[0.2em] uppercase mb-1">Kartu Tanda Santri</div>
-                        {showNama && <div className="text-[10pt] font-bold text-blue-900 leading-tight">{nama}</div>}
-                        {showNis && <div className="text-[8pt] font-mono text-blue-600 bg-blue-50 inline-block px-1 rounded mt-1">{nis}</div>}
+                        {showNama && <div className="font-bold text-blue-900 leading-tight" style={getSmartNamaStyle(nama, 9.5)}>{nama}</div>}
+                        {showNis && <div className="font-mono text-blue-600 bg-blue-50 inline-block px-1 rounded mt-1" style={getSmartNisStyle(nis, 7.8)}>{nis}</div>}
                         
-                        <div className="mt-2 text-[6.5pt] space-y-0.5 text-gray-600">
-                            {showJenjang && <div className="flex justify-end gap-1"><span className="font-semibold">Jenjang:</span> {jenjangKelas}</div>}
-                            {showRombel && <div className="flex justify-end gap-1"><span className="font-semibold">Rombel:</span> {rombelNama}</div>}
-                            {showTtl && <div className="flex justify-end gap-1"><span className="font-semibold">Lahir:</span> {ttl}</div>}
-                            {showAyahWali && <div className="flex justify-end gap-1"><span className="font-semibold">Wali:</span> {ayahWali}</div>}
-                            {showAlamat && <div className="flex justify-end gap-1 text-right items-start"><span className="font-semibold shrink-0">Alamat:</span> <span className="line-clamp-2 text-[6pt] leading-tight break-all">{alamat}</span></div>}
+                        <div className="mt-1 text-[6.5pt] space-y-0.5 text-gray-600">
+                            {showNamaHijrah && Boolean(namaHijrah) && <div className="flex justify-end gap-1" style={getSmartFieldStyle(namaHijrah, 6.5)}><span className="font-semibold">Hijrah:</span> <span>{namaHijrah}</span></div>}
+                            {showNisn && Boolean(nisn) && <div className="flex justify-end gap-1" style={getSmartFieldStyle(nisn, 6.5)}><span className="font-semibold">NISN:</span> <span>{nisn}</span></div>}
+                            {showNik && Boolean(nik) && <div className="flex justify-end gap-1" style={getSmartFieldStyle(nik, 6.5)}><span className="font-semibold">NIK:</span> <span>{nik}</span></div>}
+                            {showJenjang && <div className="flex justify-end gap-1" style={getSmartFieldStyle(jenjangDisplay, 6.5)}><span className="font-semibold">Jenjang:</span> <span>{jenjangDisplay}</span></div>}
+                            {showKelas && <div className="flex justify-end gap-1" style={getSmartFieldStyle(kelasNama, 6.5)}><span className="font-semibold">Kelas:</span> <span>{kelasNama}</span></div>}
+                            {showRombel && <div className="flex justify-end gap-1" style={getSmartFieldStyle(rombelNama, 6.5)}><span className="font-semibold">Rombel:</span> <span>{rombelNama}</span></div>}
+                            {showAsrama && <div className="flex justify-end gap-1" style={getSmartFieldStyle(asramaText, 6.2)}><span className="font-semibold">Asrama:</span> <span>{asramaText}</span></div>}
+                            {showTtl && <div className="flex justify-end gap-1" style={getSmartFieldStyle(ttl, 6.5)}><span className="font-semibold">Lahir:</span> <span>{ttl}</span></div>}
+                            {showGolDarah && Boolean(santri.golonganDarah) && <div className="flex justify-end gap-1" style={getSmartFieldStyle(golonganDarah, 6.5)}><span className="font-semibold">Darah:</span> <span>{golonganDarah}</span></div>}
+                            {showJenisSantri && <div className="flex justify-end gap-1" style={getSmartFieldStyle(jenisSantri, 6.2)}><span className="font-semibold">Status:</span> <span>{jenisSantri}</span></div>}
+                            {showAyahWali && <div className="flex justify-end gap-1" style={getSmartFieldStyle(ayahWali, 6.5)}><span className="font-semibold">Wali:</span> <span>{ayahWali}</span></div>}
+                            {showTeleponWali && Boolean(teleponWali !== '-') && <div className="flex justify-end gap-1" style={getSmartFieldStyle(teleponWali, 6.2)}><span className="font-semibold">Kontak:</span> <span>{teleponWali}</span></div>}
+                            {showTahunMasuk && <div className="flex justify-end gap-1" style={getSmartFieldStyle(tahunMasuk, 6.2)}><span className="font-semibold">Angkatan:</span> <span>{tahunMasuk}</span></div>}
+                            {showAlamat && <div className="flex justify-end gap-1 text-right items-start" style={getSmartAlamatStyle(alamat, 6.0)}><span className="font-semibold shrink-0">Alamat:</span> <span>{alamat}</span></div>}
                         </div>
                     </div>
                 </div>
@@ -497,16 +658,26 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                 </div>
 
                 <div className="z-10 mt-4 px-2 w-full flex-grow flex flex-col items-center overflow-hidden">
-                    {showNama && <div className="text-[9pt] font-bold text-gray-800 leading-tight">{nama}</div>}
-                    {showNis && <div className="text-[7pt] text-red-600 font-medium mt-0.5 mb-2">{nis}</div>}
+                    {showNama && <div className="font-bold text-gray-800 leading-tight" style={getSmartNamaStyle(nama, 8.8)}>{nama}</div>}
+                    {showNis && <div className="text-red-600 font-medium mt-0.5 mb-2" style={getSmartNisStyle(nis, 7.0)}>{nis}</div>}
                     
                     <div className="w-full border-t border-gray-200 my-1"></div>
                     
                     <div className="text-[6.5pt] text-gray-600 space-y-0.5 w-full text-left px-2">
-                        {showJenjang && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Kelas</span><span>: {jenjangKelas}</span></div>}
-                        {showRombel && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Rombel</span><span>: {rombelNama}</span></div>}
-                        {showAyahWali && <div className="grid grid-cols-[40px_1fr]"><span className="text-gray-400">Wali</span><span>: {ayahWali}</span></div>}
-                        {showAlamat && <div className="grid grid-cols-[40px_1fr] text-left border-t border-gray-100 pt-0.5 mt-0.5"><span className="text-gray-400">Alamat</span><span className="line-clamp-2 leading-tight">: {alamat}</span></div>}
+                        {showNamaHijrah && Boolean(namaHijrah) && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(namaHijrah, 6.2)}><span className="text-gray-400">Hijrah</span><span>: {namaHijrah}</span></div>}
+                        {showNisn && Boolean(nisn) && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(nisn, 6.2)}><span className="text-gray-400">NISN</span><span>: {nisn}</span></div>}
+                        {showNik && Boolean(nik) && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(nik, 6.2)}><span className="text-gray-400">NIK</span><span>: {nik}</span></div>}
+                        {showJenjang && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(jenjangDisplay, 6.5)}><span className="text-gray-400">Jenjang</span><span>: {jenjangDisplay}</span></div>}
+                        {showKelas && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(kelasNama, 6.5)}><span className="text-gray-400">Kelas</span><span>: {kelasNama}</span></div>}
+                        {showRombel && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(rombelNama, 6.5)}><span className="text-gray-400">Rombel</span><span>: {rombelNama}</span></div>}
+                        {showAsrama && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(asramaText, 6.2)}><span className="text-gray-400">Asrama</span><span>: {asramaText}</span></div>}
+                        {showTtl && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(ttl, 6.2)}><span className="text-gray-400">TTL</span><span>: {ttl}</span></div>}
+                        {showGolDarah && Boolean(santri.golonganDarah) && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(golonganDarah, 6.2)}><span className="text-gray-400">Darah</span><span>: {golonganDarah}</span></div>}
+                        {showJenisSantri && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(jenisSantri, 6.2)}><span className="text-gray-400">Status</span><span>: {jenisSantri}</span></div>}
+                        {showAyahWali && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(ayahWali, 6.5)}><span className="text-gray-400">Wali</span><span>: {ayahWali}</span></div>}
+                        {showTeleponWali && Boolean(teleponWali !== '-') && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(teleponWali, 6.2)}><span className="text-gray-400">Kontak</span><span>: {teleponWali}</span></div>}
+                        {showTahunMasuk && <div className="grid grid-cols-[45px_1fr]" style={getSmartFieldStyle(tahunMasuk, 6.2)}><span className="text-gray-400">Angkatan</span><span>: {tahunMasuk}</span></div>}
+                        {showAlamat && <div className="grid grid-cols-[45px_1fr] text-left border-t border-gray-100 pt-0.5 mt-0.5" style={getSmartAlamatStyle(alamat, 5.8)}><span className="text-gray-400">Alamat</span><span>: {alamat}</span></div>}
                     </div>
                 </div>
                 
@@ -554,7 +725,7 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                             qrPositionClass: 'bottom-0.5 right-0.5'
                         })}
                         <div className="text-center">
-                            {showNis && <div className="text-[9pt] font-mono font-bold text-teal-400">{nis}</div>}
+                            {showNis && <div className="font-mono font-bold text-teal-400" style={getSmartNisStyle(nis, 8.5)}>{nis}</div>}
                             <div className="text-[5pt] text-slate-500 uppercase tracking-widest">Nomor Induk</div>
                         </div>
                     </div>
@@ -562,16 +733,31 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                         {showNama && (
                             <div className="mb-2">
                                 <div className="text-[5pt] text-slate-500 uppercase">Nama Lengkap</div>
-                                <div className="text-[8pt] font-bold leading-tight">{nama}</div>
+                                <div className="font-bold leading-tight" style={getSmartNamaStyle(nama, 8.5)}>{nama}</div>
                             </div>
                         )}
                         
-                        <div className="grid grid-cols-2 gap-1">
-                            {showJenjang && <div><div className="text-[5pt] text-slate-500 uppercase">Jenjang</div><div className="text-[6.5pt]">{jenjangKelas}</div></div>}
-                            {showRombel && <div><div className="text-[5pt] text-slate-500 uppercase">Rombel</div><div className="text-[6.5pt]">{rombelNama}</div></div>}
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[6.5pt]">
+                            {showJenjang && <div><div className="text-[5pt] text-slate-500 uppercase">Jenjang</div><div style={getSmartFieldStyle(jenjangDisplay, 6.5)}>{jenjangDisplay}</div></div>}
+                            {showKelas && <div><div className="text-[5pt] text-slate-500 uppercase">Kelas</div><div style={getSmartFieldStyle(kelasNama, 6.5)}>{kelasNama}</div></div>}
+                            {showRombel && <div><div className="text-[5pt] text-slate-500 uppercase">Rombel</div><div style={getSmartFieldStyle(rombelNama, 6.5)}>{rombelNama}</div></div>}
+                            {showAsrama && <div><div className="text-[5pt] text-slate-500 uppercase">Asrama</div><div style={getSmartFieldStyle(asramaText, 6.2)}>{asramaText}</div></div>}
+                            {showNisn && Boolean(nisn) && <div><div className="text-[5pt] text-slate-500 uppercase">NISN</div><div style={getSmartFieldStyle(nisn, 6.5)}>{nisn}</div></div>}
+                            {showNik && Boolean(nik) && <div><div className="text-[5pt] text-slate-500 uppercase">NIK</div><div style={getSmartFieldStyle(nik, 6.5)}>{nik}</div></div>}
+                            {showNamaHijrah && Boolean(namaHijrah) && <div><div className="text-[5pt] text-slate-500 uppercase">Hijrah</div><div style={getSmartFieldStyle(namaHijrah, 6.5)}>{namaHijrah}</div></div>}
+                            {showTtl && <div><div className="text-[5pt] text-slate-500 uppercase">TTL</div><div style={getSmartFieldStyle(ttl, 6.2)}>{ttl}</div></div>}
+                            {showGolDarah && Boolean(santri.golonganDarah) && <div><div className="text-[5pt] text-slate-500 uppercase">Gol. Darah</div><div style={getSmartFieldStyle(golonganDarah, 6.5)}>{golonganDarah}</div></div>}
+                            {showJenisSantri && <div><div className="text-[5pt] text-slate-500 uppercase">Status</div><div style={getSmartFieldStyle(jenisSantri, 6.2)}>{jenisSantri}</div></div>}
+                            {showAyahWali && <div><div className="text-[5pt] text-slate-500 uppercase">Wali</div><div style={getSmartFieldStyle(ayahWali, 6.5)}>{ayahWali}</div></div>}
+                            {showTeleponWali && Boolean(teleponWali !== '-') && <div><div className="text-[5pt] text-slate-500 uppercase">Kontak</div><div style={getSmartFieldStyle(teleponWali, 6.2)}>{teleponWali}</div></div>}
+                            {showTahunMasuk && <div><div className="text-[5pt] text-slate-500 uppercase">Angkatan</div><div style={getSmartFieldStyle(tahunMasuk, 6.2)}>{tahunMasuk}</div></div>}
                         </div>
-                        {showAyahWali && <div><div className="text-[5pt] text-slate-500 uppercase">Orang Tua / Wali</div><div className="text-[6.5pt] truncate">{ayahWali}</div></div>}
-                        {showAlamat && <div><div className="text-[5pt] text-slate-500 uppercase">Alamat</div><div className="text-[6.5pt] leading-tight line-clamp-2">{alamat}</div></div>}
+                        {showAlamat && (
+                            <div className="mt-1 pt-1 border-t border-slate-800">
+                                <div className="text-[5pt] text-slate-500 uppercase">Alamat</div>
+                                <div className="text-slate-300" style={getSmartAlamatStyle(alamat, 6.0)}>{alamat}</div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -616,22 +802,49 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                          {showNama && (
                             <div className="mb-2 border-b border-orange-200 pb-1">
                                 <div className="text-[5pt] text-orange-400 uppercase tracking-wide">Nama Lengkap</div>
-                                <div className="text-[9pt] font-bold text-teal-800 leading-tight">{nama}</div>
+                                <div className="font-bold text-teal-800 leading-tight" style={getSmartNamaStyle(nama, 8.8)}>{nama}</div>
                             </div>
                         )}
                         
-                        <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[6.5pt]">
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[6.5pt]">
                              {/* NIS */}
-                             {showNis && <div><div className="text-[5pt] text-orange-400 uppercase">NIS</div><div className="font-mono text-orange-700 bg-white/50 inline-block px-1 rounded font-bold">{nis}</div></div>}
+                             {showNis && <div><div className="text-[5pt] text-orange-400 uppercase">NIS</div><div className="font-mono text-orange-700 bg-white/50 inline-block px-1 rounded font-bold" style={getSmartNisStyle(nis, 6.8)}>{nis}</div></div>}
+                             {showNisn && Boolean(nisn) && <div><div className="text-[5pt] text-orange-400 uppercase">NISN</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(nisn, 6.5)}>{nisn}</div></div>}
+                             {showNik && Boolean(nik) && <div><div className="text-[5pt] text-orange-400 uppercase">NIK</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(nik, 6.5)}>{nik}</div></div>}
+                             {showNamaHijrah && Boolean(namaHijrah) && <div><div className="text-[5pt] text-orange-400 uppercase">Hijrah</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(namaHijrah, 6.5)}>{namaHijrah}</div></div>}
                              
                              {/* Jenjang */}
-                             {showJenjang && <div><div className="text-[5pt] text-orange-400 uppercase">Jenjang</div><div className="text-teal-700 font-bold leading-tight">{jenjangKelas}</div></div>}
+                             {showJenjang && <div><div className="text-[5pt] text-orange-400 uppercase">Jenjang</div><div className="text-teal-700 font-bold leading-tight" style={getSmartFieldStyle(jenjangDisplay, 6.5)}>{jenjangDisplay}</div></div>}
+                             
+                             {/* Kelas */}
+                             {showKelas && <div><div className="text-[5pt] text-orange-400 uppercase">Kelas</div><div className="text-teal-700 font-bold leading-tight" style={getSmartFieldStyle(kelasNama, 6.5)}>{kelasNama}</div></div>}
                              
                              {/* Rombel */}
-                             {showRombel && <div><div className="text-[5pt] text-orange-400 uppercase">Rombel</div><div className="text-teal-700 font-bold leading-tight">{rombelNama}</div></div>}
+                             {showRombel && <div><div className="text-[5pt] text-orange-400 uppercase">Rombel</div><div className="text-teal-700 font-bold leading-tight" style={getSmartFieldStyle(rombelNama, 6.5)}>{rombelNama}</div></div>}
+                             
+                             {/* Asrama */}
+                             {showAsrama && <div><div className="text-[5pt] text-orange-400 uppercase">Asrama</div><div className="text-teal-700 font-bold leading-tight" style={getSmartFieldStyle(asramaText, 6.2)}>{asramaText}</div></div>}
+
+                             {/* TTL */}
+                             {showTtl && <div><div className="text-[5pt] text-orange-400 uppercase">TTL</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(ttl, 6.2)}>{ttl}</div></div>}
+
+                             {/* Golongan Darah */}
+                             {showGolDarah && Boolean(santri.golonganDarah) && <div><div className="text-[5pt] text-orange-400 uppercase">Gol. Darah</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(golonganDarah, 6.5)}>{golonganDarah}</div></div>}
+
+                             {/* Status */}
+                             {showJenisSantri && <div><div className="text-[5pt] text-orange-400 uppercase">Status</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(jenisSantri, 6.2)}>{jenisSantri}</div></div>}
                              
                              {/* Wali */}
-                             {showAyahWali && <div className="col-span-2"><div className="text-[5pt] text-orange-400 uppercase">Wali</div><div className="text-teal-700 font-bold truncate">{ayahWali}</div></div>}
+                             {showAyahWali && <div><div className="text-[5pt] text-orange-400 uppercase">Wali</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(ayahWali, 6.5)}>{ayahWali}</div></div>}
+
+                             {/* Kontak */}
+                             {showTeleponWali && Boolean(teleponWali !== '-') && <div><div className="text-[5pt] text-orange-400 uppercase">Kontak</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(teleponWali, 6.2)}>{teleponWali}</div></div>}
+
+                             {/* Angkatan */}
+                             {showTahunMasuk && <div><div className="text-[5pt] text-orange-400 uppercase">Angkatan</div><div className="text-teal-700 font-bold" style={getSmartFieldStyle(tahunMasuk, 6.2)}>{tahunMasuk}</div></div>}
+
+                             {/* Alamat */}
+                             {showAlamat && <div className="col-span-2"><div className="text-[5pt] text-orange-400 uppercase">Alamat</div><div className="text-teal-800" style={getSmartAlamatStyle(alamat, 6.0)}>{alamat}</div></div>}
                         </div>
                     </div>
                 </div>
@@ -675,11 +888,12 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
                     })}
                 </div>
                 <div className="flex-grow text-[7pt] space-y-0.5 z-10 flex flex-col justify-center">
-                    {showNama && <div className="font-bold text-[#D4AF37] text-[10pt] border-b border-[#D4AF37]/30 pb-0.5 mb-1">{nama}</div>}
-                    {showNis && <div className="grid grid-cols-[35px_1fr]"><span>NIS</span><span>: {nis}</span></div>}
-                    {showJenjang && <div className="grid grid-cols-[35px_1fr]"><span>Jenjang</span><span>: {jenjangKelas}</span></div>}
-                    {showRombel && <div className="grid grid-cols-[35px_1fr]"><span>Rombel</span><span>: {rombelNama}</span></div>}
-                    {showAyahWali && <div className="grid grid-cols-[35px_1fr]"><span>Wali</span><span>: {ayahWali}</span></div>}
+                    {showNama && <div className="font-bold text-[#D4AF37] border-b border-[#D4AF37]/30 pb-0.5 mb-1" style={getSmartNamaStyle(nama, 9.8)}>{nama}</div>}
+                    {showNis && <div className="grid grid-cols-[35px_1fr]" style={getSmartFieldStyle(nis, 6.8)}><span>NIS</span><span style={getSmartNisStyle(nis, 6.8)}>: {nis}</span></div>}
+                    {showJenjang && <div className="grid grid-cols-[35px_1fr]" style={getSmartFieldStyle(jenjangDisplay, 6.8)}><span>Jenjang</span><span>: {jenjangDisplay}</span></div>}
+                    {showRombel && <div className="grid grid-cols-[35px_1fr]" style={getSmartFieldStyle(rombelNama, 6.8)}><span>Rombel</span><span>: {rombelNama}</span></div>}
+                    {showAyahWali && <div className="grid grid-cols-[35px_1fr]" style={getSmartFieldStyle(ayahWali, 6.8)}><span>Wali</span><span>: {ayahWali}</span></div>}
+                    {showAlamat && <div className="grid grid-cols-[35px_1fr] items-start" style={getSmartAlamatStyle(alamat, 6.5)}><span>Alamat</span><span>: {alamat}</span></div>}
                 </div>
             </div>
             {validityText && (
@@ -700,8 +914,32 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
         cardRulesFontSize = 'auto',
         cardRulesCustomColor = '',
         cardSignatoryTitle, 
-        cardSignatoryId
+        cardSignatoryId,
+        cardShowQuote = true,
+        cardCustomQuote = '',
     } = options || {};
+
+    // Default quotes per card design
+    const defaultDesignQuotes: Record<string, string> = {
+        classic: 'Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain.',
+        modern: 'Menuntut ilmu adalah kewajiban bagi setiap muslim.',
+        vertical: 'Disiplin dan adab adalah kunci keberkahan ilmu.',
+        dark: 'Adab dan akhlak mulia mendahului ketinggian ilmu.',
+        ceria: 'Rajin mengaji, santun berbudi, berbakti pada orang tua & guru.',
+    };
+
+    const rawQuote = (cardCustomQuote || '').trim() || defaultDesignQuotes[cardDesign] || 'Disiplin & Berakhlakul Karimah';
+
+    const formatQuoteText = (text: string) => {
+        const trimmed = text.trim();
+        if (!trimmed) return '';
+        if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith('“') && trimmed.endsWith('”'))) {
+            return trimmed;
+        }
+        return `"${trimmed}"`;
+    };
+
+    const displayQuote = formatQuoteText(rawQuote);
     
     // Replace placeholder with actual name safely
     const finalRulesText = cardRules?.replace(/{NamaPonpes}/gi, settings.namaPonpes || 'Pondok Pesantren') || '';
@@ -792,11 +1030,13 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="mt-1 pt-0.5 border-t border-[#D4AF37]/20 flex items-center justify-center">
-                        <div className="italic text-[#D4AF37]/90 font-serif text-[4.8pt] text-center leading-tight">
-                            "Sebaik-baik manusia adalah yang paling bermanfaat bagi orang lain."
+                    {cardShowQuote && displayQuote && (
+                        <div className="mt-1 pt-0.5 border-t border-[#D4AF37]/20 flex items-center justify-center">
+                            <div className="italic text-[#D4AF37]/90 font-serif text-[4.8pt] text-center leading-tight">
+                                {displayQuote}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Signatory & Footer */}
@@ -857,11 +1097,13 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="mt-1 pt-0.5 border-t border-blue-100 flex items-center justify-center">
-                        <div className="italic text-blue-700/80 text-[4.8pt] text-center leading-tight">
-                            "Menuntut ilmu adalah kewajiban bagi setiap muslim."
+                    {cardShowQuote && displayQuote && (
+                        <div className="mt-1 pt-0.5 border-t border-blue-100 flex items-center justify-center">
+                            <div className="italic text-blue-700/80 text-[4.8pt] text-center leading-tight">
+                                {displayQuote}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Signatory & Footer */}
@@ -912,11 +1154,13 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="mt-1 pt-1 border-t border-gray-100 flex flex-col items-center shrink-0">
-                        <div className="italic text-red-700/80 text-[4.5pt] text-center mb-0.5 leading-tight">
-                            "Disiplin dan adab adalah kunci keberkahan ilmu."
+                    {cardShowQuote && displayQuote && (
+                        <div className="mt-1 pt-1 border-t border-gray-100 flex flex-col items-center shrink-0">
+                            <div className="italic text-red-700/80 text-[4.5pt] text-center mb-0.5 leading-tight">
+                                {displayQuote}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Signatory and date */}
@@ -966,11 +1210,13 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="mt-1 pt-0.5 border-t border-slate-800 flex items-center justify-center">
-                        <div className="italic text-teal-300/80 font-serif text-[4.8pt] text-center leading-tight">
-                            "Adab dan akhlak mulia mendahului ketinggian ilmu."
+                    {cardShowQuote && displayQuote && (
+                        <div className="mt-1 pt-0.5 border-t border-slate-800 flex items-center justify-center">
+                            <div className="italic text-teal-300/80 font-serif text-[4.8pt] text-center leading-tight">
+                                {displayQuote}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Signatory & Footer */}
@@ -1020,11 +1266,13 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         ))}
                     </ol>
 
-                    <div className="mt-1 pt-0.5 border-t border-orange-200 flex items-center justify-center">
-                        <div className="italic text-teal-700 font-medium text-[4.8pt] text-center leading-tight">
-                            "Rajin mengaji, santun berbudi, berbakti pada orang tua & guru."
+                    {cardShowQuote && displayQuote && (
+                        <div className="mt-1 pt-0.5 border-t border-orange-200 flex items-center justify-center">
+                            <div className="italic text-teal-700 font-medium text-[4.8pt] text-center leading-tight">
+                                {displayQuote}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 {/* Signatory & Footer */}
@@ -1060,9 +1308,11 @@ const KartuSantriBackTemplate: React.FC<{ santri?: Santri; settings: PondokSetti
                         <li key={i}>{rule.trim()}</li>
                     ))}
                 </ol>
-                <div className="flex justify-center items-center mt-1 pt-0.5 border-t border-[#D4AF37]/20">
-                    <div className="text-[4.5pt] italic text-[#D4AF37] text-center">"Disiplin & Berakhlakul Karimah"</div>
-                </div>
+                {cardShowQuote && displayQuote && (
+                    <div className="flex justify-center items-center mt-1 pt-0.5 border-t border-[#D4AF37]/20">
+                        <div className="text-[4.5pt] italic text-[#D4AF37] text-center">{displayQuote}</div>
+                    </div>
+                )}
             </div>
             <div className="py-1 px-2.5 border-t border-[#D4AF37]/30 flex justify-between items-end bg-black/25">
                 <div className="text-white/70 text-[4.2pt]">
@@ -1260,4 +1510,310 @@ export const generateLabelReports = (data: Santri[], settings: PondokSettings, o
         });
     }
     return previews;
+};
+
+// --- BUKU INDUK SANTRI (LEMBAR BUKU INDUK RESMI EMIS / KEMENAG) ---
+export const BukuIndukSantriTemplate: React.FC<{
+    santri: Santri;
+    settings: PondokSettings;
+    options: any;
+}> = ({ santri, settings, options }) => {
+    const rombel = settings.rombel.find(r => r.id === santri.rombelId);
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
+    const gedung = santri.gedungId ? settings.gedungAsrama.find(g => g.id === santri.gedungId) : undefined;
+    const kamar = santri.kamarId ? settings.kamar.find(k => k.id === santri.kamarId) : undefined;
+    const signatory = settings.tenagaPengajar.find(p => p.id === parseInt(options?.bukuIndukSignatoryId));
+
+    const signatoryTitle = options?.bukuIndukSignatoryTitle || 'Kepala Madrasah / Tata Usaha';
+    const signatoryName = signatory ? signatory.nama : (settings.namaMudir || '__________________________');
+
+    return (
+        <div className="font-sans text-black flex flex-col h-full justify-between leading-tight p-1" style={{ fontSize: '8.5pt' }}>
+            <div>
+                {/* Header Dokumen Buku Induk */}
+                <div className="flex items-center justify-between pb-2 border-b-2 border-gray-900 mb-2">
+                    <div className="w-16 h-16 flex items-center justify-center">
+                        {settings.logoYayasanUrl ? (
+                            <img src={settings.logoYayasanUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                        ) : settings.logoPonpesUrl ? (
+                            <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                            <div className="w-14 h-14 rounded border border-black flex items-center justify-center text-sm font-bold">PP</div>
+                        )}
+                    </div>
+                    <div className="text-center flex-1 px-2">
+                        <div className="text-[9px] uppercase tracking-widest font-semibold text-gray-600">Dokumen Arsip Pokok Pendidikan Pesantren</div>
+                        <h2 className="text-base font-extrabold uppercase tracking-wide">{settings.namaPonpes}</h2>
+                        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">LEMBAR BUKU INDUK SANTRI</h3>
+                        <p className="text-[9px] text-gray-600">
+                            {settings.alamat} {settings.telepon ? `| Telp: ${settings.telepon}` : ''} {settings.email ? `| Email: ${settings.email}` : ''}
+                        </p>
+                    </div>
+                    <div className="w-20 text-right">
+                        <div className="border border-gray-800 px-1 py-0.5 rounded text-[8px] font-mono inline-block text-left">
+                            <div><strong>NIS :</strong> {santri.nis}</div>
+                            <div><strong>NISN:</strong> {santri.nisn || '-'}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Grid Konten Buku Induk */}
+                <div className="space-y-2">
+                    {/* BAGIAN A: DATA PRIBADI SANTRI */}
+                    <div>
+                        <div className="bg-gray-800 text-white font-bold px-2 py-0.5 text-[9px] uppercase tracking-wider flex justify-between items-center rounded-sm">
+                            <span>A. KETERANGAN TENTANG DIRI SANTRI</span>
+                            <span className="font-normal normal-case text-[8px]">Nomor Induk: {santri.nis}</span>
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                            <table className="w-full text-[8.5pt] border-collapse">
+                                <tbody>
+                                    <tr className="border-b border-gray-200">
+                                        <td className="w-6 py-0.5 text-center font-semibold text-gray-500">1.</td>
+                                        <td className="w-44 py-0.5 text-gray-700">Nama Lengkap Santri</td>
+                                        <td className="w-3 py-0.5">:</td>
+                                        <td className="py-0.5 font-bold uppercase tracking-wide" colSpan={2}>{santri.namaLengkap}</td>
+                                    </tr>
+                                    <tr className="border-b border-gray-200">
+                                        <td className="py-0.5 text-center font-semibold text-gray-500">2.</td>
+                                        <td className="py-0.5 text-gray-700">Nama Panggilan / Hijrah</td>
+                                        <td className="py-0.5">:</td>
+                                        <td className="py-0.5" colSpan={2}>{santri.namaPanggilan || santri.namaHijrah || '-'}</td>
+                                    </tr>
+                                    <tr className="border-b border-gray-200">
+                                        <td className="py-0.5 text-center font-semibold text-gray-500">3.</td>
+                                        <td className="py-0.5 text-gray-700">Jenis Kelamin</td>
+                                        <td className="py-0.5">:</td>
+                                        <td className="py-0.5">{santri.jenisKelamin === 'Perempuan' ? 'Perempuan (P)' : 'Laki-laki (L)'}</td>
+                                        <td className="py-0.5 text-right font-mono text-[8pt]">NIK: {santri.nik || '-'}</td>
+                                    </tr>
+                                    <tr className="border-b border-gray-200">
+                                        <td className="py-0.5 text-center font-semibold text-gray-500">4.</td>
+                                        <td className="py-0.5 text-gray-700">Tempat, Tanggal Lahir</td>
+                                        <td className="py-0.5">:</td>
+                                        <td className="py-0.5" colSpan={2}>{santri.tempatLahir}, {formatDate(santri.tanggalLahir)}</td>
+                                    </tr>
+                                    <tr className="border-b border-gray-200">
+                                        <td className="py-0.5 text-center font-semibold text-gray-500">5.</td>
+                                        <td className="py-0.5 text-gray-700">Agama & Kewarganegaraan</td>
+                                        <td className="py-0.5">:</td>
+                                        <td className="py-0.5" colSpan={2}>{santri.agama || 'Islam'} / Indonesia (WNI)</td>
+                                    </tr>
+                                    <tr className="border-b border-gray-200">
+                                        <td className="py-0.5 text-center font-semibold text-gray-500">6.</td>
+                                        <td className="py-0.5 text-gray-700">Keberadaan dalam Keluarga</td>
+                                        <td className="py-0.5">:</td>
+                                        <td className="py-0.5" colSpan={2}>
+                                            Anak ke-{santri.anakKe || '-'} dari {santri.jumlahSaudara || '-'} bersaudara (Status: {santri.statusAnak || 'Anak Kandung'})
+                                        </td>
+                                    </tr>
+                                    <tr className="border-b border-gray-200">
+                                        <td className="py-0.5 text-center font-semibold text-gray-500">7.</td>
+                                        <td className="py-0.5 text-gray-700">Kondisi Fisik / Golongan Darah</td>
+                                        <td className="py-0.5">:</td>
+                                        <td className="py-0.5" colSpan={2}>
+                                            Gol. Darah: <strong>{santri.golonganDarah || '-'}</strong> | TB: {santri.tinggiBadan ? `${santri.tinggiBadan} cm` : '-'} | BB: {santri.beratBadan ? `${santri.beratBadan} kg` : '-'} | Riwayat: {santri.riwayatPenyakit || 'Tidak ada catatan'}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            {/* Pasfoto Box */}
+                            <div className="w-24 shrink-0 flex flex-col items-center justify-start pt-1">
+                                {santri.fotoUrl ? (
+                                    <div className="w-20 h-28 border border-gray-400 p-0.5 bg-white shadow-sm overflow-hidden">
+                                        <img src={santri.fotoUrl} alt={santri.namaLengkap} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                    </div>
+                                ) : (
+                                    <div className="w-20 h-28 border border-dashed border-gray-400 flex flex-col items-center justify-center text-[8px] text-gray-400 text-center p-1">
+                                        <span>FOTO RESMI</span>
+                                        <span>3 x 4 cm</span>
+                                    </div>
+                                )}
+                                <div className="text-[7.5pt] font-mono text-gray-500 mt-1">{santri.nis}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* BAGIAN B: ALAMAT & TEMPAT TINGGAL */}
+                    <div>
+                        <div className="bg-gray-800 text-white font-bold px-2 py-0.5 text-[9px] uppercase tracking-wider rounded-sm">
+                            B. KETERANGAN TEMPAT TINGGAL
+                        </div>
+                        <table className="w-full text-[8.5pt] border-collapse mt-1">
+                            <tbody>
+                                <tr className="border-b border-gray-200">
+                                    <td className="w-6 py-0.5 text-center font-semibold text-gray-500">8.</td>
+                                    <td className="w-44 py-0.5 text-gray-700">Alamat Tempat Tinggal</td>
+                                    <td className="w-3 py-0.5">:</td>
+                                    <td className="py-0.5">{formatAlamat(santri) || '-'}</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 text-center font-semibold text-gray-500">9.</td>
+                                    <td className="py-0.5 text-gray-700">Desa / Kelurahan & Kecamatan</td>
+                                    <td className="py-0.5">:</td>
+                                    <td className="py-0.5">{santri.desaKelurahan || '-'}, Kec. {santri.kecamatan || '-'}</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 text-center font-semibold text-gray-500">10.</td>
+                                    <td className="py-0.5 text-gray-700">Kabupaten / Kota & Kode Pos</td>
+                                    <td className="py-0.5">:</td>
+                                    <td className="py-0.5">{santri.kabupatenKota || '-'} (Kode Pos: {santri.kodePos || '-'})</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 text-center font-semibold text-gray-500">11.</td>
+                                    <td className="py-0.5 text-gray-700">Nomor Telepon / Kontak</td>
+                                    <td className="py-0.5">:</td>
+                                    <td className="py-0.5 font-mono">{santri.telepon || santri.noHp || santri.noHpAyah || santri.noHpIbu || '-'}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* BAGIAN C: RIWAYAT PENDIDIKAN SEBELUMNYA */}
+                    <div>
+                        <div className="bg-gray-800 text-white font-bold px-2 py-0.5 text-[9px] uppercase tracking-wider rounded-sm">
+                            C. RIWAYAT PENDIDIKAN SEBELUMNYA
+                        </div>
+                        <table className="w-full text-[8.5pt] border-collapse mt-1">
+                            <tbody>
+                                <tr className="border-b border-gray-200">
+                                    <td className="w-6 py-0.5 text-center font-semibold text-gray-500">12.</td>
+                                    <td className="w-44 py-0.5 text-gray-700">Asal Sekolah / Madrasah</td>
+                                    <td className="w-3 py-0.5">:</td>
+                                    <td className="py-0.5 font-semibold">{santri.asalSekolah || '-'}</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 text-center font-semibold text-gray-500">13.</td>
+                                    <td className="py-0.5 text-gray-700">Nomor Ijazah & Tahun Lulus</td>
+                                    <td className="py-0.5">:</td>
+                                    <td className="py-0.5">No: {santri.nomorIjazahSebelumnya || '-'} (Tahun Lulus: {santri.tahunLulusSebelumnya || '-'})</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* BAGIAN D: KETERANGAN ORANG TUA / WALI */}
+                    <div>
+                        <div className="bg-gray-800 text-white font-bold px-2 py-0.5 text-[9px] uppercase tracking-wider rounded-sm">
+                            D. KETERANGAN ORANG TUA KANDUNG / WALI
+                        </div>
+                        <table className="w-full text-[8pt] border border-gray-400 mt-1 border-collapse text-left">
+                            <thead className="bg-gray-100 font-bold border-b border-gray-400">
+                                <tr>
+                                    <th className="py-1 px-2 border-r border-gray-300 w-36">Keterangan</th>
+                                    <th className="py-1 px-2 border-r border-gray-300">Ayah Kandung</th>
+                                    <th className="py-1 px-2 border-r border-gray-300">Ibu Kandung</th>
+                                    <th className="py-1 px-2">Wali Santri</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 px-2 font-medium border-r border-gray-300 text-gray-700">Nama Lengkap</td>
+                                    <td className="py-0.5 px-2 font-bold border-r border-gray-300">{santri.namaAyah || '-'}</td>
+                                    <td className="py-0.5 px-2 font-bold border-r border-gray-300">{santri.namaIbu || '-'}</td>
+                                    <td className="py-0.5 px-2 font-bold">{santri.namaWali || '-'}</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 px-2 font-medium border-r border-gray-300 text-gray-700">NIK</td>
+                                    <td className="py-0.5 px-2 font-mono border-r border-gray-300">{santri.nikAyah || '-'}</td>
+                                    <td className="py-0.5 px-2 font-mono border-r border-gray-300">{santri.nikIbu || '-'}</td>
+                                    <td className="py-0.5 px-2 font-mono">{santri.nikWali || '-'}</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 px-2 font-medium border-r border-gray-300 text-gray-700">Pendidikan Terakhir</td>
+                                    <td className="py-0.5 px-2 border-r border-gray-300">{santri.pendidikanAyah || '-'}</td>
+                                    <td className="py-0.5 px-2 border-r border-gray-300">{santri.pendidikanIbu || '-'}</td>
+                                    <td className="py-0.5 px-2">{santri.pendidikanWali || '-'}</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 px-2 font-medium border-r border-gray-300 text-gray-700">Pekerjaan Pokok</td>
+                                    <td className="py-0.5 px-2 border-r border-gray-300">{santri.pekerjaanAyah || '-'}</td>
+                                    <td className="py-0.5 px-2 border-r border-gray-300">{santri.pekerjaanIbu || '-'}</td>
+                                    <td className="py-0.5 px-2">{santri.pekerjaanWali || '-'}</td>
+                                </tr>
+                                <tr className="border-b border-gray-200">
+                                    <td className="py-0.5 px-2 font-medium border-r border-gray-300 text-gray-700">Penghasilan Rata-rata</td>
+                                    <td className="py-0.5 px-2 border-r border-gray-300">{santri.penghasilanAyah || '-'}</td>
+                                    <td className="py-0.5 px-2 border-r border-gray-300">{santri.penghasilanIbu || '-'}</td>
+                                    <td className="py-0.5 px-2">{santri.penghasilanWali || '-'}</td>
+                                </tr>
+                                <tr>
+                                    <td className="py-0.5 px-2 font-medium border-r border-gray-300 text-gray-700">No. HP / WhatsApp</td>
+                                    <td className="py-0.5 px-2 font-mono border-r border-gray-300">{santri.noHpAyah || '-'}</td>
+                                    <td className="py-0.5 px-2 font-mono border-r border-gray-300">{santri.noHpIbu || '-'}</td>
+                                    <td className="py-0.5 px-2 font-mono">{santri.noHpWali || '-'}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* BAGIAN E: DATA PENDAFTARAN & PENEMPATAN DI PESANTREN */}
+                    <div>
+                        <div className="bg-gray-800 text-white font-bold px-2 py-0.5 text-[9px] uppercase tracking-wider rounded-sm">
+                            E. PENERIMAAN DI PONDOK PESANTREN
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 text-[8.5pt] mt-1 border border-gray-300 p-1.5 rounded-sm bg-gray-50">
+                            <div>
+                                <div className="flex justify-between py-0.5 border-b border-gray-200">
+                                    <span className="text-gray-600">Tanggal Terdaftar Masuk:</span>
+                                    <span className="font-semibold">{santri.tanggalMasuk ? formatDate(santri.tanggalMasuk) : '-'}</span>
+                                </div>
+                                <div className="flex justify-between py-0.5 border-b border-gray-200">
+                                    <span className="text-gray-600">Jenjang Pendidikan:</span>
+                                    <span className="font-semibold">{jenjang?.nama || '-'}</span>
+                                </div>
+                                <div className="flex justify-between py-0.5">
+                                    <span className="text-gray-600">Kelas / Rombongan Belajar:</span>
+                                    <span className="font-semibold">{kelas?.nama || '-'} ({rombel?.nama || '-'})</span>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex justify-between py-0.5 border-b border-gray-200">
+                                    <span className="text-gray-600">Gedung / Asrama:</span>
+                                    <span className="font-semibold">{gedung?.nama || 'Asrama Pondok'}</span>
+                                </div>
+                                <div className="flex justify-between py-0.5 border-b border-gray-200">
+                                    <span className="text-gray-600">Kamar Santri:</span>
+                                    <span className="font-semibold">{kamar?.nama || '-'}</span>
+                                </div>
+                                <div className="flex justify-between py-0.5">
+                                    <span className="text-gray-600">Status Keberadaan:</span>
+                                    <span className="font-bold text-emerald-800 uppercase">{santri.status || 'Aktif'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Bagian Pengesahan / Tanda Tangan */}
+                <div className="mt-3 flex justify-between items-end px-4" style={{ breakInside: 'avoid' }}>
+                    <div className="text-left text-[8pt] text-gray-500">
+                        <p>Catatan:</p>
+                        <p>Lembar ini adalah dokumen resmi yang tersimpan di Buku Induk Pesantren.</p>
+                        <p className="font-mono text-[7pt]">ID Record: {santri.id} | Dicetak: {new Date().toLocaleDateString('id-ID')}</p>
+                    </div>
+                    <div className="text-center w-56">
+                        <p className="text-[8.5pt]">
+                            {settings.kabupatenKota || 'Pesantren'}, {formatDate(new Date().toISOString())}
+                        </p>
+                        <p className="font-bold text-[8.5pt]">{signatoryTitle},</p>
+                        <div className="h-14 flex items-center justify-center">
+                            <span className="text-[8pt] text-gray-400 italic">[Tanda Tangan & Cap Lembaga]</span>
+                        </div>
+                        <p className="font-bold underline uppercase text-[8.5pt]">{signatoryName}</p>
+                        {signatory?.nip && <p className="font-mono text-[7.5pt] text-gray-600">NIP/NIY: {signatory.nip}</p>}
+                    </div>
+                </div>
+            </div>
+            <ReportFooter />
+        </div>
+    );
+};
+
+export const generateBukuIndukReports = (data: Santri[], settings: PondokSettings, options: any) => {
+    return data.map(santri => ({
+        content: <BukuIndukSantriTemplate santri={santri} settings={settings} options={options} />,
+        orientation: 'portrait' as const
+    }));
 };

@@ -305,8 +305,36 @@ export const JurnalMengajarModal: React.FC<JurnalMengajarModalProps> = ({
                                     <label className="block text-xs font-bold text-gray-700 mb-1.5">Mata Pelajaran (Opsional jika hanya sesi ekstra)</label>
                                     <select value={mataPelajaranId} onChange={e => setMataPelajaranId(Number(e.target.value))} className="w-full text-sm p-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none">
                                         <option value={0}>-- Tidak memilih mapel (khusus ekstra/non-mapel) --</option>
-                                        {filteredMapel.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                                        {filteredMapel.map(m => (
+                                            <option key={m.id} value={m.id}>
+                                                {m.nama} {m.rumpun ? `(${m.rumpun})` : ''}
+                                            </option>
+                                        ))}
                                     </select>
+                                    {(() => {
+                                        const selectedMapel = filteredMapel.find(m => m.id === mataPelajaranId);
+                                        if (!selectedMapel?.targetBabSemester || selectedMapel.targetBabSemester.length === 0) return null;
+                                        return (
+                                            <div className="mt-2 p-2 bg-teal-50/70 border border-teal-200 rounded-lg">
+                                                <div className="text-[11px] font-bold text-teal-900 mb-1 flex items-center gap-1">
+                                                    <i className="bi bi-bookmark-check-fill text-teal-600"></i> Target Silabus / Bab Pokok ({selectedMapel.nama}):
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {selectedMapel.targetBabSemester.map((bab, bIdx) => (
+                                                        <button
+                                                            key={bIdx}
+                                                            type="button"
+                                                            onClick={() => setKompetensiMateri(prev => prev ? `${prev}; ${bab}` : bab)}
+                                                            className="text-[11px] bg-white hover:bg-teal-100 text-teal-800 border border-teal-300 px-2 py-0.5 rounded shadow-2xs transition-colors"
+                                                            title="Klik untuk memasukkan ke materi"
+                                                        >
+                                                            + {bab}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                                 
                                 <div>

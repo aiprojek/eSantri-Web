@@ -65,37 +65,103 @@ export const exportSantriToExcel = async (data: Santri[], settings: PondokSettin
         const rombel = settings.rombel.find(r => r.id === s.rombelId);
         const kelas = settings.kelas.find(k => k.id === s.kelasId);
         const jenjang = settings.jenjang.find(j => j.id === s.jenjangId);
+        const kamar = settings.kamar?.find(k => k.id === s.kamarId);
+        const gedung = kamar?.gedungId ? settings.gedungAsrama?.find(g => g.id === kamar.gedungId) : undefined;
+        const halaqah = settings.kelompokHalaqah?.find(h => h.id === s.halaqahId);
         
+        const formatAddr = (addr?: any) => {
+            if (!addr) return '-';
+            const parts = [addr.detail, addr.desaKelurahan, addr.kecamatan, addr.kabupatenKota, addr.provinsi, addr.kodePos].filter(Boolean);
+            return parts.length > 0 ? parts.join(', ') : '-';
+        };
+
+        const hobiStr = Array.isArray(s.hobi) ? s.hobi.join(', ') : (s.hobi || '-');
+
         return {
             'No': index + 1,
             'NIS': s.nis,
+            'NISN': s.nisn || '-',
+            'NIK': s.nik || '-',
             'Nama Lengkap': s.namaLengkap,
             'Nama Hijrah': s.namaHijrah || '-',
             'L/P': s.jenisKelamin === 'Laki-laki' ? 'L' : 'P',
-            'Tempat Lahir': s.tempatLahir,
+            'Tempat Lahir': s.tempatLahir || '-',
             'Tanggal Lahir': formatExcelDate(s.tanggalLahir),
+            'Kewarganegaraan': s.kewarganegaraan || 'WNI',
+            'Status dalam Keluarga': s.statusKeluarga || '-',
+            'Anak Ke-': typeof s.anakKe === 'number' ? s.anakKe : (s.anakKe || '-'),
+            'Jumlah Saudara': typeof s.jumlahSaudara === 'number' ? s.jumlahSaudara : (s.jumlahSaudara || '-'),
+            
+            // Akademik & Asrama
             'Jenjang': jenjang?.nama || '-',
             'Kelas': kelas?.nama || '-',
             'Rombel': rombel?.nama || '-',
-            'Status': s.status,
+            'Status Santri': s.status,
+            'Tanggal Status': formatExcelDate(s.tanggalStatus),
+            'Jenis Santri': s.jenisSantri || 'Mondok (Mukim)',
+            'Tanggal Masuk': formatExcelDate(s.tanggalMasuk),
+            'Gedung Asrama': gedung?.nama || '-',
+            'Kamar': kamar?.nama || '-',
+            'Kelompok Halaqah': halaqah?.nama || '-',
+            'Target Hafalan (Juz)': typeof s.targetJuz === 'number' && s.targetJuz > 0 ? `${s.targetJuz} Juz` : (s.targetJuz || '-'),
+
+            // Sekolah Asal
             'Sekolah Asal': s.sekolahAsal || '-',
             'Alamat Sekolah Asal': s.alamatSekolahAsal || '-',
-            'Nama Ayah': s.namaAyah,
-            'Tempat Lahir Ayah': s.tempatLahirAyah || '-',
-            'Tgl Lahir Ayah': formatExcelDate(s.tanggalLahirAyah),
-            'No HP Ayah': s.teleponAyah || '-',
-            'Nama Ibu': s.namaIbu,
-            'Tempat Lahir Ibu': s.tempatLahirIbu || '-',
-            'Tgl Lahir Ibu': formatExcelDate(s.tanggalLahirIbu),
-            'No HP Ibu': s.teleponIbu || '-',
-            'Nama Wali': s.namaWali || '-',
-            'No HP Wali': s.teleponWali || '-',
-            'Alamat Detail': s.alamat?.detail || '-',
-            'Desa/Kel': s.alamat?.desaKelurahan || '-',
+
+            // Alamat Santri
+            'Alamat Lengkap': formatAddr(s.alamat),
+            'Jalan / Detail': s.alamat?.detail || '-',
+            'Desa/Kelurahan': s.alamat?.desaKelurahan || '-',
             'Kecamatan': s.alamat?.kecamatan || '-',
-            'Kab/Kota': s.alamat?.kabupatenKota || '-',
+            'Kabupaten/Kota': s.alamat?.kabupatenKota || '-',
             'Provinsi': s.alamat?.provinsi || '-',
-            'Kode Pos': s.alamat?.kodePos || '-'
+            'Kode Pos': s.alamat?.kodePos || '-',
+
+            // Data Ayah Kandung
+            'Nama Ayah': s.namaAyah || '-',
+            'Status Ayah': s.statusAyah || '-',
+            'NIK Ayah': s.nikAyah || '-',
+            'Tempat Lahir Ayah': s.tempatLahirAyah || '-',
+            'Tanggal Lahir Ayah': formatExcelDate(s.tanggalLahirAyah),
+            'Pendidikan Ayah': s.pendidikanAyah || '-',
+            'Pekerjaan Ayah': s.pekerjaanAyah || '-',
+            'Penghasilan Ayah': s.penghasilanAyah || '-',
+            'No HP Ayah': s.teleponAyah || '-',
+            'Alamat Ayah': formatAddr(s.alamatAyah),
+
+            // Data Ibu Kandung
+            'Nama Ibu': s.namaIbu || '-',
+            'Status Ibu': s.statusIbu || '-',
+            'NIK Ibu': s.nikIbu || '-',
+            'Tempat Lahir Ibu': s.tempatLahirIbu || '-',
+            'Tanggal Lahir Ibu': formatExcelDate(s.tanggalLahirIbu),
+            'Pendidikan Ibu': s.pendidikanIbu || '-',
+            'Pekerjaan Ibu': s.pekerjaanIbu || '-',
+            'Penghasilan Ibu': s.penghasilanIbu || '-',
+            'No HP Ibu': s.teleponIbu || '-',
+            'Alamat Ibu': formatAddr(s.alamatIbu),
+
+            // Data Wali
+            'Nama Wali': s.namaWali || '-',
+            'Hubungan Wali': s.statusWali || '-',
+            'Status Hidup Wali': s.statusHidupWali || '-',
+            'NIK Wali': s.nikWali || '-',
+            'Tempat Lahir Wali': s.tempatLahirWali || '-',
+            'Tanggal Lahir Wali': formatExcelDate(s.tanggalLahirWali),
+            'Pendidikan Wali': s.pendidikanWali || '-',
+            'Pekerjaan Wali': s.pekerjaanWali || '-',
+            'Penghasilan Wali': s.penghasilanWali || '-',
+            'No HP Wali': s.teleponWali || (s as any).nomorHpWali || '-',
+            'Alamat Wali': formatAddr(s.alamatWali),
+
+            // Data Fisik & Medis
+            'Tinggi Badan (cm)': s.tinggiBadan || '-',
+            'Berat Badan (kg)': s.beratBadan || '-',
+            'Jarak ke Pondok': s.jarakKePondok || '-',
+            'Kebutuhan Khusus': s.berkebutuhanKhusus || '-',
+            'Riwayat Penyakit': s.riwayatPenyakit || '-',
+            'Hobi': hobiStr
         };
     });
 

@@ -27,14 +27,61 @@
     },
     "Pendaftar": {
       "title": "Pendaftar",
-      "description": "Data pendaftaran santri baru",
+      "description": "Data pendaftaran santri baru lengkap dengan verifikasi berkas fisik dan nilai ujian seleksi",
       "type": "object",
       "properties": {
         "id": { "type": "number" },
+        "nomorRegistrasi": { "type": "string" },
         "namaLengkap": { "type": "string" },
+        "namaHijrah": { "type": "string" },
+        "nik": { "type": "string" },
+        "nisn": { "type": "string" },
+        "jenisKelamin": { "type": "string" },
+        "tempatLahir": { "type": "string" },
+        "tanggalLahir": { "type": "string" },
+        "jenjangId": { "type": "number" },
         "tanggalDaftar": { "type": "string" },
+        "tanggalMasuk": { "type": "string" },
         "status": { "type": "string" },
+        "jalurPendaftaran": { "type": "string" },
+        "gelombang": { "type": "number" },
+        "catatan": { "type": "string" },
+        "namaAyah": { "type": "string" },
+        "namaIbu": { "type": "string" },
+        "namaWali": { "type": "string" },
+        "nomorHpWali": { "type": "string" },
+        "asalSekolah": { "type": "string" },
+        "alamatSekolahAsal": { "type": "string" },
+        "berkasFisik": {
+          "type": "object",
+          "properties": {
+            "kk": { "type": "boolean" },
+            "akta": { "type": "boolean" },
+            "ijazahSkl": { "type": "boolean" },
+            "suratSehat": { "type": "boolean" },
+            "pasFoto": { "type": "boolean" },
+            "catatanBerkas": { "type": "string" }
+          }
+        },
+        "nilaiUjian": {
+          "type": "object",
+          "properties": {
+            "bacaQuran": { "type": "number" },
+            "tahfizh": { "type": "number" },
+            "akademik": { "type": "number" },
+            "wawancara": { "type": "number" },
+            "totalSkor": { "type": "number" },
+            "rekomendasi": { "type": "string" },
+            "penguji": { "type": "string" },
+            "ruangUjian": { "type": "string" },
+            "tanggalUjian": { "type": "string" },
+            "catatanUjian": { "type": "string" }
+          }
+        },
         "customData": { "type": "string" },
+        "kamarId": { "type": "number" },
+        "fotoUrl": { "type": "string" },
+        "deleted": { "type": "boolean" },
         "lastModified": { "type": "number" }
       },
       "required": ["id", "namaLengkap", "status"]
@@ -175,6 +222,58 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "tanggal", "jamMasuk", "namaTamu", "status", "petugas", "lastModified"]
+    },
+    "SuratTemplate": {
+      "title": "SuratTemplate",
+      "description": "Template master dokumen surat resmi dan pemberitahuan pondok pesantren",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nama": { "type": "string" },
+        "kategori": { "type": "string", "enum": ["Resmi", "Pemberitahuan", "Izin", "Lainnya"] },
+        "kodeSurat": { "type": "string" },
+        "judul": { "type": "string" },
+        "konten": { "type": "string" },
+        "signatories": { "type": "array" },
+        "mengetahuiConfig": { "type": "object" },
+        "tempatTanggalConfig": { "type": "object" },
+        "marginConfig": { "type": "object" },
+        "stampConfig": { "type": "object" },
+        "showJudul": { "type": "boolean" },
+        "usePrePrintedKop": { "type": "boolean" },
+        "kopMarginTop": { "type": "number" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "nama", "kategori", "judul", "konten", "lastModified"]
+    },
+    "ArsipSurat": {
+      "title": "ArsipSurat",
+      "description": "Buku agenda dan arsip surat keluar digital yang telah diterbitkan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nomorSurat": { "type": "string" },
+        "perihal": { "type": "string" },
+        "tujuan": { "type": "string" },
+        "isiSurat": { "type": "string" },
+        "tanggalBuat": { "type": "string" },
+        "templateId": { "type": "number" },
+        "tempatCetak": { "type": "string" },
+        "tanggalCetak": { "type": "string" },
+        "tempatTanggalConfig": { "type": "object" },
+        "signatoriesSnapshot": { "type": "array" },
+        "mengetahuiSnapshot": { "type": "object" },
+        "marginConfig": { "type": "object" },
+        "stampSnapshot": { "type": "object" },
+        "showJudulSnapshot": { "type": "boolean" },
+        "usePrePrintedKopSnapshot": { "type": "boolean" },
+        "nomorHpTujuan": { "type": "string" },
+        "santriId": { "type": "number" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "nomorSurat", "perihal", "tujuan", "isiSurat", "tanggalBuat", "lastModified"]
     }
   },
   "firestore": {
@@ -213,6 +312,14 @@
     "tenants/{tenantId}/bukuTamu": {
       "schema": "BukuTamu",
       "description": "Koleksi catatan buku tamu dan ekspedisi pos satpam per tenant"
+    },
+    "tenants/{tenantId}/suratTemplates": {
+      "schema": "SuratTemplate",
+      "description": "Koleksi template surat menyurat per tenant"
+    },
+    "tenants/{tenantId}/arsipSurat": {
+      "schema": "ArsipSurat",
+      "description": "Koleksi buku agenda & arsip surat keluar per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

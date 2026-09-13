@@ -8,9 +8,10 @@ import { JadwalModal } from './modals/JadwalModal';
 import { PrintHeader } from '../common/PrintHeader';
 import { formatDate } from '../reports/modules/Common';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
-import { loadJsPdf, loadJsPdfAutoTable } from '../../utils/lazyClientLibs';
+import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from '../../utils/lazyClientLibs';
 import { formatAcademicYearDisplay, getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 import { printExportFacade } from '../../utils/printExportFacade';
+import { groupRombelsForTable, RombelSplitMode, RombelTableGroup } from '../../utils/rombelGrouping';
 
 const PENDING_RESTORE_ROMBEL_KEY = 'esantri_jadwal_pending_restore_rombel_id';
 
@@ -239,6 +240,7 @@ export const TabJadwalPelajaran: React.FC = () => {
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [viewLayout, setViewLayout] = useState<'cards' | 'global_tu'>('cards');
     
     const [selectedSlot, setSelectedSlot] = useState<{ hari: number, jamKe: number } | null>(null);
     const [editingJadwal, setEditingJadwal] = useState<JadwalPelajaran | null>(null);
@@ -289,6 +291,21 @@ export const TabJadwalPelajaran: React.FC = () => {
         }
         return [];
     }, [filterJenjangId, filterKelasId, filterRombelId, settings.rombel, settings.kelas]);
+
+    // Opsi Pemisahan Tabel Rombel Rekap Global TU (agar tidak sesak)
+    const [splitMode, setSplitMode] = useState<RombelSplitMode>('gender');
+    const [activeGroupFilter, setActiveGroupFilter] = useState<string>('all');
+    const allSantri = useLiveQuery(() => db.santri.toArray(), []) || [];
+
+    const rombelGroups = useMemo<RombelTableGroup[]>(() => {
+        return groupRombelsForTable(targetRombels, splitMode, settings.kelas, allSantri);
+    }, [targetRombels, splitMode, settings.kelas, allSantri]);
+
+    const visibleRombelGroups = useMemo<RombelTableGroup[]>(() => {
+        if (activeGroupFilter === 'all') return rombelGroups;
+        const matched = rombelGroups.filter(g => g.id === activeGroupFilter);
+        return matched.length > 0 ? matched : rombelGroups;
+    }, [rombelGroups, activeGroupFilter]);
 
     const toSlug = (value: string) =>
         value
@@ -814,7 +831,214 @@ export const TabJadwalPelajaran: React.FC = () => {
         }, 350);
     };
 
-    const runExportAction = async (mode: 'pdfVisual' | 'pdfImage' | 'print' | 'excel' | 'word' | 'html') => {
+    const handlePrintGlobalTU = () => {
+        const printWindow = window.open('', '_blank', 'width=1200,height=850');
+        if (!printWindow) {
+            showToast('Izinkan pop-up untuk mencetak rekap jadwal TU.', 'error');
+            return;
+        }
+
+        const groupsToPrint = visibleRombelGroups.length > 0 ? visibleRombelGroups : [{
+            id: 'all',
+            key: 'all',
+            title: 'Seluruh Rombel',
+            badge: `${targetRombels.length} Kelas`,
+            badgeColor: 'bg-teal-100 text-teal-900 border-teal-200',
+            icon: 'bi-grid-fill',
+            rombels: targetRombels,
+        }];
+
+        const activeDays = [0, 1, 2, 3, 4, 5, 6];
+
+        let tablesHtml = '';
+        groupsToPrint.forEach((group, gIdx) => {
+            const groupRombels = group.rombels;
+            if (groupRombels.length === 0) return;
+
+            const theadRombels = groupRombels.map(r => `<th style="border:1px solid #0f766e; padding:6px; background:#0d9488; color:white; min-width:110px;">${r.nama}</th>`).join('');
+
+            let tbodyRows = '';
+            activeDays.forEach(dayIdx => {
+                const dayName = days[dayIdx];
+                jamConfig.forEach((jam, jIdx) => {
+                    const cells = groupRombels.map(rombel => {
+                        const j = jadwalList.find(item => item.rombelId === rombel.id && item.hari === dayIdx && item.jamKe === jam.urutan);
+                        if (!j) return `<td style="border:1px solid #cbd5e1; padding:5px; text-align:center; color:#94a3b8; font-size:9.5px;">-</td>`;
+                        const mapel = j.mapelId ? (settings.mataPelajaran.find(m => m.id === j.mapelId)?.nama || 'Tanpa Mapel') : 'Tanpa Mapel';
+                        const guru = getGuruLabel(j.guruId);
+                        return `
+                            <td style="border:1px solid #cbd5e1; padding:5px; font-size:9.5px; background:#ffffff;">
+                                <div style="font-weight:bold; color:#0f172a;">${mapel}</div>
+                                <div style="color:#0d9488; font-size:9px; margin-top:1px;">${guru}</div>
+                                ${j.ruangan ? `<div style="color:#64748b; font-size:8.5px;">R: ${j.ruangan}</div>` : ''}
+                            </td>
+                        `;
+                    }).join('');
+
+                    tbodyRows += `
+                        <tr>
+                            ${jIdx === 0 ? `
+                                <td rowspan="${jamConfig.length}" style="border:1px solid #334155; padding:6px; font-weight:bold; background:#f1f5f9; text-align:center; font-size:11px; width:90px;">
+                                    ${dayName}
+                                </td>
+                            ` : ''}
+                            <td style="border:1px solid #cbd5e1; padding:5px; text-align:center; font-weight:600; background:#f8fafc; font-size:9.5px; width:95px;">
+                                Jam ${jam.urutan}<br><span style="font-size:8.5px; color:#64748b; font-weight:normal;">${jam.jamMulai}-${jam.jamSelesai}</span>
+                            </td>
+                            ${cells}
+                        </tr>
+                    `;
+                });
+            });
+
+            const isLast = gIdx === groupsToPrint.length - 1;
+            const groupBanner = groupsToPrint.length > 1 ? `
+                <div style="background:#f0fdfa; border:1px solid #99f6e4; padding:6px 12px; border-radius:6px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:bold; font-size:12px; color:#0f766e; text-transform:uppercase;">
+                        ${group.title} (${group.rombels.length} Kelas: ${group.rombels.map(r => r.nama).join(', ')})
+                    </span>
+                    <span style="font-size:10px; color:#0d9488; font-weight:bold;">
+                        Tabel ${gIdx + 1} dari ${groupsToPrint.length}
+                    </span>
+                </div>
+            ` : '';
+
+            tablesHtml += `
+                <div style="${!isLast ? 'page-break-after: always; margin-bottom: 25px;' : ''}">
+                    ${groupBanner}
+                    <table style="width:100%; border-collapse:collapse; font-size:9.5px; margin-bottom:15px;">
+                        <thead>
+                            <tr>
+                                <th style="border:1px solid #0f766e; background:#0d9488; color:white; width:90px;">Hari</th>
+                                <th style="border:1px solid #0f766e; background:#0d9488; color:white; width:95px;">Jam & Waktu</th>
+                                ${theadRombels}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tbodyRows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        });
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <title>Rekapitulasi Jadwal Global TU - ${jenjangLabel}</title>
+                    <style>
+                        @page { size: A4 landscape; margin: 8mm; }
+                        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 10px; color: #1e293b; }
+                        .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0d9488; padding-bottom: 6px; margin-bottom: 12px; }
+                        .title { font-size: 14px; font-weight: bold; color: #0f172a; text-transform: uppercase; }
+                        .sub { font-size: 11px; color: #475569; margin-top: 2px; }
+                        table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+                        tr { page-break-inside: avoid; }
+                        th { padding: 6px; text-transform: uppercase; font-size: 10px; }
+                        .footer { margin-top: 15px; font-size: 9px; color: #64748b; display: flex; justify-content: space-between; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div>
+                            <div class="title">${settings.namaPonpes || 'PONDOK PESANTREN'} - REKAPITULASI JADWAL PELAJARAN GLOBAL (PEGANGAN TU)</div>
+                            <div class="sub">MARHALAH / JENJANG: <strong>${jenjangLabel.toUpperCase()}</strong> | TAHUN AJARAN: <strong>${defaultAcademicYear}</strong></div>
+                        </div>
+                        <div style="font-size:10px; font-weight:600; color:#0d9488;">
+                            Dokumen Resmi Jadwal KBM (Format Pisah Tabel Rombel)
+                        </div>
+                    </div>
+
+                    ${tablesHtml}
+
+                    <div class="footer">
+                        <span>Dicetak otomatis oleh eSantri Web App | Rekap Global TU (${groupsToPrint.length} Kelompok Tabel)</span>
+                        <span>Tanggal cetak: ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}</span>
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+        }, 350);
+    };
+
+    const handleExportExcelGlobalTU = async () => {
+        if (isExporting) return;
+        setIsExporting(true);
+        try {
+            const XLSX = await loadXLSX();
+            const wb = XLSX.utils.book_new();
+
+            const groupsToExport = visibleRombelGroups.length > 0 ? visibleRombelGroups : [{
+                id: 'all',
+                key: 'all',
+                title: 'Seluruh Rombel',
+                badge: `${targetRombels.length} Kelas`,
+                badgeColor: '',
+                icon: '',
+                rombels: targetRombels,
+            }];
+
+            const activeDays = [0, 1, 2, 3, 4, 5, 6];
+
+            groupsToExport.forEach((group, gIdx) => {
+                const groupRombels = group.rombels;
+                if (groupRombels.length === 0) return;
+
+                const wsData: any[][] = [];
+                wsData.push([`REKAPITULASI JADWAL PELAJARAN GLOBAL (PEGANGAN TU) - ${settings.namaPonpes || 'PESANTREN'}`]);
+                wsData.push([`Marhalah: ${jenjangLabel} | Kelompok: ${group.title} (${groupRombels.map(r => r.nama).join(', ')})`]);
+                wsData.push([]);
+
+                // Header row
+                const headerRow = ['Hari', 'Jam & Waktu', ...groupRombels.map(r => r.nama)];
+                wsData.push(headerRow);
+
+                activeDays.forEach(dayIdx => {
+                    const dayName = days[dayIdx];
+                    jamConfig.forEach(jam => {
+                        const row: string[] = [dayName, `${jam.urutan} (${jam.jamMulai} - ${jam.jamSelesai})`];
+                        groupRombels.forEach(rombel => {
+                            const j = jadwalList.find(item => item.rombelId === rombel.id && item.hari === dayIdx && item.jamKe === jam.urutan);
+                            if (!j) {
+                                row.push('-');
+                            } else {
+                                const mapel = j.mapelId ? (settings.mataPelajaran.find(m => m.id === j.mapelId)?.nama || 'Tanpa Mapel') : 'Tanpa Mapel';
+                                const guru = getGuruLabel(j.guruId);
+                                row.push(`${mapel} (${guru})`);
+                            }
+                        });
+                        wsData.push(row);
+                    });
+                });
+
+                wsData.push([]);
+                wsData.push(['dibuat dengan eSantri Web']);
+
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                // Clean sheet name
+                let sheetName = groupsToExport.length === 1 
+                    ? 'Rekap_Global_TU' 
+                    : `TU_${group.title.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 25)}`;
+                if (sheetName.length > 31) sheetName = sheetName.substring(0, 31);
+
+                XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            });
+
+            XLSX.writeFile(wb, `${exportFileName}-rekap-global-tu.xlsx`);
+            showToast('Rekap Global TU berhasil diekspor ke Excel', 'success');
+        } catch (e) {
+            showToast('Gagal mengekspor rekap global TU ke Excel', 'error');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const runExportAction = async (mode: 'pdfVisual' | 'pdfImage' | 'print' | 'excel' | 'word' | 'html' | 'globalTuExcel' | 'globalTuPrint') => {
         if (isExporting) return;
         if (targetRombels.length === 0) {
             showToast('Pilih setidaknya satu kelas untuk dicetak.', 'error');
@@ -825,6 +1049,14 @@ export const TabJadwalPelajaran: React.FC = () => {
         setIsExporting(true);
 
         try {
+            if (mode === 'globalTuExcel') {
+                await handleExportExcelGlobalTU();
+                return;
+            }
+            if (mode === 'globalTuPrint') {
+                handlePrintGlobalTU();
+                return;
+            }
             if (mode === 'pdfVisual') {
                 await handlePrint();
                 return;
@@ -987,13 +1219,23 @@ export const TabJadwalPelajaran: React.FC = () => {
                                     <i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-printer'} text-xl`}></i>
                                 </button>
                                 {isExportMenuOpen && (
-                                    <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF Tabel</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 border-b disabled:opacity-50">PDF Gambar</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-sky-50 border-b disabled:opacity-50">Preview & Cetak</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b disabled:opacity-50">Excel</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b disabled:opacity-50">Word</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50 disabled:opacity-50">HTML</button>
+                                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden divide-y divide-gray-100">
+                                        <div className="p-1">
+                                            <button disabled={isExporting} onClick={() => runExportAction('globalTuExcel')} className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg flex items-center gap-2 disabled:opacity-50">
+                                                <i className="bi bi-file-earmark-excel-fill text-emerald-600"></i> Rekap Global TU (Excel)
+                                            </button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('globalTuPrint')} className="w-full text-left px-3 py-2 text-xs font-bold text-teal-800 hover:bg-teal-50 rounded-lg flex items-center gap-2 disabled:opacity-50">
+                                                <i className="bi bi-printer-fill text-teal-600"></i> Rekap Global TU (Cetak)
+                                            </button>
+                                        </div>
+                                        <div className="p-1">
+                                            <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 rounded-lg disabled:opacity-50">PDF Tabel (Per Rombel)</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2 text-xs hover:bg-orange-50 rounded-lg disabled:opacity-50">PDF Gambar</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2 text-xs hover:bg-sky-50 rounded-lg disabled:opacity-50">Preview & Cetak Standar</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 rounded-lg disabled:opacity-50">Excel Biasa</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 rounded-lg disabled:opacity-50">Word</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 rounded-lg disabled:opacity-50">HTML</button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -1047,13 +1289,23 @@ export const TabJadwalPelajaran: React.FC = () => {
                                     <i className={`bi ${isExportMenuOpen ? 'bi-chevron-up' : 'bi-chevron-down'} text-xs`}></i>
                                 </button>
                                 {isExportMenuOpen && (
-                                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-red-50 border-b disabled:opacity-50">PDF Tabel</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 border-b disabled:opacity-50">PDF Gambar</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-sky-50 border-b disabled:opacity-50">Preview & Cetak</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-green-50 border-b disabled:opacity-50">Excel</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b disabled:opacity-50">Word</button>
-                                        <button disabled={isExporting} onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2.5 text-sm hover:bg-indigo-50 disabled:opacity-50">HTML</button>
+                                    <div className="absolute right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden divide-y divide-gray-100">
+                                        <div className="p-1">
+                                            <button disabled={isExporting} onClick={() => runExportAction('globalTuExcel')} className="w-full text-left px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg flex items-center gap-2 disabled:opacity-50">
+                                                <i className="bi bi-file-earmark-excel-fill text-emerald-600"></i> Rekap Global TU (Excel)
+                                            </button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('globalTuPrint')} className="w-full text-left px-3 py-2 text-xs font-bold text-teal-800 hover:bg-teal-50 rounded-lg flex items-center gap-2 disabled:opacity-50">
+                                                <i className="bi bi-printer-fill text-teal-600"></i> Rekap Global TU (Cetak)
+                                            </button>
+                                        </div>
+                                        <div className="p-1">
+                                            <button disabled={isExporting} onClick={() => runExportAction('pdfVisual')} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 rounded-lg disabled:opacity-50">PDF Tabel (Per Rombel)</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('pdfImage')} className="w-full text-left px-3 py-2 text-xs hover:bg-orange-50 rounded-lg disabled:opacity-50">PDF Gambar</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('print')} className="w-full text-left px-3 py-2 text-xs hover:bg-sky-50 rounded-lg disabled:opacity-50">Preview & Cetak Standar</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('excel')} className="w-full text-left px-3 py-2 text-xs hover:bg-green-50 rounded-lg disabled:opacity-50">Excel Biasa</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('word')} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 rounded-lg disabled:opacity-50">Word</button>
+                                            <button disabled={isExporting} onClick={() => runExportAction('html')} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 rounded-lg disabled:opacity-50">HTML</button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -1238,55 +1490,295 @@ export const TabJadwalPelajaran: React.FC = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-6">
-                            {targetRombels.length > 0 ? (
-                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                                    {targetRombels.map(rombel => (
-                                        <div key={rombel.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                                            <div className="flex justify-between items-center mb-4 pb-2 border-b">
-                                                <div>
-                                                    <h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="bi bi-calendar-event text-teal-600"></i> {rombel.nama}</h3>
-                                                    <p className="text-[11px] text-gray-500 mt-0.5">
-                                                        Jenjang: {getRombelMeta(rombel.id).jenjang} | Kelas: {getRombelMeta(rombel.id).kelas}
-                                                    </p>
-                                                </div>
-                                                {canWrite && (
-                                                    <button onClick={() => handleEditRombel(rombel.id)} className="text-xs bg-teal-50 text-teal-700 px-3 py-1.5 rounded hover:bg-teal-100 font-medium border border-teal-200 flex items-center gap-1 transition-colors">
-                                                        <i className="bi bi-pencil-square"></i> Edit Jadwal
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-xs border-collapse">
-                                                    <thead className="bg-gray-50 text-gray-600">
-                                                        <tr>
-                                                            <th className="p-1 border w-8">Jam</th>
-                                                            {days.map((d, i) => <th key={d} className={`p-1 border ${i===5?'text-red-500':''}`}>{d.substring(0,3)}</th>)}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {jamConfig.map(jam => (
-                                                            <tr key={jam.id}>
-                                                                <td className="p-1 border text-center font-bold bg-gray-50">{jam.urutan}</td>
-                                                                {days.map((day, dayIdx) => {
-                                                                    const item = jadwalList.find(j => j.rombelId === rombel.id && j.hari === dayIdx && j.jamKe === jam.urutan);
-                                                                    const mapel = item?.mapelId ? settings.mataPelajaran.find(m => m.id === item.mapelId)?.nama : '';
-                                                                    return (
-                                                                        <td key={dayIdx} className="p-1 border h-8 align-middle text-center relative hover:bg-gray-50 cursor-pointer" onClick={() => { if(canWrite) { setFilterRombelId(rombel.id); handleCellClick(dayIdx, jam.urutan); } }}>
-                                                                            {item ? (
-                                                                                item.keterangan ? <span className="text-yellow-700 font-medium text-[9px]">{item.keterangan}</span> : <span className="font-medium text-gray-800 line-clamp-1 text-[9px]" title={mapel}>{mapel}</span>
-                                                                            ) : ''}
-                                                                        </td>
-                                                                    )
-                                                                })}
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
+                        <div className="space-y-4">
+                            {targetRombels.length > 0 && (
+                                <div className="space-y-3 bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs">
+                                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                                        {/* Tampilan Switcher */}
+                                        <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl text-xs font-bold w-full sm:w-auto">
+                                            <button
+                                                type="button"
+                                                onClick={() => setViewLayout('cards')}
+                                                className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                                    viewLayout === 'cards' ? 'bg-white text-teal-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                                                }`}
+                                            >
+                                                <i className="bi bi-grid-fill"></i>
+                                                <span>Kartu Per Rombel</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setViewLayout('global_tu')}
+                                                className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                                    viewLayout === 'global_tu' ? 'bg-white text-teal-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                                                }`}
+                                            >
+                                                <i className="bi bi-table"></i>
+                                                <span>Rekap Global TU</span>
+                                            </button>
                                         </div>
-                                    ))}
+
+                                        {/* Split Option Selector (Khusus Rekap Global TU) */}
+                                        {viewLayout === 'global_tu' && targetRombels.length > 1 && (
+                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs">
+                                                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                                                    <i className="bi bi-layout-split text-teal-600"></i>
+                                                    <span>Pisah Tabel:</span>
+                                                </span>
+                                                <select
+                                                    value={splitMode}
+                                                    onChange={(e) => {
+                                                        setSplitMode(e.target.value as RombelSplitMode);
+                                                        setActiveGroupFilter('all');
+                                                    }}
+                                                    className="font-bold bg-white border border-gray-300 rounded-md px-2 py-1 text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-hidden text-xs shadow-2xs"
+                                                >
+                                                    <option value="gender">Pisah Putra & Putri (Banin / Banat)</option>
+                                                    <option value="kelas">Pisah Per Tingkat Kelas</option>
+                                                    <option value="chunk3">Bagi Maks 3 Rombel / Tabel</option>
+                                                    <option value="chunk4">Bagi Maks 4 Rombel / Tabel</option>
+                                                    <option value="all">Satu Tabel Penuh (Gabung Semua)</option>
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {/* Action Buttons: Cetak & Export Excel */}
+                                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                                            <button
+                                                type="button"
+                                                onClick={handlePrintGlobalTU}
+                                                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 flex items-center gap-1.5 shadow-2xs"
+                                                title="Cetak format A4 Landscape rapi per kelompok tabel"
+                                            >
+                                                <i className="bi bi-printer"></i>
+                                                <span>Cetak Rekap TU</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleExportExcelGlobalTU}
+                                                disabled={isExporting}
+                                                className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
+                                                title="Export ke Excel dengan lembar kerja (worksheet) per kelompok"
+                                            >
+                                                <i className="bi bi-file-earmark-excel"></i>
+                                                <span>Export Excel TU</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Filter Kelompok Tab (hanya muncul saat split aktif dan ada lebih dari 1 kelompok) */}
+                                    {viewLayout === 'global_tu' && splitMode !== 'all' && rombelGroups.length > 1 && (
+                                        <div className="pt-2 border-t border-gray-200/80 flex items-center gap-2 flex-wrap">
+                                            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mr-1">
+                                                Tampilan Tabel:
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveGroupFilter('all')}
+                                                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                    activeGroupFilter === 'all'
+                                                        ? 'bg-teal-700 text-white shadow-2xs'
+                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                <i className="bi bi-layers-fill"></i>
+                                                <span>Semua Kelompok ({rombelGroups.length} Tabel Bersusun)</span>
+                                            </button>
+                                            {rombelGroups.map(group => (
+                                                <button
+                                                    key={group.id}
+                                                    type="button"
+                                                    onClick={() => setActiveGroupFilter(group.id)}
+                                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                        activeGroupFilter === group.id
+                                                            ? 'bg-teal-700 text-white shadow-2xs'
+                                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    <i className={`bi ${group.icon}`}></i>
+                                                    <span>{group.title}</span>
+                                                    <span className="text-[10px] px-1.5 py-0.2 bg-black/10 rounded-full font-mono">
+                                                        {group.rombels.length}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
+                            )}
+
+                            {targetRombels.length > 0 ? (
+                                viewLayout === 'global_tu' ? (
+                                    <div className="space-y-6">
+                                        {visibleRombelGroups.map((group, groupIdx) => (
+                                            <div key={group.id} className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                                                {/* Header Tabel Kelompok */}
+                                                <div className="p-3 bg-gradient-to-r from-teal-50 via-slate-50 to-white border-b border-teal-100 flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-xs">
+                                                    <div className="font-bold text-teal-950 flex items-center gap-2">
+                                                        <span className="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shadow-2xs">
+                                                            <i className={`bi ${group.icon}`}></i>
+                                                        </span>
+                                                        <div>
+                                                            <div className="font-black text-slate-900 text-sm flex items-center gap-2">
+                                                                <span>{group.title}</span>
+                                                                {rombelGroups.length > 1 && (
+                                                                    <span className="text-[10px] text-gray-500 font-normal">
+                                                                        (Tabel {groupIdx + 1} dari {visibleRombelGroups.length})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-[11px] text-gray-500 font-normal">
+                                                                {group.subtitle || `${group.rombels.length} Rombel Terdaftar`}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${group.badgeColor}`}>
+                                                            {group.badge}
+                                                        </span>
+                                                        <span className="text-[11px] text-gray-400 hidden md:inline">
+                                                            Klik sel untuk edit jadwal
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Matriks Tabel Rombel */}
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full border-collapse text-left text-xs min-w-[700px]">
+                                                        <thead>
+                                                            <tr className="bg-slate-100 border-b border-gray-300 text-slate-800 font-bold">
+                                                                <th className="p-3 w-28 text-center border-r border-gray-300">Hari</th>
+                                                                <th className="p-3 w-36 text-center border-r border-gray-300">Jam & Waktu</th>
+                                                                {group.rombels.map(r => (
+                                                                    <th key={r.id} className="p-3 text-center border-r border-gray-300 min-w-[150px] bg-slate-50/80">
+                                                                        <div className="text-teal-900 font-bold">{r.nama}</div>
+                                                                        <div className="text-[10px] text-gray-500 font-normal">{getRombelMeta(r.id).kelas}</div>
+                                                                    </th>
+                                                                ))}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-200">
+                                                            {[0, 1, 2, 3, 4, 5, 6].map(dayIdx => {
+                                                                const dayName = days[dayIdx];
+                                                                return jamConfig.map((jam, jIdx) => (
+                                                                    <tr key={`${dayIdx}_${jam.urutan}`} className="hover:bg-teal-50/20">
+                                                                        {jIdx === 0 && (
+                                                                            <td
+                                                                                rowSpan={jamConfig.length}
+                                                                                className="p-3 text-center font-black text-teal-950 bg-teal-50/60 border-r border-gray-300 align-middle text-sm"
+                                                                            >
+                                                                                <div className="flex flex-col items-center justify-center">
+                                                                                    <span>{dayName}</span>
+                                                                                    <span className="text-[10px] font-normal text-teal-700 mt-0.5">{jamConfig.length} Jam</span>
+                                                                                </div>
+                                                                            </td>
+                                                                        )}
+                                                                        <td className="p-2.5 text-center font-bold text-gray-700 bg-gray-50/60 border-r border-gray-200">
+                                                                            <div className="text-xs">Jam {jam.urutan}</div>
+                                                                            <div className="text-[10px] text-gray-500 font-mono mt-0.5">{jam.jamMulai} - {jam.jamSelesai}</div>
+                                                                        </td>
+                                                                        {group.rombels.map(rombel => {
+                                                                            const j = jadwalList.find(item => item.rombelId === rombel.id && item.hari === dayIdx && item.jamKe === jam.urutan);
+                                                                            if (!j) {
+                                                                                return (
+                                                                                    <td
+                                                                                        key={rombel.id}
+                                                                                        onClick={() => {
+                                                                                            if (canWrite) {
+                                                                                                setFilterRombelId(rombel.id);
+                                                                                                handleCellClick(dayIdx, jam.urutan);
+                                                                                            }
+                                                                                        }}
+                                                                                        className="p-3 text-center text-gray-300 border-r border-gray-100 font-mono text-[11px] hover:bg-teal-50 cursor-pointer"
+                                                                                        title="Klik untuk mengisi jadwal"
+                                                                                    >
+                                                                                        -
+                                                                                    </td>
+                                                                                );
+                                                                            }
+                                                                            const mapel = j.mapelId ? settings.mataPelajaran.find(m => m.id === j.mapelId)?.nama : 'Tanpa Mapel';
+                                                                            const guru = getGuruLabel(j.guruId);
+                                                                            return (
+                                                                                <td
+                                                                                    key={rombel.id}
+                                                                                    onClick={() => {
+                                                                                        if (canWrite) {
+                                                                                            setFilterRombelId(rombel.id);
+                                                                                            handleCellClick(dayIdx, jam.urutan);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="p-2.5 border-r border-gray-200 bg-white hover:bg-teal-50 transition-colors cursor-pointer"
+                                                                                    title="Klik untuk mengubah jadwal"
+                                                                                >
+                                                                                    <div className="font-bold text-gray-900 leading-tight">{mapel}</div>
+                                                                                    <div className="text-[11px] text-teal-700 font-medium mt-0.5 flex items-center gap-1">
+                                                                                        <i className="bi bi-person"></i>
+                                                                                        <span>{guru}</span>
+                                                                                    </div>
+                                                                                    {j.ruangan && (
+                                                                                        <div className="text-[10px] text-gray-400 mt-0.5">R: {j.ruangan}</div>
+                                                                                    )}
+                                                                                </td>
+                                                                            );
+                                                                        })}
+                                                                    </tr>
+                                                                ));
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                        {targetRombels.map(rombel => (
+                                            <div key={rombel.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                                                <div className="flex justify-between items-center mb-4 pb-2 border-b">
+                                                    <div>
+                                                        <h3 className="font-bold text-gray-800 flex items-center gap-2"><i className="bi bi-calendar-event text-teal-600"></i> {rombel.nama}</h3>
+                                                        <p className="text-[11px] text-gray-500 mt-0.5">
+                                                            Jenjang: {getRombelMeta(rombel.id).jenjang} | Kelas: {getRombelMeta(rombel.id).kelas}
+                                                        </p>
+                                                    </div>
+                                                    {canWrite && (
+                                                        <button onClick={() => handleEditRombel(rombel.id)} className="text-xs bg-teal-50 text-teal-700 px-3 py-1.5 rounded hover:bg-teal-100 font-medium border border-teal-200 flex items-center gap-1 transition-colors">
+                                                            <i className="bi bi-pencil-square"></i> Edit Jadwal
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-xs border-collapse">
+                                                        <thead className="bg-gray-50 text-gray-600">
+                                                            <tr>
+                                                                <th className="p-1 border w-8">Jam</th>
+                                                                {days.map((d, i) => <th key={d} className={`p-1 border ${i===5?'text-red-500':''}`}>{d.substring(0,3)}</th>)}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {jamConfig.map(jam => (
+                                                                <tr key={jam.id}>
+                                                                    <td className="p-1 border text-center font-bold bg-gray-50">{jam.urutan}</td>
+                                                                    {days.map((day, dayIdx) => {
+                                                                        const item = jadwalList.find(j => j.rombelId === rombel.id && j.hari === dayIdx && j.jamKe === jam.urutan);
+                                                                        const mapel = item?.mapelId ? settings.mataPelajaran.find(m => m.id === item.mapelId)?.nama : '';
+                                                                        return (
+                                                                            <td key={dayIdx} className="p-1 border h-8 align-middle text-center relative hover:bg-gray-50 cursor-pointer" onClick={() => { if(canWrite) { setFilterRombelId(rombel.id); handleCellClick(dayIdx, jam.urutan); } }}>
+                                                                                {item ? (
+                                                                                    item.keterangan ? <span className="text-yellow-700 font-medium text-[9px]">{item.keterangan}</span> : <span className="font-medium text-gray-800 line-clamp-1 text-[9px]" title={mapel}>{mapel}</span>
+                                                                                ) : ''}
+                                                                            </td>
+                                                                        )
+                                                                    })}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
                             ) : (
                                 <div className="text-center py-20 bg-gray-50 rounded-lg border border-dashed border-gray-300">
                                     <i className="bi bi-calendar-range text-4xl text-gray-300 mb-2 block"></i>

@@ -52,13 +52,12 @@ const Akademik: React.FC = () => {
         if (!isWaliKelas && canWriteAkademik) {
             tabs.push(
                 { value: 'designer', label: 'Design & Template', icon: 'bi-grid-3x3' },
-                { value: 'generator', label: 'Generate Form', icon: 'bi-file-earmark-code' },
-                { value: 'import', label: 'Import Nilai', icon: 'bi-box-arrow-in-down' }
+                { value: 'generator', label: 'Generate Form', icon: 'bi-file-earmark-code' }
             );
         }
 
         if (isWaliKelas || isAdmin || canWriteAkademik) {
-            tabs.push({ value: 'input_wali', label: 'Input Nilai Wali Kelas', icon: 'bi-pencil-square' });
+            tabs.push({ value: 'input_wali', label: 'Input Nilai', icon: 'bi-pencil-square' });
         }
 
         if (!isWaliKelas && canReadAkademik) {
@@ -134,11 +133,10 @@ const Akademik: React.FC = () => {
                     {activeTab === 'jadwal' && <TabJadwalPelajaran />}
                     {activeTab === 'designer' && <TabDesainRapor />}
                     {activeTab === 'generator' && <TabGeneratorFormulir />}
-                    {activeTab === 'import' && <TabImportNilai />}
                     {activeTab === 'monitoring' && <TabMonitoringNilai />}
                     {activeTab === 'data' && <TabDataNilai />}
                     {activeTab === 'print' && <TabCetakRapor />}
-                    {activeTab === 'input_wali' && <TabInputNilaiWali />}
+                    {(activeTab === 'input_wali' || activeTab === 'import') && <TabInputNilaiWali />}
                     {activeTab === 'jurnal' && <TabJurnalMengajar />}
                 </Suspense>
             </div>

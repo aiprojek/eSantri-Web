@@ -226,7 +226,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const triggerManualSync = async (action: 'up' | 'down' | 'admin_publish', silent: boolean = false) => {
         const config = sets.settings.cloudSyncConfig;
-        if (!config || config.provider === 'none' || config.provider === 'firebase') return;
+        if (!config || config.provider === 'none') return;
+
+        if (config.provider === 'firebase') {
+            setSyncStatus('syncing');
+            try {
+                const { loadFirebaseRealtimeRuntime } = await import('./utils/lazyFirebaseRuntimes');
+                const { pushAllToFirebase, downloadAllFromFirebase, syncPsbWithFirebaseHub } = await loadFirebaseRealtimeRuntime();
+                const { auth } = await import('./firebaseAuth');
+                const activeTenantId = config.firebasePairedTenantId || auth.currentUser?.uid;
+
+                if (!activeTenantId) {
+                    if (!silent) ui.showToast('Koneksi Firebase belum aktif atau belum login Google.', 'error');
+                    setSyncStatus('idle');
+                    return;
+                }
+
+                if (action === 'up' || action === 'admin_publish') {
+                    await pushAllToFirebase(activeTenantId);
+                    if (!silent) ui.showToast('Semua data berhasil diunggah ke Firebase Hub.', 'success');
+                } else {
+                    await downloadAllFromFirebase(activeTenantId);
+                    await syncPsbWithFirebaseHub(activeTenantId);
+                    if (!silent) ui.showToast('Semua data berhasil disinkronkan dari Firebase Hub.', 'success');
+                }
+
+                await db.settings.update(sets.settings.id!, {
+                    cloudSyncConfig: { ...config, lastSync: new Date().toISOString() }
+                });
+
+                setSyncStatus('success');
+                setTimeout(() => setSyncStatus('idle'), 3000);
+            } catch (err) {
+                setSyncStatus('error');
+                if (!silent) ui.showToast(`Gagal sinkronisasi Firebase: ${(err as Error).message}`, 'error');
+            }
+            return;
+        }
 
         setSyncStatus('syncing');
         try {

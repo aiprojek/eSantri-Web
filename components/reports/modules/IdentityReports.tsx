@@ -309,75 +309,71 @@ const KartuSantriTemplate: React.FC<{ santri: Santri; settings: PondokSettings; 
         };
     };
 
-    // Smart Font Sizing for standard fields (NIS, Jenjang, Kelas, Rombel, Asrama, TTL, Wali)
-    const getSmartFieldStyle = (text: string, basePt: number = 6.8): React.CSSProperties => {
-        const len = (text || '').trim().length;
-        const densityAdjust = activeRowCount >= 9 ? -1.2 : activeRowCount >= 7 ? -0.7 : activeRowCount >= 5 ? -0.3 : activeRowCount <= 3 ? 0.3 : 0;
-        const effectiveBase = basePt + densityAdjust;
-        let sizePt = effectiveBase;
-        let lineHeight = 1.15;
+    // Seragamkan ukuran font data kartu santri ikut yang paling kecil agar visualnya rapih & konsisten
+    const calculateUniformDataPt = (): number => {
+        const activeTexts = [
+            showNamaHijrah ? namaHijrah : '',
+            showNis ? nis : '',
+            showNisn ? nisn : '',
+            showNik ? nik : '',
+            showJenjang ? jenjangDisplay : '',
+            showKelas ? kelasNama : '',
+            showRombel ? rombelNama : '',
+            showAsrama ? asramaText : '',
+            showTtl ? ttl : '',
+            showGolDarah ? santri.golonganDarah : '',
+            showJenisSantri ? jenisSantri : '',
+            showAyahWali ? ayahWali : '',
+            showTeleponWali ? teleponWali : '',
+            showTahunMasuk ? tahunMasuk : '',
+            showAlamat ? alamat : ''
+        ].filter(Boolean) as string[];
 
-        if (len > 40) {
-            sizePt = Math.max(4.2, effectiveBase - 1.8);
-            lineHeight = 1.02;
-        } else if (len > 28) {
-            sizePt = Math.max(4.8, effectiveBase - 1.2);
-            lineHeight = 1.06;
-        } else if (len > 18) {
-            sizePt = Math.max(5.4, effectiveBase - 0.7);
-            lineHeight = 1.1;
+        const maxLen = activeTexts.reduce((m, t) => Math.max(m, (t || '').length), 0);
+
+        // Menentukan ukuran seragam terkecil yang tetap presisi, terbaca tajam, dan tidak melompat-lompat antar baris
+        if (activeRowCount >= 9 || maxLen > 55) {
+            return 4.8;
+        } else if (activeRowCount >= 7 || maxLen > 38) {
+            return 5.1;
+        } else if (activeRowCount >= 5 || maxLen > 24) {
+            return 5.3;
         }
-
-        return {
-            fontSize: `${sizePt.toFixed(1)}pt`,
-            lineHeight: lineHeight,
-            wordBreak: 'break-word',
-            overflowWrap: 'break-word',
-        };
+        return 5.5;
     };
 
-    // Smart Font Sizing for NIS badge / number
-    const getSmartNisStyle = (text: string, basePt: number = 7.5): React.CSSProperties => {
-        const len = (text || '').trim().length;
-        let sizePt = basePt;
-        if (len > 20) {
-            sizePt = Math.max(5.5, basePt - 2.0);
-        } else if (len > 14) {
-            sizePt = Math.max(6.2, basePt - 1.1);
-        }
+    const uniformDataPt = calculateUniformDataPt();
+
+    // Gaya seragam yang dipakai semua baris data kartu santri
+    const uniformFieldStyle: React.CSSProperties = {
+        fontSize: `${uniformDataPt.toFixed(1)}pt`,
+        lineHeight: 1.14,
+        wordBreak: 'break-word',
+        overflowWrap: 'break-word',
+    };
+
+    const uniformAlamatStyle: React.CSSProperties = {
+        fontSize: `${uniformDataPt.toFixed(1)}pt`,
+        lineHeight: 1.08,
+        wordBreak: 'break-word',
+        overflowWrap: 'break-word',
+    };
+
+    const getSmartFieldStyle = (_text?: string, _basePt?: number): React.CSSProperties => {
+        return uniformFieldStyle;
+    };
+
+    const getSmartNisStyle = (_text?: string, _basePt?: number): React.CSSProperties => {
         return {
-            fontSize: `${sizePt.toFixed(1)}pt`,
+            fontSize: `${uniformDataPt.toFixed(1)}pt`,
+            fontWeight: 'bold',
             wordBreak: 'break-all',
-            letterSpacing: len > 14 ? '0.01em' : '0.04em'
+            letterSpacing: '0.02em'
         };
     };
 
-    // Smart Font Sizing for Alamat & multi-line long text without ellipsis
-    const getSmartAlamatStyle = (text: string, basePt: number = 6.5): React.CSSProperties => {
-        const len = (text || '').trim().length;
-        const densityAdjust = activeRowCount >= 9 ? -1.2 : activeRowCount >= 7 ? -0.7 : activeRowCount >= 5 ? -0.3 : 0;
-        const effectiveBase = basePt + densityAdjust;
-        let sizePt = effectiveBase;
-        let lineHeight = 1.16;
-        if (len > 120) {
-            sizePt = Math.max(3.8, effectiveBase - 2.6);
-            lineHeight = 1.04;
-        } else if (len > 80) {
-            sizePt = Math.max(4.4, effectiveBase - 2.0);
-            lineHeight = 1.08;
-        } else if (len > 50) {
-            sizePt = Math.max(5.0, effectiveBase - 1.4);
-            lineHeight = 1.12;
-        } else if (len > 30) {
-            sizePt = Math.max(5.7, effectiveBase - 0.7);
-            lineHeight = 1.15;
-        }
-        return {
-            fontSize: `${sizePt.toFixed(1)}pt`,
-            lineHeight: lineHeight,
-            wordBreak: 'break-word',
-            overflowWrap: 'break-word',
-        };
+    const getSmartAlamatStyle = (_text?: string, _basePt?: number): React.CSSProperties => {
+        return uniformAlamatStyle;
     };
 
     const getSmartTextStyle = getSmartFieldStyle;

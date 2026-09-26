@@ -8,6 +8,7 @@ const TabJurnalMengajar = lazy(() => import('./akademik/TabJurnalMengajar').then
 const TabBebanMengajar = lazy(() => import('./akademik/TabBebanMengajar').then((module) => ({ default: module.TabBebanMengajar })));
 const MatriksJadwalInduk = lazy(() => import('./akademik/MatriksJadwalInduk').then((module) => ({ default: module.MatriksJadwalInduk })));
 const TabKurikulumMapel = lazy(() => import('./akademik/TabKurikulumMapel').then((module) => ({ default: module.TabKurikulumMapel })));
+const TabPlottingPengampu = lazy(() => import('./akademik/TabPlottingPengampu').then((module) => ({ default: module.TabPlottingPengampu })));
 const TabJadwalUjian = lazy(() => import('./akademik/TabJadwalUjian').then((module) => ({ default: module.TabJadwalUjian })));
 
 const TabLoadingFallback = () => (
@@ -16,7 +17,7 @@ const TabLoadingFallback = () => (
     </div>
 );
 
-type KurikulumTabId = 'jadwal' | 'matriks' | 'ujian' | 'beban_guru' | 'jurnal' | 'mapel';
+type KurikulumTabId = 'jadwal' | 'matriks' | 'plotting' | 'ujian' | 'beban_guru' | 'jurnal' | 'mapel';
 
 const Kurikulum: React.FC = () => {
     const { currentUser } = useAppContext();
@@ -49,8 +50,9 @@ const Kurikulum: React.FC = () => {
                         tabs={[
                             { value: 'jadwal', label: 'Jadwal Pelajaran', icon: 'bi-calendar-week' },
                             { value: 'matriks', label: 'Matriks Induk & RPE', icon: 'bi-grid-3x3' },
+                            { value: 'plotting', label: 'Plotting Pengampu', icon: 'bi-person-check-fill' },
                             { value: 'ujian', label: 'Jadwal & Generator Ujian', icon: 'bi-file-earmark-ruled' },
-                            { value: 'beban_guru', label: 'Beban Mengajar & Slip', icon: 'bi-person-check' },
+                            { value: 'beban_guru', label: 'Beban Mengajar & Slip', icon: 'bi-person-badge' },
                             { value: 'jurnal', label: 'Jurnal Mengajar (Log)', icon: 'bi-journal-text' },
                             { value: 'mapel', label: 'Mata Pelajaran & Silabus', icon: 'bi-book' },
                         ]}
@@ -61,6 +63,7 @@ const Kurikulum: React.FC = () => {
                 <Suspense fallback={<TabLoadingFallback />}>
                     {activeTab === 'jadwal' && <TabJadwalPelajaran />}
                     {activeTab === 'matriks' && <MatriksJadwalInduk />}
+                    {activeTab === 'plotting' && <TabPlottingPengampu />}
                     {activeTab === 'ujian' && <TabJadwalUjian />}
                     {activeTab === 'beban_guru' && <TabBebanMengajar />}
                     {activeTab === 'jurnal' && <TabJurnalMengajar />}

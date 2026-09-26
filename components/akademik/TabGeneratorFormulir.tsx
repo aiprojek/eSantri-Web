@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { generateRaporFormHtml } from '../../services/academicService';
+import { getTemplateSheets } from '../../services/raporExcelService';
 import { getAcademicYearOptions, getDefaultAcademicYear } from '../../utils/academicYear';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
 
@@ -228,13 +229,44 @@ export const TabGeneratorFormulir: React.FC = () => {
     const [genJenjangId, setGenJenjangId] = useState(0);
     const [genKelasId, setGenKelasId] = useState(0);
     const [genRombelId, setGenRombelId] = useState(0);
+    const [targetMode, setTargetMode] = useState<'single' | 'range'>('single');
+    const [rangeFromKelasId, setRangeFromKelasId] = useState<number>(0);
+    const [rangeToKelasId, setRangeToKelasId] = useState<number>(0);
     const [genSemester, setGenSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
     const [genTahunAjaran, setGenTahunAjaran] = useState(defaultAcademicYear);
     const [genRankingScope, setGenRankingScope] = useState<'rombel' | 'kelas' | 'jenjang' | 'global'>('rombel');
+
+    const availableKelas = useMemo(() => genJenjangId ? settings.kelas.filter(k => k.jenjangId === genJenjangId) : [], [genJenjangId, settings.kelas]);
+    const availableRombel = useMemo(() => genKelasId ? settings.rombel.filter(r => r.kelasId === genKelasId) : [], [genKelasId, settings.rombel]);
+
+    // Keep default range synced when available classes change
+    React.useEffect(() => {
+        if (availableKelas.length > 0) {
+            if (!rangeFromKelasId || !availableKelas.some(k => k.id === rangeFromKelasId)) {
+                setRangeFromKelasId(availableKelas[0].id);
+            }
+            if (!rangeToKelasId || !availableKelas.some(k => k.id === rangeToKelasId)) {
+                setRangeToKelasId(availableKelas[availableKelas.length - 1].id);
+            }
+        } else {
+            setRangeFromKelasId(0);
+            setRangeToKelasId(0);
+        }
+    }, [availableKelas, rangeFromKelasId, rangeToKelasId]);
+
+    const selectedRangeKelas = useMemo(() => {
+        if (targetMode !== 'range' || availableKelas.length === 0) return [];
+        const fromIdx = availableKelas.findIndex(k => k.id === rangeFromKelasId);
+        const toIdx = availableKelas.findIndex(k => k.id === rangeToKelasId);
+        if (fromIdx === -1 || toIdx === -1) return availableKelas;
+        const minIdx = Math.min(fromIdx, toIdx);
+        const maxIdx = Math.max(fromIdx, toIdx);
+        return availableKelas.slice(minIdx, maxIdx + 1);
+    }, [targetMode, availableKelas, rangeFromKelasId, rangeToKelasId]);
     
     const filteredTemplates = useMemo(() => {
-        const rombel = genRombelId ? settings.rombel.find(r => r.id === genRombelId) : null;
-        const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : (genKelasId ? settings.kelas.find(k => k.id === genKelasId) : null);
+        const rombel = targetMode === 'single' && genRombelId ? settings.rombel.find(r => r.id === genRombelId) : null;
+        const kelas = targetMode === 'single' ? (rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : (genKelasId ? settings.kelas.find(k => k.id === genKelasId) : null)) : null;
         const jenjangId = rombel ? (kelas?.jenjangId || null) : genJenjangId;
 
         if (!jenjangId) return templates;
@@ -245,6 +277,13 @@ export const TabGeneratorFormulir: React.FC = () => {
             
             // Jenjang mismatch
             if (t.jenjangId !== jenjangId) return false;
+
+            // In range mode: allow template without specific class lock or matching any class in range
+            if (targetMode === 'range') {
+                if (t.kelasId && !selectedRangeKelas.some(k => k.id === t.kelasId)) return false;
+                if (t.rombelId) return false;
+                return true;
+            }
             
             // Kelas lock check
             if (t.kelasId && (!kelas || t.kelasId !== kelas.id)) return false;
@@ -254,7 +293,7 @@ export const TabGeneratorFormulir: React.FC = () => {
             
             return true;
         });
-    }, [templates, genJenjangId, genKelasId, genRombelId, settings.rombel, settings.kelas]);
+    }, [templates, genJenjangId, genKelasId, genRombelId, targetMode, selectedRangeKelas, settings.rombel, settings.kelas]);
 
     // Auto-select template if only one matches, or reset if current is invalid
     React.useEffect(() => {
@@ -282,12 +321,25 @@ export const TabGeneratorFormulir: React.FC = () => {
     const [waDestination, setWaDestination] = useState('');
     const [showScriptHelper, setShowScriptHelper] = useState(false);
 
-    const availableKelas = useMemo(() => genJenjangId ? settings.kelas.filter(k => k.jenjangId === genJenjangId) : [], [genJenjangId, settings.kelas]);
-    const availableRombel = useMemo(() => genKelasId ? settings.rombel.filter(r => r.kelasId === genKelasId) : [], [genKelasId, settings.rombel]);
+    const selectedTemplate = useMemo(() => templates.find(t => t.id === genTemplateId), [templates, genTemplateId]);
+    const availableSheets = useMemo(() => getTemplateSheets(selectedTemplate), [selectedTemplate]);
+    const [genSheetId, setGenSheetId] = useState<string>('all');
+    const [previewModalOpen, setPreviewModalOpen] = useState(false);
+    const [previewHtml, setPreviewHtml] = useState('');
 
     // Live preview of active students matching current selection
     const targetSantriList = useMemo(() => {
         const activeList = santriList.filter(s => !s.deleted && (s.status || '').trim().toLowerCase() === 'aktif');
+        if (targetMode === 'range') {
+            if (!genJenjangId || selectedRangeKelas.length === 0) return [];
+            const rangeIds = new Set(selectedRangeKelas.map(k => Number(k.id)));
+            return activeList.filter(s => {
+                if (s.kelasId && rangeIds.has(Number(s.kelasId))) return true;
+                const sRombel = settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
+                return sRombel && rangeIds.has(Number(sRombel.kelasId));
+            });
+        }
+
         if (genRombelId > 0) {
             return activeList.filter(s => Number(s.rombelId) === Number(genRombelId));
         }
@@ -309,42 +361,87 @@ export const TabGeneratorFormulir: React.FC = () => {
             });
         }
         return [];
-    }, [santriList, genRombelId, genKelasId, genJenjangId, settings.rombel, settings.kelas]);
+    }, [santriList, targetMode, selectedRangeKelas, genRombelId, genKelasId, genJenjangId, settings.rombel, settings.kelas]);
 
-    const handleGenerate = () => {
-        // Validasi: Rombel harus dipilih ATAU (Jenjang/Kelas dipilih)
-        if (!genTemplateId || (!genRombelId && !genKelasId && !genJenjangId)) {
-            showToast('Pilih template dan target (Jenjang/Kelas/Rombel) terlebih dahulu', 'error');
-            return;
+    const createGeneratedHtml = (): string | null => {
+        if (targetMode === 'range') {
+            if (!genTemplateId || !genJenjangId || selectedRangeKelas.length === 0) {
+                showToast('Pilih template, jenjang, dan rentang kelas terlebih dahulu', 'error');
+                return null;
+            }
+        } else {
+            // Validasi: Rombel harus dipilih ATAU (Jenjang/Kelas dipilih)
+            if (!genTemplateId || (!genRombelId && !genKelasId && !genJenjangId)) {
+                showToast('Pilih template dan target (Jenjang/Kelas/Rombel) terlebih dahulu', 'error');
+                return null;
+            }
         }
         if (targetSantriList.length === 0) {
             showToast('Tidak ada santri aktif pada target yang dipilih', 'error');
-            return;
+            return null;
         }
         const tpl = templates.find(t => t.id === genTemplateId);
-        if (!tpl) return;
+        if (!tpl) return null;
 
+        const rangeLabel = targetMode === 'range' && selectedRangeKelas.length > 0 
+            ? `${selectedRangeKelas[0].nama} s/d ${selectedRangeKelas[selectedRangeKelas.length - 1].nama} (${selectedRangeKelas.length} Tingkat Kelas)` 
+            : undefined;
+
+        return generateRaporFormHtml(santriList, settings, {
+            rombelId: targetMode === 'range' ? 0 : genRombelId,
+            kelasId: targetMode === 'range' ? 0 : genKelasId,
+            jenjangId: genJenjangId,
+            kelasRange: targetMode === 'range' && selectedRangeKelas.length > 0 ? {
+                fromKelasId: rangeFromKelasId,
+                toKelasId: rangeToKelasId,
+                kelasIds: selectedRangeKelas.map(k => k.id),
+                label: rangeLabel
+            } : undefined,
+            semester: genSemester,
+            tahunAjaran: genTahunAjaran,
+            template: tpl,
+            sheetId: genSheetId,
+            submissionMethod,
+            googleScriptUrl,
+            waDestination,
+            rankingScope: genRankingScope 
+        });
+    };
+
+    const handlePreview = () => {
         try {
-            const html = generateRaporFormHtml(santriList, settings, {
-                rombelId: genRombelId,
-                kelasId: genKelasId,
-                jenjangId: genJenjangId,
-                semester: genSemester,
-                tahunAjaran: genTahunAjaran,
-                template: tpl,
-                submissionMethod,
-                googleScriptUrl,
-                waDestination,
-                rankingScope: genRankingScope 
-            });
+            const html = createGeneratedHtml();
+            if (!html) return;
+            setPreviewHtml(html);
+            setPreviewModalOpen(true);
+        } catch (e) {
+            showAlert('Gagal Pratinjau', (e as Error).message);
+        }
+    };
+
+    const handleGenerate = () => {
+        try {
+            const html = createGeneratedHtml();
+            if (!html) return;
             const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             
             const targetJenjang = genJenjangId > 0 ? settings.jenjang.find(j => j.id === genJenjangId)?.nama : 'semua-marhalah';
-            const targetKelas = genKelasId > 0 ? settings.kelas.find(k => k.id === genKelasId)?.nama : '';
-            const targetRombel = genRombelId > 0 ? settings.rombel.find(r => r.id === genRombelId)?.nama : (genKelasId > 0 ? 'semua-rombel-kelas' : 'semua-rombel-jenjang');
+            let targetKelas = '';
+            let targetRombel = '';
+
+            if (targetMode === 'range') {
+                targetKelas = selectedRangeKelas.length > 0 
+                    ? `rentang-${selectedRangeKelas[0].nama}-sd-${selectedRangeKelas[selectedRangeKelas.length - 1].nama}` 
+                    : 'rentang-kelas';
+                targetRombel = 'semua-rombel';
+            } else {
+                targetKelas = genKelasId > 0 ? settings.kelas.find(k => k.id === genKelasId)?.nama || '' : '';
+                targetRombel = genRombelId > 0 ? settings.rombel.find(r => r.id === genRombelId)?.nama || '' : (genKelasId > 0 ? 'semua-rombel-kelas' : 'semua-rombel-jenjang');
+            }
+
             const filename = buildStandardExportFileName('form-nilai', [targetJenjang, targetKelas, targetRombel, genSemester, genTahunAjaran].filter(Boolean));
             a.download = `${filename}.html`;
             document.body.appendChild(a);
@@ -383,13 +480,37 @@ export const TabGeneratorFormulir: React.FC = () => {
                     <div className="bg-teal-100 p-2 rounded-lg text-teal-700 shrink-0">
                         <i className="bi bi-1-circle-fill text-xl"></i>
                     </div>
-                    <div className="flex-grow">
-                        <h4 className="font-bold text-teal-800 text-base mb-1">Pilih Template Rapor</h4>
-                        <p className="text-xs text-teal-600 mb-3">Pilih desain grid yang sudah Anda buat di tab Desain.</p>
-                        <select value={genTemplateId} onChange={e => setGenTemplateId(e.target.value)} className="w-full border border-teal-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-teal-500">
-                            <option value="">-- Pilih Template --</option>
-                            {filteredTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
+                    <div className="flex-grow space-y-3">
+                        <div>
+                            <h4 className="font-bold text-teal-800 text-base mb-1">Pilih Template Rapor</h4>
+                            <p className="text-xs text-teal-600 mb-2">Pilih desain grid yang sudah Anda buat di tab Desain.</p>
+                            <select value={genTemplateId} onChange={e => { setGenTemplateId(e.target.value); setGenSheetId('all'); }} className="w-full border border-teal-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-teal-500">
+                                <option value="">-- Pilih Template --</option>
+                                {filteredTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                        </div>
+
+                        {availableSheets.length > 1 && (
+                            <div className="bg-white/80 p-3 rounded-lg border border-teal-200">
+                                <label className="block text-xs font-bold text-teal-900 mb-1 flex items-center justify-between">
+                                    <span><i className="bi bi-layers-fill text-teal-600 mr-1"></i> Lembar Kerja (Sheets) yang Disertakan:</span>
+                                    <span className="text-[10px] text-teal-700 font-normal">{availableSheets.length} Lembar Tersedia</span>
+                                </label>
+                                <select 
+                                    value={genSheetId} 
+                                    onChange={e => setGenSheetId(e.target.value)}
+                                    className="w-full border border-teal-300 rounded-lg p-2 text-xs font-semibold bg-white focus:ring-2 focus:ring-teal-500"
+                                >
+                                    <option value="all">📑 Semua Lembar (Multi-Sheet Gabungan)</option>
+                                    {availableSheets.map(s => (
+                                        <option key={s.id} value={s.id}>📄 Khusus: {s.name}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[10px] text-teal-600 mt-1">
+                                    {genSheetId === 'all' ? '✅ Seluruh lembar dalam template akan digabungkan dengan navigasi tab interaktif.' : 'ℹ️ Hanya kolom nilai dari lembar yang dipilih yang akan disertakan dalam formulir.'}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -397,32 +518,133 @@ export const TabGeneratorFormulir: React.FC = () => {
                     <h4 className="font-bold text-gray-700 mb-4 flex items-center gap-2 border-b pb-2">
                         <i className="bi bi-2-circle-fill text-blue-600"></i> Target Kelas & Periode
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-600 mb-1">Jenjang</label>
-                            <select value={genJenjangId} onChange={e => {setGenJenjangId(Number(e.target.value)); setGenKelasId(0); setGenRombelId(0)}} className="w-full border rounded-lg p-2 text-sm bg-gray-50 focus:bg-white transition-colors">
-                                <option value={0}>Pilih...</option>
-                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-600 mb-1">Kelas</label>
-                            <select value={genKelasId} onChange={e => {setGenKelasId(Number(e.target.value)); setGenRombelId(0)}} disabled={!genJenjangId} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 bg-gray-50 focus:bg-white transition-colors">
-                                <option value={0}>Semua Kelas</option>
-                                {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-600 mb-1">Rombel</label>
-                            <select value={genRombelId} onChange={e => setGenRombelId(Number(e.target.value))} disabled={!genJenjangId} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 bg-gray-50 focus:bg-white transition-colors">
-                                <option value={0}>-- Semua Rombel (1 File) --</option>
-                                {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
-                            </select>
-                        </div>
+
+                    {/* Mode Selector: Single/Rombel vs Range */}
+                    <div className="flex items-center gap-2 mb-4 bg-gray-100/80 p-1 rounded-xl border border-gray-200">
+                        <button
+                            type="button"
+                            onClick={() => setTargetMode('single')}
+                            className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                targetMode === 'single'
+                                    ? 'bg-white text-blue-700 shadow-xs border border-gray-200/80'
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                        >
+                            <i className="bi bi-ui-checks-grid"></i> Kelas / Rombel Tunggal
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setTargetMode('range')}
+                            className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                targetMode === 'range'
+                                    ? 'bg-white text-indigo-700 shadow-xs border border-gray-200/80'
+                                    : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                        >
+                            <i className="bi bi-arrows-expand"></i> Rentang Kelas (Multi-Tingkat)
+                        </button>
                     </div>
-                    <div className="mt-2 text-[10px] text-gray-500 italic bg-gray-50 p-2 rounded border border-dashed">
-                        Tips: Pilih "Semua Rombel" untuk men-generate satu file HTML gabungan berisi seluruh santri dalam Jenjang tersebut.
-                    </div>
+
+                    {targetMode === 'single' ? (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 mb-1">Jenjang</label>
+                                    <select value={genJenjangId} onChange={e => {setGenJenjangId(Number(e.target.value)); setGenKelasId(0); setGenRombelId(0)}} className="w-full border rounded-lg p-2 text-sm bg-gray-50 focus:bg-white transition-colors">
+                                        <option value={0}>Pilih...</option>
+                                        {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 mb-1">Kelas</label>
+                                    <select value={genKelasId} onChange={e => {setGenKelasId(Number(e.target.value)); setGenRombelId(0)}} disabled={!genJenjangId} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 bg-gray-50 focus:bg-white transition-colors">
+                                        <option value={0}>Semua Kelas</option>
+                                        {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 mb-1">Rombel</label>
+                                    <select value={genRombelId} onChange={e => setGenRombelId(Number(e.target.value))} disabled={!genJenjangId} className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 bg-gray-50 focus:bg-white transition-colors">
+                                        <option value={0}>-- Semua Rombel (1 File) --</option>
+                                        {availableRombel.map(r => <option key={r.id} value={r.id}>{r.nama}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="mt-2 text-[10px] text-gray-500 italic bg-gray-50 p-2 rounded border border-dashed">
+                                Tips: Pilih "Semua Rombel" untuk men-generate satu file HTML gabungan berisi seluruh santri dalam Jenjang tersebut.
+                            </div>
+                        </>
+                    ) : (
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-indigo-900 mb-1">1. Jenjang (Marhalah)</label>
+                                    <select 
+                                        value={genJenjangId} 
+                                        onChange={e => {setGenJenjangId(Number(e.target.value)); setGenKelasId(0); setGenRombelId(0)}} 
+                                        className="w-full border-2 border-indigo-100 rounded-lg p-2 text-sm bg-white focus:border-indigo-500 transition-colors"
+                                    >
+                                        <option value={0}>Pilih Jenjang...</option>
+                                        {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-indigo-900 mb-1">2. Dari Kelas (Mulai)</label>
+                                    <select 
+                                        value={rangeFromKelasId} 
+                                        onChange={e => setRangeFromKelasId(Number(e.target.value))} 
+                                        disabled={!genJenjangId || availableKelas.length === 0} 
+                                        className="w-full border-2 border-indigo-100 rounded-lg p-2 text-sm disabled:bg-gray-100 bg-white focus:border-indigo-500 transition-colors"
+                                    >
+                                        {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-indigo-900 mb-1">3. Sampai Kelas (Akhir)</label>
+                                    <select 
+                                        value={rangeToKelasId} 
+                                        onChange={e => setRangeToKelasId(Number(e.target.value))} 
+                                        disabled={!genJenjangId || availableKelas.length === 0} 
+                                        className="w-full border-2 border-indigo-100 rounded-lg p-2 text-sm disabled:bg-gray-100 bg-white focus:border-indigo-500 transition-colors"
+                                    >
+                                        {availableKelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Range preview pill badges */}
+                            {genJenjangId > 0 && selectedRangeKelas.length > 0 && (
+                                <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs font-bold text-indigo-900">
+                                        <span className="flex items-center gap-1.5">
+                                            <i className="bi bi-collection-fill text-indigo-600"></i> Cakupan Rentang Terpilih:
+                                        </span>
+                                        <span className="bg-indigo-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+                                            {selectedRangeKelas.length} Tingkat Kelas
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5 pt-1">
+                                        {selectedRangeKelas.map((k, idx) => (
+                                            <span key={k.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-indigo-900 border border-indigo-200 shadow-2xs">
+                                                <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-800 flex items-center justify-center text-[9px]">{idx + 1}</span>
+                                                {k.nama}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-indigo-700 leading-normal pt-1">
+                                        Seluruh rombel dari {selectedRangeKelas.length} kelas di atas akan digabungkan ke dalam 1 formulir nilai dengan pemisah rombel dan filter tingkat kelas.
+                                    </p>
+                                </div>
+                            )}
+
+                            {!genJenjangId && (
+                                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 flex items-center gap-2">
+                                    <i className="bi bi-info-circle-fill text-amber-600"></i>
+                                    Silakan pilih <b>Jenjang</b> terlebih dahulu untuk menentukan daftar kelas yang tersedia.
+                                </div>
+                            )}
+                        </div>
+                    )}
                     
                     <div className="grid grid-cols-2 gap-4 mt-4">
                         <div>
@@ -475,13 +697,17 @@ export const TabGeneratorFormulir: React.FC = () => {
                                         Target Santri: <span className="underline font-black">{targetSantriList.length} Santri Aktif</span>
                                     </span>
                                     <span className="text-[10px] opacity-80">
-                                        {genRombelId > 0 
-                                            ? `Rombel: ${settings.rombel.find(r => r.id === genRombelId)?.nama || ''}` 
-                                            : genKelasId > 0 
-                                                ? `Kelas: ${settings.kelas.find(k => k.id === genKelasId)?.nama || ''} (Semua Rombel)` 
-                                                : genJenjangId > 0 
-                                                    ? `Jenjang: ${settings.jenjang.find(j => j.id === genJenjangId)?.nama || ''} (Gabungan Seluruh Kelas)`
-                                                    : 'Silakan tentukan Jenjang / Kelas / Rombel'}
+                                        {targetMode === 'range'
+                                            ? (selectedRangeKelas.length > 0 
+                                                ? `Rentang Kelas: ${selectedRangeKelas.map(k => k.nama).join(' s/d ')} (${selectedRangeKelas.length} Tingkat Kelas, Semua Rombel)` 
+                                                : 'Pilih Jenjang dan Rentang Kelas')
+                                            : genRombelId > 0 
+                                                ? `Rombel: ${settings.rombel.find(r => r.id === genRombelId)?.nama || ''}` 
+                                                : genKelasId > 0 
+                                                    ? `Kelas: ${settings.kelas.find(k => k.id === genKelasId)?.nama || ''} (Semua Rombel)` 
+                                                    : genJenjangId > 0 
+                                                        ? `Jenjang: ${settings.jenjang.find(j => j.id === genJenjangId)?.nama || ''} (Gabungan Seluruh Kelas)`
+                                                        : 'Silakan tentukan Jenjang / Kelas / Rombel'}
                                     </span>
                                 </div>
                             </div>
@@ -587,23 +813,106 @@ export const TabGeneratorFormulir: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mt-4">
-                    <button 
-                        onClick={handleGenerate} 
-                        disabled={!genTemplateId || !genJenjangId} 
-                        className="w-full bg-teal-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-teal-100 hover:bg-teal-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 px-6 active:scale-95"
-                    >
-                        <i className="bi bi-cloud-download-fill text-xl"></i> 
-                        <span className="text-sm">Download Formulir Digital</span>
-                    </button>
-                    <div className="mt-3 flex items-start gap-2 text-[10px] text-gray-500 bg-gray-50 p-3 rounded-lg border border-dashed border-gray-300">
-                        <i className="bi bi-info-circle-fill text-teal-500 mt-0.5"></i>
+                <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm mt-4 space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <button 
+                            onClick={handlePreview} 
+                            disabled={!genTemplateId || !genJenjangId} 
+                            className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-2 border-indigo-200 py-3.5 px-4 rounded-xl font-bold text-xs transition-all disabled:opacity-40 flex items-center justify-center gap-2 active:scale-98 shadow-xs"
+                            title="Buka pratinjau interaktif langsung di aplikasi"
+                        >
+                            <i className="bi bi-eye-fill text-base text-indigo-600"></i> 
+                            <span>Pratinjau Formulir</span>
+                        </button>
+                        <button 
+                            onClick={handleGenerate} 
+                            disabled={!genTemplateId || !genJenjangId} 
+                            className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-3.5 px-4 rounded-xl font-black text-xs shadow-md shadow-teal-100 transition-all disabled:opacity-40 flex items-center justify-center gap-2 active:scale-98"
+                            title="Unduh file HTML formulir digital mandiri"
+                        >
+                            <i className="bi bi-cloud-download-fill text-base"></i> 
+                            <span>Download Formulir (.html)</span>
+                        </button>
+                    </div>
+
+                    <div className="flex items-start gap-2.5 text-[11px] text-gray-500 bg-gray-50 p-3 rounded-xl border border-dashed border-gray-300">
+                        <i className="bi bi-patch-check-fill text-teal-600 text-sm mt-0.5 shrink-0"></i>
                         <p className="leading-relaxed">
-                            Formulir ini **Offline-First**. Kirimkan ke Guru untuk pengisian nilai tanpa kuota internet.
+                            Formulir ini sudah dilengkapi <b>Tailwind CSS & Responsive Layout</b> (Tabel Leger & Form Kartu Santri), rumus otomatis, dan mode <b>Offline-First</b>. Guru dapat membuka file langsung di browser HP/Laptop tanpa perlu login atau kuota internet.
                         </p>
                     </div>
                 </div>
             </div>
+
+            {/* PREVIEW MODAL */}
+            {previewModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 md:p-6 animate-fade-in">
+                    <div className="bg-white w-full h-full max-w-7xl max-h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-300">
+                        {/* Modal Header */}
+                        <div className="bg-slate-900 text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-teal-500/20 text-teal-400 rounded-xl border border-teal-500/30">
+                                    <i className="bi bi-window-fullscreen text-lg"></i>
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="font-bold text-sm text-white">Pratinjau Formulir Digital Rapor</h3>
+                                        <span className="text-[10px] bg-teal-500/20 text-teal-300 font-bold px-2 py-0.5 rounded-full border border-teal-400/30">
+                                            {selectedTemplate?.name || 'Template'}
+                                        </span>
+                                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-semibold px-2 py-0.5 rounded-full">
+                                            {targetSantriList.length} Santri
+                                        </span>
+                                        <span className="text-[10px] bg-blue-500/20 text-blue-300 font-semibold px-2 py-0.5 rounded-full">
+                                            Tailwind CSS Active
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                        Tampilan pratinjau mandiri persis seperti yang akan dibuka oleh Guru / Penguji.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => {
+                                        const blob = new Blob([previewHtml], { type: 'text/html' });
+                                        const url = URL.createObjectURL(blob);
+                                        window.open(url, '_blank');
+                                    }}
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg border border-slate-700 flex items-center gap-1.5 transition-colors"
+                                    title="Buka pratinjau di tab browser baru"
+                                >
+                                    <i className="bi bi-box-arrow-up-right"></i> Buka di Tab Baru
+                                </button>
+                                <button
+                                    onClick={handleGenerate}
+                                    className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
+                                >
+                                    <i className="bi bi-download"></i> Unduh File
+                                </button>
+                                <button
+                                    onClick={() => setPreviewModalOpen(false)}
+                                    className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg text-lg transition-colors ml-2"
+                                    title="Tutup Pratinjau"
+                                >
+                                    <i className="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Body: IFrame */}
+                        <div className="flex-grow w-full h-full bg-slate-100 relative">
+                            <iframe 
+                                title="Pratinjau Formulir Rapor"
+                                srcDoc={previewHtml}
+                                className="w-full h-full border-0"
+                                sandbox="allow-scripts allow-modals allow-same-origin allow-downloads"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

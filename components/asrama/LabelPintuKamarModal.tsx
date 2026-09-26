@@ -54,7 +54,7 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
     };
 
     return (
-        <div className="print-modal-target fixed inset-0 bg-black/60 z-[70] flex justify-center items-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+        <div className="print-modal-target fixed inset-0 bg-black/60 z-[70] flex justify-center items-center p-3.5 sm:p-5 md:p-6 overflow-y-auto print:p-0 print:bg-white print:static">
             <style>{`
                 @media print {
                     @page {
@@ -80,22 +80,23 @@ export const LabelPintuKamarModal: React.FC<LabelPintuKamarModalProps> = ({
 
             <div className="print-modal-card bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden my-auto print:shadow-none print:w-full print:max-w-none print:rounded-none print:max-h-none print:m-0">
                 {/* Header Modal (Hidden in Print) */}
-                <div className="p-4 bg-teal-800 text-white flex items-center justify-between shrink-0 print:hidden">
-                    <div className="flex items-center gap-2">
-                        <i className="bi bi-printer-fill text-xl text-teal-200"></i>
-                        <div>
-                            <h3 className="font-bold text-base">Cetak Label Pintu Kamar (Door Tag)</h3>
-                            <p className="text-xs text-teal-100">{gedung.nama} &bull; {kamar.nama}</p>
+                <div className="p-3.5 sm:p-4 bg-teal-800 text-white flex items-center justify-between shrink-0 print:hidden gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <i className="bi bi-printer-fill text-xl text-teal-200 shrink-0"></i>
+                        <div className="min-w-0">
+                            <h3 className="font-bold text-sm sm:text-base truncate">Cetak Label Pintu Kamar</h3>
+                            <p className="text-xs text-teal-100 truncate">{gedung.nama} &bull; {kamar.nama}</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <button
                             onClick={handlePrint}
                             disabled={isPrinting}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold text-xs rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-amber-400 hover:bg-amber-300 text-teal-950 font-bold text-xs rounded-lg transition-colors shadow-sm disabled:opacity-50 whitespace-nowrap"
                         >
-                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'}`}></i>
-                            <span>{isPrinting ? 'Menyiapkan...' : 'Cetak / Print Sekarang'}</span>
+                            <i className={`bi ${isPrinting ? 'bi-hourglass-split animate-spin' : 'bi-printer'} shrink-0`}></i>
+                            <span className="sm:hidden">{isPrinting ? 'Menyiapkan...' : 'Cetak'}</span>
+                            <span className="hidden sm:inline">{isPrinting ? 'Menyiapkan...' : 'Cetak / Print Sekarang'}</span>
                         </button>
                         <button
                             onClick={onClose}

@@ -1,6 +1,12 @@
 import { loadJsPdf, loadJsPdfAutoTable, loadXLSX } from "./lazyClientLibs";
+import { getStandaloneDocumentStyles, getStandaloneDocumentStylesSync } from "./standaloneStyles";
 
 const getUnifiedPreviewPrintStyles = () => `
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
     /* Screen Display: Realistic Paper Sheet View (Offline HTML Viewer) */
     @media screen {
         body {
@@ -10,11 +16,13 @@ const getUnifiedPreviewPrintStyles = () => `
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: #1e293b;
         }
-        #print-root {
+        #print-root, #preview-area, .preview-area-exported, #jadwal-print-area, #sarpras-print-area, #calendar-print-area, #surat-preview-container, #surat-peringatan-print-area {
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 24px;
+            width: 100%;
+            margin: 0 auto;
         }
         .printable-content-wrapper,
         .print-portrait,
@@ -168,9 +176,13 @@ const getUnifiedPreviewPrintStyles = () => `
         .no-print {
             display: none !important;
         }
-        #print-root {
+        #print-root, #preview-area, .preview-area-exported, #jadwal-print-area, #sarpras-print-area, #calendar-print-area, #surat-preview-container, #surat-peringatan-print-area {
             display: block !important;
             gap: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            background: transparent !important;
         }
         .print-portrait {
             page: portrait;
@@ -295,32 +307,82 @@ const getUnifiedPreviewPrintStyles = () => `
     }
 `;
 
-const collectDocumentStyles = () => {
+const collectDocumentStyles = async (): Promise<string> => {
     let styles = '';
-    document.querySelectorAll('style, link[rel="stylesheet"]').forEach(node => {
-        styles += node.outerHTML;
+    // 1. Embed all active compiled stylesheet rules directly so offline HTML viewer has full styling (Tailwind, grid, flex, colors, borders)
+    try {
+        const compiledCss = await getStandaloneDocumentStyles();
+        if (compiledCss && compiledCss.trim().length > 0) {
+            styles += `<style id="embedded-compiled-styles">\n${compiledCss}\n</style>\n`;
+        }
+    } catch (e) {
+        console.warn('Failed to extract standalone document styles:', e);
+        try {
+            const syncCss = getStandaloneDocumentStylesSync();
+            if (syncCss && syncCss.trim().length > 0) {
+                styles += `<style id="embedded-compiled-styles">\n${syncCss}\n</style>\n`;
+            }
+        } catch (err) {
+            console.warn('Failed to extract synchronous document styles:', err);
+        }
+    }
+
+    // 2. Append explicit inline <style> elements from DOM
+    document.querySelectorAll('style').forEach(node => {
+        if (node.id !== 'embedded-compiled-styles' && node.textContent) {
+            styles += `<style>${node.textContent}</style>\n`;
+        }
     });
+
+    // 3. Keep external links (CDN fonts/stylesheets with absolute URLs)
+    document.querySelectorAll('link[rel="stylesheet"]').forEach(node => {
+        const href = node.getAttribute('href');
+        if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+            styles += `<link rel="stylesheet" href="${href}">\n`;
+        }
+    });
+
+    // 4. Always include Bootstrap Icons CDN fallback
+    styles += `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">\n`;
+
     return styles;
 };
 
 const extractPrintableContent = (element: HTMLElement, elementId: string): string => {
     // For report preview, avoid exporting the zoom wrapper (transform: scale)
     // and use raw page nodes directly.
+    let targetElement: HTMLElement = element;
     if (elementId === 'preview-area') {
         const zoomWrapper = element.querySelector('.printable-content-wrapper');
         if (zoomWrapper) {
-            return (zoomWrapper as HTMLElement).innerHTML;
+            targetElement = zoomWrapper as HTMLElement;
         }
     }
-    return element.innerHTML;
+
+    // Clone element to normalize relative image paths to absolute URLs without touching live DOM
+    const clone = targetElement.cloneNode(true) as HTMLElement;
+    const images = clone.querySelectorAll<HTMLImageElement>('img');
+    images.forEach(img => {
+        const currentSrc = img.getAttribute('src');
+        if (currentSrc && !currentSrc.startsWith('data:') && !currentSrc.startsWith('http://') && !currentSrc.startsWith('https://')) {
+            try {
+                const absoluteUrl = new URL(currentSrc, window.location.href).href;
+                img.setAttribute('src', absoluteUrl);
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+    });
+
+    return clone.innerHTML;
 };
 
-const buildUnifiedHtmlDocument = (
+const buildUnifiedHtmlDocument = async (
     content: string,
     fileName: string,
     options?: { showToolbar?: boolean; isJadwalPrint?: boolean; isSarprasPrint?: boolean; elementId?: string }
-) => {
-    const styles = collectDocumentStyles();
+): Promise<string> => {
+    const styles = await collectDocumentStyles();
     const showToolbar = options?.showToolbar ?? false;
     const isJadwalPrint = options?.isJadwalPrint ?? false;
     const isSarprasPrint = options?.isSarprasPrint ?? false;
@@ -337,6 +399,8 @@ const buildUnifiedHtmlDocument = (
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500;600;700&family=Scheherazade+New:wght@400;700&family=Lateef:wght@400;700&display=swap" rel="stylesheet">
     ${styles}
+    <!-- Tailwind CSS Engine Fallback: Guarantees 100% precision rendering matching in-app preview -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         ${getUnifiedPreviewPrintStyles()}
         @media print {
@@ -410,8 +474,10 @@ const buildUnifiedHtmlDocument = (
         </div>
     </div>
     ` : ''}
-    <div id="${rootElementId}">
-    ${content}
+    <div id="print-root">
+        <div id="${rootElementId}" class="preview-area-exported">
+            ${content}
+        </div>
     </div>
 </body>
 </html>`;
@@ -421,13 +487,13 @@ const buildUnifiedHtmlDocument = (
  * HTML Export with Offline Support
  * Embeds styles and cleans up the document for offline usage.
  */
-export const exportToHtml = (elementId: string, fileName: string) => {
+export const exportToHtml = async (elementId: string, fileName: string): Promise<void> => {
     const element = document.getElementById(elementId);
     if (!element) return;
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isSarprasPrint = elementId === 'sarpras-print-area';
     const content = extractPrintableContent(element, elementId);
-    const finalHtml = buildUnifiedHtmlDocument(content, fileName, { showToolbar: true, isJadwalPrint, isSarprasPrint, elementId });
+    const finalHtml = await buildUnifiedHtmlDocument(content, fileName, { showToolbar: true, isJadwalPrint, isSarprasPrint, elementId });
 
     const blob = new Blob([finalHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -446,6 +512,8 @@ export const printPreviewExact = async (elementId: string, fileName: string): Pr
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isSarprasPrint = elementId === 'sarpras-print-area';
     const content = extractPrintableContent(element, elementId);
+    const unifiedHtml = await buildUnifiedHtmlDocument(content, fileName, { showToolbar: false, isJadwalPrint, isSarprasPrint, elementId });
+
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
@@ -460,7 +528,7 @@ export const printPreviewExact = async (elementId: string, fileName: string): Pr
 
     doc.open();
     doc.write(
-        `${buildUnifiedHtmlDocument(content, fileName, { showToolbar: false, isJadwalPrint, isSarprasPrint, elementId })}
+        `${unifiedHtml}
          <script>
             window.onload = () => {
                 setTimeout(() => {
@@ -479,13 +547,21 @@ export const printPreviewExact = async (elementId: string, fileName: string): Pr
     }, 60000);
 };
 
-export const exportToWord = (elementId: string, fileName: string) => {
+export const exportToWord = async (elementId: string, fileName: string): Promise<void> => {
     const element = document.getElementById(elementId);
     if (!element) return;
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isSurat = elementId === 'surat-peringatan-print-area' || elementId === 'surat-preview-container';
+    
+    // Auto-detect landscape orientation from DOM classes or attributes
+    const isLandscape = 
+        isJadwalPrint ||
+        element.classList.contains('print-landscape') ||
+        element.querySelector('.print-landscape') !== null ||
+        (element.getAttribute('data-orientation') === 'landscape');
+
     const content = extractPrintableContent(element, elementId);
-    const styles = collectDocumentStyles();
+    const styles = await collectDocumentStyles();
     const finalHtml = `
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
@@ -503,8 +579,8 @@ export const exportToWord = (elementId: string, fileName: string) => {
 ${styles}
 <style>
     @page Section1 {
-        size: ${isJadwalPrint ? '841.9pt 595.3pt' : '595.3pt 841.9pt'};
-        mso-page-orientation: ${isJadwalPrint ? 'landscape' : 'portrait'};
+        size: ${isLandscape ? '841.9pt 595.3pt' : '595.3pt 841.9pt'};
+        mso-page-orientation: ${isLandscape ? 'landscape' : 'portrait'};
         margin: ${isSurat ? '54.0pt 54.0pt 54.0pt 54.0pt' : '36.0pt 36.0pt 36.0pt 36.0pt'};
         mso-header-margin: 36.0pt;
         mso-footer-margin: 36.0pt;

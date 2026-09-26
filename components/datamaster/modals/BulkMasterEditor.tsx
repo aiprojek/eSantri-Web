@@ -50,8 +50,9 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
         switch (mode) {
             case 'pendidik':
                 return [
-                    { field: 'nama', label: 'Nama (Wajib)', required: true, type: 'text', placeholder: 'Nama Ustadz/Ustadzah...' },
-                    { field: 'jabatan', label: 'Jabatan Awal', type: 'select', options: ['Wali Kelas', 'Guru Mapel', 'Pengajar', 'Staff'] },
+                    { field: 'nama', label: 'Nama (Wajib)', required: true, type: 'text', placeholder: 'Nama Ustadz/Ustadzah/Staf...' },
+                    { field: 'jenisPegawai', label: 'Kategori', type: 'select', options: ['Pendidik (Guru)', 'Kependidikan (Staf)'] },
+                    { field: 'jabatan', label: 'Jabatan / Tugas', type: 'select', options: ['Guru Mapel', 'Wali Kelas', 'Pengajar', 'Tata Usaha (TU)', 'Keuangan / Kasir', 'Bimbingan Konseling (BK)', 'Pengasuhan / Asrama', 'Keamanan / Satpam', 'Perpustakaan', 'Kesehatan / UKS', 'Staff'] },
                     { field: 'kelasId', label: 'Kelas (Wali)', type: 'select-kelas' },
                     { field: 'rombelId', label: 'Rombel (Wali)', type: 'select-rombel' },
                     { field: 'telepon', label: 'No. Telp', type: 'text', placeholder: '08...' },
@@ -109,7 +110,7 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
     const createEmptyRow = useCallback((index: number) => {
         const base = { tempId: Date.now() + Math.floor(Math.random() * 10000) + index, nama: '' };
         switch (mode) {
-            case 'pendidik': return { ...base, jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0], telepon: '', email: '', kelasId: '', rombelId: '' };
+            case 'pendidik': return { ...base, jenisPegawai: 'Pendidik (Guru)', jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0], telepon: '', email: '', kelasId: '', rombelId: '' };
             case 'jenjang': return { ...base, kode: '', mudirId: '' };
             case 'kelas': return { ...base, jenjangId: settings.jenjang[0]?.id || '' };
             case 'rombel': return { ...base, kelasId: settings.kelas[0]?.id || '', waliKelasId: '' };
@@ -714,7 +715,7 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
                                                                 onKeyDown={e => handleCellKeyDown(e, rIdx, cIdx)}
                                                                 className="w-full px-2 py-1.5 text-xs bg-transparent border-0 rounded-md focus:outline-none focus:bg-white text-slate-800 cursor-pointer"
                                                             >
-                                                                <option value="">-- Pilih Jabatan --</option>
+                                                                <option value="">-- Pilih {col.label} --</option>
                                                                 {(col.options || []).map((opt: string) => (
                                                                     <option key={opt} value={opt}>{opt}</option>
                                                                 ))}

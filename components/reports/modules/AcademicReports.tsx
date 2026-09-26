@@ -526,13 +526,52 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             ? options.rombelVisibleColumns
             : defaultColumns;
             
-        // Calculate orientation
+        // Calculate orientation: jika kolom > 5 maka otomatis landscape agar pas di kertas
         if (options.rombelOrientation === 'portrait') {
             orientation = 'portrait';
         } else if (options.rombelOrientation === 'landscape') {
             orientation = 'landscape';
         } else {
-            orientation = activeColumns.length > 7 ? 'landscape' : 'portrait';
+            orientation = activeColumns.length > 5 ? 'landscape' : 'portrait';
+        }
+
+        const colCount = activeColumns.length;
+
+        // Weight-based column percentage calculation to ensure table ALWAYS fits paper width perfectly
+        const getColumnWeight = (id: string): number => {
+            if (id === 'no' || id === 'lp') return 1.0;
+            if (['anakKe', 'jumlahSaudara', 'tinggiBadan', 'beratBadan'].includes(id)) return 1.2;
+            if (['nis', 'nisn', 'targetJuz', 'status', 'jenisSantri'].includes(id)) return 2.0;
+            if (['nik', 'nikAyah', 'nikIbu', 'telepon', 'teleponAyah', 'teleponIbu', 'teleponWali'].includes(id)) return 2.6;
+            if (id === 'namaLengkap') return 4.0;
+            if (['alamat', 'alamatSekolahAsal', 'jalan', 'desa', 'kecamatan', 'kabupaten', 'ttl', 'ttlAyah', 'ttlIbu'].includes(id)) return 3.4;
+            return 2.2;
+        };
+
+        const totalWeight = activeColumns.reduce((sum, col) => sum + getColumnWeight(col), 0);
+        const getColumnPercent = (id: string) => ((getColumnWeight(id) / totalWeight) * 100).toFixed(2);
+
+        // Dynamically compute exact font size & cell padding according to column density
+        let tableFontSize = '8.5pt';
+        let tableLineHeight = '1.25';
+        let cellPadding = 'px-2 py-1';
+
+        if (colCount >= 14) {
+            tableFontSize = '6pt';
+            tableLineHeight = '1.05';
+            cellPadding = 'px-0.5 py-0.5';
+        } else if (colCount >= 11) {
+            tableFontSize = '6.8pt';
+            tableLineHeight = '1.1';
+            cellPadding = 'px-1 py-0.5';
+        } else if (colCount >= 8) {
+            tableFontSize = '7.5pt';
+            tableLineHeight = '1.15';
+            cellPadding = 'px-1 py-1';
+        } else if (colCount >= 6) {
+            tableFontSize = '8pt';
+            tableLineHeight = '1.2';
+            cellPadding = 'px-1.5 py-1';
         }
 
         const getColumnLabel = (id: string) => {
@@ -622,90 +661,19 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
         };
 
         const getColumnClass = (id: string) => {
-            const baseClass = 'border border-black px-2 py-1.5 text-xs';
-            const widthMap: Record<string, string> = {
-                no: 'border border-black px-1 py-1.5 text-center w-8',
-                lp: 'border border-black px-1 py-1.5 text-center w-10',
-                nis: 'border border-black px-2 py-1.5 text-center w-20',
-                nisn: 'border border-black px-2 py-1.5 text-center w-24',
-                nik: 'border border-black px-2 py-1.5 text-center w-28',
-                nikAyah: 'border border-black px-2 py-1.5 text-center w-28',
-                nikIbu: 'border border-black px-2 py-1.5 text-center w-28',
-                namaLengkap: 'border border-black px-2 py-1.5 font-medium',
-                namaHijrah: 'border border-black px-2 py-1.5',
-                tempatLahir: 'border border-black px-2 py-1.5',
-                tanggalLahir: 'border border-black px-2 py-1.5 text-center',
-                ttl: 'border border-black px-2 py-1.5',
-                kewarganegaraan: 'border border-black px-2 py-1.5 text-center',
-                statusKeluarga: 'border border-black px-2 py-1.5',
-                anakKe: 'border border-black px-1 py-1.5 text-center w-12',
-                jumlahSaudara: 'border border-black px-1 py-1.5 text-center w-12',
+            const isCentered = [
+                'no', 'lp', 'anakKe', 'jumlahSaudara', 'tinggiBadan', 'beratBadan',
+                'nis', 'nisn', 'nik', 'nikAyah', 'nikIbu',
+                'tanggalLahir', 'kewarganegaraan', 'jenjang', 'kelas', 'rombel', 'status', 'tanggalStatus',
+                'jenisSantri', 'tanggalMasuk', 'kamar', 'gedungAsrama', 'halaqah', 'targetJuz', 'kodePos',
+                'statusAyah', 'tanggalLahirAyah', 'pendidikanAyah', 'teleponAyah', 'statusIbu', 'tanggalLahirIbu',
+                'pendidikanIbu', 'teleponIbu', 'statusHidupWali', 'tanggalLahirWali', 'pendidikanWali',
+                'teleponWali', 'telepon', 'jarakKePondok', 'berkebutuhanKhusus'
+            ].includes(id);
 
-                jenjang: 'border border-black px-2 py-1.5 text-center',
-                kelas: 'border border-black px-2 py-1.5 text-center',
-                rombel: 'border border-black px-2 py-1.5 text-center',
-                status: 'border border-black px-2 py-1.5 text-center',
-                tanggalStatus: 'border border-black px-2 py-1.5 text-center',
-                jenisSantri: 'border border-black px-2 py-1.5 text-center',
-                tanggalMasuk: 'border border-black px-2 py-1.5 text-center',
-                kamar: 'border border-black px-2 py-1.5 text-center',
-                gedungAsrama: 'border border-black px-2 py-1.5 text-center',
-                halaqah: 'border border-black px-2 py-1.5 text-center',
-                targetJuz: 'border border-black px-2 py-1.5 text-center',
-
-                alamat: 'border border-black px-2 py-1.5',
-                jalan: 'border border-black px-2 py-1.5',
-                desa: 'border border-black px-2 py-1.5',
-                kecamatan: 'border border-black px-2 py-1.5',
-                kabupaten: 'border border-black px-2 py-1.5',
-                provinsi: 'border border-black px-2 py-1.5',
-                kodePos: 'border border-black px-2 py-1.5 text-center',
-                sekolahAsal: 'border border-black px-2 py-1.5',
-                alamatSekolahAsal: 'border border-black px-2 py-1.5',
-
-                ayah: 'border border-black px-2 py-1.5',
-                statusAyah: 'border border-black px-2 py-1.5 text-center',
-                ttlAyah: 'border border-black px-2 py-1.5',
-                tempatLahirAyah: 'border border-black px-2 py-1.5',
-                tanggalLahirAyah: 'border border-black px-2 py-1.5 text-center',
-                pendidikanAyah: 'border border-black px-2 py-1.5 text-center',
-                pekerjaanAyah: 'border border-black px-2 py-1.5',
-                penghasilanAyah: 'border border-black px-2 py-1.5',
-                teleponAyah: 'border border-black px-2 py-1.5 text-center',
-                alamatAyah: 'border border-black px-2 py-1.5',
-
-                ibu: 'border border-black px-2 py-1.5',
-                statusIbu: 'border border-black px-2 py-1.5 text-center',
-                ttlIbu: 'border border-black px-2 py-1.5',
-                tempatLahirIbu: 'border border-black px-2 py-1.5',
-                tanggalLahirIbu: 'border border-black px-2 py-1.5 text-center',
-                pendidikanIbu: 'border border-black px-2 py-1.5 text-center',
-                pekerjaanIbu: 'border border-black px-2 py-1.5',
-                penghasilanIbu: 'border border-black px-2 py-1.5',
-                teleponIbu: 'border border-black px-2 py-1.5 text-center',
-                alamatIbu: 'border border-black px-2 py-1.5',
-
-                wali: 'border border-black px-2 py-1.5',
-                statusWali: 'border border-black px-2 py-1.5',
-                statusHidupWali: 'border border-black px-2 py-1.5 text-center',
-                ttlWali: 'border border-black px-2 py-1.5',
-                tempatLahirWali: 'border border-black px-2 py-1.5',
-                tanggalLahirWali: 'border border-black px-2 py-1.5 text-center',
-                pendidikanWali: 'border border-black px-2 py-1.5 text-center',
-                pekerjaanWali: 'border border-black px-2 py-1.5',
-                penghasilanWali: 'border border-black px-2 py-1.5',
-                teleponWali: 'border border-black px-2 py-1.5 text-center',
-                alamatWali: 'border border-black px-2 py-1.5',
-                telepon: 'border border-black px-2 py-1.5 text-center',
-
-                tinggiBadan: 'border border-black px-1 py-1.5 text-center w-14',
-                beratBadan: 'border border-black px-1 py-1.5 text-center w-14',
-                jarakKePondok: 'border border-black px-2 py-1.5 text-center',
-                berkebutuhanKhusus: 'border border-black px-2 py-1.5 text-center',
-                riwayatPenyakit: 'border border-black px-2 py-1.5',
-                hobi: 'border border-black px-2 py-1.5',
-            };
-            return widthMap[id] || baseClass;
+            const alignClass = isCentered ? 'text-center' : 'text-left';
+            const weightClass = id === 'namaLengkap' ? 'font-medium' : '';
+            return `border border-black ${cellPadding} ${alignClass} ${weightClass}`;
         };
 
         const renderSingleRow = (s: Santri, i: number) => {
@@ -823,9 +791,16 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
             };
             
             return (
-                <tr key={s.id} className="hover:bg-gray-50/50">
+                <tr key={s.id} className="hover:bg-gray-50/50" style={{ fontSize: tableFontSize, lineHeight: tableLineHeight }}>
                     {activeColumns.map(col => (
-                        <td key={col} className={getColumnClass(col)}>
+                        <td 
+                            key={col} 
+                            className={getColumnClass(col)}
+                            style={{ 
+                                wordBreak: 'break-word',
+                                overflowWrap: 'anywhere'
+                            }}
+                        >
                             {col === 'namaLengkap' ? (
                                 <>
                                     <span className="font-semibold">{valueMap[col]}</span>
@@ -843,13 +818,33 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
         };
 
         const renderTableHeader = () => (
-            <thead className="bg-gray-200 uppercase font-semibold text-xs text-center border-b border-black">
-                <tr>
+            <>
+                <colgroup>
                     {activeColumns.map(col => (
-                        <th key={col} className={getColumnClass(col)}>{getColumnLabel(col)}</th>
+                        <col key={col} style={{ width: `${getColumnPercent(col)}%` }} />
                     ))}
-                </tr>
-            </thead>
+                </colgroup>
+                <thead 
+                    className="bg-gray-200 uppercase font-semibold text-center border-b border-black"
+                    style={{ fontSize: tableFontSize, lineHeight: tableLineHeight }}
+                >
+                    <tr>
+                        {activeColumns.map(col => (
+                            <th 
+                                key={col} 
+                                className={getColumnClass(col)} 
+                                style={{ 
+                                    width: `${getColumnPercent(col)}%`, 
+                                    wordBreak: 'break-word',
+                                    overflowWrap: 'anywhere'
+                                }}
+                            >
+                                {getColumnLabel(col)}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+            </>
         );
 
         // Grouping logic for Daftar Santri
@@ -1046,21 +1041,31 @@ export const generateTableReport = (data: Santri[], settings: PondokSettings, op
                                 </div>
                             )}
 
-                            {/* Table */}
-                            <table className="w-full text-left border-collapse border border-black text-xs">
-                                {renderTableHeader()}
-                                <tbody>
-                                    {group.items.length > 0 ? (
-                                        group.items.map((s, i) => renderSingleRow(s, i))
-                                    ) : (
-                                        <tr>
-                                            <td colSpan={activeColumns.length} className="text-center py-6 text-gray-400 italic border border-black">
-                                                Tidak ada santri yang terdaftar dalam kelompok ini.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                            {/* Table Container dengan pembatasan lebar 100% agar tidak meluber keluar kertas */}
+                            <div className="w-full max-w-full overflow-hidden">
+                                <table 
+                                    className="w-full text-left border-collapse border border-black" 
+                                    style={{ 
+                                        tableLayout: 'fixed', 
+                                        width: '100%',
+                                        maxWidth: '100%',
+                                        wordBreak: 'break-word' 
+                                    }}
+                                >
+                                    {renderTableHeader()}
+                                    <tbody>
+                                        {group.items.length > 0 ? (
+                                            group.items.map((s, i) => renderSingleRow(s, i))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={activeColumns.length} className="text-center py-6 text-gray-400 italic border border-black">
+                                                    Tidak ada santri yang terdaftar dalam kelompok ini.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
 
                             {/* Formal Signature Section */}
                             {(options.rombelShowSignatures ?? true) && (

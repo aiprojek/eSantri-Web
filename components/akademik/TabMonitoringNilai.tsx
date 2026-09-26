@@ -7,7 +7,11 @@ import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { formatAcademicYearDisplay } from '../../utils/academicYear';
 
-export const TabMonitoringNilai: React.FC = () => {
+export interface TabMonitoringNilaiProps {
+    onNavigateToTab?: (tab: string, rombelId?: number) => void;
+}
+
+export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNavigateToTab }) => {
     const { settings } = useAppContext();
     const { santriList } = useSantriContext();
     const {
@@ -20,6 +24,9 @@ export const TabMonitoringNilai: React.FC = () => {
     } = useAcademicPeriodFilter(settings);
     
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+    const [selectedAuditRombel, setSelectedAuditRombel] = useState<any | null>(null);
+    const [auditStudents, setAuditStudents] = useState<any[]>([]);
+    const [isAuditLoading, setIsAuditLoading] = useState(false);
     
     // Stats State
     const [stats, setStats] = useState<any[]>([]);
@@ -87,6 +94,56 @@ export const TabMonitoringNilai: React.FC = () => {
 
         calculateStats();
     }, [filterTahun, filterSemester, settings, santriList]);
+
+    // Audit specific rombel students
+    useEffect(() => {
+        const loadRombelAudit = async () => {
+            if (!selectedAuditRombel) {
+                setAuditStudents([]);
+                return;
+            }
+            setIsAuditLoading(true);
+            try {
+                const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
+                const recs = await db.raporRecords
+                    .where('[tahunAjaran+semester]')
+                    .equals([currentYear, filterSemester])
+                    .toArray();
+
+                const rombelRecs = recs.filter(r => r.rombelId === selectedAuditRombel.id);
+                const recMap = new Map<number, any>();
+                rombelRecs.forEach(r => recMap.set(r.santriId, r));
+
+                const students = santriList
+                    .filter(s => s.rombelId === selectedAuditRombel.id && s.status === 'Aktif')
+                    .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap))
+                    .map(s => {
+                        const rec = recMap.get(s.id);
+                        let filledCount = 0;
+                        let customData: Record<string, any> = {};
+                        if (rec?.customData) {
+                            try {
+                                customData = JSON.parse(rec.customData);
+                                filledCount = Object.keys(customData).filter(k => customData[k] !== undefined && customData[k] !== '').length;
+                            } catch {}
+                        }
+                        return {
+                            santri: s,
+                            record: rec || null,
+                            isSubmitted: !!rec,
+                            filledCount,
+                            lastModified: rec?.lastModified || rec?.tanggalRapor || null
+                        };
+                    });
+
+                setAuditStudents(students);
+            } finally {
+                setIsAuditLoading(false);
+            }
+        };
+
+        loadRombelAudit();
+    }, [selectedAuditRombel, filterTahun, filterSemester, santriList, defaultAcademicYear, availableYears]);
 
     // Summary Totals
     const summary = useMemo(() => {
@@ -246,18 +303,38 @@ export const TabMonitoringNilai: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 pt-2 border-t border-gray-200/50 mt-2">
-                                    <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-gray-500 border text-xs">
-                                        <i className="bi bi-person-fill"></i>
+                                <div className="flex items-center justify-between pt-3 border-t border-gray-200/50 mt-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-gray-500 border text-xs">
+                                            <i className="bi bi-person-fill"></i>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] text-gray-400 uppercase font-bold">Wali Kelas</p>
+                                            <p className="text-xs font-semibold text-gray-800 truncate max-w-[130px]">{rombel.wali}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-[10px] text-gray-500 uppercase font-bold">Wali Kelas</p>
-                                        <p className="text-xs font-semibold text-gray-800 truncate max-w-[150px]">{rombel.wali}</p>
+                                    <div className="flex items-center gap-1.5">
+                                        <button
+                                            onClick={() => setSelectedAuditRombel(rombel)}
+                                            className="px-2 py-1 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-[11px] font-bold rounded-lg shadow-2xs transition-all"
+                                            title="Audit Kelengkapan Santri"
+                                        >
+                                            <i className="bi bi-list-check mr-1"></i>Audit
+                                        </button>
+                                        {onNavigateToTab && (
+                                            <button
+                                                onClick={() => onNavigateToTab('leger', rombel.id)}
+                                                className="px-2 py-1 bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all"
+                                                title="Buka Leger Nilai"
+                                            >
+                                                <i className="bi bi-table mr-1"></i>Leger
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
                                 {rombel.lastUpdate && (
-                                    <div className="absolute bottom-2 right-3 text-[9px] text-gray-400">
+                                    <div className="mt-2 text-[9px] text-gray-400 text-right">
                                         Update: {rombel.lastUpdate.toLocaleDateString()}
                                     </div>
                                 )}
@@ -270,6 +347,115 @@ export const TabMonitoringNilai: React.FC = () => {
             {!isLoading && stats.length === 0 && (
                 <div className="p-8 text-center bg-gray-50 border rounded-lg text-gray-500">
                     Belum ada data rombel yang dikonfigurasi. Silakan atur di Data Master.
+                </div>
+            )}
+
+            {/* Audit Kelengkapan Modal */}
+            {selectedAuditRombel && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+                    <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95 max-h-[85vh] flex flex-col">
+                        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">
+                                    Audit Kelengkapan Rapor: {selectedAuditRombel.nama}
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    {selectedAuditRombel.jenjang} • Wali Kelas: {selectedAuditRombel.wali} • {filterTahun || defaultAcademicYear} ({filterSemester})
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setSelectedAuditRombel(null)}
+                                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+
+                        <div className="py-3 px-1 flex-1 overflow-y-auto">
+                            {isAuditLoading ? (
+                                <div className="p-12 text-center text-slate-500">
+                                    <div className="w-7 h-7 border-2 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                    <p className="mt-2 text-xs font-semibold">Memeriksa data santri...</p>
+                                </div>
+                            ) : auditStudents.length === 0 ? (
+                                <div className="p-8 text-center text-slate-400 text-xs">
+                                    Tidak ada santri aktif di rombel ini.
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded-lg text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                        <span>Santri ({auditStudents.length})</span>
+                                        <span>Status Nilai</span>
+                                    </div>
+                                    {auditStudents.map((item, idx) => (
+                                        <div
+                                            key={item.santri.id}
+                                            className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors"
+                                        >
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-semibold text-slate-400 w-5">{idx + 1}.</span>
+                                                    <span className="text-xs font-bold text-slate-800">{item.santri.namaLengkap}</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 pl-7 font-mono">
+                                                    NIS: {item.santri.nis || '-'}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                {item.isSubmitted && item.filledCount > 0 ? (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                        <i className="bi bi-check-circle-fill"></i>
+                                                        <span>Terisi ({item.filledCount} field)</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                        <i className="bi bi-x-circle-fill"></i>
+                                                        <span>Belum Ada Data</span>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                            <button
+                                onClick={() => setSelectedAuditRombel(null)}
+                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                            >
+                                Tutup
+                            </button>
+                            <div className="flex items-center gap-2">
+                                {onNavigateToTab && (
+                                    <>
+                                        <button
+                                            onClick={() => {
+                                                const rId = selectedAuditRombel.id;
+                                                setSelectedAuditRombel(null);
+                                                onNavigateToTab('input_wali', rId);
+                                            }}
+                                            className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                                        >
+                                            <i className="bi bi-pencil-square mr-1.5"></i>Input Nilai
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const rId = selectedAuditRombel.id;
+                                                setSelectedAuditRombel(null);
+                                                onNavigateToTab('leger', rId);
+                                            }}
+                                            className="px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-all"
+                                        >
+                                            <i className="bi bi-table mr-1.5"></i>Buka Leger Nilai
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

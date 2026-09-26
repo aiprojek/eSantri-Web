@@ -12,6 +12,8 @@ const PANDUAN_ORDER: string[] = [
     'kesehatan',
     'bk',
     'bukutamu',
+    'kurikulum',
+    'rapor',
     'akademik',
     'perpustakaan',
     'kalender',

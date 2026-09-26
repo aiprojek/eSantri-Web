@@ -3,7 +3,7 @@
 
 import { Santri, PondokSettings, RaporRecord, NilaiMapel, RaporTemplate, GridCell } from '../types';
 import { db } from '../db';
-import { getStandaloneDocumentStyles } from '../utils/standaloneStyles';
+import { getTemplateSheets } from './raporExcelService';
 
 // --- HELPER: CONVERT EXCEL SYNTAX TO JS ---
 const convertFormulaToJs = (expression: string): string => {
@@ -34,13 +34,20 @@ const convertFormulaToJs = (expression: string): string => {
     return js;
 };
 
-interface GeneratorConfig {
+export interface GeneratorConfig {
     rombelId: number; // 0 means ALL rombels in jenjang / kelas
     kelasId?: number; // 0 or undefined means ALL kelas in jenjang
     jenjangId?: number; // Required if rombelId and kelasId are 0
+    kelasRange?: {
+        fromKelasId: number;
+        toKelasId: number;
+        kelasIds: number[];
+        label?: string;
+    };
     semester: 'Ganjil' | 'Genap';
     tahunAjaran: string;
     template: RaporTemplate;
+    sheetId?: string; // Optional: specific sheet ID or 'all'
     submissionMethod?: 'whatsapp' | 'google_sheet' | 'hybrid';
     googleScriptUrl?: string;
     waDestination?: string; 
@@ -54,12 +61,23 @@ interface RankConfig {
     scope: 'rombel' | 'kelas' | 'jenjang' | 'global';
 }
 
+export interface FormInteractiveCell {
+    key: string;
+    label: string;
+    type: 'input' | 'formula' | 'dropdown';
+    options?: string[];
+    sheetId: string;
+    sheetName: string;
+    formulaValue?: string;
+    row: number;
+    col: number;
+}
+
 export const generateRaporFormHtml = (
     santriList: Santri[],
     settings: PondokSettings,
     config: GeneratorConfig
 ): string => {
-    const standaloneStyles = getStandaloneDocumentStyles();
     let targetSantri: Santri[] = [];
     let contextName = "";
     const defaultRankingScope = config.rankingScope || (config.rombelId > 0 ? 'rombel' : 'rombel');
@@ -90,7 +108,6 @@ export const generateRaporFormHtml = (
         targetSantri = activeSantriList
             .filter(s => {
                 if (Number(s.kelasId) === Number(config.kelasId)) return true;
-                // Fallback check if santri's rombel belongs to this kelas
                 const sRombel = settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
                 return sRombel && Number(sRombel.kelasId) === Number(config.kelasId);
             })
@@ -102,6 +119,30 @@ export const generateRaporFormHtml = (
             
         const jenjang = settings.jenjang.find(j => Number(j.id) === Number(kelas.jenjangId));
         contextName = `${jenjang ? jenjang.nama + ' - ' : ''}${kelas.nama} (Semua Rombel)`;
+    } else if (config.kelasRange && config.kelasRange.kelasIds && config.kelasRange.kelasIds.length > 0) {
+        const rangeIds = new Set(config.kelasRange.kelasIds.map(Number));
+        const jenjang = config.jenjangId ? settings.jenjang.find(j => Number(j.id) === Number(config.jenjangId)) : null;
+
+        targetSantri = activeSantriList
+            .filter(s => {
+                if (s.kelasId && rangeIds.has(Number(s.kelasId))) return true;
+                const sRombel = settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
+                return sRombel && rangeIds.has(Number(sRombel.kelasId));
+            })
+            .sort((a, b) => {
+                const aKelasId = Number(a.kelasId || settings.rombel.find(r => Number(r.id) === Number(a.rombelId))?.kelasId || 0);
+                const bKelasId = Number(b.kelasId || settings.rombel.find(r => Number(r.id) === Number(b.rombelId))?.kelasId || 0);
+                const aIdx = config.kelasRange!.kelasIds.indexOf(aKelasId);
+                const bIdx = config.kelasRange!.kelasIds.indexOf(bKelasId);
+                if (aIdx !== -1 && bIdx !== -1 && aIdx !== bIdx) return aIdx - bIdx;
+
+                const rA = settings.rombel.find(r => Number(r.id) === Number(a.rombelId))?.nama || '';
+                const rB = settings.rombel.find(r => Number(r.id) === Number(b.rombelId))?.nama || '';
+                return rA.localeCompare(rB) || a.namaLengkap.localeCompare(b.namaLengkap);
+            });
+
+        const rangeLabel = config.kelasRange.label || `${config.kelasRange.kelasIds.length} Tingkat Kelas`;
+        contextName = `${jenjang ? jenjang.nama + ' - ' : ''}Rentang: ${rangeLabel} (Semua Rombel)`;
     } else if (config.jenjangId && config.jenjangId > 0) {
         const jenjang = settings.jenjang.find(j => Number(j.id) === Number(config.jenjangId));
         if (!jenjang) throw new Error("Jenjang tidak ditemukan");
@@ -109,7 +150,6 @@ export const generateRaporFormHtml = (
         targetSantri = activeSantriList
             .filter(s => {
                 if (Number(s.jenjangId) === Number(config.jenjangId)) return true;
-                // Fallback check if santri's kelas/rombel belongs to this jenjang
                 const sKelas = settings.kelas.find(k => Number(k.id) === Number(s.kelasId));
                 if (sKelas && Number(sKelas.jenjangId) === Number(config.jenjangId)) return true;
                 const sRombel = settings.rombel.find(r => Number(r.id) === Number(s.rombelId));
@@ -126,100 +166,140 @@ export const generateRaporFormHtml = (
             
         contextName = `${jenjang.nama} (Gabungan Seluruh Kelas)`;
     } else {
-        throw new Error("Target Rombel, Kelas, atau Jenjang harus dipilih.");
+        throw new Error("Target Rombel, Kelas, Rentang Kelas, atau Jenjang harus dipilih.");
     }
 
-    const { cells, rowCount, colCount } = config.template;
+    // 3. Extract sheets and interactive cells
+    const allSheets = getTemplateSheets(config.template);
+    const targetSheets = config.sheetId && config.sheetId !== 'all'
+        ? allSheets.filter(s => s.id === config.sheetId)
+        : allSheets;
 
-    // 1. Extract ALL interactive cells (input, formula, dropdown) from the template
-    const interactiveCells: GridCell[] = [];
-    const formulaCells: GridCell[] = [];
+    const interactiveCells: FormInteractiveCell[] = [];
+    const formulaCells: FormInteractiveCell[] = [];
     const rankConfigs: RankConfig[] = [];
+    const seenKeys = new Set<string>();
 
-    for (let r = 0; r < rowCount; r++) {
-        for (let c = 0; c < colCount; c++) {
-            const cell = cells[r][c];
-            if (!cell.hidden && cell.key && (cell.type === 'input' || cell.type === 'formula' || cell.type === 'dropdown')) {
-                // Prevent duplicates if the user accidentally used the same key twice
-                if (!interactiveCells.find(ic => ic.key === cell.key)) {
-                    interactiveCells.push(cell);
-                    
-                    if (cell.type === 'formula' && cell.value) {
-                        // Regex matches: RANK($TOTAL), RANK($TOTAL, "rombel"), RANK($TOTAL, "kelas", 10), RANK($TOTAL, 10, "rombel"), etc.
-                        const rankMatch = cell.value.match(/RANK\(\$([A-Z0-9_]+)(?:,\s*["']?([a-zA-Z0-9_]+)["']?)?(?:,\s*["']?([a-zA-Z0-9_]+)["']?)?\)/i);
-                        if (rankMatch) {
-                            const p1 = rankMatch[2];
-                            const p2 = rankMatch[3];
-                            let scope: 'rombel' | 'kelas' | 'jenjang' | 'global' = defaultRankingScope;
-                            let limit = 0;
+    targetSheets.forEach(sheet => {
+        if (!sheet.cells || sheet.cells.length === 0) return;
+        const rCount = sheet.rowCount || sheet.cells.length;
+        const cCount = sheet.colCount || (sheet.cells[0]?.length || 0);
 
-                            const checkParam = (p: string | undefined) => {
-                                if (!p) return;
-                                if (/^\d+$/.test(p)) {
-                                    limit = parseInt(p, 10);
-                                } else if (['rombel', 'kelas', 'jenjang', 'global'].includes(p.toLowerCase())) {
-                                    scope = p.toLowerCase() as any;
-                                }
-                            };
-                            checkParam(p1);
-                            checkParam(p2);
+        for (let r = 0; r < rCount; r++) {
+            const rowCells = sheet.cells[r] || [];
+            for (let c = 0; c < cCount; c++) {
+                const cell = rowCells[c];
+                if (!cell || cell.hidden || !cell.key) continue;
+                const trimmedKey = cell.key.trim();
+                if (!trimmedKey) continue;
 
-                            rankConfigs.push({
-                                targetKey: cell.key, 
-                                sourceKey: rankMatch[1],
-                                limit,
-                                scope
-                            });
-                        } else {
-                            formulaCells.push(cell);
+                if (cell.type === 'input' || cell.type === 'formula' || cell.type === 'dropdown') {
+                    if (!seenKeys.has(trimmedKey)) {
+                        seenKeys.add(trimmedKey);
+
+                        // Find descriptive label in row before this cell, or above
+                        let label = trimmedKey;
+                        const labelCellLeft = [...rowCells]
+                            .reverse()
+                            .find(ch => ch && ch.col < cell.col && ch.type === 'label' && ch.value && ch.value.trim() !== '' && !ch.value.startsWith('$'));
+                        
+                        if (labelCellLeft) {
+                            label = labelCellLeft.value.trim();
+                        } else if (cell.value && cell.value.trim() !== '' && !cell.value.startsWith('$') && cell.type !== 'formula') {
+                            label = cell.value.trim();
+                        }
+
+                        const formCell: FormInteractiveCell = {
+                            key: trimmedKey,
+                            label: label || trimmedKey,
+                            type: cell.type,
+                            options: cell.options,
+                            sheetId: sheet.id,
+                            sheetName: sheet.name || 'Lembar 1',
+                            formulaValue: cell.value,
+                            row: r,
+                            col: c
+                        };
+
+                        interactiveCells.push(formCell);
+
+                        if (cell.type === 'formula' && cell.value) {
+                            const rankMatch = cell.value.match(/RANK\(\$([A-Z0-9_]+)(?:,\s*["']?([a-zA-Z0-9_]+)["']?)?(?:,\s*["']?([a-zA-Z0-9_]+)["']?)?\)/i);
+                            if (rankMatch) {
+                                const p1 = rankMatch[2];
+                                const p2 = rankMatch[3];
+                                let scope: 'rombel' | 'kelas' | 'jenjang' | 'global' = defaultRankingScope;
+                                let limit = 0;
+
+                                const checkParam = (p: string | undefined) => {
+                                    if (!p) return;
+                                    if (/^\d+$/.test(p)) {
+                                        limit = parseInt(p, 10);
+                                    } else if (['rombel', 'kelas', 'jenjang', 'global'].includes(p.toLowerCase())) {
+                                        scope = p.toLowerCase() as any;
+                                    }
+                                };
+                                checkParam(p1);
+                                checkParam(p2);
+
+                                rankConfigs.push({
+                                    targetKey: trimmedKey, 
+                                    sourceKey: rankMatch[1],
+                                    limit,
+                                    scope
+                                });
+                            } else {
+                                formulaCells.push(formCell);
+                            }
                         }
                     }
                 }
             }
         }
-    }
+    });
 
     const formulaScripts = formulaCells.map(c => {
-        const jsExpression = convertFormulaToJs(c.value || '');
+        const jsExpression = convertFormulaToJs(c.formulaValue || '');
         return `
         try {
             const val = ${jsExpression};
             const field = document.getElementById('val_' + rowId + '_${c.key}');
             const cardField = document.getElementById('card_val_' + rowId + '_${c.key}');
-            if(field) {
-                if (typeof val === 'string') {
-                     field.value = val;
-                } else {
-                     field.value = isNaN(val) ? val : Number(val).toFixed(2).replace(/[.,]00$/, "");
-                }
-            }
-            if(cardField) {
-                if (typeof val === 'string') {
-                     cardField.value = val;
-                } else {
-                     cardField.value = isNaN(val) ? val : Number(val).toFixed(2).replace(/[.,]00$/, "");
-                }
-            }
+            const formatted = (typeof val === 'string') ? val : (isNaN(val) ? '-' : Number(val).toFixed(2).replace(/[.,]00$/, ""));
+            if(field) field.value = formatted;
+            if(cardField) cardField.value = formatted;
         } catch(e) {}
         `;
     }).join('\n');
 
     // --- Generate Ledger Header ---
+    const showMultiSheetBadges = targetSheets.length > 1;
     const theadHtml = `
         <tr class="sticky-header">
-            <th class="p-2 bg-gray-200 w-10 border border-black text-xs font-bold text-center sticky left-0 z-30">No</th>
-            <th class="p-2 bg-gray-200 border border-black text-xs font-bold text-left min-w-[180px] sticky left-10 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">Nama Santri</th>
-            <th class="p-2 bg-gray-200 border border-black text-xs font-bold text-center">NIS</th>
+            <th class="p-2.5 bg-slate-100 border border-slate-300 text-xs font-bold text-center sticky left-0 z-30 w-12 text-slate-700">No</th>
+            <th class="p-2.5 bg-slate-100 border border-slate-300 text-xs font-bold text-left min-w-[200px] sticky left-12 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.06)] text-slate-800">Nama Santri</th>
+            <th class="p-2.5 bg-slate-100 border border-slate-300 text-xs font-bold text-center w-24 text-slate-600">NIS</th>
             ${interactiveCells.map(cell => {
-                let bgClass = "bg-gray-100 text-gray-700";
-                if (cell.type === 'input') bgClass = "bg-blue-100 text-blue-800";
-                else if (cell.type === 'formula') bgClass = "bg-yellow-100 text-yellow-800";
-                else if (cell.type === 'dropdown') bgClass = "bg-orange-100 text-orange-800";
+                let badgeClass = "bg-blue-100 text-blue-800 border-blue-200";
+                let headerBg = "bg-slate-50";
+                if (cell.type === 'input') {
+                    badgeClass = "bg-blue-100 text-blue-800 border-blue-200";
+                } else if (cell.type === 'formula') {
+                    badgeClass = "bg-amber-100 text-amber-900 border-amber-200";
+                    headerBg = "bg-amber-50/40";
+                } else if (cell.type === 'dropdown') {
+                    badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
+                    headerBg = "bg-emerald-50/40";
+                }
                 
                 return `
-                <th class="p-2 border border-black text-xs font-bold text-center ${bgClass}">
-                    ${cell.key}
-                    <br/><span class="text-[9px] font-normal opacity-60">${cell.type.toUpperCase()}</span>
+                <th data-sheet="${cell.sheetId}" class="table-col-cell p-2 border border-slate-300 text-xs font-bold text-center min-w-[130px] ${headerBg}">
+                    <div class="font-bold text-slate-800 leading-tight mb-1 text-[11px]">${cell.label}</div>
+                    <div class="flex items-center justify-center gap-1">
+                        <span class="font-mono text-[9px] text-slate-500 font-semibold bg-white/80 px-1 py-0.5 rounded border border-slate-200">${cell.key}</span>
+                        <span class="text-[8px] font-black uppercase px-1 py-0.5 rounded border ${badgeClass}">${cell.type}</span>
+                    </div>
+                    ${showMultiSheetBadges ? `<div class="text-[8px] text-slate-400 font-normal mt-0.5 truncate max-w-[120px] mx-auto">${cell.sheetName}</div>` : ''}
                 </th>
                 `;
             }).join('')}
@@ -230,21 +310,29 @@ export const generateRaporFormHtml = (
     let tbodyHtml = "";
     let cardsHtml = "";
     let currentRombelId = -1;
+    let currentKelasId = -1;
     
     targetSantri.forEach((s, index) => {
         const shortName = (s.namaLengkap || '').trim().split(/\s+/)[0] || s.namaLengkap;
         const rombelObj = settings.rombel.find(r => r.id === s.rombelId);
         const rombelName = rombelObj?.nama || "Tanpa Rombel";
-        const kelasObj = settings.kelas.find(k => k.id === s.kelasId);
+        const kelasObj = settings.kelas.find(k => k.id === s.kelasId) || (rombelObj ? settings.kelas.find(k => k.id === rombelObj.kelasId) : null);
         const kelasName = kelasObj?.nama || "";
 
-        // Add Separator Row if Rombel changes (only in "All Rombels" mode)
-        if (config.rombelId === 0 && s.rombelId !== currentRombelId) {
+        // Add Separator Row if Rombel or Kelas changes (in "All Rombels", "Jenjang", or "Rentang Kelas" mode)
+        const isMultiGroup = config.rombelId === 0 || !!config.kelasRange;
+        const effectiveKelasId = s.kelasId || (rombelObj ? rombelObj.kelasId : 0);
+        const groupChanged = (s.rombelId !== currentRombelId) || (effectiveKelasId !== currentKelasId);
+
+        if (isMultiGroup && groupChanged) {
             currentRombelId = s.rombelId;
+            currentKelasId = effectiveKelasId;
             tbodyHtml += `
-                <tr class="bg-teal-600 text-white font-bold rombel-sep">
-                    <td colspan="${interactiveCells.length + 3}" class="p-2 text-xs border border-black sticky left-0 z-20">
-                        <i class="bi bi-people-fill mr-2"></i> ROMBEL: ${rombelName}
+                <tr class="bg-teal-700 text-white font-bold rombel-sep">
+                    <td colspan="${interactiveCells.length + 3}" class="p-2.5 text-xs border border-teal-800 sticky left-0 z-20">
+                        <span class="inline-flex items-center gap-2">
+                            <i class="bi bi-people-fill"></i> ${rombelName !== "Tanpa Rombel" ? `ROMBEL: <b>${rombelName}</b>` : 'SANTRI'} ${kelasName ? `• Tingkat: <b>${kelasName}</b>` : ''}
+                        </span>
                     </td>
                 </tr>
             `;
@@ -252,50 +340,71 @@ export const generateRaporFormHtml = (
 
         const rowCells = interactiveCells.map(col => {
             const fieldId = `val_${s.id}_${col.key}`;
-            const commonFocusAttr = `data-santri="${shortName}" data-mapel="${col.key}" onfocus="showCellHint(this)"`;
+            const commonFocusAttr = `data-santri="${shortName}" data-mapel="${col.label} (${col.key})" onfocus="showCellHint(this)"`;
             
             if (col.type === 'input') {
-                return `<td class="p-1 border border-black"><input type="text" id="${fieldId}" name="${fieldId}" ${commonFocusAttr} oninput="syncFromTable(${s.id}, '${col.key}', this.value)" class="w-full h-full p-1.5 text-center bg-white focus:bg-blue-50 outline-none transition-colors rounded text-sm font-medium focus:ring-2 focus:ring-blue-300"></td>`;
+                return `
+                <td data-sheet="${col.sheetId}" class="table-col-cell p-0.5 border border-slate-300 bg-white">
+                    <input type="text" id="${fieldId}" name="${fieldId}" ${commonFocusAttr} oninput="syncFromTable(${s.id}, '${col.key}', this.value)" class="w-full h-full p-1.5 text-center text-xs font-semibold text-slate-800 bg-transparent focus:bg-blue-50 focus:ring-2 focus:ring-blue-400 outline-none rounded transition-colors" placeholder="-">
+                </td>`;
             }
             if (col.type === 'dropdown') {
                 const optionsHtml = col.options ? col.options.map(opt => `<option value="${opt}">${opt}</option>`).join('') : '';
-                return `<td class="p-1 border border-black bg-orange-50"><select id="${fieldId}" name="${fieldId}" ${commonFocusAttr} onchange="syncFromTable(${s.id}, '${col.key}', this.value)" class="w-full h-full p-1 text-center bg-transparent outline-none text-sm cursor-pointer"><option value="">-</option>${optionsHtml}</select></td>`;
+                return `
+                <td data-sheet="${col.sheetId}" class="table-col-cell p-0.5 border border-slate-300 bg-emerald-50/30">
+                    <select id="${fieldId}" name="${fieldId}" ${commonFocusAttr} onchange="syncFromTable(${s.id}, '${col.key}', this.value)" class="w-full h-full p-1 text-center text-xs font-semibold text-emerald-950 bg-transparent focus:bg-emerald-100 outline-none rounded cursor-pointer">
+                        <option value="">-</option>
+                        ${optionsHtml}
+                    </select>
+                </td>`;
             }
             if (col.type === 'formula') {
-                return `<td class="p-1 border border-black bg-yellow-50"><input type="text" id="${fieldId}" name="${fieldId}" ${commonFocusAttr} readonly tabindex="-1" class="w-full h-full p-1.5 text-center bg-transparent outline-none font-bold text-gray-700" value="-"></td>`;
+                return `
+                <td data-sheet="${col.sheetId}" class="table-col-cell p-0.5 border border-slate-300 bg-amber-50/50">
+                    <input type="text" id="${fieldId}" name="${fieldId}" ${commonFocusAttr} readonly tabindex="-1" class="w-full h-full p-1.5 text-center text-xs font-bold text-amber-950 bg-transparent outline-none cursor-default" value="-">
+                </td>`;
             }
-            return `<td class="p-1 border border-black bg-gray-100"></td>`;
+            return `<td data-sheet="${col.sheetId}" class="table-col-cell p-1 border border-slate-300 bg-slate-50"></td>`;
         }).join('');
 
         tbodyHtml += `
-        <tr id="row_santri_${s.id}" class="hover:bg-gray-50">
-            <td class="p-2 text-center bg-gray-100 text-xs border border-black sticky left-0 z-10">${index + 1}</td>
-            <td class="p-2 bg-white text-sm text-gray-800 font-bold whitespace-nowrap border border-black sticky left-10 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)]" title="${s.namaLengkap}">${shortName}</td>
-            <td class="p-2 bg-gray-50 text-xs text-gray-600 text-center border border-black">${s.nis}</td>
+        <tr id="row_santri_${s.id}" class="hover:bg-slate-50 transition-colors">
+            <td class="p-2 text-center bg-slate-50 text-xs font-medium text-slate-500 border border-slate-300 sticky left-0 z-10 w-12">${index + 1}</td>
+            <td class="p-2 bg-white text-xs font-bold text-slate-900 whitespace-nowrap border border-slate-300 sticky left-12 z-10 shadow-[2px_0_5px_rgba(0,0,0,0.05)]" title="${s.namaLengkap}">
+                <div class="leading-tight">${s.namaLengkap}</div>
+                <div class="text-[10px] text-slate-400 font-normal md:hidden">${rombelName}</div>
+            </td>
+            <td class="p-2 bg-slate-50/70 text-xs font-mono text-slate-600 text-center border border-slate-300">${s.nis || '-'}</td>
             ${rowCells}
         </tr>`;
 
         // Card items
         const cardFields = interactiveCells.map(col => {
             const cardFieldId = `card_val_${s.id}_${col.key}`;
-            let typeBadge = '<span class="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">INPUT</span>';
-            if (col.type === 'dropdown') typeBadge = '<span class="text-[9px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-800 font-bold">DROPDOWN</span>';
-            if (col.type === 'formula') typeBadge = '<span class="text-[9px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 font-bold">RUMUS</span>';
+            let typeBadge = '<span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold border border-blue-200">INPUT</span>';
+            if (col.type === 'dropdown') typeBadge = '<span class="text-[9px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">PILIHAN</span>';
+            if (col.type === 'formula') typeBadge = '<span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-200">RUMUS</span>';
 
             let inputWidget = '';
             if (col.type === 'input') {
-                inputWidget = `<input type="text" id="${cardFieldId}" oninput="syncFromCard(${s.id}, '${col.key}', this.value)" placeholder="Ketik nilai..." class="w-full border-2 border-gray-200 rounded-xl p-2.5 text-base font-bold text-gray-800 focus:border-teal-500 focus:bg-teal-50/20 outline-none transition-all">`;
+                inputWidget = `<input type="text" id="${cardFieldId}" oninput="syncFromCard(${s.id}, '${col.key}', this.value)" placeholder="Ketik nilai..." class="w-full border-2 border-slate-200 rounded-xl p-3 text-base font-bold text-slate-800 focus:border-teal-500 focus:bg-teal-50/20 outline-none transition-all shadow-xs">`;
             } else if (col.type === 'dropdown') {
                 const optionsHtml = col.options ? col.options.map(opt => `<option value="${opt}">${opt}</option>`).join('') : '';
-                inputWidget = `<select id="${cardFieldId}" onchange="syncFromCard(${s.id}, '${col.key}', this.value)" class="w-full border-2 border-orange-200 bg-orange-50/50 rounded-xl p-2.5 text-base font-bold text-orange-950 focus:border-orange-500 outline-none"><option value="">-- Pilih Nilai --</option>${optionsHtml}</select>`;
+                inputWidget = `<select id="${cardFieldId}" onchange="syncFromCard(${s.id}, '${col.key}', this.value)" class="w-full border-2 border-emerald-200 bg-emerald-50/40 rounded-xl p-3 text-base font-bold text-emerald-950 focus:border-emerald-500 outline-none shadow-xs"><option value="">-- Pilih Nilai --</option>${optionsHtml}</select>`;
             } else if (col.type === 'formula') {
-                inputWidget = `<input type="text" id="${cardFieldId}" readonly tabindex="-1" value="-" class="w-full border-2 border-yellow-200 bg-yellow-50 rounded-xl p-2.5 text-base font-black text-yellow-900 text-center outline-none">`;
+                inputWidget = `<input type="text" id="${cardFieldId}" readonly tabindex="-1" value="-" class="w-full border-2 border-amber-200 bg-amber-50 rounded-xl p-3 text-base font-black text-amber-950 text-center outline-none shadow-xs">`;
             }
 
             return `
-            <div class="bg-gray-50/80 p-3 rounded-xl border border-gray-200 flex flex-col gap-1.5">
-                <div class="flex justify-between items-center">
-                    <label class="text-xs font-bold text-gray-700">${col.key}</label>
+            <div data-sheet="${col.sheetId}" class="card-field-item bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 flex flex-col gap-2 transition-all">
+                <div class="flex justify-between items-start gap-2">
+                    <div>
+                        <label class="text-xs font-bold text-slate-800 leading-snug block">${col.label}</label>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="font-mono text-[9px] text-slate-400 font-semibold">${col.key}</span>
+                            ${showMultiSheetBadges ? `<span class="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-100">${col.sheetName}</span>` : ''}
+                        </div>
+                    </div>
                     ${typeBadge}
                 </div>
                 ${inputWidget}
@@ -304,21 +413,21 @@ export const generateRaporFormHtml = (
 
         cardsHtml += `
         <div id="card_santri_${s.id}" class="santri-card-item ${index === 0 ? 'block' : 'hidden'} bg-white rounded-2xl border-2 border-teal-100 shadow-sm p-4 md:p-6 mb-4">
-            <div class="flex items-center justify-between border-b pb-3 mb-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-teal-600 text-white font-black flex items-center justify-center text-sm shadow">
+                    <div class="w-10 h-10 rounded-full bg-teal-700 text-white font-black flex items-center justify-center text-sm shadow">
                         ${index + 1}
                     </div>
                     <div>
-                        <h3 class="text-base md:text-lg font-black text-gray-800 leading-tight">${s.namaLengkap}</h3>
-                        <p class="text-xs text-gray-500">NIS: <span class="font-mono font-bold text-gray-700">${s.nis}</span> • ${rombelName}</p>
+                        <h3 class="text-base md:text-lg font-black text-slate-900 leading-tight">${s.namaLengkap}</h3>
+                        <p class="text-xs text-slate-500">NIS: <span class="font-mono font-bold text-slate-700">${s.nis || '-'}</span> • ${rombelName}</p>
                     </div>
                 </div>
                 <div class="text-right">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200">${index + 1} dari ${targetSantri.length}</span>
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">${index + 1} dari ${targetSantri.length}</span>
                 </div>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 ${cardFields}
             </div>
         </div>`;
@@ -342,7 +451,8 @@ export const generateRaporFormHtml = (
         };
     });
     const rankConfigsJson = JSON.stringify(rankConfigs);
-    const localStorageKey = `esantri_leger_${config.template.id}_${config.tahunAjaran}_${config.semester}_${config.rombelId || config.jenjangId || 0}`;
+    const rangeKeyPart = config.kelasRange ? `range_${config.kelasRange.kelasIds.join('_')}` : (config.kelasId || config.jenjangId || 0);
+    const localStorageKey = `esantri_leger_${config.template.id}_${config.tahunAjaran}_${config.semester}_${config.rombelId || rangeKeyPart}`;
 
     // Extract unique kelas & rombel for filter
     const uniqueKelasMap = new Map<number, string>();
@@ -360,40 +470,60 @@ export const generateRaporFormHtml = (
     let filterToolbarHtml = '';
     if (hasMultipleClasses) {
         filterToolbarHtml = `
-        <div class="max-w-2xl mx-auto bg-white p-3.5 rounded-2xl border border-teal-100 shadow-sm mb-3">
-            <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-gray-100">
+        <div class="max-w-3xl mx-auto bg-white p-3.5 rounded-2xl border border-teal-100 shadow-sm mb-3">
+            <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
                 <span class="text-xs font-black text-teal-900 flex items-center gap-1.5">
                     <span class="w-2 h-2 rounded-full bg-teal-500"></span> Filter Rombel & Santri
                 </span>
-                <span class="text-[10px] text-gray-500 font-medium">Memudahkan guru memilih rombel</span>
+                <span class="text-[10px] text-slate-500 font-medium">Cari atau filter santri</span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Tingkat Kelas</label>
-                    <select id="card-filter-kelas" onchange="onKelasFilterChange(this.value)" class="w-full border rounded-xl p-2 text-xs font-bold text-gray-800 bg-gray-50/80 focus:bg-white focus:border-teal-500 outline-none">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tingkat Kelas</label>
+                    <select id="card-filter-kelas" onchange="onKelasFilterChange(this.value)" class="w-full border rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
                         <option value="0">Semua Tingkat Kelas</option>
                         ${uniqueKelasOptions}
                     </select>
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Rombel</label>
-                    <select id="card-filter-rombel" onchange="onRombelFilterChange(this.value)" class="w-full border rounded-xl p-2 text-xs font-bold text-gray-800 bg-gray-50/80 focus:bg-white focus:border-teal-500 outline-none">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Rombel</label>
+                    <select id="card-filter-rombel" onchange="onRombelFilterChange(this.value)" class="w-full border rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
                         <option value="0">Semua Rombel</option>
                         ${uniqueRombelOptions}
                     </select>
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Cari Santri</label>
-                    <input type="text" id="card-search-input" oninput="onSearchChange(this.value)" placeholder="Nama / NIS..." class="w-full border rounded-xl p-2 text-xs font-bold text-gray-800 bg-gray-50/80 focus:bg-white focus:border-teal-500 outline-none">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cari Santri</label>
+                    <input type="text" id="card-search-input" oninput="onSearchChange(this.value)" placeholder="Nama / NIS..." class="w-full border rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
                 </div>
             </div>
         </div>`;
     } else {
-        // Single Rombel Mode: Omit Kelas and Rombel dropdowns for maximum simplicity
         filterToolbarHtml = `
-        <div class="max-w-2xl mx-auto bg-white p-2.5 rounded-2xl border border-teal-100 shadow-sm mb-3 flex items-center gap-2">
+        <div class="max-w-3xl mx-auto bg-white p-2.5 rounded-2xl border border-teal-100 shadow-sm mb-3 flex items-center gap-2">
             <span class="text-xs text-teal-700 font-bold whitespace-nowrap pl-1">🔍 Cari:</span>
-            <input type="text" id="card-search-input" oninput="onSearchChange(this.value)" placeholder="Ketik nama santri atau NIS..." class="w-full border border-gray-200 rounded-xl p-2 text-xs font-bold text-gray-800 bg-gray-50/80 focus:bg-white focus:border-teal-500 outline-none">
+            <input type="text" id="card-search-input" oninput="onSearchChange(this.value)" placeholder="Ketik nama santri atau NIS..." class="w-full border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
+        </div>`;
+    }
+
+    // Navigasi Sheet Filter Tabs jika multi-sheet
+    let sheetTabsToolbarHtml = '';
+    if (targetSheets.length > 1) {
+        sheetTabsToolbarHtml = `
+        <div class="sheet-tabs-container max-w-3xl mx-auto flex items-center gap-1.5 overflow-x-auto pb-2 mb-3">
+            <span class="text-xs font-bold text-slate-600 mr-1 whitespace-nowrap flex items-center gap-1">
+                <i class="bi bi-layers"></i> Lembar:
+            </span>
+            <button onclick="filterBySheet('all')" id="sheet-btn-all" class="sheet-filter-btn active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all bg-teal-700 text-white shadow-xs">
+                Semua Lembar (${interactiveCells.length})
+            </button>
+            ${targetSheets.map(s => {
+                const count = interactiveCells.filter(c => c.sheetId === s.id).length;
+                return `
+                <button onclick="filterBySheet('${s.id}')" id="sheet-btn-${s.id}" class="sheet-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-700 border border-slate-200 hover:bg-slate-50">
+                    ${s.name} (${count})
+                </button>`;
+            }).join('')}
         </div>`;
     }
 
@@ -411,7 +541,6 @@ export const generateRaporFormHtml = (
                 window.open(waUrl, '_blank');
                 btn.disabled = false; btn.innerHTML = originalText;
             }).catch(err => {
-                // Fallback if clipboard fails
                 const waUrl = "${waDest}" ? 'https://wa.me/${waDest}?text=' : 'https://wa.me/?text=';
                 window.open(waUrl + encodeURIComponent(message), '_blank');
                 btn.disabled = false; btn.innerHTML = originalText;
@@ -446,13 +575,91 @@ export const generateRaporFormHtml = (
         `;
     }
 
-    return `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Input Nilai - ${contextName}</title><style>${standaloneStyles}input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.sticky-header th{position:sticky;top:0;z-index:40;height:36px}.rombel-sep td{position:sticky;top:36px;z-index:35}th,td{box-sizing:border-box}@media (max-width: 768px){.sticky.left-10{position:static!important;left:auto!important;z-index:auto!important;box-shadow:none!important}.sticky-header th:nth-child(2),tbody td:nth-child(2){min-width:96px!important;max-width:96px!important;padding-left:6px!important;padding-right:6px!important;font-size:12px!important}}</style><script>
+    return `<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulir Input Nilai - ${contextName}</title>
+    
+    <!-- Google Fonts & Bootstrap Icons CDN -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        teal: {
+                            50: '#f0fdfa', 100: '#ccfbf1', 200: '#99f6e4', 300: '#5eead4', 400: '#2dd4bf',
+                            500: '#14b8a6', 600: '#0d9488', 700: '#0f766e', 800: '#115e59', 900: '#134e4a', 950: '#042f2e'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Comprehensive Standalone CSS Fallback (Tetap Cantik & Terformat Sempurna Bahkan Saat Offline) -->
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            line-height: 1.5;
+            margin: 0;
+            padding: 12px;
+        }
+        input, select, button, textarea {
+            font-family: inherit;
+        }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .sticky-header th {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            height: 40px;
+        }
+        .rombel-sep td {
+            position: sticky;
+            top: 40px;
+            z-index: 35;
+        }
+        th, td {
+            box-sizing: border-box;
+        }
+        @media (max-width: 768px) {
+            body { padding: 6px; }
+            .sticky.left-12 {
+                position: static !important;
+                left: auto !important;
+                z-index: auto !important;
+                box-shadow: none !important;
+            }
+        }
+    </style>
+
+    <script>
         const santriList = ${JSON.stringify(santriMetaArray)};
         const santriIds = santriList.map(s => s.id);
         const rankConfigs = ${rankConfigsJson};
         const defaultRankingScope = "${defaultRankingScope}";
         const storageKey = "${localStorageKey}";
         let currentCardIndex = 0;
+        let currentActiveSheet = 'all';
 
         function getValue(key, rowId) { 
             const el = document.getElementById('val_' + rowId + '_' + key) || document.getElementById('card_val_' + rowId + '_' + key); 
@@ -499,7 +706,10 @@ export const generateRaporFormHtml = (
             }); 
         }
 
-        function calculateRow(rowId) { ${formulaScripts} calculateRanks(); }
+        function calculateRow(rowId) { 
+            ${formulaScripts} 
+            calculateRanks(); 
+        }
 
         function syncFromTable(rowId, key, val) {
             const cardEl = document.getElementById('card_val_' + rowId + '_' + key);
@@ -521,14 +731,45 @@ export const generateRaporFormHtml = (
             if (mode === 'table') {
                 if (tableView) tableView.style.display = 'block';
                 if (cardView) cardView.style.display = 'none';
-                if (btnTable) { btnTable.className = 'bg-white text-teal-800 font-black px-3 py-1.5 rounded-lg text-xs shadow-sm'; }
-                if (btnCard) { btnCard.className = 'text-white font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-white/10'; }
+                if (btnTable) { btnTable.className = 'bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm'; }
+                if (btnCard) { btnCard.className = 'text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15'; }
             } else {
                 if (tableView) tableView.style.display = 'none';
                 if (cardView) cardView.style.display = 'block';
-                if (btnCard) { btnCard.className = 'bg-white text-teal-800 font-black px-3 py-1.5 rounded-lg text-xs shadow-sm'; }
-                if (btnTable) { btnTable.className = 'text-white font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-white/10'; }
+                if (btnCard) { btnCard.className = 'bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm'; }
+                if (btnTable) { btnTable.className = 'text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15'; }
             }
+        }
+
+        function filterBySheet(sheetId) {
+            currentActiveSheet = sheetId;
+            document.querySelectorAll('.sheet-filter-btn').forEach(btn => {
+                btn.className = 'sheet-filter-btn px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all bg-white text-slate-700 border border-slate-200 hover:bg-slate-50';
+            });
+            const activeBtn = document.getElementById('sheet-btn-' + sheetId);
+            if (activeBtn) {
+                activeBtn.className = 'sheet-filter-btn active px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all bg-teal-700 text-white shadow-xs';
+            }
+
+            // In Table View: show/hide columns
+            document.querySelectorAll('.table-col-cell').forEach(cell => {
+                const sId = cell.getAttribute('data-sheet');
+                if (sheetId === 'all' || sId === sheetId) {
+                    cell.style.display = '';
+                } else {
+                    cell.style.display = 'none';
+                }
+            });
+
+            // In Card View: show/hide field items
+            document.querySelectorAll('.card-field-item').forEach(item => {
+                const sId = item.getAttribute('data-sheet');
+                if (sheetId === 'all' || sId === sheetId) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
         }
 
         let filteredSantriList = [...santriList];
@@ -589,7 +830,7 @@ export const generateRaporFormHtml = (
                 }
             }
 
-            // Filter Table View rows too if table exists
+            // Filter Table View rows too
             santriList.forEach(s => {
                 const rowEl = document.getElementById('row_santri_' + s.id);
                 if (rowEl) {
@@ -674,7 +915,7 @@ export const generateRaporFormHtml = (
                     draft.records[sid] = row; 
                 }); 
                 localStorage.setItem(storageKey, JSON.stringify(draft)); 
-                alert('Draft nilai disimpan di perangkat ini.'); 
+                alert('✅ Draft nilai berhasil disimpan di perangkat ini!'); 
             } catch (e) { alert('Gagal menyimpan draft: ' + e.message); } 
         }
 
@@ -695,12 +936,50 @@ export const generateRaporFormHtml = (
             } catch (e) { console.warn('Draft tidak dapat dimuat', e); } 
         }
 
+        function downloadBackupJson() {
+            try {
+                const inputKeys = ${JSON.stringify(inputKeysToSave)};
+                const records = [];
+                santriList.forEach(s => {
+                    const santriRecord = { santriId: s.id, santriName: s.nama, data: {} };
+                    inputKeys.forEach(key => {
+                        const el = document.getElementById('val_' + s.id + '_' + key) || document.getElementById('card_val_' + s.id + '_' + key);
+                        if (el && el.value !== "" && el.value !== null) {
+                            santriRecord.data[key] = el.value;
+                        }
+                    });
+                    records.push(santriRecord);
+                });
+                const payload = {
+                    meta: {
+                        rombelId: ${config.rombelId},
+                        rombelName: "${contextName}",
+                        templateName: "${config.template.name}",
+                        tahunAjaran: "${config.tahunAjaran}",
+                        semester: "${config.semester}",
+                        templateId: "${config.template.id}",
+                        exportedAt: new Date().toISOString()
+                    },
+                    records
+                };
+                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "backup-nilai-${contextName.replace(/[^a-zA-Z0-9]/g, '-')}.json";
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch(err) {
+                alert('Gagal download backup: ' + err.message);
+            }
+        }
+
         function showCellHint(el) { 
             const hint = document.getElementById('cell-hint'); 
             if (!hint || !el) return; 
             const mapel = el.getAttribute('data-mapel') || '-'; 
             const santri = el.getAttribute('data-santri') || '-'; 
-            hint.textContent = 'Kolom: ' + mapel + ' • Santri: ' + santri; 
+            hint.innerHTML = '<span class="opacity-75">Mapel:</span> <b>' + mapel + '</b> <span class="opacity-75 ml-2">Santri:</span> <b>' + santri + '</b>'; 
         }
 
         function submitData() { 
@@ -752,45 +1031,116 @@ export const generateRaporFormHtml = (
             }
             applyCardFilter();
         });
-    </script></head><body class="bg-gray-100 min-h-screen p-2 md:p-4"><div class="max-w-[99%] md:max-w-[98%] mx-auto bg-white shadow-xl rounded-2xl border overflow-hidden flex flex-col min-h-[92vh]"><div class="bg-teal-700 p-4 text-white shrink-0"><div class="flex flex-col md:flex-row md:justify-between md:items-center gap-3"><div><div class="flex items-center gap-2"><h1 class="text-lg md:text-xl font-black">${config.template.name}</h1><span class="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold uppercase">${config.semester}</span></div><p class="text-xs opacity-90">${settings.namaPonpes} | ${contextName}</p><p class="text-[11px] opacity-75">Tahun Ajaran: ${config.tahunAjaran} • Cakupan Ranking: <b class="uppercase">${defaultRankingScope}</b></p></div><div class="flex flex-wrap items-center gap-2 w-full md:w-auto"><div class="bg-teal-800/80 p-1 rounded-xl flex items-center border border-white/20"><button id="btn-mode-table" onclick="setViewMode('table')" class="bg-white text-teal-800 font-black px-3 py-1.5 rounded-lg text-xs shadow-sm">📊 Tabel</button><button id="btn-mode-card" onclick="setViewMode('card')" class="text-white font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-white/10">📇 Form Kartu</button></div><button onclick="saveDraft()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25">Simpan Draft</button><button onclick="submitData()" id="submit-btn" class="bg-white text-teal-700 px-4 py-2 rounded-xl font-black text-xs hover:bg-teal-50 shadow-md">Kirim Nilai</button></div></div><div id="cell-hint" class="mt-2 text-xs font-semibold text-teal-50/95 hidden md:block">Klik/fokus ke kolom nilai untuk melihat nama santri dan mapel.</div></div>
-    
-    <!-- TABLE VIEW -->
-    <div id="table-view-container" class="flex-grow overflow-auto">
-        <table class="w-full text-sm border-collapse"><thead class="sticky-header">${theadHtml}</thead><tbody class="divide-y">${tbodyHtml}</tbody></table>
-    </div>
+    </script>
+</head>
+<body class="bg-slate-100 min-h-screen p-2 md:p-4">
+    <div class="max-w-[99%] md:max-w-[98%] mx-auto bg-white shadow-xl rounded-2xl border border-slate-200 overflow-hidden flex flex-col min-h-[92vh]">
+        <!-- TOP HEADER BAR -->
+        <div class="bg-teal-800 p-4 md:p-5 text-white shrink-0">
+            <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                <div>
+                    <div class="flex items-center gap-2.5 flex-wrap">
+                        <h1 class="text-lg md:text-xl font-black tracking-tight">${config.template.name}</h1>
+                        <span class="text-[11px] bg-white/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">${config.semester}</span>
+                        <span class="text-[11px] bg-teal-900/80 border border-white/20 px-2 py-0.5 rounded-full font-semibold">T.A. ${config.tahunAjaran}</span>
+                    </div>
+                    <p class="text-xs text-teal-100/90 mt-1 font-medium">
+                        <i class="bi bi-building mr-1"></i> ${settings.namaPonpes} &nbsp;|&nbsp; <i class="bi bi-people mr-1"></i> ${contextName}
+                    </p>
+                    <p class="text-[11px] text-teal-200/80 mt-0.5">
+                        <i class="bi bi-trophy mr-1"></i> Cakupan Ranking: <b class="uppercase">${defaultRankingScope}</b>
+                        &nbsp;•&nbsp; <i class="bi bi-person-check mr-1"></i> <b>${targetSantri.length}</b> Santri Aktif
+                        &nbsp;•&nbsp; <i class="bi bi-input-cursor-text mr-1"></i> <b>${interactiveCells.length}</b> Kolom Nilai
+                    </p>
+                </div>
+                
+                <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                    <!-- Switch View Mode -->
+                    <div class="bg-teal-900/90 p-1 rounded-xl flex items-center border border-white/20 shadow-inner">
+                        <button id="btn-mode-table" onclick="setViewMode('table')" class="bg-white text-teal-900 font-black px-3.5 py-1.5 rounded-lg text-xs shadow-sm transition-all">
+                            <i class="bi bi-table mr-1"></i> Tabel Leger
+                        </button>
+                        <button id="btn-mode-card" onclick="setViewMode('card')" class="text-white font-semibold px-3.5 py-1.5 rounded-lg text-xs hover:bg-white/15 transition-all">
+                            <i class="bi bi-card-text mr-1"></i> Form Kartu
+                        </button>
+                    </div>
 
-    <!-- CARD / FORM VIEW (Mobile Friendly) -->
-    <div id="card-view-container" class="flex-grow overflow-auto p-4 bg-gray-50/70" style="display: none;">
-        <!-- Filter Toolbar (Kelas & Rombel Selector) -->
-        ${filterToolbarHtml}
-
-        <!-- Stepper Navigation Bar -->
-        <div class="max-w-2xl mx-auto bg-white p-3 rounded-2xl border shadow-sm mb-4 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20">
-            <div class="flex items-center gap-2">
-                <button id="card-btn-prev" onclick="prevCard()" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs disabled:opacity-40 transition-colors">◀ Sebelumnya</button>
-                <span id="card-progress-text" class="text-xs font-black text-teal-800 bg-teal-50 px-3 py-2 rounded-xl border border-teal-200">1 / ${targetSantri.length}</span>
-                <button id="card-btn-next" onclick="nextCard()" class="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs disabled:opacity-40 transition-colors">Berikutnya ▶</button>
+                    <!-- Draft & Action Buttons -->
+                    <button onclick="saveDraft()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5">
+                        <i class="bi bi-save"></i> Simpan Draft
+                    </button>
+                    <button onclick="downloadBackupJson()" class="bg-white/15 border border-white/30 text-white px-3 py-2 rounded-xl font-bold text-xs hover:bg-white/25 transition-all flex items-center gap-1.5" title="Download file JSON cadangan">
+                        <i class="bi bi-download"></i> Backup
+                    </button>
+                    <button onclick="submitData()" id="submit-btn" class="bg-amber-400 hover:bg-amber-300 text-teal-950 px-4 py-2 rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 active:scale-95">
+                        <i class="bi bi-send-fill"></i> Kirim Nilai
+                    </button>
+                </div>
             </div>
-            <div class="flex-grow max-w-xs">
-                <select id="card-jump-select" onchange="showFilteredCard(parseInt(this.value))" class="w-full border rounded-xl p-2 text-xs font-bold bg-gray-50 focus:bg-white focus:border-teal-500 outline-none">
-                    ${targetSantri.map((s, idx) => `<option value="${idx}">${idx + 1}. ${s.namaLengkap} (${s.nis})</option>`).join('')}
-                </select>
+
+            <!-- Hint helper bar -->
+            <div id="cell-hint" class="mt-3 pt-2 border-t border-teal-700/60 text-xs font-medium text-teal-100 hidden md:block">
+                <i class="bi bi-info-circle mr-1"></i> Klik atau fokus ke salah satu kotak nilai untuk melihat nama santri dan mata pelajaran.
+            </div>
+        </div>
+        
+        <!-- TABLE VIEW -->
+        <div id="table-view-container" class="flex-grow overflow-auto p-2 bg-slate-50">
+            ${sheetTabsToolbarHtml}
+            <div class="border border-slate-300 rounded-xl overflow-x-auto shadow-xs bg-white">
+                <table class="w-full text-sm border-collapse">
+                    <thead class="sticky-header">${theadHtml}</thead>
+                    <tbody class="divide-y divide-slate-200">${tbodyHtml}</tbody>
+                </table>
             </div>
         </div>
 
-        <div class="max-w-2xl mx-auto">
-            <!-- Empty state if filter doesn't match -->
-            <div id="card-empty-state" class="hidden bg-white p-8 rounded-2xl border-2 border-dashed border-gray-300 text-center text-gray-500">
-                <div class="text-3xl mb-2">🔍</div>
-                <h4 class="font-bold text-gray-800 text-sm mb-1">Tidak ada santri yang cocok</h4>
-                <p class="text-xs text-gray-500">Silakan ubah pilihan filter Kelas / Rombel atau kata kunci pencarian Anda.</p>
+        <!-- CARD / FORM VIEW (Mobile Friendly) -->
+        <div id="card-view-container" class="flex-grow overflow-auto p-3 md:p-5 bg-slate-50/70" style="display: none;">
+            <!-- Filter Toolbar -->
+            ${filterToolbarHtml}
+
+            <!-- Sheet Tabs Toolbar if multi-sheet -->
+            ${sheetTabsToolbarHtml}
+
+            <!-- Stepper Navigation Bar -->
+            <div class="max-w-3xl mx-auto bg-white p-3 rounded-2xl border border-slate-200 shadow-sm mb-4 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20">
+                <div class="flex items-center gap-2">
+                    <button id="card-btn-prev" onclick="prevCard()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs disabled:opacity-40 transition-colors flex items-center gap-1">
+                        <i class="bi bi-chevron-left"></i> Sebelumnya
+                    </button>
+                    <span id="card-progress-text" class="text-xs font-black text-teal-900 bg-teal-50 px-3 py-2 rounded-xl border border-teal-200">1 / ${targetSantri.length}</span>
+                    <button id="card-btn-next" onclick="nextCard()" class="px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs disabled:opacity-40 transition-colors flex items-center gap-1">
+                        Berikutnya <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="flex-grow max-w-xs">
+                    <select id="card-jump-select" onchange="showFilteredCard(parseInt(this.value))" class="w-full border border-slate-200 rounded-xl p-2 text-xs font-bold bg-slate-50 focus:bg-white focus:border-teal-500 outline-none">
+                        ${targetSantri.map((s, idx) => `<option value="${idx}">${idx + 1}. ${s.namaLengkap} (${s.nis || '-'})</option>`).join('')}
+                    </select>
+                </div>
             </div>
 
-            ${cardsHtml}
+            <div class="max-w-3xl mx-auto">
+                <!-- Empty state if filter doesn't match -->
+                <div id="card-empty-state" class="hidden bg-white p-8 rounded-2xl border-2 border-dashed border-slate-300 text-center text-slate-500">
+                    <div class="text-3xl mb-2">🔍</div>
+                    <h4 class="font-bold text-slate-800 text-sm mb-1">Tidak ada santri yang cocok</h4>
+                    <p class="text-xs text-slate-500">Silakan ubah pilihan filter Kelas / Rombel atau kata kunci pencarian Anda.</p>
+                </div>
+
+                ${cardsHtml}
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="px-4 py-3 text-center text-[11px] text-slate-500 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>eSantri Web Rapor • Offline-First Digital Ledger</span>
+            <span class="font-semibold text-slate-600">Dibuat dengan eSantri Web by AI Projek</span>
         </div>
     </div>
-
-    <div class="px-4 py-2.5 text-center text-[11px] text-gray-500 border-t border-gray-200 bg-gray-50">dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id</div></div></body></html>`;
+</body>
+</html>`;
 };
 
 export const fetchRaporFromCloud = async (scriptUrl: string): Promise<any[]> => {

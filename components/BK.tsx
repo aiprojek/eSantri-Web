@@ -7,6 +7,7 @@ import { BkSession, Santri } from '../types';
 import { PageHeader } from './common/PageHeader';
 import { SectionCard } from './common/SectionCard';
 import { EmptyState } from './common/EmptyState';
+import { MobileFilterDrawer } from './common/MobileFilterDrawer';
 import { BkModal } from './bk/BkModal';
 import { BkFollowUpModal } from './bk/BkFollowUpModal';
 import { BkSuratModal } from './bk/BkSuratModal';
@@ -33,6 +34,13 @@ const BK: React.FC = () => {
     const [filterKategori, setFilterKategori] = useState('');
     const [filterPrivasi, setFilterPrivasi] = useState('');
     const [filterJadwal, setFilterJadwal] = useState<'semua' | 'ada_jadwal'>('semua');
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+
+    const activeFiltersCount =
+        (filterStatus ? 1 : 0) +
+        (filterKategori ? 1 : 0) +
+        (filterPrivasi ? 1 : 0) +
+        (filterJadwal !== 'semua' ? 1 : 0);
 
     // UI state
     const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -295,8 +303,141 @@ const BK: React.FC = () => {
                 description="Telusuri, pantau perkembangan berkala, dan cetak administrasi penanganan santri."
                 contentClassName="overflow-hidden"
             >
-                {/* Advanced Filter Toolbar */}
-                <div className="p-4 bg-gray-50/70 border-b border-app-border space-y-3">
+                {/* Mobile Search & Filter Drawer Trigger */}
+                <div className="p-3 bg-gray-50/70 border-b border-app-border md:hidden">
+                    <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                            <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                            <input
+                                type="text"
+                                placeholder="Cari santri, NIS, masalah..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="app-input w-full pl-8 pr-3 py-2 text-xs bg-white"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsFilterDrawerOpen(true)}
+                            className={`app-button-secondary h-9 shrink-0 px-3 py-1.5 text-xs flex items-center gap-1.5 ${
+                                activeFiltersCount > 0 ? 'border-indigo-400 bg-indigo-50 text-indigo-800 font-bold' : ''
+                            }`}
+                        >
+                            <i className="bi bi-funnel-fill"></i>
+                            <span>Filter</span>
+                            {activeFiltersCount > 0 && (
+                                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">
+                                    {activeFiltersCount}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Mobile Filter Drawer */}
+                <MobileFilterDrawer
+                    isOpen={isFilterDrawerOpen}
+                    onClose={() => setIsFilterDrawerOpen(false)}
+                    title="Filter Sesi BK"
+                    onReset={() => {
+                        setSearchTerm('');
+                        setFilterStatus('');
+                        setFilterKategori('');
+                        setFilterPrivasi('');
+                        setFilterJadwal('semua');
+                    }}
+                >
+                    <div className="space-y-4 text-xs">
+                        <div>
+                            <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Status Penanganan</label>
+                            <select
+                                value={filterStatus}
+                                onChange={(e) => setFilterStatus(e.target.value)}
+                                className="app-select w-full rounded-xl p-2.5 text-xs font-medium bg-white"
+                            >
+                                <option value="">Semua Status</option>
+                                <option value="Baru">Baru</option>
+                                <option value="Proses">Sedang Diproses</option>
+                                <option value="Pemantauan">Dalam Pemantauan</option>
+                                <option value="Selesai">Selesai / Ditutup</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Kategori Masalah</label>
+                            <select
+                                value={filterKategori}
+                                onChange={(e) => setFilterKategori(e.target.value)}
+                                className="app-select w-full rounded-xl p-2.5 text-xs font-medium bg-white"
+                            >
+                                <option value="">Semua Kategori</option>
+                                <option value="Pribadi">Pribadi</option>
+                                <option value="Sosial">Sosial / Teman</option>
+                                <option value="Belajar">Belajar / Akademik</option>
+                                <option value="Keluarga">Keluarga</option>
+                                <option value="Ibadah">Ibadah & Spiritual</option>
+                                <option value="Homesick">Homesick / Adaptasi</option>
+                                <option value="Kedisiplinan">Kedisiplinan</option>
+                                <option value="Perundungan">Perundungan (Bullying)</option>
+                                <option value="Karir">Karir</option>
+                                <option value="Lainnya">Lainnya</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Tingkat Privasi</label>
+                            <select
+                                value={filterPrivasi}
+                                onChange={(e) => setFilterPrivasi(e.target.value)}
+                                className="app-select w-full rounded-xl p-2.5 text-xs font-medium bg-white"
+                            >
+                                <option value="">Semua Privasi</option>
+                                <option value="Biasa">Biasa</option>
+                                <option value="Rahasia">Rahasia</option>
+                                <option value="Sangat Rahasia">Sangat Rahasia</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Jadwal Kontrol</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterJadwal('semua')}
+                                    className={`p-2.5 rounded-xl border text-xs font-bold transition text-center ${
+                                        filterJadwal === 'semua'
+                                            ? 'bg-indigo-50 border-indigo-500 text-indigo-800'
+                                            : 'bg-white border-gray-200 text-gray-700'
+                                    }`}
+                                >
+                                    Semua
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterJadwal('ada_jadwal')}
+                                    className={`p-2.5 rounded-xl border text-xs font-bold transition text-center flex items-center justify-center gap-1 ${
+                                        filterJadwal === 'ada_jadwal'
+                                            ? 'bg-indigo-50 border-indigo-500 text-indigo-800'
+                                            : 'bg-white border-gray-200 text-gray-700'
+                                    }`}
+                                >
+                                    <i className="bi bi-calendar-check"></i>
+                                    <span>Ada Kontrol</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-center">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Hasil Filter</div>
+                            <div className="text-xl font-black text-indigo-900 mt-0.5">
+                                {filteredSessions.length} <span className="text-xs font-bold uppercase text-indigo-600">Sesi BK</span>
+                            </div>
+                        </div>
+                    </div>
+                </MobileFilterDrawer>
+
+                {/* Advanced Desktop Filter Toolbar */}
+                <div className="hidden md:block p-4 bg-gray-50/70 border-b border-app-border space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
                         {/* Search */}
                         <div className="relative lg:col-span-2">

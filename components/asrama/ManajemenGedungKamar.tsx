@@ -3,6 +3,7 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { GedungAsrama, Kamar } from '../../types';
 import { LabelPintuKamarModal } from './LabelPintuKamarModal';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 // Modal CRUD Gedung
 interface GedungModalProps {
@@ -282,6 +283,9 @@ export const ManajemenGedungKamar: React.FC = () => {
     const [filterGedungId, setFilterGedungId] = useState<number | ''>('');
     const [filterKondisi, setFilterKondisi] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+
+    const activeFilterCount = (filterGedungId ? 1 : 0) + (filterKondisi ? 1 : 0);
 
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.keasramaan === 'write';
 
@@ -385,44 +389,119 @@ export const ManajemenGedungKamar: React.FC = () => {
             )}
 
             {/* Filter Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-gray-50/70 border border-gray-200/80 rounded-xl text-xs">
-                <div>
-                    <label className="block text-gray-600 font-bold mb-1">Filter Gedung:</label>
-                    <select
-                        value={filterGedungId}
-                        onChange={e => setFilterGedungId(e.target.value ? Number(e.target.value) : '')}
-                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-medium"
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-3 sm:p-4 shadow-2xs">
+                {/* Mobile Filter & Search Bar */}
+                <div className="flex sm:hidden items-center gap-2">
+                    <div className="relative flex-1">
+                        <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                        <input
+                            type="text"
+                            placeholder="Cari kamar / musyrif..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsFilterDrawerOpen(true)}
+                        className={`h-9 px-3 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all shrink-0 ${
+                            activeFilterCount > 0
+                                ? 'bg-teal-50 text-teal-800 border-teal-300 shadow-xs'
+                                : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                        }`}
                     >
-                        <option value="">Semua Gedung Asrama</option>
-                        {settings.gedungAsrama.map(g => (
-                            <option key={g.id} value={g.id}>{g.nama} ({g.jenis})</option>
-                        ))}
-                    </select>
+                        <i className="bi bi-funnel-fill text-teal-600"></i>
+                        <span>Filter</span>
+                        {activeFilterCount > 0 && (
+                            <span className="w-4 h-4 rounded-full bg-teal-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </button>
                 </div>
 
-                <div>
-                    <label className="block text-gray-600 font-bold mb-1">Filter Kondisi Fisik:</label>
-                    <select
-                        value={filterKondisi}
-                        onChange={e => setFilterKondisi(e.target.value)}
-                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-medium"
-                    >
-                        <option value="">Semua Kondisi</option>
-                        <option value="Baik">Kondisi Baik</option>
-                        <option value="Cukup">Kondisi Cukup</option>
-                        <option value="Perlu Perbaikan">Perlu Perbaikan</option>
-                    </select>
-                </div>
+                {/* Mobile Filter Drawer */}
+                <MobileFilterDrawer
+                    isOpen={isFilterDrawerOpen}
+                    onClose={() => setIsFilterDrawerOpen(false)}
+                    title="Filter Gedung & Kamar Asrama"
+                    onReset={() => {
+                        setFilterGedungId('');
+                        setFilterKondisi('');
+                    }}
+                >
+                    <div className="space-y-3.5 text-xs">
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">Filter Gedung Asrama</label>
+                            <select
+                                value={filterGedungId}
+                                onChange={e => setFilterGedungId(e.target.value ? Number(e.target.value) : '')}
+                                className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs font-medium"
+                            >
+                                <option value="">Semua Gedung Asrama</option>
+                                {settings.gedungAsrama.map(g => (
+                                    <option key={g.id} value={g.id}>{g.nama} ({g.jenis})</option>
+                                ))}
+                            </select>
+                        </div>
 
-                <div>
-                    <label className="block text-gray-600 font-bold mb-1">Cari Kamar / Musyrif:</label>
-                    <input
-                        type="text"
-                        placeholder="Ketik nama kamar atau musyrif..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-medium"
-                    />
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">Filter Kondisi Fisik</label>
+                            <select
+                                value={filterKondisi}
+                                onChange={e => setFilterKondisi(e.target.value)}
+                                className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs font-medium"
+                            >
+                                <option value="">Semua Kondisi</option>
+                                <option value="Baik">Kondisi Baik</option>
+                                <option value="Cukup">Kondisi Cukup</option>
+                                <option value="Perlu Perbaikan">Perlu Perbaikan</option>
+                            </select>
+                        </div>
+                    </div>
+                </MobileFilterDrawer>
+
+                {/* Desktop Filter Bar */}
+                <div className="hidden sm:grid sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                        <label className="block text-gray-600 font-bold mb-1">Filter Gedung:</label>
+                        <select
+                            value={filterGedungId}
+                            onChange={e => setFilterGedungId(e.target.value ? Number(e.target.value) : '')}
+                            className="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-medium"
+                        >
+                            <option value="">Semua Gedung Asrama</option>
+                            {settings.gedungAsrama.map(g => (
+                                <option key={g.id} value={g.id}>{g.nama} ({g.jenis})</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-gray-600 font-bold mb-1">Filter Kondisi Fisik:</label>
+                        <select
+                            value={filterKondisi}
+                            onChange={e => setFilterKondisi(e.target.value)}
+                            className="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-medium"
+                        >
+                            <option value="">Semua Kondisi</option>
+                            <option value="Baik">Kondisi Baik</option>
+                            <option value="Cukup">Kondisi Cukup</option>
+                            <option value="Perlu Perbaikan">Perlu Perbaikan</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-gray-600 font-bold mb-1">Cari Kamar / Musyrif:</label>
+                        <input
+                            type="text"
+                            placeholder="Ketik nama kamar atau musyrif..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-medium"
+                        />
+                    </div>
                 </div>
             </div>
 

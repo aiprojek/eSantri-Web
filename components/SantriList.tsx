@@ -386,15 +386,17 @@ const SantriList: React.FC = () => {
                 </table>
             </div>
             <div className="md:hidden space-y-3 p-4">
-                <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-600">
-                    <input
-                        type="checkbox"
-                        onChange={handleSelectAll}
-                        checked={paginatedSantri.length > 0 && paginatedSantri.every(s => selectedIds.includes(s.id))}
-                        className="h-4 w-4 cursor-pointer rounded text-teal-600 focus:ring-teal-500"
-                    />
-                    Pilih semua data di halaman ini
-                </label>
+                {filteredSantri.length > 0 && (
+                    <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-600">
+                        <input
+                            type="checkbox"
+                            onChange={handleSelectAll}
+                            checked={paginatedSantri.length > 0 && paginatedSantri.every(s => selectedIds.includes(s.id))}
+                            className="h-4 w-4 cursor-pointer rounded text-teal-600 focus:ring-teal-500"
+                        />
+                        Pilih semua data di halaman ini
+                    </label>
+                )}
 
                 {paginatedSantri.map((s) => (
                     <article key={s.id} className={`rounded-2xl border p-4 shadow-sm ${selectedIds.includes(s.id) ? 'border-teal-300 bg-teal-50/40' : 'border-app-border bg-white'}`}>

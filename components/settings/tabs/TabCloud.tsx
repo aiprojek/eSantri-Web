@@ -450,10 +450,29 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
             async () => {
                 try {
                     const { pushAllToFirebase } = await loadFirebaseRealtimeRuntime();
-                    await pushAllToFirebase(fbUser!.uid);
+                    const targetTenantId = localSettings.cloudSyncConfig.firebasePairedTenantId || fbUser!.uid;
+                    await pushAllToFirebase(targetTenantId);
                     showToast('Semua data berhasil diunggah ke Firebase!', 'success');
                 } catch (err) {
-                    showToast('Gagal mengunggah data.', 'error');
+                    showToast('Gagal mengunggah data: ' + (err as Error).message, 'error');
+                }
+            }
+        );
+    };
+
+    const handleDownloadAllFirebaseData = () => {
+        showConfirmation(
+            'Tarik Data dari Cloud Hub',
+            'Sistem akan mengunduh seluruh data terbaru dari Firebase Hub dan menggabungkannya ke penyimpanan lokal perangkat ini. Lanjutkan?',
+            async () => {
+                try {
+                    const { downloadAllFromFirebase, syncPsbWithFirebaseHub } = await loadFirebaseRealtimeRuntime();
+                    const targetTenantId = localSettings.cloudSyncConfig.firebasePairedTenantId || fbUser!.uid;
+                    await downloadAllFromFirebase(targetTenantId);
+                    await syncPsbWithFirebaseHub(targetTenantId);
+                    showToast('Semua data berhasil disinkronkan dari Firebase!', 'success');
+                } catch (err) {
+                    showToast('Gagal mengunduh data: ' + (err as Error).message, 'error');
                 }
             }
         );
@@ -547,6 +566,7 @@ export const TabCloud: React.FC<TabCloudProps> = ({ localSettings, setLocalSetti
                             onGeneratePairingCode={handleGeneratePairingCode}
                             onLinkEmail={handleLinkFirebaseEmail}
                             onUploadAllData={handleUploadAllFirebaseData}
+                            onDownloadAllData={handleDownloadAllFirebaseData}
                             onToggleCustomFirebase={() => setShowCustomFirebase(!showCustomFirebase)}
                             onSyncConfigChange={handleSyncConfigChange}
                         />

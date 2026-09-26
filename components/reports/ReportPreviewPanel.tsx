@@ -272,10 +272,10 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         }
     };
 
-    const handleDownloadHtml = () => {
+    const handleDownloadHtml = async () => {
         setIsGeneratingFile(true);
         try {
-            printExportFacade.downloadHtml({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
+            await printExportFacade.downloadHtml({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('HTML Offline berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor HTML.', 'error');
@@ -285,10 +285,10 @@ export const ReportPreviewPanel: React.FC<ReportPreviewPanelProps> = ({ previewC
         }
     };
 
-    const handleDownloadWord = () => {
+    const handleDownloadWord = async () => {
         setIsGeneratingFile(true);
         try {
-            printExportFacade.downloadWord({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
+            await printExportFacade.downloadWord({ elementId: 'preview-area', fileName: getBaseFileName(), paperSize, target: 'report' });
             triggerSuccessDownload('Word Document (.doc) berhasil diunduh.');
         } catch (e) {
             onToast('Gagal ekspor Word Document.', 'error');

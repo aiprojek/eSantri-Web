@@ -1371,7 +1371,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
         const originalTransform = contentWrapperRef.current.style.transform;
         contentWrapperRef.current.style.transform = 'none';
         try {
-            exportToHtml('surat-preview-container', `Surat_${nomorSurat.replace(/[\/\\:*?"<>|]/g, '-') || 'Draft'}`);
+            await exportToHtml('surat-preview-container', `Surat_${nomorSurat.replace(/[\/\\:*?"<>|]/g, '-') || 'Draft'}`);
             setIsDownloadMenuOpen(false);
         } finally {
             contentWrapperRef.current.style.transform = originalTransform;
@@ -1389,7 +1389,7 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
         const originalTransform = contentWrapperRef.current.style.transform;
         contentWrapperRef.current.style.transform = 'none';
         try {
-            exportToWord('surat-preview-container', `Surat_${nomorSurat.replace(/[\/\\:*?"<>|]/g, '-') || 'Draft'}`);
+            await exportToWord('surat-preview-container', `Surat_${nomorSurat.replace(/[\/\\:*?"<>|]/g, '-') || 'Draft'}`);
             setIsDownloadMenuOpen(false);
         } finally {
             contentWrapperRef.current.style.transform = originalTransform;

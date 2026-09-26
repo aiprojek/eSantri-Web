@@ -236,6 +236,11 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
     const [zoomLevel, setZoomLevel] = useState<'auto' | '50' | '75' | '100'>('auto');
     const [containerWidth, setContainerWidth] = useState<number>(800);
 
+    // Zoom & Scaling state for Rapor preview
+    const raporPreviewContainerRef = useRef<HTMLDivElement>(null);
+    const [raporZoomLevel, setRaporZoomLevel] = useState<'auto' | '50' | '75' | '100'>('auto');
+    const [raporContainerWidth, setRaporContainerWidth] = useState<number>(800);
+
     // Save preferences on changes
     useEffect(() => {
         try {
@@ -294,6 +299,31 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
         });
 
         observer.observe(previewContainerRef.current);
+        window.addEventListener('resize', updateWidth);
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('resize', updateWidth);
+        };
+    }, [activeTab]);
+
+    // Track rapor preview container width for responsive Auto Zoom
+    useEffect(() => {
+        if (!raporPreviewContainerRef.current || activeTab !== 'rapor') return;
+
+        const updateWidth = () => {
+            if (raporPreviewContainerRef.current) {
+                setRaporContainerWidth(raporPreviewContainerRef.current.clientWidth);
+            }
+        };
+
+        updateWidth();
+
+        const observer = new ResizeObserver(() => {
+            updateWidth();
+        });
+
+        observer.observe(raporPreviewContainerRef.current);
         window.addEventListener('resize', updateWidth);
 
         return () => {
@@ -366,6 +396,21 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
     };
 
     const currentScale = getScale();
+
+    // Rapor Semester A4 Portrait is ~793.7px width x 1122.5px height (21cm x 29.7cm at 96 DPI)
+    const BASE_RAPOR_WIDTH = 793.7;
+    const BASE_RAPOR_HEIGHT = 1122.5;
+
+    const getRaporScale = (): number => {
+        if (raporZoomLevel === '50') return 0.5;
+        if (raporZoomLevel === '75') return 0.75;
+        if (raporZoomLevel === '100') return 1.0;
+
+        const availableW = Math.max(260, raporContainerWidth - 24);
+        return Math.min(1.0, availableW / BASE_RAPOR_WIDTH);
+    };
+
+    const raporCurrentScale = getRaporScale();
 
     // Default Date Range: Current Month
     const date = new Date();
@@ -458,49 +503,51 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-[70] flex justify-center items-end sm:items-center p-0 sm:p-4">
-            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-4xl h-[94vh] sm:h-[90vh] flex flex-col animate-slide-up sm:animate-none relative overflow-hidden">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-2xs z-[70] flex justify-center items-center p-3.5 sm:p-5 md:p-6 animate-fade-in">
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl h-[92vh] sm:h-[88vh] flex flex-col relative overflow-hidden">
                 {/* Header */}
-                <div className="p-4 border-b flex justify-between items-center bg-gray-50 shrink-0">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                <div className="p-3.5 sm:p-4 border-b flex justify-between items-center bg-gray-50 shrink-0 gap-2">
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm sm:text-lg shadow-sm shrink-0">
                             {santri.namaLengkap.charAt(0)}
                         </div>
-                        <div>
-                            <h3 className="font-bold text-gray-800 text-base">{santri.namaLengkap}</h3>
-                            <p className="text-xs text-gray-500">
+                        <div className="min-w-0">
+                            <h3 className="font-bold text-gray-800 text-sm sm:text-base truncate">{santri.namaLengkap}</h3>
+                            <p className="text-[11px] sm:text-xs text-gray-500 truncate">
                                 NIS: {santri.nis} • Target: <span className="font-semibold text-teal-700">{santri.targetJuz || 30} Juz</span>
                             </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         {/* Instant WhatsApp Share Button */}
                         <button
                             type="button"
                             onClick={() => setIsWaModalOpen(true)}
-                            className="text-xs font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-3 py-1.5 rounded-lg hover:bg-emerald-200 flex items-center gap-1.5 transition-colors shadow-xs"
+                            className="text-xs font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-emerald-200 flex items-center gap-1.5 transition-colors shadow-2xs whitespace-nowrap shrink-0"
                             title="Format Laporan & Kirim ke WhatsApp Wali Santri"
                         >
                             <i className="bi bi-whatsapp text-emerald-700"></i>
+                            <span className="sm:hidden">WA</span>
                             <span className="hidden sm:inline">Kirim WA Wali</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={() => setShowPrintConfig(!showPrintConfig)}
-                            className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-100 flex items-center gap-1.5 transition-colors shadow-xs"
+                            className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-teal-100 flex items-center gap-1.5 transition-colors shadow-2xs whitespace-nowrap shrink-0"
                         >
                             <i className="bi bi-printer"></i>
+                            <span className="sm:hidden">Cetak</span>
                             <span className="hidden sm:inline">Cetak Dokumen</span>
                         </button>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
-                            <i className="bi bi-x-lg text-lg"></i>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                            <i className="bi bi-x-lg text-base"></i>
                         </button>
                     </div>
                 </div>
 
                 {/* Tabs (5 Core Features) */}
-                <div className="flex border-b border-gray-200 bg-white px-4 shrink-0 text-xs sm:text-sm overflow-x-auto">
+                <div className="flex border-b border-gray-200 bg-white px-4 shrink-0 text-xs sm:text-sm overflow-x-auto no-scrollbar">
                     <button
                         onClick={() => setActiveTab('timeline')}
                         className={`py-3 px-3.5 font-bold border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
@@ -508,7 +555,7 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                         }`}
                     >
                         <i className="bi bi-clock-history"></i>
-                        <span>Riwayat Setoran ({records.length})</span>
+                        <span>Riwayat ({records.length})</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('grid')}
@@ -517,7 +564,7 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                         }`}
                     >
                         <i className="bi bi-grid-3x3-gap-fill"></i>
-                        <span>Peta 30 Juz & Radar</span>
+                        <span>Peta 30 Juz</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('munaqosyah')}
@@ -526,7 +573,7 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                         }`}
                     >
                         <i className="bi bi-patch-check-fill text-teal-600"></i>
-                        <span>Ujian Munaqosyah</span>
+                        <span>Munaqosyah</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('rapor')}
@@ -569,23 +616,29 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                             <button
                                 type="button"
                                 onClick={handlePrintLaporan}
-                                className="bg-teal-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-teal-700 flex items-center justify-center gap-1.5 shadow-sm"
+                                className="bg-teal-600 text-white py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-teal-700 flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap"
                             >
-                                <i className="bi bi-file-earmark-pdf-fill"></i> PDF Rekap Mutaba'ah
+                                <i className="bi bi-file-earmark-pdf-fill"></i>
+                                <span className="sm:hidden">Rekap Mutaba'ah</span>
+                                <span className="hidden sm:inline">PDF Rekap Mutaba'ah</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={handlePrintRapor}
-                                className="bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-800 flex items-center justify-center gap-1.5 shadow-sm"
+                                className="bg-emerald-700 text-white py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-emerald-800 flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap"
                             >
-                                <i className="bi bi-journal-check"></i> PDF Rapor Semester
+                                <i className="bi bi-journal-check"></i>
+                                <span className="sm:hidden">Rapor Semester</span>
+                                <span className="hidden sm:inline">PDF Rapor Semester</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={handlePrintSyahadah}
-                                className="bg-amber-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-amber-700 flex items-center justify-center gap-1.5 shadow-sm"
+                                className="bg-amber-600 text-white py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-amber-700 flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap"
                             >
-                                <i className="bi bi-award-fill"></i> PDF Syahadah
+                                <i className="bi bi-award-fill"></i>
+                                <span className="sm:hidden">Syahadah</span>
+                                <span className="hidden sm:inline">PDF Syahadah</span>
                             </button>
                         </div>
                     </div>
@@ -819,7 +872,7 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                         <div className="space-y-4">
                             {/* Controls Card */}
                             <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-                                <div className="flex justify-between items-center border-b pb-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
                                     <div>
                                         <h4 className="text-xs font-extrabold uppercase text-gray-800 tracking-wider flex items-center gap-1.5">
                                             <i className="bi bi-journal-text text-teal-600"></i>
@@ -830,9 +883,10 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                     <button
                                         type="button"
                                         onClick={handlePrintRapor}
-                                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                                        className="w-full sm:w-auto px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all whitespace-nowrap shrink-0"
                                     >
-                                        <i className="bi bi-printer"></i> Cetak PDF Rapor
+                                        <i className="bi bi-printer"></i>
+                                        <span>Cetak PDF Rapor</span>
                                     </button>
                                 </div>
 
@@ -950,28 +1004,30 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                             </label>
                                             <p className="text-[10px] text-gray-500">Pilih format visualisasi hafalan yang dicetak pada halaman rapor santri.</p>
                                         </div>
-                                        <div className="inline-flex rounded-lg border border-gray-300 bg-white p-0.5 text-xs shadow-2xs">
+                                        <div className="grid grid-cols-2 gap-1 w-full sm:w-auto sm:inline-flex rounded-lg border border-gray-300 bg-white p-0.5 text-xs shadow-2xs">
                                             <button
                                                 type="button"
                                                 onClick={() => setRaporPetaMode('grid30')}
-                                                className={`px-3 py-1 rounded-md font-bold transition-all ${
+                                                className={`px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition-all text-center whitespace-nowrap ${
                                                     raporPetaMode === 'grid30'
                                                         ? 'bg-teal-700 text-white shadow-xs'
                                                         : 'text-gray-600 hover:text-gray-900'
                                                 }`}
                                             >
-                                                Peta 30 Juz Al-Qur'an
+                                                <span className="sm:hidden">Peta 30 Juz</span>
+                                                <span className="hidden sm:inline">Peta 30 Juz Al-Qur'an</span>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setRaporPetaMode('perSurah')}
-                                                className={`px-3 py-1 rounded-md font-bold transition-all ${
+                                                className={`px-2.5 sm:px-3 py-1.5 rounded-md font-bold transition-all text-center whitespace-nowrap ${
                                                     raporPetaMode === 'perSurah'
                                                         ? 'bg-teal-700 text-white shadow-xs'
                                                         : 'text-gray-600 hover:text-gray-900'
                                                 }`}
                                             >
-                                                Per Surat (Ibtidaiyah / Rentang Juz)
+                                                <span className="sm:hidden">Per Surat</span>
+                                                <span className="hidden sm:inline">Per Surat / Rentang Juz</span>
                                             </button>
                                         </div>
                                     </div>
@@ -979,15 +1035,15 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                     {raporPetaMode === 'perSurah' && (
                                         <div className="pt-2.5 border-t border-gray-200 space-y-2">
                                             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-teal-900">
-                                                        🎯 Model Pilihan Juz:
+                                                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                                                    <span className="text-xs font-bold text-teal-900 shrink-0">
+                                                        🎯 Model Pilihan:
                                                     </span>
-                                                    <div className="inline-flex rounded-md border border-teal-300 bg-white p-0.5 text-[11px]">
+                                                    <div className="grid grid-cols-2 gap-1 sm:inline-flex rounded-md border border-teal-300 bg-white p-0.5 text-[11px]">
                                                         <button
                                                             type="button"
                                                             onClick={() => setRaporPetaRentangType('single')}
-                                                            className={`px-2 py-0.5 rounded font-bold transition-all ${
+                                                            className={`px-2 py-1 rounded font-bold transition-all text-center whitespace-nowrap ${
                                                                 raporPetaRentangType === 'single'
                                                                     ? 'bg-teal-700 text-white'
                                                                     : 'text-teal-900 hover:bg-teal-50'
@@ -998,13 +1054,14 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                                         <button
                                                             type="button"
                                                             onClick={() => setRaporPetaRentangType('range')}
-                                                            className={`px-2 py-0.5 rounded font-bold transition-all ${
+                                                            className={`px-2 py-1 rounded font-bold transition-all text-center whitespace-nowrap ${
                                                                 raporPetaRentangType === 'range'
                                                                     ? 'bg-teal-700 text-white'
                                                                     : 'text-teal-900 hover:bg-teal-50'
                                                             }`}
                                                         >
-                                                            Rentang Juz (Misal Juz 30 - 29)
+                                                            <span className="sm:hidden">Rentang</span>
+                                                            <span className="hidden sm:inline">Rentang Juz</span>
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1456,66 +1513,145 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                             </div>
 
                             {/* Live Preview of Rapor */}
-                            <div className="bg-slate-800 p-4 rounded-2xl shadow-inner flex flex-col items-center">
-                                <div className="w-full flex justify-between items-center text-slate-300 text-xs mb-3 pb-2 border-b border-slate-700">
-                                    <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-                                        <i className="bi bi-eye-fill"></i> Pratinjau Dokumen Rapor Tahfizh (A4):
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={handlePrintRapor}
-                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs transition-colors"
-                                    >
-                                        <i className="bi bi-printer mr-1"></i> Cetak / Simpan PDF
-                                    </button>
+                            <div className="bg-slate-800 p-3 sm:p-5 rounded-2xl shadow-inner space-y-3">
+                                {/* Preview Controls Bar */}
+                                <div className="flex flex-wrap justify-between items-center gap-2 text-slate-300 text-xs border-b border-slate-700 pb-2.5">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-emerald-400 flex items-center gap-1.5">
+                                            <i className="bi bi-eye-fill"></i> Pratinjau Dokumen Rapor (A4):
+                                        </span>
+                                        <span className="text-[11px] text-slate-400">
+                                            Skala: <strong className="text-white">{Math.round(raporCurrentScale * 100)}%</strong>
+                                        </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        {/* Zoom Mode Buttons */}
+                                        <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-700">
+                                            <button
+                                                type="button"
+                                                onClick={() => setRaporZoomLevel('auto')}
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                                                    raporZoomLevel === 'auto' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                                                }`}
+                                                title="Sesuaikan otomatis dengan lebar layar"
+                                            >
+                                                <i className="bi bi-aspect-ratio mr-1"></i> Auto
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setRaporZoomLevel('50')}
+                                                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                                                    raporZoomLevel === '50' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                                                }`}
+                                            >
+                                                50%
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setRaporZoomLevel('75')}
+                                                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                                                    raporZoomLevel === '75' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                                                }`}
+                                            >
+                                                75%
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setRaporZoomLevel('100')}
+                                                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                                                    raporZoomLevel === '100' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                                                }`}
+                                            >
+                                                100%
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={handlePrintRapor}
+                                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap shrink-0"
+                                        >
+                                            <i className="bi bi-printer"></i>
+                                            <span className="sm:hidden">PDF</span>
+                                            <span className="hidden sm:inline">Cetak PDF</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="w-full overflow-x-auto flex justify-center pb-2">
-                                    <div id="tahfizh-rapor-preview-screen" className="shadow-2xl scale-90 sm:scale-100 origin-top bg-white print-portrait">
-                                        <TahfizhSemesterRaporTemplate
-                                            santri={santri}
-                                            records={records}
-                                            settings={{
-                                                ...settings,
-                                                tanggalRaporDefault: raporTanggal || settings.tanggalRaporDefault,
-                                                tempatRaporDefault: raporTempat.trim() || settings.tempatRaporDefault
+
+                                {/* Container with Responsive Auto-Zoom */}
+                                <div
+                                    ref={raporPreviewContainerRef}
+                                    className="overflow-auto flex justify-center items-start p-1 sm:p-2 bg-slate-900/50 rounded-xl border border-slate-700/50 custom-scrollbar"
+                                    style={{ minHeight: '320px' }}
+                                >
+                                    <div
+                                        style={{
+                                            width: `${BASE_RAPOR_WIDTH * raporCurrentScale}px`,
+                                            height: `${BASE_RAPOR_HEIGHT * raporCurrentScale}px`,
+                                            position: 'relative'
+                                        }}
+                                        className="shrink-0 transition-all duration-150"
+                                    >
+                                        <div
+                                            id="tahfizh-rapor-preview-screen"
+                                            style={{
+                                                transform: `scale(${raporCurrentScale})`,
+                                                transformOrigin: 'top left',
+                                                width: `${BASE_RAPOR_WIDTH}px`,
+                                                height: `${BASE_RAPOR_HEIGHT}px`,
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0
                                             }}
-                                            semester={raporSemester}
-                                            tahunAjaran={raporTahunAjaran}
-                                            tanggalRapor={raporTanggal}
-                                            targetJuz={santri.targetJuz || 30}
-                                            catatanMuhaffizh={raporCatatan}
-                                            
-                                            orangTuaMode={raporOrangTuaMode}
-                                            orangTuaName={raporOrangTuaMode === 'manual' ? raporCustomOrangTuaName : undefined}
-                                            orangTuaLabel={raporOrangTuaMode === 'manual' ? raporCustomOrangTuaLabel : undefined}
-                                            
-                                            muhaffizhMode={raporMuhaffizhMode === 'select' ? 'manual' : raporMuhaffizhMode}
-                                            muhaffizhName={
-                                                raporMuhaffizhMode === 'select' 
-                                                    ? settings.tenagaPengajar.find(t => t.id === raporSelectedMuhaffizhId)?.nama 
-                                                    : raporMuhaffizhMode === 'manual' 
-                                                        ? raporCustomMuhaffizhName 
-                                                        : undefined
-                                            }
-                                            muhaffizhLabel={raporMuhaffizhMode === 'manual' ? raporCustomMuhaffizhLabel : undefined}
-                                            
-                                            mudirMode={raporMudirMode === 'select' ? 'manual' : raporMudirMode}
-                                            mudirName={
-                                                raporMudirMode === 'select'
-                                                    ? settings.tenagaPengajar.find(t => t.id === raporSelectedMudirId)?.nama
-                                                    : raporMudirMode === 'manual'
-                                                        ? raporCustomMudirName
-                                                        : undefined
-                                            }
-                                            mudirJabatan={raporMudirMode === 'manual' ? raporCustomMudirJabatan : undefined}
-                                            
-                                            petaMode={raporPetaMode}
-                                            petaJuzStart={raporPetaRentangType === 'range' ? Math.min(raporPetaJuzStart, raporPetaJuzEnd) : raporPetaJuzStart}
-                                            petaJuzEnd={raporPetaRentangType === 'range' ? Math.max(raporPetaJuzStart, raporPetaJuzEnd) : raporPetaJuzStart}
-                                            petaJuzTarget={raporPetaJuzStart}
-                                            formatMode={raporFormatMode}
-                                            manualHijri={raporManualHijri}
-                                        />
+                                            className="shadow-2xl rounded-lg overflow-hidden bg-white print-portrait"
+                                        >
+                                            <TahfizhSemesterRaporTemplate
+                                                santri={santri}
+                                                records={records}
+                                                settings={{
+                                                    ...settings,
+                                                    tanggalRaporDefault: raporTanggal || settings.tanggalRaporDefault,
+                                                    tempatRaporDefault: raporTempat.trim() || settings.tempatRaporDefault
+                                                }}
+                                                semester={raporSemester}
+                                                tahunAjaran={raporTahunAjaran}
+                                                tanggalRapor={raporTanggal}
+                                                targetJuz={santri.targetJuz || 30}
+                                                catatanMuhaffizh={raporCatatan}
+                                                
+                                                orangTuaMode={raporOrangTuaMode}
+                                                orangTuaName={raporOrangTuaMode === 'manual' ? raporCustomOrangTuaName : undefined}
+                                                orangTuaLabel={raporOrangTuaMode === 'manual' ? raporCustomOrangTuaLabel : undefined}
+                                                
+                                                muhaffizhMode={raporMuhaffizhMode === 'select' ? 'manual' : raporMuhaffizhMode}
+                                                muhaffizhName={
+                                                    raporMuhaffizhMode === 'select' 
+                                                        ? settings.tenagaPengajar.find(t => t.id === raporSelectedMuhaffizhId)?.nama 
+                                                        : raporMuhaffizhMode === 'manual' 
+                                                            ? raporCustomMuhaffizhName 
+                                                            : undefined
+                                                }
+                                                muhaffizhLabel={raporMuhaffizhMode === 'manual' ? raporCustomMuhaffizhLabel : undefined}
+                                                
+                                                mudirMode={raporMudirMode === 'select' ? 'manual' : raporMudirMode}
+                                                mudirName={
+                                                    raporMudirMode === 'select'
+                                                        ? settings.tenagaPengajar.find(t => t.id === raporSelectedMudirId)?.nama
+                                                        : raporMudirMode === 'manual'
+                                                            ? raporCustomMudirName
+                                                            : undefined
+                                                }
+                                                mudirJabatan={raporMudirMode === 'manual' ? raporCustomMudirJabatan : undefined}
+                                                
+                                                petaMode={raporPetaMode}
+                                                petaJuzStart={raporPetaRentangType === 'range' ? Math.min(raporPetaJuzStart, raporPetaJuzEnd) : raporPetaJuzStart}
+                                                petaJuzEnd={raporPetaRentangType === 'range' ? Math.max(raporPetaJuzStart, raporPetaJuzEnd) : raporPetaJuzStart}
+                                                petaJuzTarget={raporPetaJuzStart}
+                                                formatMode={raporFormatMode}
+                                                manualHijri={raporManualHijri}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1636,11 +1772,11 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                         <label className="text-[11px] font-bold text-gray-700 uppercase">
                                             Jenis / Rentang Capaian Hafalan:
                                         </label>
-                                        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5 text-xs">
+                                        <div className="grid grid-cols-3 gap-1 w-full sm:w-auto sm:inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5 text-xs">
                                             <button
                                                 type="button"
                                                 onClick={() => setCapaianMode('preset')}
-                                                className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                                                className={`px-2 sm:px-2.5 py-1.5 rounded-md font-bold transition-all text-center whitespace-nowrap ${
                                                     capaianMode === 'preset' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-600 hover:text-gray-800'
                                                 }`}
                                             >
@@ -1649,16 +1785,17 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                             <button
                                                 type="button"
                                                 onClick={() => setCapaianMode('rentang')}
-                                                className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                                                className={`px-2 sm:px-2.5 py-1.5 rounded-md font-bold transition-all text-center whitespace-nowrap ${
                                                     capaianMode === 'rentang' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-600 hover:text-gray-800'
                                                 }`}
                                             >
-                                                Rentang Juz (Per 5/10 Juz)
+                                                <span className="sm:hidden">Rentang</span>
+                                                <span className="hidden sm:inline">Rentang Juz</span>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setCapaianMode('custom')}
-                                                className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                                                className={`px-2 sm:px-2.5 py-1.5 rounded-md font-bold transition-all text-center whitespace-nowrap ${
                                                     capaianMode === 'custom' ? 'bg-white text-teal-700 shadow-xs' : 'text-gray-600 hover:text-gray-800'
                                                 }`}
                                             >
@@ -2092,10 +2229,11 @@ export const TahfizhDetailModal: React.FC<TahfizhDetailModalProps> = ({ isOpen, 
                                 <button
                                     type="button"
                                     onClick={handlePrintSyahadah}
-                                    className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold py-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all"
+                                    className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all text-center"
                                 >
-                                    <i className="bi bi-printer-fill text-base"></i>
-                                    <span>Download / Cetak PDF ({getFinalDocTitle()})</span>
+                                    <i className="bi bi-printer-fill text-base shrink-0"></i>
+                                    <span className="sm:hidden">Download / Cetak PDF</span>
+                                    <span className="hidden sm:inline">Download / Cetak PDF ({getFinalDocTitle()})</span>
                                 </button>
                             </div>
 

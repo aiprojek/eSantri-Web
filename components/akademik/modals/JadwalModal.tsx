@@ -13,9 +13,10 @@ interface JadwalModalProps {
     days: string[];
     mapelList: MataPelajaran[];
     teacherList: TenagaPengajar[];
+    currentRombelId?: number;
 }
 
-export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSave, onDelete, slot, initialData, days, mapelList, teacherList }) => {
+export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSave, onDelete, slot, initialData, days, mapelList, teacherList, currentRombelId }) => {
     const { showConfirmation } = useAppContext();
     const [mapelId, setMapelId] = useState<string>('');
     const [guruId, setGuruId] = useState<string>('');
@@ -38,7 +39,7 @@ export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSav
         }
     }, [isOpen, initialData]);
 
-    // Enhanced Grouping Logic: Availability AND Competency
+    // Enhanced Grouping Logic: Availability (Day, Hour, Rombel) AND Competency
     const groupedTeachers = useMemo(() => {
         if (!slot) return { recommended: [], othersAvailable: [], unavailable: [] };
         
@@ -49,13 +50,24 @@ export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSav
         const unavailable: TenagaPengajar[] = [];
         
         teacherList.forEach(t => {
+            // Exclude non-teaching staff (tenaga kependidikan)
+            if (t.jenisPegawai === 'kependidikan') return;
+
             // Check Availability Day
             const isAvailableDay = !t.hariMasuk || t.hariMasuk.length === 0 || t.hariMasuk.includes(slot.hari);
+
+            // Check Availability Hour (Jam Ke-)
+            const isAvailableHour = !t.jamMasuk || t.jamMasuk.length === 0 || t.jamMasuk.includes(slot.jamKe);
+
+            // Check Rombel Restriction (if currentRombelId is provided)
+            const isAllowedRombel = !currentRombelId || !t.availableRombelIds || t.availableRombelIds.length === 0 || t.availableRombelIds.includes(currentRombelId);
             
+            const isFullyAvailable = isAvailableDay && isAvailableHour && isAllowedRombel;
+
             // Check Competency (Only if Mapel is selected)
             const hasCompetency = mId && t.kompetensiMapelIds && t.kompetensiMapelIds.includes(mId);
 
-            if (isAvailableDay) {
+            if (isFullyAvailable) {
                 if (hasCompetency) {
                     recommended.push(t);
                 } else {
@@ -67,7 +79,7 @@ export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSav
         });
         
         return { recommended, othersAvailable, unavailable };
-    }, [teacherList, slot, mapelId]);
+    }, [teacherList, slot, mapelId, currentRombelId]);
 
     if (!isOpen || !slot) return null;
 
@@ -133,26 +145,26 @@ export const JadwalModal: React.FC<JadwalModalProps> = ({ isOpen, onClose, onSav
                                     <option value="-2" className="font-bold text-teal-600">-- MUSYRIF / PENGAMPU TAHFIZH --</option>
                                     
                                     {groupedTeachers.recommended.length > 0 && (
-                                        <optgroup label="🌟 Rekomendasi (Sesuai Kompetensi)">
+                                        <optgroup label="🌟 Rekomendasi (Sesuai Pengampu & Waktu)">
                                             {groupedTeachers.recommended.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                                         </optgroup>
                                     )}
                                     
                                     {groupedTeachers.othersAvailable.length > 0 && (
-                                        <optgroup label="✅ Tersedia Hari Ini (Mapel Lain)">
+                                        <optgroup label="✅ Tersedia di Jam Ini (Guru Mapel Lain)">
                                             {groupedTeachers.othersAvailable.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                                         </optgroup>
                                     )}
                                     
                                     {groupedTeachers.unavailable.length > 0 && (
-                                        <optgroup label="⚠️ Tidak Tersedia Hari Ini">
+                                        <optgroup label="⚠️ Di Luar Kesanggupan Waktu / Batasan Rombel">
                                             {groupedTeachers.unavailable.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                                         </optgroup>
                                     )}
                                 </select>
                                 {mapelId && groupedTeachers.recommended.length === 0 && (
-                                    <p className="text-[10px] text-yellow-600 mt-1 italic">
-                                        <i className="bi bi-info-circle mr-1"></i> Tidak ada guru yang diset kompetensi mapel ini. Silakan atur di Data Master.
+                                    <p className="text-[10px] text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200 mt-1 italic">
+                                        <i className="bi bi-info-circle mr-1"></i> Belum ada guru yang diplot untuk mapel ini atau sedang di luar jam kesanggupannya. Atur di menu <strong>Kurikulum &gt; Plotting Pengampu</strong>.
                                     </p>
                                 )}
                             </div>

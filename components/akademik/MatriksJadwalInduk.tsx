@@ -276,24 +276,28 @@ export const MatriksJadwalInduk: React.FC = () => {
     return (
         <div className="space-y-6">
             {/* Sub Mode Selector */}
-            <div className="flex bg-gray-100 p-1 rounded-xl w-fit text-xs font-bold">
+            <div className="w-full sm:w-fit grid grid-cols-2 sm:flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 shadow-2xs gap-1 text-xs font-bold">
                 <button
+                    type="button"
                     onClick={() => setViewSubTab('matriks')}
-                    className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-                        viewSubTab === 'matriks' ? 'bg-white text-teal-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 rounded-lg transition-all text-center ${
+                        viewSubTab === 'matriks' ? 'bg-teal-700 text-white shadow-2xs' : 'text-gray-700 hover:text-gray-900 hover:bg-white/60'
                     }`}
                 >
-                    <i className="bi bi-grid-3x3"></i>
-                    <span>Matriks Jadwal Induk (Master Board)</span>
+                    <i className="bi bi-grid-3x3 text-xs shrink-0"></i>
+                    <span className="hidden sm:inline">Matriks Jadwal Induk (Master Board)</span>
+                    <span className="sm:hidden">Matriks Induk</span>
                 </button>
                 <button
+                    type="button"
                     onClick={() => setViewSubTab('rpe')}
-                    className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-                        viewSubTab === 'rpe' ? 'bg-white text-teal-800 shadow-2xs' : 'text-gray-600 hover:text-gray-900'
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 rounded-lg transition-all text-center ${
+                        viewSubTab === 'rpe' ? 'bg-teal-700 text-white shadow-2xs' : 'text-gray-700 hover:text-gray-900 hover:bg-white/60'
                     }`}
                 >
-                    <i className="bi bi-calculator"></i>
-                    <span>Rencana Pekan Efektif (RPE)</span>
+                    <i className="bi bi-calculator text-xs shrink-0"></i>
+                    <span className="hidden sm:inline">Rencana Pekan Efektif (RPE)</span>
+                    <span className="sm:hidden">Pekan Efektif (RPE)</span>
                 </button>
             </div>
 

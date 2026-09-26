@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../../AppContext';
 import { PsbConfig, PondokSettings, PsbDesignStyle, PsbFormTemplate, PsbSubmissionMethod } from '../../types';
 import { CustomFieldEditor } from './common/CustomFieldEditor';
-import { getStandaloneDocumentStyles } from '../../utils/standaloneStyles';
+import { getStandaloneDocumentStyles, getStandaloneDocumentStylesSync } from '../../utils/standaloneStyles';
 
 interface PsbFormBuilderProps {
     config: PsbConfig;
@@ -33,9 +33,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     const [googleScriptUrl, setGoogleScriptUrl] = useState(config.googleScriptUrl || '');
     const [showScriptHelper, setShowScriptHelper] = useState(false);
     const [copiedScript, setCopiedScript] = useState(false);
-    const previewViewportRef = useRef<HTMLDivElement | null>(null);
     const [manualZoom, setManualZoom] = useState(1);
-    const [smartZoomScale, setSmartZoomScale] = useState(1);
     const [mobileTab, setMobileTab] = useState<'config' | 'preview'>('config');
 
     const styles: {id: PsbDesignStyle, label: string}[] = [
@@ -432,8 +430,8 @@ function doPost(e) {
 }
 `;
 
-    const generateHtml = () => {
-        const standaloneStyles = getStandaloneDocumentStyles();
+    const generateHtml = (isForPreview = false) => {
+        const standaloneStyles = getStandaloneDocumentStylesSync();
         const style = localConfig.designStyle || 'classic';
         const targetJenjang = settings.jenjang.find((j) => j.id === localConfig.targetJenjangId);
         const jenjangName = targetJenjang ? targetJenjang.nama : 'Umum';
@@ -568,13 +566,21 @@ function doPost(e) {
              </label>`
         ).join('');
 
-        let bodyClass = "bg-gray-100 min-h-screen py-10 font-sans text-gray-800 print:bg-white print:py-0";
-        let wrapperClass = "bg-white shadow-xl mx-auto max-w-2xl p-8 rounded-lg print:shadow-none print:max-w-none print:p-0";
+        let bodyClass = isForPreview 
+            ? "bg-white min-h-screen p-6 sm:p-10 font-sans text-gray-800 m-0"
+            : "bg-gray-100 min-h-screen py-10 font-sans text-gray-800 print:bg-white print:py-0";
+        let wrapperClass = isForPreview 
+            ? "w-full max-w-2xl mx-auto"
+            : "bg-white shadow-xl mx-auto max-w-2xl p-8 rounded-lg print:shadow-none print:max-w-none print:p-0";
         let headerHtml = `<div class="text-center mb-8"><h1 class="text-2xl font-bold">${settings.namaPonpes}</h1><p>Formulir Pendaftaran</p></div>`;
 
         if (style === 'classic') {
-            bodyClass = "bg-[#F3F4F6] min-h-screen py-10 font-serif text-gray-900 print:bg-white";
-            wrapperClass = "bg-[#fff] shadow-2xl mx-auto max-w-[210mm] p-10 rounded-sm border-t-[8px] border-[#1B4D3E] print:shadow-none print:border-none print:rounded-none print:max-w-none";
+            bodyClass = isForPreview 
+                ? "bg-white min-h-screen p-6 sm:p-10 font-serif text-gray-900 m-0 border-t-[8px] border-[#1B4D3E]"
+                : "bg-[#F3F4F6] min-h-screen py-10 font-serif text-gray-900 print:bg-white";
+            wrapperClass = isForPreview 
+                ? "w-full max-w-[210mm] mx-auto"
+                : "bg-[#fff] shadow-2xl mx-auto max-w-[210mm] p-10 rounded-sm border-t-[8px] border-[#1B4D3E] print:shadow-none print:border-none print:rounded-none print:max-w-none";
             headerHtml = `
                 <div class="text-center mb-12 relative">
                     <div class="absolute top-0 left-1/2 transform -translate-x-1/2 w-24 h-1 bg-[#D4AF37] rounded-full"></div>
@@ -584,42 +590,440 @@ function doPost(e) {
                 </div>
             `;
         } else if (style === 'modern') {
-             bodyClass = "bg-slate-50 min-h-screen py-10 font-sans print:bg-white";
-             wrapperClass = "bg-white shadow-xl mx-auto max-w-[210mm] border border-gray-200 rounded-xl overflow-hidden print:shadow-none print:border-none print:rounded-none print:max-w-none";
+             bodyClass = isForPreview 
+                ? "bg-white min-h-screen font-sans m-0 p-0"
+                : "bg-slate-50 min-h-screen py-10 font-sans print:bg-white";
+             wrapperClass = isForPreview 
+                ? "w-full max-w-[210mm] mx-auto overflow-hidden"
+                : "bg-white shadow-xl mx-auto max-w-[210mm] border border-gray-200 rounded-xl overflow-hidden print:shadow-none print:border-none print:rounded-none print:max-w-none";
              headerHtml = `<div class="bg-blue-600 p-8 text-white flex justify-between items-center print:bg-white print:text-black print:border-b-2 print:border-blue-600 print:mb-6"><div><h1 class="text-3xl font-bold tracking-tight">Registration</h1><p class="text-blue-100 print:text-gray-600">${settings.namaPonpes}</p></div><div class="text-5xl opacity-30 print:hidden"><i class="bi bi-pencil-square"></i></div></div><div class="p-8 print:p-0">`;
         } 
         else if (style === 'bold') {
-            bodyClass = "bg-zinc-100 min-h-screen py-10 font-sans print:bg-white";
-            wrapperClass = "bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mx-auto max-w-2xl p-8 border-2 border-black print:shadow-none print:border-none";
+            bodyClass = isForPreview 
+                ? "bg-white min-h-screen p-6 sm:p-8 font-sans m-0"
+                : "bg-zinc-100 min-h-screen py-10 font-sans print:bg-white";
+            wrapperClass = isForPreview 
+                ? "w-full max-w-2xl mx-auto p-6 sm:p-8 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                : "bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mx-auto max-w-2xl p-8 border-2 border-black print:shadow-none print:border-none";
             headerHtml = `<div class="mb-10 border-b-4 border-black pb-4"><h1 class="text-4xl font-black uppercase tracking-tighter">${settings.namaPonpes}</h1><p class="text-lg font-bold bg-black text-white inline-block px-2 transform -skew-x-12">PENERIMAAN SANTRI BARU</p></div>`;
         } else if (style === 'dark') {
-            bodyClass = "bg-slate-900 min-h-screen py-10 font-sans print:bg-white";
-            wrapperClass = "bg-slate-800 shadow-2xl mx-auto max-w-2xl p-10 rounded-2xl border border-slate-700 text-slate-200 print:bg-white print:text-black print:shadow-none";
+            bodyClass = isForPreview 
+                ? "bg-slate-900 min-h-screen p-6 sm:p-10 font-sans text-slate-200 m-0"
+                : "bg-slate-900 min-h-screen py-10 font-sans print:bg-white";
+            wrapperClass = isForPreview 
+                ? "w-full max-w-2xl mx-auto"
+                : "bg-slate-800 shadow-2xl mx-auto max-w-2xl p-10 rounded-2xl border border-slate-700 text-slate-200 print:bg-white print:text-black print:shadow-none";
             headerHtml = `<div class="text-center mb-12"><div class="inline-block p-4 rounded-full bg-slate-700/50 mb-4 print:hidden"><i class="bi bi-buildings-fill text-4xl text-amber-500"></i></div><h1 class="text-3xl font-serif text-white print:text-black">${settings.namaPonpes}</h1><div class="h-1 w-20 bg-amber-500 mx-auto mt-4 rounded-full print:bg-black"></div></div>`;
         } else { // ceria
-            bodyClass = "bg-yellow-50 min-h-screen py-10 font-comic print:bg-white";
-            wrapperClass = "bg-white shadow-xl mx-auto max-w-2xl p-8 rounded-[2rem] border-4 border-orange-200 print:border-none print:shadow-none";
+            bodyClass = isForPreview 
+                ? "bg-yellow-50/50 min-h-screen p-6 sm:p-8 font-comic m-0"
+                : "bg-yellow-50 min-h-screen py-10 font-comic print:bg-white";
+            wrapperClass = isForPreview 
+                ? "w-full max-w-2xl mx-auto p-6 sm:p-8 rounded-[2rem] border-4 border-orange-200 bg-white"
+                : "bg-white shadow-xl mx-auto max-w-2xl p-8 rounded-[2rem] border-4 border-orange-200 print:border-none print:shadow-none";
             headerHtml = `<div class="text-center mb-8 bg-orange-100 p-6 rounded-[2rem] print:bg-transparent print:p-0"><h1 class="text-3xl font-bold text-orange-600 print:text-black">${settings.namaPonpes}</h1><p class="text-orange-800 print:text-gray-600">Formulir Pendaftaran Santri</p></div>`;
         }
         
-        const closeDiv = (style === 'modern' || style === 'bold') ? '</div>' : '';
+        const closeDiv = style === 'modern' ? '</div>' : '';
         const buttonIcon = submissionMethod === 'whatsapp' ? 'bi bi-whatsapp' : submissionMethod === 'hybrid' ? 'bi bi-cloud-check-fill' : 'bi bi-send-fill';
-        const buttonText = submissionMethod === 'whatsapp' ? 'Kirim Data via WhatsApp' : submissionMethod === 'hybrid' ? 'Kirim Data (Cloud + WA)' : 'Kirim ke Google Sheet';
-        const buttonColor = submissionMethod === 'whatsapp' ? 'bg-green-600 hover:bg-green-700' : submissionMethod === 'hybrid' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-blue-600 hover:bg-blue-700';
+        const buttonText = submissionMethod === 'whatsapp' ? 'Kirim Data via WhatsApp' : submissionMethod === 'hybrid' ? 'Kirim Data (Cloud + WA)' : 'Kirim Formulir';
+        const buttonSubtext = submissionMethod === 'whatsapp' 
+            ? 'Data pendaftaran akan diteruskan ke WhatsApp resmi Admin PSB.' 
+            : submissionMethod === 'hybrid' 
+            ? 'Data otomatis tersimpan di Cloud & terkonfirmasi ke WhatsApp Admin.' 
+            : 'Data formulir dan berkas langsung tersimpan ke sistem PSB.';
+        let buttonColor = submissionMethod === 'whatsapp' ? 'bg-green-600 hover:bg-green-700' : submissionMethod === 'hybrid' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-blue-600 hover:bg-blue-700';
+        if (style === 'classic') {
+            buttonColor = 'bg-[#1B4D3E] hover:bg-[#14392e] text-[#fbf9f4] font-serif tracking-wider shadow-md';
+        } else if (style === 'bold') {
+            buttonColor = 'bg-black hover:bg-red-700 text-white font-black uppercase tracking-wider border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 transition-all';
+        } else if (style === 'dark') {
+            buttonColor = 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold tracking-wide shadow-lg shadow-amber-500/20';
+        } else if (style === 'ceria') {
+            buttonColor = 'bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl shadow-md shadow-orange-300';
+        }
         
         const adminPhone = localConfig.nomorHpAdmin.replace(/^0/, '62');
+        let modalHtml = '';
         let submitScript = '';
+
         if (submissionMethod === 'whatsapp') {
-             submitScript = `<script>function submitForm(){const form=document.getElementById('psbForm');if(!form.checkValidity()){form.reportValidity();return;}const btn=document.getElementById('submit-btn');const originalContent=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Memproses...';const formData=new FormData(form);const data={tanggalDaftar:new Date().toISOString(),status:'Baru'};const customData={};formData.forEach((value,key)=>{if(key.startsWith('custom_')){customData[key.replace('custom_','')]=value;}else if(key==='docs[]'){if(!data.docs)data.docs=[];data.docs.push(value);}else{data[key]=value;}});data.customData=JSON.stringify(customData);let message="*Pendaftaran Santri Baru*\\n*${settings.namaPonpes}*\\n\\n";message+="Nama: "+data.namaLengkap+"\\n";message+="Jenjang: "+"${jenjangName}"+"\\n";message+="Wali: "+(data.namaWali||data.namaAyah||'-')+"\\n";message+="\\n--------------------------------\\n";message+="PSB_START\\n"+JSON.stringify(data)+"\\nPSB_END";message+="\\n--------------------------------\\n";message+="\\n_Harap lampirkan foto/dokumen pendukung secara manual di chat ini._";setTimeout(()=>{window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');btn.disabled=false;btn.innerHTML=originalContent;},1000);}</script>`;
-        } else if (submissionMethod === 'google_sheet') {
+             modalHtml = `
+             <div id="waModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+                 <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-left border border-gray-100 my-8">
+                     <div class="flex items-center gap-3 mb-4">
+                         <div class="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center text-2xl shrink-0">
+                             <i class="bi bi-whatsapp"></i>
+                         </div>
+                         <div>
+                             <h3 class="text-base font-bold text-gray-900 leading-tight">Panduan Pengiriman WhatsApp</h3>
+                             <p class="text-xs text-gray-500 mt-0.5">Petunjuk agar data pendaftaran santri baru berhasil diproses panitia:</p>
+                         </div>
+                     </div>
+                     <div class="space-y-2.5 my-4">
+                         <div class="flex items-start gap-2.5 text-xs text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                             <span class="w-5 h-5 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px] mt-0.5">1</span>
+                             <div><strong>Langkah 1:</strong> Klik tombol hijau <em>"Buka WhatsApp Sekarang"</em> di bawah untuk membuka aplikasi WhatsApp Admin resmi.</div>
+                         </div>
+                         <div class="flex items-start gap-2.5 text-xs text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-200">
+                             <span class="w-5 h-5 rounded-full bg-amber-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px] mt-0.5">2</span>
+                             <div><strong>PENTING - JANGAN HAPUS TEKS:</strong> Format pesan pendaftaran dan kode <code>PSB_START ... PSB_END</code> sudah terisi otomatis. Mohon jangan diubah atau dihapus agar sistem panitia dapat membaca data santri.</div>
+                         </div>
+                         <div class="flex items-start gap-2.5 text-xs text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                             <span class="w-5 h-5 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px] mt-0.5">3</span>
+                             <div><strong>Langkah 2:</strong> Di aplikasi WhatsApp, langsung tekan tombol <strong>KIRIM (Send / Panah Hijau)</strong> untuk mengirim pesan ke Admin.</div>
+                         </div>
+                         <div class="flex items-start gap-2.5 text-xs text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                             <span class="w-5 h-5 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px] mt-0.5">4</span>
+                             <div><strong>Langkah 3 (Opsional):</strong> Jika ada dokumen berkas persyaratan (KK, Akta Kelahiran, dll), Anda bisa langsung melampirkan fotonya di chat WhatsApp tersebut.</div>
+                         </div>
+                     </div>
+                     <div class="mt-6 flex flex-col gap-2">
+                         <button type="button" id="waProceedBtn" onclick="proceedWaSubmit()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all text-sm">
+                             <i class="bi bi-whatsapp text-lg"></i> Buka WhatsApp Sekarang
+                         </button>
+                         <button type="button" onclick="closeWaModal()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 rounded-xl text-xs transition">
+                             Periksa Formulir Kembali
+                         </button>
+                     </div>
+                 </div>
+             </div>`;
+
              submitScript = `<script>
-function readFile(file, fieldLabel){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true,fieldLabel:fieldLabel||''});reader.onerror=reject;reader.readAsDataURL(file);});}
-async function submitForm(){const form=document.getElementById('psbForm');if(!form.checkValidity()){form.reportValidity();return;}const btn=document.getElementById('submit-btn');const originalContent=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Mengirim Data & File...';try{const formData=new FormData(form);const data={};const filePromises=[];for(const [key,value] of formData.entries()){if(value instanceof File){if(value.size>0){if(value.size>5*1024*1024){alert('File '+value.name+' terlalu besar (Max 5MB)');throw new Error('File too large');}const inputEl=form.querySelector('[name="'+key+'"]');const fieldLabel=inputEl?.closest('div')?.querySelector('label')?.textContent?.trim()||key;filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[key]=fileObj;}));}}else{if(data[key]){data[key]=data[key]+", "+value;}else{data[key]=value;}}}await Promise.all(filePromises);data.tanggalDaftar=new Date().toISOString();data.jenjangId="${localConfig.targetJenjangId||''}";data.sheetName="${targetSheetName}";await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});alert("Pendaftaran Berhasil! Data dan File telah tersimpan.");form.reset();}catch(error){console.error('Error!',error);if(error.message!=='File too large'){alert("Terjadi kesalahan koneksi.");}}finally{btn.disabled=false;btn.innerHTML=originalContent;}}
+function submitForm(){
+    const form=document.getElementById('psbForm');
+    if(!form.checkValidity()){
+        form.reportValidity();
+        return;
+    }
+    const modal=document.getElementById('waModal');
+    if(modal){
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+}
+function closeWaModal(){
+    const modal=document.getElementById('waModal');
+    if(modal){
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+function proceedWaSubmit(){
+    const form=document.getElementById('psbForm');
+    const btn=document.getElementById('waProceedBtn');
+    const originalText=btn.innerHTML;
+    btn.disabled=true;
+    btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Membuka WhatsApp...';
+
+    const formData=new FormData(form);
+    const data={tanggalDaftar:new Date().toISOString(),status:'Baru'};
+    const customData={};
+    formData.forEach((value,key)=>{
+        if(key.startsWith('custom_')){
+            customData[key.replace('custom_','')]=value;
+        }else if(key==='docs[]'){
+            if(!data.docs) data.docs=[];
+            data.docs.push(value);
+        }else{
+            data[key]=value;
+        }
+    });
+    data.customData=JSON.stringify(customData);
+
+    let message="*Pendaftaran Santri Baru*\\n*${settings.namaPonpes}*\\n\\n";
+    message+="Nama: "+data.namaLengkap+"\\n";
+    message+="Jenjang: "+"${jenjangName}"+"\\n";
+    message+="Wali: "+(data.namaWali||data.namaAyah||'-')+"\\n";
+    message+="\\n--------------------------------\\n";
+    message+="PSB_START\\n"+JSON.stringify(data)+"\\nPSB_END";
+    message+="\\n--------------------------------\\n";
+    message+="\\n_Harap lampirkan foto/dokumen pendukung secara manual di chat ini._";
+
+    setTimeout(()=>{
+        window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');
+        btn.disabled=false;
+        btn.innerHTML=originalText;
+        closeWaModal();
+    },600);
+}
+</script>`;
+        } else if (submissionMethod === 'google_sheet') {
+             modalHtml = `
+             <div id="gsSuccessModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+                 <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-center border border-gray-100 my-8">
+                     <div class="w-14 h-14 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center text-3xl mx-auto mb-3">
+                         <i class="bi bi-check-circle-fill"></i>
+                     </div>
+                     <h3 class="text-lg font-bold text-gray-900">Pendaftaran Berhasil Dikirim!</h3>
+                     <p class="text-xs text-gray-600 mt-2 leading-relaxed">
+                         Alhamdulillah, formulir pendaftaran santri baru dan berkas persyaratan Anda telah berhasil diterima dan tersimpan ke sistem <strong>${settings.namaPonpes}</strong>.
+                     </p>
+                     <div class="bg-teal-50 border border-teal-200 text-teal-900 text-xs p-3 rounded-xl mt-4 text-left">
+                         <div class="flex items-center gap-2 font-bold mb-1">
+                             <i class="bi bi-info-circle-fill text-teal-600"></i> Informasi Selanjutnya:
+                         </div>
+                         <p>Panitia PSB akan segera memverifikasi data dan berkas yang Anda kirimkan. Pastikan nomor kontak yang didaftarkan selalu aktif.</p>
+                     </div>
+                     <button type="button" onclick="closeGsSuccessModal()" class="w-full mt-5 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl text-sm shadow-md transition">
+                         Selesai &amp; Tutup
+                     </button>
+                 </div>
+             </div>`;
+
+             submitScript = `<script>
+function readFile(file, fieldLabel){
+    return new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true,fieldLabel:fieldLabel||''});
+        reader.onerror=reject;
+        reader.readAsDataURL(file);
+    });
+}
+async function submitForm(){
+    const form=document.getElementById('psbForm');
+    if(!form.checkValidity()){
+        form.reportValidity();
+        return;
+    }
+    const btn=document.getElementById('submit-btn');
+    const originalContent=btn.innerHTML;
+    btn.disabled=true;
+    btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Mengirim Formulir...';
+    try{
+        const formData=new FormData(form);
+        const data={};
+        const filePromises=[];
+        for(const [key,value] of formData.entries()){
+            if(value instanceof File){
+                if(value.size>0){
+                    if(value.size>5*1024*1024){
+                        alert('File '+value.name+' terlalu besar (Maksimal 5MB)');
+                        throw new Error('File too large');
+                    }
+                    const inputEl=form.querySelector('[name="'+key+'"]');
+                    const fieldLabel=inputEl?.closest('div')?.querySelector('label')?.textContent?.trim()||key;
+                    filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[key]=fileObj;}));
+                }
+            }else{
+                if(data[key]){
+                    data[key]=data[key]+", "+value;
+                }else{
+                    data[key]=value;
+                }
+            }
+        }
+        await Promise.all(filePromises);
+        data.tanggalDaftar=new Date().toISOString();
+        data.jenjangId="${localConfig.targetJenjangId||''}";
+        data.sheetName="${targetSheetName}";
+        await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
+        const modal=document.getElementById('gsSuccessModal');
+        if(modal){
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }else{
+            alert("Pendaftaran Berhasil! Data dan Berkas telah tersimpan.");
+            form.reset();
+        }
+    }catch(error){
+        console.error('Error!',error);
+        if(error.message!=='File too large'){
+            alert("Terjadi kesalahan koneksi saat mengirim formulir. Silakan coba kembali.");
+        }
+    }finally{
+        btn.disabled=false;
+        btn.innerHTML=originalContent;
+    }
+}
+function closeGsSuccessModal(){
+    const modal=document.getElementById('gsSuccessModal');
+    if(modal){
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    const form=document.getElementById('psbForm');
+    if(form) form.reset();
+}
 </script>`;
         } else {
+             modalHtml = `
+             <div id="hybridModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+                 <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl text-left border border-gray-100 my-8">
+                     <div id="hybridInitialContent">
+                         <div class="flex items-center gap-3 mb-4">
+                             <div class="flex items-center gap-1.5 p-2 bg-teal-50 rounded-2xl text-teal-700 shrink-0">
+                                 <i class="bi bi-cloud-check-fill text-xl"></i>
+                                 <i class="bi bi-plus text-xs"></i>
+                                 <i class="bi bi-whatsapp text-xl text-green-600"></i>
+                             </div>
+                             <div>
+                                 <h3 class="text-base font-bold text-gray-900 leading-tight">Panduan Langkah Pendaftaran (Hybrid)</h3>
+                                 <p class="text-xs text-gray-500 mt-0.5">Pendaftaran diproses dalam 2 tahapan otomatis agar berkas &amp; data aman:</p>
+                             </div>
+                         </div>
+                         <div class="space-y-3 my-4">
+                             <div class="p-3 bg-teal-50/80 border border-teal-200 rounded-xl space-y-1">
+                                 <div class="flex items-center gap-2 text-xs font-bold text-teal-900">
+                                     <span class="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] shrink-0">1</span>
+                                     <span>Langkah 1: Penyimpanan Otomatis ke Cloud &amp; Drive</span>
+                                 </div>
+                                 <p class="text-xs text-teal-800 pl-7 leading-relaxed">Seluruh isian formulir dan berkas/dokumen persyaratan Anda akan otomatis diunggah dan disimpan aman ke Google Drive &amp; Cloud database panitia.</p>
+                             </div>
+                             <div class="p-3 bg-green-50/80 border border-green-200 rounded-xl space-y-1">
+                                 <div class="flex items-center gap-2 text-xs font-bold text-green-900">
+                                     <span class="w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center text-[10px] shrink-0">2</span>
+                                     <span>Langkah 2: Konfirmasi Otomatis ke WhatsApp Admin</span>
+                                 </div>
+                                 <p class="text-xs text-green-800 pl-7 leading-relaxed">Setelah data tersimpan di Cloud, WhatsApp Admin akan terbuka secara otomatis dengan pesan konfirmasi resmi. <strong>Cukup tekan tombol KIRIM di WhatsApp</strong> (jangan menghapus kode pendaftaran).</p>
+                             </div>
+                         </div>
+                         <div class="mt-6 flex flex-col gap-2">
+                             <button type="button" id="hybridProceedBtn" onclick="proceedHybridSubmit()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all text-sm">
+                                 <i class="bi bi-arrow-right-circle-fill text-lg"></i> Mulai Kirim &amp; Lanjutkan ke WA
+                             </button>
+                             <button type="button" onclick="closeHybridModal()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 rounded-xl text-xs transition">
+                                 Periksa Formulir Kembali
+                             </button>
+                         </div>
+                     </div>
+                     <div id="hybridProgressContent" class="hidden text-center py-4">
+                         <div class="animate-spin rounded-full h-12 w-12 border-4 border-teal-600 border-t-transparent mx-auto mb-4"></div>
+                         <h4 id="hybridStatusTitle" class="text-base font-bold text-gray-800">Sedang Memproses Pendaftaran...</h4>
+                         <p id="hybridStatusDesc" class="text-xs text-gray-500 mt-1">Mohon tunggu, jangan menutup halaman ini.</p>
+                     </div>
+                     <div id="hybridDoneContent" class="hidden text-center py-2">
+                         <div class="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-3xl mx-auto mb-3">
+                             <i class="bi bi-check-circle-fill"></i>
+                         </div>
+                         <h4 class="text-base font-bold text-gray-800">Pendaftaran Berhasil Diproses!</h4>
+                         <p class="text-xs text-gray-600 mt-2 leading-relaxed">
+                             Data dan berkas telah tersimpan di Cloud server. Chat WhatsApp Admin telah dibuka dengan kode konfirmasi pendaftaran.
+                         </p>
+                         <div class="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-xl mt-3 text-left">
+                             <strong>Pengingat Penting:</strong> Pastikan Anda telah menekan tombol <strong>KIRIM</strong> di WhatsApp agar Admin langsung menerima konfirmasi Anda.
+                         </div>
+                         <button type="button" onclick="finishHybridSubmit()" class="w-full mt-4 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-md">
+                             Selesai &amp; Tutup
+                         </button>
+                     </div>
+                 </div>
+             </div>`;
+
              submitScript = `<script>
-function readFile(file, fieldLabel){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true,fieldLabel:fieldLabel||''});reader.onerror=reject;reader.readAsDataURL(file);});}
-async function submitForm(){const form=document.getElementById('psbForm');if(!form.checkValidity()){form.reportValidity();return;}const btn=document.getElementById('submit-btn');const originalContent=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="inline-block animate-spin mr-2">↻</span> Menyimpan ke Cloud...';try{const formData=new FormData(form);const data={};const filePromises=[];for(const [key,value] of formData.entries()){if(value instanceof File){if(value.size>0){if(value.size>5*1024*1024){alert('File '+value.name+' terlalu besar (Max 5MB)');throw new Error('File too large');}const inputEl=form.querySelector('[name="'+key+'"]');const fieldLabel=inputEl?.closest('div')?.querySelector('label')?.textContent?.trim()||key;filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[key]=fileObj;}));}}else{if(data[key]){data[key]=data[key]+", "+value;}else{data[key]=value;}}}await Promise.all(filePromises);data.tanggalDaftar=new Date().toISOString();data.jenjangId="${localConfig.targetJenjangId||''}";data.sheetName="${targetSheetName}";const textOnlyData={...data};for(let key in textOnlyData){if(typeof textOnlyData[key]==='object'&&textOnlyData[key]!==null&&textOnlyData[key].isFile){delete textOnlyData[key];textOnlyData[key+'_status']="[File di Cloud/HP User]";}}const jsonString=JSON.stringify(textOnlyData);const encodedBackup=btoa(unescape(encodeURIComponent(jsonString)));let cloudSuccess=false;try{await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});cloudSuccess=true;}catch(err){console.error("Cloud Upload Failed",err);}btn.innerHTML='<i class="bi bi-whatsapp mr-1"></i> Membuka WhatsApp...';let message="Assalamu'alaikum Admin,\\nSaya sudah mengisi formulir pendaftaran santri baru.\\n\\n*Data Santri*\\nNama: "+data.namaLengkap+"\\nJenjang: "+"${jenjangName}"+"\\nWali: "+(data.namaWali||data.namaAyah||'-')+"\\nStatus Upload: "+(cloudSuccess?"✅ Sukses ke Server":"⚠️ Gagal/Pending")+"\\n\\n*KODE BACKUP DATA (JANGAN DIHAPUS):*\\nPSB_BACKUP_START\\n"+encodedBackup+"\\nPSB_BACKUP_END\\n\\n_Jika server error, Admin dapat menyalin pesan ini ke menu 'Impor WA'._";setTimeout(()=>{window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');if(cloudSuccess){alert("Pendaftaran Berhasil! Data tersimpan di Cloud & WhatsApp Admin akan terbuka.");}else{alert("Koneksi ke Server Cloud bermasalah, tapi Data Aman di WhatsApp. Silakan kirim pesan WA yang terbuka.");}form.reset();btn.disabled=false;btn.innerHTML=originalContent;},1000);}catch(error){console.error('Error!',error);if(error.message!=='File too large'){alert("Terjadi kesalahan. Pastikan file tidak terlalu besar.");}btn.disabled=false;btn.innerHTML=originalContent;}}
+function readFile(file, fieldLabel){
+    return new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>resolve({name:file.name,mime:file.type,data:reader.result,isFile:true,fieldLabel:fieldLabel||''});
+        reader.onerror=reject;
+        reader.readAsDataURL(file);
+    });
+}
+function submitForm(){
+    const form=document.getElementById('psbForm');
+    if(!form.checkValidity()){
+        form.reportValidity();
+        return;
+    }
+    const modal=document.getElementById('hybridModal');
+    if(modal){
+        document.getElementById('hybridInitialContent').classList.remove('hidden');
+        document.getElementById('hybridProgressContent').classList.add('hidden');
+        document.getElementById('hybridDoneContent').classList.add('hidden');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+}
+function closeHybridModal(){
+    const modal=document.getElementById('hybridModal');
+    if(modal){
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+async function proceedHybridSubmit(){
+    const form=document.getElementById('psbForm');
+    const initBox=document.getElementById('hybridInitialContent');
+    const progBox=document.getElementById('hybridProgressContent');
+    const doneBox=document.getElementById('hybridDoneContent');
+    const statusTitle=document.getElementById('hybridStatusTitle');
+    const statusDesc=document.getElementById('hybridStatusDesc');
+
+    initBox.classList.add('hidden');
+    progBox.classList.remove('hidden');
+    statusTitle.textContent="Langkah 1: Menyimpan ke Cloud...";
+    statusDesc.textContent="Sedang mengunggah data dan berkas persyaratan...";
+
+    try{
+        const formData=new FormData(form);
+        const data={};
+        const filePromises=[];
+        for(const [key,value] of formData.entries()){
+            if(value instanceof File){
+                if(value.size>0){
+                    if(value.size>5*1024*1024){
+                        alert('File '+value.name+' terlalu besar (Maksimal 5MB)');
+                        throw new Error('File too large');
+                    }
+                    const inputEl=form.querySelector('[name="'+key+'"]');
+                    const fieldLabel=inputEl?.closest('div')?.querySelector('label')?.textContent?.trim()||key;
+                    filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[key]=fileObj;}));
+                }
+            }else{
+                if(data[key]){
+                    data[key]=data[key]+", "+value;
+                }else{
+                    data[key]=value;
+                }
+            }
+        }
+        await Promise.all(filePromises);
+        data.tanggalDaftar=new Date().toISOString();
+        data.jenjangId="${localConfig.targetJenjangId||''}";
+        data.sheetName="${targetSheetName}";
+
+        const textOnlyData={...data};
+        for(let key in textOnlyData){
+            if(typeof textOnlyData[key]==='object'&&textOnlyData[key]!==null&&textOnlyData[key].isFile){
+                delete textOnlyData[key];
+                textOnlyData[key+'_status']="[File di Cloud/HP User]";
+            }
+        }
+        const jsonString=JSON.stringify(textOnlyData);
+        const encodedBackup=btoa(unescape(encodeURIComponent(jsonString)));
+        let cloudSuccess=false;
+        try{
+            await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
+            cloudSuccess=true;
+        }catch(err){
+            console.error("Cloud Upload Failed",err);
+        }
+
+        statusTitle.textContent="Langkah 2: Membuka WhatsApp...";
+        statusDesc.textContent="Menyiapkan pesan konfirmasi otomatis...";
+
+        let message="Assalamu'alaikum Admin,\\nSaya sudah mengisi formulir pendaftaran santri baru.\\n\\n*Data Santri*\\nNama: "+data.namaLengkap+"\\nJenjang: "+"${jenjangName}"+"\\nWali: "+(data.namaWali||data.namaAyah||'-')+"\\nStatus Upload: "+(cloudSuccess?"✅ Sukses ke Server":"⚠️ Gagal/Pending")+"\\n\\n*KODE BACKUP DATA (JANGAN DIHAPUS):*\\nPSB_BACKUP_START\\n"+encodedBackup+"\\nPSB_BACKUP_END\\n\\n_Jika server error, Admin dapat menyalin pesan ini ke menu 'Impor WA'._";
+
+        setTimeout(()=>{
+            window.open('https://wa.me/${adminPhone}?text='+encodeURIComponent(message),'_blank');
+            progBox.classList.add('hidden');
+            doneBox.classList.remove('hidden');
+        },800);
+
+    }catch(error){
+        console.error('Error!',error);
+        initBox.classList.remove('hidden');
+        progBox.classList.add('hidden');
+        if(error.message!=='File too large'){
+            alert("Terjadi kesalahan. Pastikan koneksi internet stabil dan ukuran file tidak melebihi 5MB.");
+        }
+    }
+}
+function finishHybridSubmit(){
+    closeHybridModal();
+    const form=document.getElementById('psbForm');
+    if(form) form.reset();
+}
 </script>`;
         }
 
@@ -659,7 +1063,55 @@ async function submitForm(){const form=document.getElementById('psbForm');if(!fo
         </script>
         `;
 
-        return `<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pendaftaran ${settings.namaPonpes}</title><style>${standaloneStyles}@media print{@page{size:A4;margin:0}body{background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.printable-content-wrapper{box-shadow:none!important;margin:0!important}}.screen-only{display:block}.print-only{display:none}@media print{.screen-only{display:none}.print-only{display:block}}</style></head><body class="${bodyClass}"><div class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${submissionMethod === 'whatsapp' ? 'Data dikirim ke WA Admin.' : submissionMethod === 'hybrid' ? 'Data tersimpan otomatis ke Cloud & Notifikasi Backup ke WA Admin.' : 'Data tersimpan otomatis ke Google Sheet.'}</p></div><div class="mt-8 pt-4 border-t text-center text-xs text-gray-500"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div>${submitScript}${deadlineCheckScript}</body></html>`;
+        return `<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pendaftaran ${settings.namaPonpes}</title>
+    <!-- Fonts & Icons CDN -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        serif: ['"Playfair Display"', 'Georgia', 'serif'],
+                        comic: ['"Comic Neue"', 'Comic Sans MS', 'cursive', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        ${standaloneStyles}
+        /* Theme Fallbacks & Specific Overrides */
+        .font-comic { font-family: "Comic Neue", "Comic Sans MS", cursive, sans-serif !important; }
+        .font-serif { font-family: "Playfair Display", Georgia, serif !important; }
+        .font-sans { font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif !important; }
+        
+        @media print {
+            @page { size: A4; margin: 0; }
+            body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+            .printable-content-wrapper { box-shadow: none !important; margin: 0 !important; }
+        }
+        .screen-only { display: block; }
+        .print-only { display: none; }
+        @media print {
+            .screen-only { display: none; }
+            .print-only { display: block; }
+        }
+    </style>
+</head>
+<body class="${bodyClass}">
+<div class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t text-center text-xs text-gray-500"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div>${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
     };
 
     const handleDownloadPdf = () => {
@@ -690,42 +1142,31 @@ async function submitForm(){const form=document.getElementById('psbForm');if(!fo
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'Form_PSB.html';
+        const targetJenjang = settings.jenjang.find((j) => j.id === localConfig.targetJenjangId);
+        const jenjangName = targetJenjang ? targetJenjang.nama.replace(/\s+/g, '_') : 'Umum';
+        const cleanName = (templateName || `Form_PSB_${jenjangName}`).replace(/[/\\?%*:|"<>]/g, '_');
+        link.download = `${cleanName}.html`;
         link.click();
         URL.revokeObjectURL(url);
     };
 
     useEffect(() => {
-        const viewport = previewViewportRef.current;
-        if (!viewport) return;
-
-        const calculateZoom = () => {
-            const containerWidth = viewport.clientWidth;
-            const baseContentWidth = 980;
-            if (baseContentWidth > containerWidth - 24) {
-                setSmartZoomScale((containerWidth - 24) / baseContentWidth);
-            } else {
-                setSmartZoomScale(1);
-            }
-        };
-
-        const observer = new ResizeObserver(calculateZoom);
-        observer.observe(viewport);
-        window.addEventListener('resize', calculateZoom);
-        const timer = setTimeout(calculateZoom, 120);
-
-        return () => {
-            clearTimeout(timer);
-            observer.disconnect();
-            window.removeEventListener('resize', calculateZoom);
-        };
-    }, [localConfig, templateName, submissionMethod, googleScriptUrl]);
-
-    useEffect(() => {
         const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
         if (iframe) {
-            const html = generateHtml();
+            const html = generateHtml(true);
             iframe.srcdoc = html;
+            iframe.onload = () => {
+                try {
+                    if (iframe.contentWindow?.document?.body) {
+                        const h = iframe.contentWindow.document.body.scrollHeight;
+                        if (h > 500) {
+                            iframe.style.height = `${h + 60}px`;
+                        }
+                    }
+                } catch {
+                    // cross-origin safety
+                }
+            };
         }
     }, [localConfig, settings, templateName, submissionMethod, googleScriptUrl]);
 
@@ -1049,62 +1490,84 @@ async function submitForm(){const form=document.getElementById('psbForm');if(!fo
                 </div>
             </div>
             
-            <div className={`lg:col-span-8 flex flex-col h-[70vh] min-h-[420px] lg:h-full bg-gray-200 rounded-xl overflow-hidden border border-gray-300 ${mobileTab === 'preview' ? 'flex' : 'hidden lg:flex'}`}>
-                <div className="bg-white p-3 border-b shadow-sm">
-                    <div className="flex flex-col gap-3">
-                        <div className="flex flex-col">
-                            <h3 className="font-bold text-gray-700"><i className="bi bi-eye mr-2"></i>Live Preview</h3>
-                            {templateName && <span className="text-[10px] text-teal-600 font-medium italic">Sheet/Tab Tujuan: {templateName.replace(/[:\/\\?*\[\]]/g, "_")}</span>}
-                            <span className="text-[10px] text-gray-500">Smart Zoom aktif. Lebar menyesuaikan layar, tinggi tetap utuh.</span>
+            <div className={`lg:col-span-8 flex flex-col h-[75vh] min-h-[480px] lg:h-full bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden ${mobileTab === 'preview' ? 'flex' : 'hidden lg:flex'}`}>
+                {/* Toolbar following ReportPreviewPanel reference */}
+                <div className="bg-white border-b px-3 sm:px-4 py-2.5 flex flex-wrap gap-2 justify-between items-center z-20 shadow-2xs shrink-0">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                            <i className="bi bi-eye text-teal-600"></i> Preview Formulir
+                        </span>
+                        {templateName && (
+                            <span className="bg-teal-50 text-teal-700 border border-teal-200 text-xs px-2 py-0.5 rounded-full font-medium">
+                                {templateName}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="flex items-center flex-wrap justify-end gap-2">
+                        {/* Zoom Controls */}
+                        <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                            <button
+                                type="button"
+                                onClick={() => setManualZoom(z => Math.max(0.4, Number((z - 0.1).toFixed(2))))}
+                                className="h-7 w-7 hover:bg-white rounded text-gray-700 transition flex items-center justify-center cursor-pointer"
+                                title="Perkecil (Zoom Out)"
+                            >
+                                <i className="bi bi-dash"></i>
+                            </button>
+                            <span className="text-[11px] font-mono w-11 text-center font-medium text-gray-700">
+                                {Math.round(manualZoom * 100)}%
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setManualZoom(z => Math.min(2, Number((z + 0.1).toFixed(2))))}
+                                className="h-7 w-7 hover:bg-white rounded text-gray-700 transition flex items-center justify-center cursor-pointer"
+                                title="Perbesar (Zoom In)"
+                            >
+                                <i className="bi bi-plus"></i>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setManualZoom(1)}
+                                className="ml-1 h-7 px-2 text-[11px] rounded hover:bg-white text-gray-600 border border-transparent hover:border-gray-200 transition cursor-pointer"
+                                title="Reset Ukuran Normal (100%)"
+                            >
+                                100%
+                            </button>
                         </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="inline-flex w-fit items-center rounded-lg border border-slate-300 bg-slate-50 p-1">
-                                <button
-                                    onClick={() => setManualZoom(z => Math.max(0.5, Number((z - 0.1).toFixed(2))))}
-                                    className="h-8 w-8 rounded-md text-slate-700 transition hover:bg-white"
-                                    title="Zoom Out"
-                                >
-                                    <i className="bi bi-dash-lg"></i>
-                                </button>
-                                <span className="w-14 text-center text-xs font-semibold text-slate-700">
-                                    {Math.round(smartZoomScale * manualZoom * 100)}%
-                                </span>
-                                <button
-                                    onClick={() => setManualZoom(z => Math.min(2, Number((z + 0.1).toFixed(2))))}
-                                    className="h-8 w-8 rounded-md text-slate-700 transition hover:bg-white"
-                                    title="Zoom In"
-                                >
-                                    <i className="bi bi-plus-lg"></i>
-                                </button>
-                                <button
-                                    onClick={() => setManualZoom(1)}
-                                    className="ml-1 h-8 rounded-md px-2 text-[11px] font-semibold text-teal-700 transition hover:bg-white"
-                                    title="Reset Zoom"
-                                >
-                                    Reset
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:min-w-[360px]">
-                                <button onClick={handleDownloadPdf} className="w-full bg-gray-700 text-white px-3 py-2 rounded text-sm hover:bg-gray-800 flex items-center justify-center gap-2">
-                                    <i className="bi bi-file-pdf"></i> Cetak / PDF
-                                </button>
-                                <button onClick={handleDownloadForm} className="w-full bg-teal-600 text-white px-3 py-2 rounded text-sm hover:bg-teal-700 flex items-center justify-center gap-2">
-                                    <i className="bi bi-filetype-html"></i> Download Formulir
-                                </button>
-                            </div>
-                        </div>
+
+                        <button
+                            type="button"
+                            onClick={handleDownloadPdf}
+                            className="bg-gray-700 hover:bg-gray-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition cursor-pointer"
+                            title="Cetak atau Simpan PDF"
+                        >
+                            <i className="bi bi-printer"></i>
+                            <span className="hidden sm:inline">Cetak / PDF</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleDownloadForm}
+                            className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition cursor-pointer"
+                            title="Unduh Formulir HTML Mandiri"
+                        >
+                            <i className="bi bi-download"></i>
+                            <span className="hidden sm:inline">Unduh Formulir</span>
+                        </button>
                     </div>
                 </div>
-                <div ref={previewViewportRef} className="flex-grow bg-gray-500/10 p-3 sm:p-4 overflow-auto">
-                    <div
-                        className="origin-top-left transition-transform duration-200"
-                        style={{
-                            width: `${100 / (smartZoomScale * manualZoom)}%`,
-                            height: `${100 / (smartZoomScale * manualZoom)}%`,
-                            transform: `scale(${smartZoomScale * manualZoom})`
-                        }}
+
+                {/* Preview Canvas with single paper sheet */}
+                <div id="preview-area" className="flex-grow overflow-auto p-3 sm:p-6 flex justify-center items-start bg-gray-200/50 backdrop-blur-xs">
+                    <div 
+                        className="printable-content-wrapper origin-top transition-transform duration-200 w-full max-w-[210mm] shadow-xl rounded-xl border border-gray-300 bg-white overflow-hidden"
+                        style={{ transform: `scale(${manualZoom})`, transformOrigin: 'top center' }}
                     >
-                        <iframe id="preview-frame" className="w-full h-full bg-white shadow-lg rounded border border-gray-200" title="Form Preview" style={{ border: 'none' }}></iframe>
+                        <iframe
+                            id="preview-frame"
+                            className="w-full border-0 block min-h-[960px]"
+                            title="Form Preview"
+                        />
                     </div>
                 </div>
             </div>

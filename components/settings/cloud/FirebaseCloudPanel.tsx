@@ -17,6 +17,7 @@ interface FirebaseCloudPanelProps {
     onGeneratePairingCode: () => Promise<void>;
     onLinkEmail: () => Promise<void>;
     onUploadAllData: () => void;
+    onDownloadAllData?: () => void;
     onToggleCustomFirebase: () => void;
     onSyncConfigChange: (field: string, value: unknown) => void;
 }
@@ -32,6 +33,7 @@ export const FirebaseCloudPanel: React.FC<FirebaseCloudPanelProps> = ({
     onGeneratePairingCode,
     onLinkEmail,
     onUploadAllData,
+    onDownloadAllData,
     onToggleCustomFirebase,
     onSyncConfigChange,
 }) => (
@@ -111,9 +113,20 @@ export const FirebaseCloudPanel: React.FC<FirebaseCloudPanelProps> = ({
                         <button
                             onClick={onUploadAllData}
                             className="app-button-primary flex-1 px-4 py-2.5 text-sm"
+                            title="Unggah semua data lokal ke Cloud Hub"
                         >
                             <i className="bi bi-cloud-upload"></i> Upload Data
                         </button>
+
+                        {onDownloadAllData && (
+                            <button
+                                onClick={onDownloadAllData}
+                                className="app-button-secondary flex-1 px-4 py-2.5 text-sm"
+                                title="Tarik pembaruan data terbaru dari Cloud Hub"
+                            >
+                                <i className="bi bi-cloud-download"></i> Tarik Data Cloud
+                            </button>
+                        )}
 
                         {!localSettings.cloudSyncConfig.firebasePairedTenantId && (
                             <button

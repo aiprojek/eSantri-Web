@@ -528,45 +528,45 @@ export const TahfizhHistory: React.FC = () => {
                 <div className="mt-3.5 pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mr-1 flex items-center gap-1">
-                            <i className="bi bi-file-earmark-spreadsheet-fill text-emerald-600"></i> Ekspor Rekap:
+                            <i className="bi bi-file-earmark-spreadsheet-fill text-emerald-600"></i> Ekspor:
                         </span>
-                        <div className="inline-flex rounded-xl shadow-2xs border border-emerald-300 overflow-hidden">
+                        <div className="inline-flex rounded-xl shadow-2xs border border-emerald-300 overflow-hidden text-xs">
                             <button
                                 onClick={handleExportByRombel}
-                                className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800 transition-colors"
+                                className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 font-bold text-emerald-800 transition-colors whitespace-nowrap"
                                 title="Ekspor CSV Rekapitulasi per Rombel (Lengkap dengan Teguran & Kesalahan)"
                             >
-                                <i className="bi bi-filetype-csv"></i> CSV Rombel
+                                <i className="bi bi-filetype-csv"></i> Rombel
                             </button>
                             <button
                                 onClick={() => {
                                     setBatchReportType('rekap-rombel');
                                     runBatchExport('excel');
                                 }}
-                                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white transition-colors border-l border-emerald-500"
+                                className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1.5 font-bold text-white transition-colors border-l border-emerald-500 whitespace-nowrap"
                                 title="Ekspor Excel Rekapitulasi per Rombel Berformat Rapi"
                             >
-                                <i className="bi bi-file-earmark-excel-fill"></i> Excel Rombel
+                                <i className="bi bi-file-earmark-excel-fill"></i> XLS
                             </button>
                         </div>
 
-                        <div className="inline-flex rounded-xl shadow-2xs border border-blue-300 overflow-hidden">
+                        <div className="inline-flex rounded-xl shadow-2xs border border-blue-300 overflow-hidden text-xs">
                             <button
                                 onClick={handleExportByMuhaffizh}
-                                className="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-800 transition-colors"
+                                className="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 font-bold text-blue-800 transition-colors whitespace-nowrap"
                                 title="Ekspor CSV Rekapitulasi Kinerja Pembimbing & Halaqah"
                             >
-                                <i className="bi bi-filetype-csv"></i> CSV Muhaffizh
+                                <i className="bi bi-filetype-csv"></i> Muhaffizh
                             </button>
                             <button
                                 onClick={() => {
                                     setBatchReportType('rekap-muhaffizh');
                                     runBatchExport('excel');
                                 }}
-                                className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs font-bold text-white transition-colors border-l border-blue-500"
+                                className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 px-2.5 py-1.5 font-bold text-white transition-colors border-l border-blue-500 whitespace-nowrap"
                                 title="Ekspor Excel Rekapitulasi Muhaffizh Berformat Rapi"
                             >
-                                <i className="bi bi-file-earmark-excel-fill"></i> Excel Muhaffizh
+                                <i className="bi bi-file-earmark-excel-fill"></i> XLS
                             </button>
                         </div>
                     </div>
@@ -574,12 +574,13 @@ export const TahfizhHistory: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => setIsConfigOpen(prev => !prev)}
-                        className={`text-xs font-bold px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition-all ${
+                        className={`text-xs font-bold px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition-all whitespace-nowrap ${
                             isConfigOpen ? 'bg-teal-700 text-white border-teal-700 shadow-sm' : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-teal-50 hover:text-teal-800'
                         }`}
                     >
                         <i className={`bi ${isConfigOpen ? 'bi-sliders2-vertical' : 'bi-gear-fill'} text-xs`}></i>
-                        <span>{isConfigOpen ? 'Tutup Pengaturan Cetak' : 'Pengaturan Titimangsa & Cetak Massal'}</span>
+                        <span className="sm:hidden">{isConfigOpen ? 'Tutup Opsi' : 'Opsi Cetak'}</span>
+                        <span className="hidden sm:inline">{isConfigOpen ? 'Tutup Pengaturan Cetak' : 'Pengaturan Titimangsa & Cetak Massal'}</span>
                     </button>
                 </div>
             </div>

@@ -55,32 +55,32 @@ export const MobileFilterDrawer: React.FC<MobileFilterDrawerProps> = ({
                         className="app-modal fixed bottom-0 left-0 right-0 z-[101] flex max-h-[85vh] flex-col rounded-t-[2rem] md:hidden"
                     >
                         {/* Handle */}
-                        <div className="w-full flex justify-center pt-4 pb-2">
-                            <div className="h-1.5 w-12 rounded-full bg-white/10" />
+                        <div className="w-full flex justify-center pt-3 pb-1.5">
+                            <div className="h-1.5 w-12 rounded-full bg-slate-300" />
                         </div>
 
                         {/* Header */}
-                        <div className="flex items-center justify-between border-b border-app-border px-6 py-4">
+                        <div className="flex items-center justify-between border-b border-app-border px-5 py-3.5">
                             <div>
-                                <h3 className="text-xl font-black tracking-tight text-app-text">{title}</h3>
+                                <h3 className="text-lg font-black tracking-tight text-app-text">{title}</h3>
                                 <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-app-primary">Konfigurasi Tampilan</p>
                             </div>
-                            <button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full border border-app-border bg-white text-app-textMuted transition-colors hover:bg-teal-50 hover:text-app-text">
-                                <i className="bi bi-x-lg"></i>
+                            <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border border-app-border bg-white text-app-textMuted transition-colors hover:bg-teal-50 hover:text-app-text" aria-label="Tutup Filter">
+                                <i className="bi bi-x-lg text-sm"></i>
                             </button>
                         </div>
 
                         {/* Content */}
-                        <div className="px-6 py-8 overflow-y-auto space-y-8 flex-grow">
+                        <div className="px-5 py-4 overflow-y-auto space-y-4 flex-grow">
                             {children}
                         </div>
 
                         {/* Footer Actions */}
-                        <div className="flex gap-3 border-t border-app-border bg-slate-50/80 p-6">
+                        <div className="flex gap-2.5 border-t border-app-border bg-slate-50/90 p-4">
                             {onReset && (
                                 <button 
                                     onClick={() => { onReset(); onClose(); }}
-                                    className="app-button-secondary flex-1 px-4 py-4"
+                                    className="app-button-secondary flex-1 py-3 text-sm font-bold"
                                 >
                                     <i className="bi bi-arrow-counterclockwise"></i>
                                     Reset
@@ -88,9 +88,9 @@ export const MobileFilterDrawer: React.FC<MobileFilterDrawerProps> = ({
                             )}
                             <button 
                                 onClick={onApply || onClose}
-                                className="app-button-primary flex-[2] px-4 py-4"
+                                className="app-button-primary flex-[2] py-3 text-sm font-bold justify-center"
                             >
-                                <i className="bi bi-check-lg text-xl"></i>
+                                <i className="bi bi-check-lg text-lg"></i>
                                 Terapkan Filter
                             </button>
                         </div>

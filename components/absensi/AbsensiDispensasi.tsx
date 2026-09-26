@@ -3,6 +3,7 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { AbsensiRecord, Santri, SesiAbsensi } from '../../types';
 import { SESI_ABSENSI_LIST } from './absensiConstants';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 interface DispensasiEntry {
     id: string;
@@ -28,6 +29,9 @@ export const AbsensiDispensasi: React.FC = () => {
     const [selectedJenjangId, setSelectedJenjangId] = useState<number>(0);
     const [selectedKelasId, setSelectedKelasId] = useState<number>(0);
     const [selectedRombelId, setSelectedRombelId] = useState<number>(0);
+    const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
+    const activeFilterCount = (selectedJenjangId ? 1 : 0) + (selectedKelasId ? 1 : 0) + (selectedRombelId ? 1 : 0);
     const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
     const [searchSantri, setSearchSantri] = useState('');
     const [statusIzin, setStatusIzin] = useState<'I' | 'S'>('I');
@@ -252,8 +256,94 @@ export const AbsensiDispensasi: React.FC = () => {
                             )}
                         </div>
 
-                        {/* Complete Cascading Filter: Jenjang, Kelas, Rombel */}
-                        <div className="space-y-2.5 bg-gray-50/80 p-3 rounded-xl border border-gray-200/80">
+                        {/* Mobile Filter & Search Trigger */}
+                        <div className="flex md:hidden items-center gap-2">
+                            <div className="relative flex-1">
+                                <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                                <input
+                                    type="text"
+                                    placeholder="Cari nama santri atau NIS..."
+                                    value={searchSantri}
+                                    onChange={e => setSearchSantri(e.target.value)}
+                                    className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsMobileFilterOpen(true)}
+                                className={`h-9 px-3 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all shrink-0 ${
+                                    activeFilterCount > 0
+                                        ? 'bg-blue-50 text-blue-800 border-blue-300 shadow-xs'
+                                        : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                                }`}
+                            >
+                                <i className="bi bi-funnel-fill text-blue-600"></i>
+                                <span>Filter</span>
+                                {activeFilterCount > 0 && (
+                                    <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                        {activeFilterCount}
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Mobile Filter Drawer */}
+                        <MobileFilterDrawer
+                            isOpen={isMobileFilterOpen}
+                            onClose={() => setIsMobileFilterOpen(false)}
+                            title="Filter Kelas Santri Dispensasi"
+                            onReset={() => {
+                                setSelectedJenjangId(0);
+                                setSelectedKelasId(0);
+                                setSelectedRombelId(0);
+                            }}
+                        >
+                            <div className="space-y-3.5 text-xs">
+                                <div>
+                                    <label className="block text-gray-700 font-bold mb-1">Marhalah / Jenjang</label>
+                                    <select
+                                        value={selectedJenjangId}
+                                        onChange={e => handleJenjangChange(Number(e.target.value))}
+                                        className="w-full text-xs font-medium p-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                                    >
+                                        <option value={0}>Semua Jenjang</option>
+                                        {settings.jenjang.map(j => (
+                                            <option key={j.id} value={j.id}>{j.nama}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-gray-700 font-bold mb-1">Tingkat / Kelas</label>
+                                    <select
+                                        value={selectedKelasId}
+                                        onChange={e => handleKelasChange(Number(e.target.value))}
+                                        className="w-full text-xs font-medium p-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                                    >
+                                        <option value={0}>Semua Tingkat</option>
+                                        {availableKelas.map(k => (
+                                            <option key={k.id} value={k.id}>{k.nama}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-gray-700 font-bold mb-1">Rombel / Kelas Belajar</label>
+                                    <select
+                                        value={selectedRombelId}
+                                        onChange={e => setSelectedRombelId(Number(e.target.value))}
+                                        className="w-full text-xs font-medium p-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                                    >
+                                        <option value={0}>Semua Rombel</option>
+                                        {availableRombel.map(r => {
+                                            const k = settings.kelas.find(kl => kl.id === r.kelasId);
+                                            return <option key={r.id} value={r.id}>{r.nama} ({k?.nama || '-'})</option>;
+                                        })}
+                                    </select>
+                                </div>
+                            </div>
+                        </MobileFilterDrawer>
+
+                        {/* Complete Cascading Filter: Jenjang, Kelas, Rombel (Desktop) */}
+                        <div className="hidden md:block space-y-2.5 bg-gray-50/80 p-3 rounded-xl border border-gray-200/80">
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Marhalah / Jenjang</label>
@@ -508,10 +598,11 @@ export const AbsensiDispensasi: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={isSubmitting || selectedSantriIds.length === 0 || !canWrite}
-                                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-center"
                             >
-                                <i className="bi bi-check2-circle text-lg"></i>
-                                <span>{isSubmitting ? 'Menerapkan ke Database...' : `Terapkan Izin untuk ${selectedSantriIds.length} Santri (${dateRangeList.length} Hari)`}</span>
+                                <i className="bi bi-check2-circle text-base sm:text-lg shrink-0"></i>
+                                <span className="sm:hidden">{isSubmitting ? 'Menerapkan...' : `Terapkan Izin (${selectedSantriIds.length} Santri)`}</span>
+                                <span className="hidden sm:inline">{isSubmitting ? 'Menerapkan ke Database...' : `Terapkan Izin untuk ${selectedSantriIds.length} Santri (${dateRangeList.length} Hari)`}</span>
                             </button>
                         </div>
                     </form>

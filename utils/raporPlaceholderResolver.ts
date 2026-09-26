@@ -80,6 +80,34 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         ]
     },
     {
+        id: 'absensi_catatan',
+        title: 'Presensi & Catatan',
+        icon: 'bi-calendar-check',
+        color: 'text-amber-700 bg-amber-50 border-amber-200',
+        tags: [
+            { tag: '$SAKIT', label: 'Jumlah Sakit (Hari)', description: 'Akumulasi izin sakit semester ini', example: '2' },
+            { tag: '$IZIN', label: 'Jumlah Izin (Hari)', description: 'Akumulasi izin keperluan semester ini', example: '1' },
+            { tag: '$ALPHA', label: 'Jumlah Alpha (Hari)', description: 'Akumulasi tanpa keterangan', example: '0' },
+            { tag: '$TOTAL_ABSEN', label: 'Total Ketidakhadiran (Hari)', description: 'Total Sakit + Izin + Alpha', example: '3' },
+            { tag: '$CATATAN_WALI_KELAS', label: 'Catatan Wali Kelas', description: 'Catatan kemajuan santri dari wali kelas', example: 'Pertahankan prestasi belajar dan kedisiplinan.' },
+            { tag: '$KEPUTUSAN', label: 'Keputusan Kenaikan / Kelulusan', description: 'Naik ke kelas / Lulus', example: 'Naik ke Kelas VIII' },
+        ]
+    },
+    {
+        id: 'kalkulasi',
+        title: 'Kalkulasi & Ranking',
+        icon: 'bi-calculator-fill',
+        color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+        tags: [
+            { tag: '$TOTAL_NILAI', label: 'Total Akumulasi Nilai', description: 'Jumlah total seluruh nilai mapel santri', example: '850' },
+            { tag: '$RATA_RATA', label: 'Nilai Rata-Rata', description: 'Rata-rata seluruh nilai mapel santri', example: '85.50' },
+            { tag: '$PREDIKAT_RATA_RATA', label: 'Predikat Rata-Rata', description: 'Predikat hasil belajar (Mumtaz/Jayyid Jiddan/dll)', example: 'Jayyid Jiddan' },
+            { tag: '$PERINGKAT', label: 'Peringkat / Ranking', description: 'Peringkat santri di rombel', example: '3' },
+            { tag: '$RANKING', label: 'Ranking Kelas (Alias)', description: 'Peringkat santri di rombel', example: '3' },
+            { tag: '$TOTAL_SANTRI', label: 'Jumlah Santri di Rombel', description: 'Total santri dalam satu rombel', example: '32' },
+        ]
+    },
+    {
         id: 'pejabat',
         title: 'Wali Kelas & Pimpinan',
         icon: 'bi-person-check-fill',
@@ -150,6 +178,13 @@ export interface RaporResolveContext {
     record?: RaporRecord | null;
     digitalAssets?: DigitalAsset[];
     targetDate?: Date;
+    calculation?: {
+        totalNilai?: number;
+        rataRata?: number;
+        ranking?: number;
+        totalSantri?: number;
+        predikat?: string;
+    };
 }
 
 export const isMediaTag = (value: string): boolean => {
@@ -317,6 +352,76 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     res = res.replace(/\$SEMESTER/g, sem);
     res = res.replace(/\$TAHUN_AJARAN/g, record?.tahunAjaran || '-');
     res = res.replace(/\$TAHUN_AJAR/g, record?.tahunAjaran || '-');
+
+    // Presensi & Catatan Wali
+    let customObj: Record<string, any> = {};
+    if (record?.customData) {
+        try {
+            customObj = JSON.parse(record.customData);
+        } catch {}
+    }
+    const findCustomVal = (...keys: string[]) => {
+        for (const k of keys) {
+            if (customObj[k] !== undefined && customObj[k] !== null && String(customObj[k]).trim() !== '') {
+                return customObj[k];
+            }
+        }
+        return undefined;
+    };
+    const sakitVal = record?.sakit ?? (findCustomVal('SAKIT', 'sakit', 'S', 'ABSENSI_SAKIT') ?? 0);
+    const izinVal = record?.izin ?? (findCustomVal('IZIN', 'izin', 'I', 'ABSENSI_IZIN') ?? 0);
+    const alphaVal = record?.alpha ?? (findCustomVal('ALPHA', 'alpha', 'ALPA', 'alpa', 'A', 'ABSENSI_ALPHA') ?? 0);
+    const totalAbsen = Number(sakitVal || 0) + Number(izinVal || 0) + Number(alphaVal || 0);
+    const catatanWali = record?.catatanWaliKelas || findCustomVal('CATATAN_WALI_KELAS', 'catatanWaliKelas', 'CATATAN_WALI', 'catatan_wali') || '-';
+    const keputusanVal = record?.keputusan || findCustomVal('KEPUTUSAN', 'keputusan') || '-';
+
+    res = res.replace(/\$SAKIT/g, String(sakitVal));
+    res = res.replace(/\$IZIN/g, String(izinVal));
+    res = res.replace(/\$ALPHA/g, String(alphaVal));
+    res = res.replace(/\$TOTAL_ABSEN/g, String(totalAbsen));
+    res = res.replace(/\$CATATAN_WALI_KELAS/g, String(catatanWali));
+    res = res.replace(/\$CATATAN_WALI/g, String(catatanWali));
+    res = res.replace(/\$KEPUTUSAN/g, String(keputusanVal));
+
+    // Kalkulasi & Ranking
+    let totalScore = context.calculation?.totalNilai;
+    let avgScore = context.calculation?.rataRata;
+    let predikatStr = context.calculation?.predikat;
+    let rankVal = context.calculation?.ranking;
+    const totalSantriVal = context.calculation?.totalSantri;
+
+    if (totalScore === undefined || avgScore === undefined) {
+        let sum = 0;
+        let count = 0;
+        const nonGradeSet = new Set(['sakit', 'izin', 'alpha', 'alpa', 'total_absen', 's', 'i', 'a']);
+        Object.entries(customObj).forEach(([k, val]) => {
+            if (!nonGradeSet.has(k.toLowerCase()) && val !== undefined && val !== null && String(val).trim() !== '') {
+                const num = Number(val);
+                if (!isNaN(num) && num >= 0 && num <= 100) {
+                    sum += num;
+                    count += 1;
+                }
+            }
+        });
+        if (count > 0) {
+            totalScore = sum;
+            avgScore = Math.round((sum / count) * 100) / 100;
+            if (!predikatStr) {
+                if (avgScore >= 90) predikatStr = 'Mumtaz';
+                else if (avgScore >= 80) predikatStr = 'Jayyid Jiddan';
+                else if (avgScore >= 70) predikatStr = 'Jayyid';
+                else if (avgScore >= 60) predikatStr = 'Maqbul';
+                else predikatStr = 'Rasib';
+            }
+        }
+    }
+
+    res = res.replace(/\$TOTAL_NILAI/g, totalScore !== undefined && totalScore > 0 ? String(totalScore) : '-');
+    res = res.replace(/\$RATA_RATA/g, avgScore !== undefined && avgScore > 0 ? avgScore.toFixed(2) : '-');
+    res = res.replace(/\$PREDIKAT_RATA_RATA/g, predikatStr || '-');
+    res = res.replace(/\$PERINGKAT/g, rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
+    res = res.replace(/\$RANKING/g, rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
+    res = res.replace(/\$TOTAL_SANTRI/g, totalSantriVal !== undefined && totalSantriVal > 0 ? String(totalSantriVal) : '-');
 
     // Date & Hijri
     let dateObj: Date;

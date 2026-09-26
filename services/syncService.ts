@@ -306,7 +306,7 @@ export const uploadStaffChanges = async (config: CloudSyncConfig, username: stri
         'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi', 'suratTemplates', 
         'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi', 
         'jurnalMengajar', 'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 
-        'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 
+        'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'jadwalUjian',
         'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang',
         'warehouses', 'stockTransfers', 'digitalAssets'
     ];
@@ -413,7 +413,7 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
         'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi', 'jurnalMengajar',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules',
+        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'jadwalUjian', 'piketSchedules',
         'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'warehouses', 'stockTransfers',
         'digitalAssets', 'settings', 'users', 'auditLogs'
     ];
@@ -550,7 +550,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
         'suratTemplates', 'arsipSurat', 'pendaftar', 'auditLogs', 'users', 'raporRecords', 'absensi', 'jurnalMengajar',
         'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules',
+        'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'jadwalUjian', 'piketSchedules',
         'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'warehouses', 'stockTransfers', 'digitalAssets', 'settings'
     ];
 
@@ -664,7 +664,7 @@ export const getPendingChangesCount = async (config: CloudSyncConfig) => {
         'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi', 'suratTemplates', 
         'arsipSurat', 'pendaftar', 'auditLogs', 'raporRecords', 'absensi', 
         'jurnalMengajar', 'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 
-        'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 
+        'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'jadwalUjian',
         'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang',
         'warehouses', 'stockTransfers', 'digitalAssets'
     ];
@@ -713,6 +713,7 @@ export const publishMasterData = async (config: CloudSyncConfig) => {
         calendarEvents: await db.calendarEvents.toArray(),
         jadwalPelajaran: await db.jadwalPelajaran.toArray(),
         arsipJadwal: await db.arsipJadwal.toArray(),
+        jadwalUjian: await db.jadwalUjian.toArray(),
         piketSchedules: await db.piketSchedules.toArray(),
         pendingOrders: await db.pendingOrders.toArray(),
         diskon: await db.diskon.toArray(),
@@ -771,14 +772,26 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
         const tenantId = config.firebasePairedTenantId;
         if (!tenantId) throw new Error("Tenant ID tidak ditemukan. Harap hubungkan Firebase terlebih dahulu.");
         
-        const { db: fdb, collection, getDocs, query } = await import('../firebase');
+        const { db: fdb, collection, getDocs, query, doc, getDoc } = await import('../firebase');
         const path = `tenants/${tenantId}/users`;
         const q = query(collection(fdb, path));
         const snapshot = await getDocs(q);
         const users = snapshot.docs.map(doc => doc.data());
-        if (users.length > 0) {
-            data = { users };
+
+        let settingsDoc = null;
+        try {
+            const settingsSnap = await getDoc(doc(fdb, `tenants/${tenantId}/settings`, 'main'));
+            if (settingsSnap.exists()) {
+                settingsDoc = settingsSnap.data();
+            }
+        } catch (sErr) {
+            console.warn("Could not fetch remote settings during updateAccountFromCloud:", sErr);
         }
+
+        data = {
+            users: users.length > 0 ? users : undefined,
+            settings: settingsDoc ? [settingsDoc] : undefined,
+        };
     } else if (config.provider === 'dropbox') {
         const token = await getValidDropboxToken(config);
         const response = await fetchWithRetry('https://content.dropboxapi.com/2/files/download', {
@@ -812,9 +825,16 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
             const cloudSettings = data.settings[0];
             
             if (localSettings.length > 0) {
-                // Ensure we ALWAYS overwrite the core settings data during a fresh pairing/config update
-                // to make sure multiUserMode etc are picked up immediately.
+                // Ensure we preserve the pairing info on the local spoke device
+                const localPaired = localSettings[0]?.cloudSyncConfig?.firebasePairedTenantId || config.firebasePairedTenantId;
                 const { id, ...rest } = cloudSettings;
+                if (localPaired) {
+                    rest.cloudSyncConfig = {
+                        ...(rest.cloudSyncConfig || {}),
+                        firebasePairedTenantId: localPaired,
+                        provider: 'firebase'
+                    };
+                }
                 await db.settings.update(localSettings[0].id!, rest);
             } else {
                 await db.settings.add(cloudSettings);

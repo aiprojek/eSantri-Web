@@ -35,6 +35,115 @@ export const TabBebanMengajar: React.FC = () => {
     const [selectedTeacherForSlip, setSelectedTeacherForSlip] = useState<TeacherLoadDetail | null>(null);
     const [isExporting, setIsExporting] = useState(false);
 
+    // Signatory auto-resolution for schedule slip
+    const mudirTeacher = useMemo(() => {
+        return settings.tenagaPengajar.find(t => t.id === settings.mudirAamId);
+    }, [settings.tenagaPengajar, settings.mudirAamId]);
+
+    const kurikulumTeacher = useMemo(() => {
+        return settings.tenagaPengajar.find(t =>
+            t.riwayatJabatan?.some(rj =>
+                rj.jabatan?.toLowerCase().includes('kurikulum') ||
+                rj.jabatan?.toLowerCase().includes('akademik')
+            ) ||
+            (t as any).jabatan?.toLowerCase().includes('kurikulum') ||
+            (t as any).jabatan?.toLowerCase().includes('akademik')
+        );
+    }, [settings.tenagaPengajar]);
+
+    const defaultSignatoryName = useMemo(() => {
+        if (mudirTeacher?.nama) return mudirTeacher.nama;
+        if (settings.namaMudir?.trim()) return settings.namaMudir.trim();
+        if (kurikulumTeacher?.nama) return kurikulumTeacher.nama;
+        
+        // Find any leadership / kepala teacher
+        const pimpinanTeacher = settings.tenagaPengajar.find(t =>
+            t.riwayatJabatan?.some(rj =>
+                rj.jabatan?.toLowerCase().includes('mudir') ||
+                rj.jabatan?.toLowerCase().includes('kepala') ||
+                rj.jabatan?.toLowerCase().includes('pimpinan') ||
+                rj.jabatan?.toLowerCase().includes('pengasuh')
+            ) ||
+            (t as any).jabatan?.toLowerCase().includes('mudir') ||
+            (t as any).jabatan?.toLowerCase().includes('kepala') ||
+            (t as any).jabatan?.toLowerCase().includes('pimpinan')
+        );
+        if (pimpinanTeacher?.nama) return pimpinanTeacher.nama;
+
+        // Fallback to first teacher if available
+        const firstTeacher = settings.tenagaPengajar[0];
+        if (firstTeacher?.nama) return firstTeacher.nama;
+
+        return 'Kepala Bagian Kurikulum';
+    }, [mudirTeacher, settings.namaMudir, kurikulumTeacher, settings.tenagaPengajar]);
+
+    const defaultSignatoryTitle = useMemo(() => {
+        if (mudirTeacher?.nama || settings.namaMudir) return 'Pimpinan / Mudir Pesantren';
+        if (kurikulumTeacher) return 'Kepala Bagian Kurikulum';
+        return 'Kepala Bagian Kurikulum';
+    }, [mudirTeacher, settings.namaMudir, kurikulumTeacher]);
+
+    const defaultSignatoryNip = useMemo(() => {
+        return mudirTeacher?.nip || kurikulumTeacher?.nip || '';
+    }, [mudirTeacher, kurikulumTeacher]);
+
+    const defaultSignatoryCity = useMemo(() => {
+        return settings.kabupatenKota || settings.tempatRaporDefault || 'Pesantren';
+    }, [settings.kabupatenKota, settings.tempatRaporDefault]);
+
+    const [slipSignatory, setSlipSignatory] = useState<{
+        nama?: string;
+        jabatan?: string;
+        nip?: string;
+        kota?: string;
+    }>(() => {
+        try {
+            const raw = localStorage.getItem('esantri_slip_beban_signatory');
+            if (raw) return JSON.parse(raw);
+        } catch (e) {}
+        return {};
+    });
+
+    const [showSignatorySettings, setShowSignatorySettings] = useState(false);
+
+    const updateSlipSignatory = (field: 'nama' | 'jabatan' | 'nip' | 'kota', value: string) => {
+        setSlipSignatory(prev => {
+            const updated = { ...prev, [field]: value };
+            try {
+                localStorage.setItem('esantri_slip_beban_signatory', JSON.stringify(updated));
+            } catch (e) {}
+            return updated;
+        });
+    };
+
+    const activeSignatoryName = useMemo(() => {
+        if (slipSignatory.nama !== undefined && slipSignatory.nama.trim() !== '' && !slipSignatory.nama.trim().startsWith('...')) {
+            return slipSignatory.nama.trim();
+        }
+        return defaultSignatoryName.trim() || 'Kepala Bagian Kurikulum';
+    }, [slipSignatory.nama, defaultSignatoryName]);
+
+    const activeSignatoryTitle = useMemo(() => {
+        if (slipSignatory.jabatan !== undefined && slipSignatory.jabatan.trim() !== '' && !slipSignatory.jabatan.trim().startsWith('...')) {
+            return slipSignatory.jabatan.trim();
+        }
+        return defaultSignatoryTitle.trim() || 'Kepala Bagian Kurikulum';
+    }, [slipSignatory.jabatan, defaultSignatoryTitle]);
+
+    const activeSignatoryNip = useMemo(() => {
+        if (slipSignatory.nip !== undefined) {
+            return slipSignatory.nip.trim();
+        }
+        return defaultSignatoryNip.trim();
+    }, [slipSignatory.nip, defaultSignatoryNip]);
+
+    const activeSignatoryCity = useMemo(() => {
+        if (slipSignatory.kota !== undefined && slipSignatory.kota.trim() !== '') {
+            return slipSignatory.kota.trim();
+        }
+        return defaultSignatoryCity.trim();
+    }, [slipSignatory.kota, defaultSignatoryCity]);
+
     // Live query for current schedules
     const jadwalList = useLiveQuery(() => db.jadwalPelajaran.toArray(), []) || [];
 
@@ -189,7 +298,7 @@ export const TabBebanMengajar: React.FC = () => {
             });
 
             wsData.push([]);
-            wsData.push(['dibuat dengan eSantri Web | aiprojek01.my.id']);
+            wsData.push(['eSantri Web by AI Projek | aiprojek01.my.id']);
 
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             ws['!cols'] = [
@@ -308,20 +417,28 @@ export const TabBebanMengajar: React.FC = () => {
 
                     <div class="signature-block">
                         <div class="signature">
-                            Mengetahui,<br/>Kepala Kurikulum / Marhalah
+                            <div style="font-size:10px; color:#475569; margin-bottom: 3px;">
+                                ${activeSignatoryCity ? `${activeSignatoryCity}, ` : ''}${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </div>
+                            <div style="font-size:11px; color:#334155;">Mengetahui,</div>
+                            <div style="font-weight:700; color:#0f172a; font-size:11px;">${activeSignatoryTitle}</div>
                             <div class="sign-line"></div>
-                            ( .................................................. )
+                            <strong style="color:#0f172a; text-decoration:underline;">${activeSignatoryName}</strong>
+                            ${activeSignatoryNip ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">NIP/NIY. ${activeSignatoryNip}</div>` : ''}
                         </div>
                         <div class="signature">
-                            Guru Pengajar
+                            <div style="font-size:10px; color:transparent; margin-bottom: 3px;">-</div>
+                            <div style="font-size:11px; color:#334155;">Penerima Tugas,</div>
+                            <div style="font-weight:700; color:#0f172a; font-size:11px;">Guru Pengajar</div>
                             <div class="sign-line"></div>
-                            <strong>${detail.guru.nama}</strong>
+                            <strong style="color:#0f172a; text-decoration:underline;">${detail.guru.nama}</strong>
+                            ${detail.guru.nip ? `<div style="font-size:10px; color:#64748b; margin-top:2px;">NIP/NIY. ${detail.guru.nip}</div>` : ''}
                         </div>
                     </div>
 
                     <div class="footer">
                         <span>Dicetak pada: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                        <span>eSantri Web Application | Sistem Manajemen Pesantren</span>
+                        <span>eSantri Web by AI Projek | aiprojek01.my.id</span>
                     </div>
                 </body>
             </html>
@@ -649,6 +766,109 @@ export const TabBebanMengajar: React.FC = () => {
                                             </div>
                                         );
                                     })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Panel Konfigurasi Penandatangan Slip */}
+                        <div className="mx-5 mb-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
+                                        <i className="bi bi-pen-fill text-xs"></i>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                            <span>Penandatangan:</span>
+                                            <span className="text-teal-700">{activeSignatoryName}</span>
+                                            <span className="text-[10px] bg-teal-50 text-teal-700 border border-teal-200 px-1.5 py-0.2 rounded font-normal">
+                                                Otomatis
+                                            </span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-500">
+                                            {activeSignatoryTitle} {activeSignatoryNip ? `• NIP/NIY: ${activeSignatoryNip}` : ''} {activeSignatoryCity ? `• ${activeSignatoryCity}` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSignatorySettings(prev => !prev)}
+                                    className="text-xs font-semibold text-teal-700 hover:text-teal-800 bg-white border border-teal-200 hover:border-teal-300 px-2.5 py-1 rounded-lg flex items-center gap-1 self-start sm:self-auto transition-colors"
+                                >
+                                    <i className="bi bi-sliders"></i>
+                                    <span>{showSignatorySettings ? 'Sembunyikan' : 'Ubah Penandatangan'}</span>
+                                </button>
+                            </div>
+
+                            {showSignatorySettings && (
+                                <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs animate-fade-in">
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                            Nama Penandatangan
+                                        </label>
+                                        <div className="flex gap-1.5">
+                                            <input
+                                                type="text"
+                                                value={slipSignatory.nama !== undefined ? slipSignatory.nama : defaultSignatoryName}
+                                                onChange={e => updateSlipSignatory('nama', e.target.value)}
+                                                placeholder="Contoh: Ust. Ahmad Fauzi, Lc"
+                                                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                                            />
+                                            {defaultSignatoryName && (
+                                                <button
+                                                    type="button"
+                                                    title="Gunakan Nama Mudir / Pimpinan dari Pengaturan"
+                                                    onClick={() => updateSlipSignatory('nama', defaultSignatoryName)}
+                                                    className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold rounded-lg shrink-0"
+                                                >
+                                                    Mudir
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                            Jabatan Resmi
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={slipSignatory.jabatan !== undefined ? slipSignatory.jabatan : defaultSignatoryTitle}
+                                            onChange={e => updateSlipSignatory('jabatan', e.target.value)}
+                                            placeholder="Contoh: Kepala Bidang Kurikulum / Mudir"
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                            NIP / NIY Penandatangan (Opsional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={slipSignatory.nip !== undefined ? slipSignatory.nip : defaultSignatoryNip}
+                                            onChange={e => updateSlipSignatory('nip', e.target.value)}
+                                            placeholder="Nomor Induk Pegawai/Guru"
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                                            Kota / Wilayah Penandatanganan
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={slipSignatory.kota !== undefined ? slipSignatory.kota : defaultSignatoryCity}
+                                            onChange={e => updateSlipSignatory('kota', e.target.value)}
+                                            placeholder="Contoh: Jombang"
+                                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div className="sm:col-span-2 text-[10px] text-slate-500 italic mt-0.5">
+                                        Data penandatangan otomatis tersimpan dan digunakan untuk semua cetak slip saku guru berikutnya.
+                                    </div>
                                 </div>
                             )}
                         </div>

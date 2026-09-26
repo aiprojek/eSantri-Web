@@ -274,6 +274,32 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "nomorSurat", "perihal", "tujuan", "isiSurat", "tanggalBuat", "lastModified"]
+    },
+    "JadwalUjian": {
+      "title": "JadwalUjian",
+      "description": "Jadwal pelaksanaan evaluasi & ujian (PTS, PAS, Munaqosyah) santri",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "jenjangId": { "type": "number" },
+        "rombelId": { "type": "number" },
+        "jenisUjian": { "type": "string" },
+        "tahunAjaran": { "type": "string" },
+        "semester": { "type": "string", "enum": ["Ganjil", "Genap"] },
+        "tanggal": { "type": "string" },
+        "hari": { "type": "number" },
+        "hariKe": { "type": "number" },
+        "sesiKe": { "type": "number" },
+        "jamMulai": { "type": "string" },
+        "jamSelesai": { "type": "string" },
+        "mapelId": { "type": "number" },
+        "pengawasId": { "type": "number" },
+        "pengawas2Id": { "type": "number" },
+        "ruangan": { "type": "string" },
+        "keterangan": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "jenjangId", "rombelId", "jenisUjian", "tanggal", "hari", "sesiKe", "jamMulai", "jamSelesai", "lastModified"]
     }
   },
   "firestore": {
@@ -320,6 +346,10 @@
     "tenants/{tenantId}/arsipSurat": {
       "schema": "ArsipSurat",
       "description": "Koleksi buku agenda & arsip surat keluar per tenant"
+    },
+    "tenants/{tenantId}/jadwalUjian": {
+      "schema": "JadwalUjian",
+      "description": "Koleksi jadwal ujian & evaluasi KBM santri per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

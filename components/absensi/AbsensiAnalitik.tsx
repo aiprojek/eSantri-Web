@@ -16,6 +16,7 @@ import {
     Cell,
     Legend
 } from 'recharts';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const AbsensiAnalitik: React.FC = () => {
     const { settings } = useAppContext();
@@ -30,6 +31,9 @@ export const AbsensiAnalitik: React.FC = () => {
     const [selectedJenisSantri, setSelectedJenisSantri] = useState<string>('all');
     const [selectedSesi, setSelectedSesi] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState<string>('');
+    const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
+
+    const activeFilterCount = (selectedJenjangId ? 1 : 0) + (selectedKelasId ? 1 : 0) + (selectedRombelId ? 1 : 0) + (selectedJenisSantri !== 'all' ? 1 : 0) + (selectedSesi !== 'all' ? 1 : 0) + (searchQuery.trim() ? 1 : 0);
 
     // --- Date & Period State ---
     const now = new Date();
@@ -429,7 +433,135 @@ export const AbsensiAnalitik: React.FC = () => {
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                {/* Mobile Filter & Search Bar */}
+                <div className="flex sm:hidden items-center gap-2">
+                    <div className="relative flex-1">
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Cari santri..."
+                            className="w-full text-xs p-2.5 pr-7 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:bg-white outline-none"
+                        />
+                        {searchQuery ? (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600 text-xs"
+                            >
+                                <i className="bi bi-x-circle-fill"></i>
+                            </button>
+                        ) : (
+                            <i className="bi bi-search absolute right-2.5 top-2.5 text-gray-400 text-xs pointer-events-none"></i>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsMobileFilterOpen(true)}
+                        className={`h-9 px-3 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all shrink-0 ${
+                            activeFilterCount > 0
+                                ? 'bg-teal-50 text-teal-800 border-teal-300 shadow-xs'
+                                : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                        }`}
+                    >
+                        <i className="bi bi-funnel-fill text-teal-600"></i>
+                        <span>Filter</span>
+                        {activeFilterCount > 0 && (
+                            <span className="w-4 h-4 rounded-full bg-teal-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </button>
+                </div>
+
+                {/* Mobile Filter Drawer */}
+                <MobileFilterDrawer
+                    isOpen={isMobileFilterOpen}
+                    onClose={() => setIsMobileFilterOpen(false)}
+                    title="Filter Kalender & Analitik"
+                    onReset={handleResetFilters}
+                >
+                    <div className="space-y-3.5 text-xs">
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">1. Jenjang</label>
+                            <select
+                                value={selectedJenjangId}
+                                onChange={e => handleJenjangChange(Number(e.target.value))}
+                                className="w-full text-xs font-semibold p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500"
+                            >
+                                <option value={0}>-- Semua Jenjang --</option>
+                                {settings.jenjang.map(j => (
+                                    <option key={j.id} value={j.id}>{j.nama}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">2. Kelas</label>
+                            <select
+                                value={selectedKelasId}
+                                onChange={e => handleKelasChange(Number(e.target.value))}
+                                disabled={availableKelas.length === 0}
+                                className="w-full text-xs font-semibold p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                            >
+                                <option value={0}>-- Semua Kelas --</option>
+                                {availableKelas.map(k => (
+                                    <option key={k.id} value={k.id}>{k.nama}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">3. Rombel</label>
+                            <select
+                                value={selectedRombelId}
+                                onChange={e => handleRombelChange(Number(e.target.value))}
+                                disabled={availableRombel.length === 0}
+                                className="w-full text-xs font-semibold p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                            >
+                                <option value={0}>-- Semua Rombel --</option>
+                                {availableRombel.map(r => {
+                                    const k = settings.kelas.find(kl => kl.id === r.kelasId);
+                                    return (
+                                        <option key={r.id} value={r.id}>
+                                            {r.nama} {k ? `(${k.nama})` : ''}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">Jenis Santri</label>
+                            <select
+                                value={selectedJenisSantri}
+                                onChange={e => setSelectedJenisSantri(e.target.value)}
+                                className="w-full text-xs font-semibold p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500"
+                            >
+                                <option value="all">Semua Kategori</option>
+                                <option value="Mondok">Semua Mondok (Berasrama)</option>
+                                <option value="Laju">Semua Laju (Pulang-Pergi)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">Sesi Presensi</label>
+                            <select
+                                value={selectedSesi}
+                                onChange={e => setSelectedSesi(e.target.value)}
+                                className="w-full text-xs font-semibold p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500"
+                            >
+                                <option value="all">Semua Sesi</option>
+                                {sessionList.map((s: string, idx: number) => (
+                                    <option key={idx} value={s}>{s}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                </MobileFilterDrawer>
+
+                {/* Desktop Grid View */}
+                <div className="hidden sm:grid grid-cols-2 lg:grid-cols-6 gap-3">
                     {/* 1. Filter Jenjang */}
                     <div>
                         <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">

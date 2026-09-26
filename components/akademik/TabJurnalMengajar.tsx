@@ -509,19 +509,39 @@ export const TabJurnalMengajar: React.FC = () => {
                         </div>
                     </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                    <button onClick={handlePrint} className="px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50">
-                        <i className="bi bi-printer mr-2"></i>Cetak
-                    </button>
-                    <button onClick={handleExportPdf} disabled={isExporting} className="px-3 py-2 text-sm rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50">
-                        <i className="bi bi-file-earmark-pdf mr-2"></i>Export PDF
-                    </button>
-                    <button onClick={handleExportXlsx} disabled={isExporting} className="px-3 py-2 text-sm rounded-lg border border-green-200 text-green-700 bg-green-50 hover:bg-green-100 disabled:opacity-50">
-                        <i className="bi bi-file-earmark-spreadsheet mr-2"></i>Export Excel
-                    </button>
-                    <span className="px-3 py-2 text-xs rounded-lg border border-blue-100 bg-blue-50 text-blue-700">
-                        Preview langsung terlihat di tabel ini
-                    </span>
+                <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pt-3 border-t border-gray-100">
+                    <div className="grid grid-cols-3 sm:flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                            type="button"
+                            onClick={handlePrint}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 shadow-2xs transition-colors"
+                        >
+                            <i className="bi bi-printer text-gray-500"></i>
+                            <span>Cetak</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleExportPdf}
+                            disabled={isExporting}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50 shadow-2xs transition-colors"
+                        >
+                            <i className="bi bi-file-earmark-pdf"></i>
+                            <span>PDF</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleExportXlsx}
+                            disabled={isExporting}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 shadow-2xs transition-colors"
+                        >
+                            <i className="bi bi-file-earmark-spreadsheet"></i>
+                            <span>Excel</span>
+                        </button>
+                    </div>
+                    <div className="text-[11px] text-gray-500 font-medium flex items-center gap-1.5 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100 w-full sm:w-auto">
+                        <i className="bi bi-info-circle text-teal-600 shrink-0"></i>
+                        <span>Menampilkan {filteredJournals.length} log jurnal KBM</span>
+                    </div>
                 </div>
             </div>
 

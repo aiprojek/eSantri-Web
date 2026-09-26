@@ -110,6 +110,7 @@ const DataMaster: React.FC = () => {
                         localSettings={localSettings} 
                         handleInputChange={handleInputChange} 
                         canWrite={canWrite} 
+                        source="datamaster"
                     />
                 )}
                 {activeTab === 'tahun_ajaran' && (

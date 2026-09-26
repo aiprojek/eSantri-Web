@@ -266,6 +266,8 @@ export interface KetersediaanPengajar {
     rombelId: number;
 }
 
+export type JenisPegawai = 'pendidik' | 'kependidikan';
+
 export interface TenagaPengajar {
     id: number;
     nama: string;
@@ -273,6 +275,8 @@ export interface TenagaPengajar {
     telepon?: string;
     email?: string;
     status?: string;
+    jenisPegawai?: JenisPegawai; // 'pendidik' (Guru/Ustadz) atau 'kependidikan' (Staf/TU/BK/Kasir/Satpam/dll)
+    kategoriStaf?: string; // e.g. 'Tata Usaha', 'Keuangan/Kasir', 'Bimbingan Konseling (BK)', 'Keamanan/Satpam', 'Pengasuhan/Asrama', 'Umum/Lainnya'
     kodeGuru?: string; // Kode guru untuk legenda jadwal
     riwayatJabatan: RiwayatJabatan[];
     ketersediaanPengajar?: KetersediaanPengajar[];
@@ -300,6 +304,7 @@ export interface MataPelajaran {
     rumpun?: RumpunMapel;
     kodeMapel?: string;
     alokasiJamDefault?: number; // Target alokasi jam tatap muka per pekan
+    jamPerMinggu?: number; // Alias untuk alokasi jam per pekan
     targetBabSemester?: string[]; // Target pokok bahasan / silabus bab per semester
 }
 
@@ -549,6 +554,17 @@ export interface AcademicYearConfig {
     isActive: boolean;
 }
 
+export interface RaporSheet {
+    id: string;
+    name: string;
+    rowCount: number;
+    colCount: number;
+    cells: GridCell[][];
+    paperSize?: 'A4' | 'F4';
+    orientation?: 'portrait' | 'landscape';
+    showJudul?: boolean;
+}
+
 export interface RaporTemplate {
     id: string;
     name: string;
@@ -558,6 +574,8 @@ export interface RaporTemplate {
     rowCount: number;
     colCount: number;
     cells: GridCell[][];
+    sheets?: RaporSheet[]; // Multi-sheet / Multi-worksheet support
+    activeSheetId?: string;
     lastModified: string;
     showJudul?: boolean;
 }
@@ -573,6 +591,7 @@ export interface GridCell {
     colSpan?: number;
     rowSpan?: number;
     width?: number;
+    height?: number;
     key?: string; // For input/data mapping
     options?: string[]; // For dropdown
     align?: 'left' | 'center' | 'right';

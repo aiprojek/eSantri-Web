@@ -42,8 +42,16 @@ Sekarang satu mata pelajaran bisa punya lebih dari satu:
   - Modul: `Safinatun Najah;Fathul Qarib`
   - Link Unduh: `https://a;https://b`
 
-## 4) Catatan Kompatibilitas
+## 4) Kesanggupan Guru & Sinkronisasi Dua Arah Kurikulum
+
+- **Hari & Jam Masuk:** Guru kini dapat diatur hari kesanggupan (Senin–Ahad) serta urutan Jam Pelajaran ke- (misal hanya jam 1–4).
+- **Batasan Rombel/Kelas:** Guru dapat dibatasi hanya mengajar di kelas/rombel spesifik (misal rombel putra).
+- **Sinkronisasi 2 Arah Real-Time:** Penugasan mata pelajaran di menu *Kurikulum > Plotting Pengampu* langsung tersinkronisasi ke data kompetensi guru di Data Master, dan sebaliknya.
+- **Validasi Cerdas Jadwal:** Pemilihan pengampu di Jadwal Pelajaran (manual & auto-generate) mematuhi batasan hari, jam ke-, dan rombel ini.
+
+## 5) Catatan Kompatibilitas
 
 - Data lama tetap aman.
 - Field lama (`modul`, `linkUnduh`, `linkPembelian`) tetap dibaca.
 - Sistem otomatis mengisi list baru bila data lama masih format tunggal.
+- Guru tanpa batasan jam/rombel dianggap bersedia di semua jam dan semua rombel.

@@ -140,8 +140,8 @@ const TeacherLoadModal: React.FC<TeacherLoadModalProps> = ({ isOpen, onClose, te
     const teacherStats = useMemo(() => {
         const stats = new Map<number, { name: string, totalHours: number, rombels: Set<string> }>();
         
-        // Init stats for all teachers
-        teachers.forEach(t => {
+        // Init stats for all teachers (exclude kependidikan)
+        teachers.filter(t => t.jenisPegawai !== 'kependidikan').forEach(t => {
             stats.set(t.id, { name: t.nama, totalHours: 0, rombels: new Set() });
         });
 
@@ -371,8 +371,12 @@ export const TabJadwalPelajaran: React.FC = () => {
     const handleSaveJadwal = async (data: Partial<JadwalPelajaran>) => {
         if (!filterRombelId) return;
 
-        // Check Conflict
+        // Check Teacher Availability & Restrictions
         if (data.guruId && data.guruId > 0) {
+            const teacher = settings.tenagaPengajar.find(t => t.id === data.guruId);
+            const rombel = settings.rombel.find(r => r.id === filterRombelId);
+            
+            // Check Conflict with other classes at the same slot
             const conflict = jadwalList.find(j => 
                 j.hari === data.hari && 
                 j.jamKe === data.jamKe && 
@@ -384,13 +388,37 @@ export const TabJadwalPelajaran: React.FC = () => {
                 const conflictRombel = settings.rombel.find(r => r.id === conflict.rombelId)?.nama;
                 showConfirmation(
                     'Konflik Jadwal Guru',
-                    `Guru ini sudah mengajar di kelas ${conflictRombel} pada waktu yang sama. Tetap simpan?`,
+                    `Ustadz/Guru ${teacher?.nama || ''} sudah terjadwal mengajar di kelas ${conflictRombel} pada waktu yang sama. Tetap simpan?`,
                     async () => {
                         await persistJadwalSlot(data);
                     },
                     { confirmText: 'Tetap Simpan', confirmColor: 'yellow' }
                 );
                 return;
+            }
+
+            // Check Availability Day/Hour/Rombel
+            if (teacher) {
+                const isDayOk = !teacher.hariMasuk || teacher.hariMasuk.length === 0 || (data.hari !== undefined && teacher.hariMasuk.includes(data.hari));
+                const isHourOk = !teacher.jamMasuk || teacher.jamMasuk.length === 0 || (data.jamKe !== undefined && teacher.jamMasuk.includes(data.jamKe));
+                const isRombelOk = !teacher.availableRombelIds || teacher.availableRombelIds.length === 0 || teacher.availableRombelIds.includes(filterRombelId);
+
+                if (!isDayOk || !isHourOk || !isRombelOk) {
+                    const warnings: string[] = [];
+                    if (!isDayOk) warnings.push('hari ini bukan hari masuknya');
+                    if (!isHourOk) warnings.push(`jam ke-${data.jamKe} di luar jam kesanggupan`);
+                    if (!isRombelOk) warnings.push(`guru memiliki batasan rombel khusus`);
+
+                    showConfirmation(
+                        'Peringatan Kesanggupan Guru',
+                        `Ustadz/Guru ${teacher.nama} memiliki batasan jadwal (${warnings.join(', ')}). Tetap jadwalkan?`,
+                        async () => {
+                            await persistJadwalSlot(data);
+                        },
+                        { confirmText: 'Tetap Jadwalkan', confirmColor: 'yellow' }
+                    );
+                    return;
+                }
             }
         }
 
@@ -461,10 +489,16 @@ export const TabJadwalPelajaran: React.FC = () => {
                     await db.jadwalPelajaran.bulkDelete(existingIds);
 
                     const newJadwal: JadwalPelajaran[] = [];
-                    const teachers = settings.tenagaPengajar;
+                    // Only include teachers (tenaga pendidik), exclude non-teaching staff (kependidikan)
+                    const teachers = settings.tenagaPengajar.filter(t => t.jenisPegawai !== 'kependidikan');
                     const mapels = settings.mataPelajaran.filter(m => m.jenjangId === filterJenjangId);
                     
-                    // Simple Greedy Algorithm for Auto-Generation
+                    // Trackers to respect curriculum allocations (jamPerMinggu) and load balancing
+                    const rombelMapelCount: Record<string, number> = {}; // key: `${rombelId}_${mapelId}`
+                    const rombelDayMapelCount: Record<string, number> = {}; // key: `${rombelId}_${dayIdx}_${mapelId}`
+                    const teacherScheduledHours: Record<number, number> = {}; // key: teacherId
+
+                    // Curriculum-Aware Scheduling Loop
                     // For each Rombel, for each Day, for each Jam
                     for (const rombelId of rombelIdsInJenjang) {
                         const rombel = settings.rombel.find(r => r.id === rombelId);
@@ -474,50 +508,87 @@ export const TabJadwalPelajaran: React.FC = () => {
                             for (const jam of jamConfig) {
                                 if (jam.jenis !== 'KBM') continue;
 
-                                // Find a suitable teacher
-                                // Criteria:
-                                // - Available on this day (hariMasuk)
-                                // - Available on this jam (jamMasuk)
-                                // - Competent in a mapel for this jenjang (kompetensiMapelIds)
-                                // - Allowed to teach in this Rombel or Kelas
-                                // - Not already teaching at this time in another Rombel
-                                
-                                const suitableTeacher = teachers.find(t => {
+                                // Gather all possible teacher-mapel candidate pairs
+                                interface CandidatePair {
+                                    teacher: typeof teachers[0];
+                                    mapel: typeof mapels[0];
+                                    remainingQuota: number;
+                                    todayCount: number;
+                                    teacherLoad: number;
+                                }
+
+                                const candidates: CandidatePair[] = [];
+
+                                for (const t of teachers) {
                                     // Day check
-                                    if (t.hariMasuk && t.hariMasuk.length > 0 && !t.hariMasuk.includes(dayIdx)) return false;
+                                    if (t.hariMasuk && t.hariMasuk.length > 0 && !t.hariMasuk.includes(dayIdx)) continue;
                                     // Jam check
-                                    if (t.jamMasuk && t.jamMasuk.length > 0 && !t.jamMasuk.includes(jam.urutan)) return false;
+                                    if (t.jamMasuk && t.jamMasuk.length > 0 && !t.jamMasuk.includes(jam.urutan)) continue;
                                     // Rombel/Kelas check
                                     const canTeachInRombel = !t.availableRombelIds || t.availableRombelIds.length === 0 || t.availableRombelIds.includes(rombelId);
                                     const canTeachInKelas = !t.availableKelasIds || t.availableKelasIds.length === 0 || (kelas && t.availableKelasIds.includes(kelas.id));
-                                    if (!canTeachInRombel && !canTeachInKelas) return false;
-                                    
-                                    // Mapel check (must have at least one mapel for this jenjang)
-                                    const hasMapel = t.kompetensiMapelIds?.some(mid => mapels.some(m => m.id === mid));
-                                    if (!hasMapel) return false;
+                                    if (!canTeachInRombel || !canTeachInKelas) continue;
 
-                                    // Conflict check
+                                    // Conflict check (teacher already assigned elsewhere at this time)
                                     const isBusy = newJadwal.some(j => j.hari === dayIdx && j.jamKe === jam.urutan && j.guruId === t.id);
-                                    if (isBusy) return false;
+                                    if (isBusy) continue;
 
-                                    return true;
-                                });
+                                    // Find all competent mapels for this jenjang
+                                    const competentMapels = mapels.filter(m => t.kompetensiMapelIds?.includes(m.id));
+                                    for (const m of competentMapels) {
+                                        const allocated = rombelMapelCount[`${rombelId}_${m.id}`] || 0;
+                                        const targetQuota = (m.alokasiJamDefault && m.alokasiJamDefault > 0) 
+                                            ? m.alokasiJamDefault 
+                                            : ((m.jamPerMinggu && m.jamPerMinggu > 0) ? m.jamPerMinggu : 2);
+                                        const remainingQuota = targetQuota - allocated;
+                                        const todayCount = rombelDayMapelCount[`${rombelId}_${dayIdx}_${m.id}`] || 0;
+                                        const teacherLoad = teacherScheduledHours[t.id] || 0;
 
-                                if (suitableTeacher) {
-                                    // Pick a mapel the teacher is competent in for this jenjang
-                                    const teacherMapelId = suitableTeacher.kompetensiMapelIds?.find(mid => mapels.some(m => m.id === mid));
-                                    
-                                    if (teacherMapelId) {
-                                        newJadwal.push({
-                                            id: Date.now() + Math.random(),
-                                            rombelId,
-                                            hari: dayIdx,
-                                            jamKe: jam.urutan,
-                                            mapelId: teacherMapelId,
-                                            guruId: suitableTeacher.id,
-                                            lastModified: Date.now()
+                                        candidates.push({
+                                            teacher: t,
+                                            mapel: m,
+                                            remainingQuota,
+                                            todayCount,
+                                            teacherLoad
                                         });
                                     }
+                                }
+
+                                if (candidates.length === 0) continue;
+
+                                // Filter candidates that still have curriculum quota left & not over-taught today
+                                const quotaCandidates = candidates.filter(c => c.remainingQuota > 0 && c.todayCount < 2);
+                                const candidatePool = quotaCandidates.length > 0 
+                                    ? quotaCandidates 
+                                    : (candidates.filter(c => c.remainingQuota > 0).length > 0 ? candidates.filter(c => c.remainingQuota > 0) : candidates);
+
+                                // Sort: prioritize highest remaining quota (fulfill curriculum first), then lowest teacher load
+                                candidatePool.sort((a, b) => {
+                                    if (b.remainingQuota !== a.remainingQuota) {
+                                        return b.remainingQuota - a.remainingQuota;
+                                    }
+                                    if (a.todayCount !== b.todayCount) {
+                                        return a.todayCount - b.todayCount;
+                                    }
+                                    return a.teacherLoad - b.teacherLoad;
+                                });
+
+                                const selected = candidatePool[0];
+                                if (selected) {
+                                    newJadwal.push({
+                                        id: Date.now() + Math.random(),
+                                        rombelId,
+                                        hari: dayIdx,
+                                        jamKe: jam.urutan,
+                                        mapelId: selected.mapel.id,
+                                        guruId: selected.teacher.id,
+                                        lastModified: Date.now()
+                                    });
+
+                                    // Update tracking counters
+                                    rombelMapelCount[`${rombelId}_${selected.mapel.id}`] = (rombelMapelCount[`${rombelId}_${selected.mapel.id}`] || 0) + 1;
+                                    rombelDayMapelCount[`${rombelId}_${dayIdx}_${selected.mapel.id}`] = (rombelDayMapelCount[`${rombelId}_${dayIdx}_${selected.mapel.id}`] || 0) + 1;
+                                    teacherScheduledHours[selected.teacher.id] = (teacherScheduledHours[selected.teacher.id] || 0) + 1;
                                 }
                             }
                         }
@@ -1798,6 +1869,7 @@ export const TabJadwalPelajaran: React.FC = () => {
                         days={days}
                         mapelList={settings.mataPelajaran.filter(m => m.jenjangId === filterJenjangId)}
                         teacherList={settings.tenagaPengajar}
+                        currentRombelId={filterRombelId}
                     />
                     
                     <ArchiveModal 

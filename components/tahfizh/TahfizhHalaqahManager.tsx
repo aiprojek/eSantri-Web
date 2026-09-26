@@ -389,15 +389,16 @@ export const TahfizhHalaqahManager: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0 w-full sm:w-auto">
                     <button
                         type="button"
                         onClick={handleExportHalaqahCsv}
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-3.5 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
+                        className="flex-1 sm:flex-initial bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-300 font-bold px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all text-center whitespace-nowrap shadow-2xs"
                         title="Ekspor daftar plotting seluruh kelompok halaqah ke file CSV"
                     >
-                        <i className="bi bi-file-earmark-spreadsheet-fill text-emerald-600"></i>
-                        <span>Ekspor CSV Halaqah</span>
+                        <i className="bi bi-file-earmark-spreadsheet-fill text-emerald-600 shrink-0"></i>
+                        <span className="sm:hidden">Ekspor CSV</span>
+                        <span className="hidden sm:inline">Ekspor CSV Halaqah</span>
                     </button>
 
                     {/* Add Halaqah Button */}
@@ -405,10 +406,11 @@ export const TahfizhHalaqahManager: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleOpenCreate}
-                            className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-4 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all"
+                            className="flex-1 sm:flex-initial bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-bold px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md transition-all text-center whitespace-nowrap"
                         >
-                            <i className="bi bi-plus-lg text-base"></i>
-                            <span>Tambah Kelompok Halaqah</span>
+                            <i className="bi bi-plus-lg text-sm shrink-0"></i>
+                            <span className="sm:hidden">+ Halaqah</span>
+                            <span className="hidden sm:inline">Tambah Kelompok Halaqah</span>
                         </button>
                     )}
                 </div>
@@ -685,7 +687,7 @@ export const TahfizhHalaqahManager: React.FC = () => {
 
             {/* MODAL: Member Assignment / Plotting Santri */}
             {isMemberModalOpen && selectedHalaqah && (
-                <div className="fixed inset-0 bg-black bg-opacity-60 z-[70] flex justify-center items-center p-2 sm:p-4 animate-fade-in">
+                <div className="fixed inset-0 bg-black/60 z-[70] flex justify-center items-center p-3.5 sm:p-5 md:p-6 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
                         {/* Modal Header */}
                         <div className="p-4 sm:p-5 bg-gradient-to-r from-teal-800 to-teal-900 text-white flex justify-between items-center shrink-0">

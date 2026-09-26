@@ -6,6 +6,7 @@ import { db } from '../../db';
 import { SuratPeringatanPrintTemplate, SuratPeringatanData } from './SuratPeringatanPrintTemplate';
 import { printExportFacade } from '../../utils/printExportFacade';
 import { AbsensiBkModal } from './AbsensiBkModal';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const AbsensiSuratPeringatan: React.FC = () => {
     const { settings, showToast, currentUser } = useAppContext();
@@ -16,6 +17,9 @@ export const AbsensiSuratPeringatan: React.FC = () => {
     const [selectedRombelId, setSelectedRombelId] = useState<number>(0);
     const [filterRiskLevel, setFilterRiskLevel] = useState<'ALL' | 'SP1' | 'SP2' | 'SP3'>('ALL');
     const [searchTerm, setSearchTerm] = useState('');
+    const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
+    const activeFilterCount = (selectedJenjangId ? 1 : 0) + (selectedRombelId ? 1 : 0) + (filterRiskLevel !== 'ALL' ? 1 : 0);
 
     // Modal state for Generating Letter
     const [isLetterModalOpen, setIsLetterModalOpen] = useState(false);
@@ -412,57 +416,153 @@ _Wassalamu'alaikum Warahmatullahi Wabarakatuh_
             </div>
 
             {/* Filter Bar */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-2xs flex flex-col md:flex-row gap-3 items-center justify-between">
-                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                    <select
-                        value={selectedJenjangId}
-                        onChange={e => {
-                            setSelectedJenjangId(Number(e.target.value));
-                            setSelectedRombelId(0);
-                        }}
-                        className="text-xs font-medium p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+            <div className="bg-white rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-2xs">
+                {/* Mobile View: Search + Filter Drawer Button */}
+                <div className="flex md:hidden items-center gap-2">
+                    <div className="relative flex-1">
+                        <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                        <input
+                            type="text"
+                            placeholder="Cari santri / NIS..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsMobileFilterOpen(true)}
+                        className={`h-9 px-3 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all shrink-0 ${
+                            activeFilterCount > 0
+                                ? 'bg-teal-50 text-teal-800 border-teal-300 shadow-xs'
+                                : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                        }`}
                     >
-                        <option value={0}>Semua Jenjang</option>
-                        {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
-                    </select>
-
-                    <select
-                        value={selectedRombelId}
-                        onChange={e => setSelectedRombelId(Number(e.target.value))}
-                        className="text-xs font-medium p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
-                    >
-                        <option value={0}>Semua Rombel</option>
-                        {settings.rombel
-                            .filter(r => {
-                                if (!selectedJenjangId) return true;
-                                const k = settings.kelas.find(kl => kl.id === r.kelasId);
-                                return k?.jenjangId === selectedJenjangId;
-                            })
-                            .map(r => <option key={r.id} value={r.id}>{r.nama}</option>)
-                        }
-                    </select>
-
-                    <select
-                        value={filterRiskLevel}
-                        onChange={e => setFilterRiskLevel(e.target.value as any)}
-                        className="text-xs font-medium p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
-                    >
-                        <option value="ALL">Semua Tingkat Alpha</option>
-                        <option value="SP1">Kategori SP-1 (3-4 Alpha)</option>
-                        <option value="SP2">Kategori SP-2 (5-6 Alpha)</option>
-                        <option value="SP3">Kategori SP-3 (&ge; 7 Alpha)</option>
-                    </select>
+                        <i className="bi bi-funnel-fill text-teal-600"></i>
+                        <span>Filter</span>
+                        {activeFilterCount > 0 && (
+                            <span className="w-4 h-4 rounded-full bg-teal-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </button>
                 </div>
 
-                <div className="w-full md:w-64 relative">
-                    <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
-                    <input
-                        type="text"
-                        placeholder="Cari santri / NIS..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
-                    />
+                {/* Mobile Filter Drawer */}
+                <MobileFilterDrawer
+                    isOpen={isMobileFilterOpen}
+                    onClose={() => setIsMobileFilterOpen(false)}
+                    title="Filter Surat Peringatan & SP"
+                    onReset={() => {
+                        setSelectedJenjangId(0);
+                        setSelectedRombelId(0);
+                        setFilterRiskLevel('ALL');
+                    }}
+                >
+                    <div className="space-y-3.5 text-xs">
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">Marhalah / Jenjang</label>
+                            <select
+                                value={selectedJenjangId}
+                                onChange={e => {
+                                    setSelectedJenjangId(Number(e.target.value));
+                                    setSelectedRombelId(0);
+                                }}
+                                className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-teal-500"
+                            >
+                                <option value={0}>Semua Jenjang</option>
+                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">Rombel / Kelas Belajar</label>
+                            <select
+                                value={selectedRombelId}
+                                onChange={e => setSelectedRombelId(Number(e.target.value))}
+                                className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-teal-500"
+                            >
+                                <option value={0}>Semua Rombel</option>
+                                {settings.rombel
+                                    .filter(r => {
+                                        if (!selectedJenjangId) return true;
+                                        const k = settings.kelas.find(kl => kl.id === r.kelasId);
+                                        return k?.jenjangId === selectedJenjangId;
+                                    })
+                                    .map(r => <option key={r.id} value={r.id}>{r.nama}</option>)
+                                }
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-gray-700 font-bold mb-1">Kategori Tingkat Alpha (SP)</label>
+                            <select
+                                value={filterRiskLevel}
+                                onChange={e => setFilterRiskLevel(e.target.value as any)}
+                                className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-teal-500"
+                            >
+                                <option value="ALL">Semua Tingkat Alpha</option>
+                                <option value="SP1">Kategori SP-1 (3-4 Alpha)</option>
+                                <option value="SP2">Kategori SP-2 (5-6 Alpha)</option>
+                                <option value="SP3">Kategori SP-3 (&ge; 7 Alpha)</option>
+                            </select>
+                        </div>
+                    </div>
+                </MobileFilterDrawer>
+
+                {/* Desktop View: Full Horizontal Row */}
+                <div className="hidden md:flex flex-row gap-3 items-center justify-between">
+                    <div className="flex flex-wrap items-center gap-2 w-auto">
+                        <select
+                            value={selectedJenjangId}
+                            onChange={e => {
+                                setSelectedJenjangId(Number(e.target.value));
+                                setSelectedRombelId(0);
+                            }}
+                            className="text-xs font-medium p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                        >
+                            <option value={0}>Semua Jenjang</option>
+                            {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                        </select>
+
+                        <select
+                            value={selectedRombelId}
+                            onChange={e => setSelectedRombelId(Number(e.target.value))}
+                            className="text-xs font-medium p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                        >
+                            <option value={0}>Semua Rombel</option>
+                            {settings.rombel
+                                .filter(r => {
+                                    if (!selectedJenjangId) return true;
+                                    const k = settings.kelas.find(kl => kl.id === r.kelasId);
+                                    return k?.jenjangId === selectedJenjangId;
+                                })
+                                .map(r => <option key={r.id} value={r.id}>{r.nama}</option>)
+                            }
+                        </select>
+
+                        <select
+                            value={filterRiskLevel}
+                            onChange={e => setFilterRiskLevel(e.target.value as any)}
+                            className="text-xs font-medium p-2.5 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                        >
+                            <option value="ALL">Semua Tingkat Alpha</option>
+                            <option value="SP1">Kategori SP-1 (3-4 Alpha)</option>
+                            <option value="SP2">Kategori SP-2 (5-6 Alpha)</option>
+                            <option value="SP3">Kategori SP-3 (&ge; 7 Alpha)</option>
+                        </select>
+                    </div>
+
+                    <div className="w-64 relative">
+                        <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                        <input
+                            type="text"
+                            placeholder="Cari santri / NIS..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                        />
+                    </div>
                 </div>
             </div>
 

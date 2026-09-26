@@ -20,6 +20,8 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
     const [isBulkOpen, setIsBulkOpen] = useState(false);
     const [bulkInitialData, setBulkInitialData] = useState<any[] | undefined>(undefined);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [filterCategory, setFilterCategory] = useState<'all' | 'pendidik' | 'kependidikan'>('all');
+    const [searchKeyword, setSearchKeyword] = useState('');
 
     const getTeacherStatus = (teacher: TenagaPengajar) => {
         if (!teacher.riwayatJabatan || teacher.riwayatJabatan.length === 0) {
@@ -90,6 +92,9 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
             
             const teacherId = isEdit ? item.id : nextId++;
 
+            const isKependidikan = item.jenisPegawai === 'Kependidikan (Staf)' || item.jenisPegawai === 'kependidikan';
+            const jenisPegawaiVal = isKependidikan ? 'kependidikan' : 'pendidik';
+
             if (item.jabatan) {
                 riwayat.push({
                     id: Date.now() + Math.random(),
@@ -113,19 +118,23 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                 nama: item.nama,
                 telepon: item.telepon,
                 email: item.email,
-                riwayatJabatan: isEdit ? riwayat : riwayat // If edit, we might want to preserve old riwayat, but the bulk editor currently simplified it to just the current one.
+                status: 'Aktif',
+                jenisPegawai: jenisPegawaiVal,
+                kategoriStaf: isKependidikan ? (item.jabatan || 'Tata Usaha (TU)') : undefined,
+                riwayatJabatan: isEdit ? riwayat : riwayat
             };
 
-            // If edit, we should merge or replace. For bulk grid editor, usually we replace the main fields.
+            // If edit, we should merge or replace.
             if (isEdit) {
                 const idx = teacherList.findIndex(t => t.id === item.id);
                 if (idx !== -1) {
-                    // Preserve old riwayat except the active one if we want complex sync, but let's keep it simple for now as requested.
                     teacherList[idx] = { 
                         ...teacherList[idx], 
                         nama: item.nama, 
                         telepon: item.telepon, 
                         email: item.email,
+                        jenisPegawai: jenisPegawaiVal,
+                        kategoriStaf: isKependidikan ? (item.jabatan || teacherList[idx].kategoriStaf || 'Tata Usaha (TU)') : undefined,
                         riwayatJabatan: riwayat.length > 0 ? riwayat : teacherList[idx].riwayatJabatan
                     };
                 }
@@ -191,9 +200,10 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
             return {
                 id: t.id,
                 nama: t.nama,
+                jenisPegawai: t.jenisPegawai === 'kependidikan' ? 'Kependidikan (Staf)' : 'Pendidik (Guru)',
                 telepon: t.telepon || '',
                 email: t.email || '',
-                jabatan: latestRiwayat?.jabatan || '',
+                jabatan: latestRiwayat?.jabatan || (t.kategoriStaf || ''),
                 rombelId: latestRiwayat?.rombelId || '',
                 tanggalMulai: latestRiwayat?.tanggalMulai || ''
             };
@@ -202,11 +212,39 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
         setIsBulkOpen(true);
     };
 
+    const filteredTeachers = localSettings.tenagaPengajar.filter(t => {
+        // Filter Category
+        const isKependidikan = t.jenisPegawai === 'kependidikan' || (
+            !t.jenisPegawai && t.riwayatJabatan?.some(r => {
+                const j = (r.jabatan || '').toLowerCase();
+                return j.includes('satpam') || j.includes('security') || j.includes('kasir') || j.includes('keuangan') || j.includes('tu') || j.includes('tata usaha') || j.includes('bk') || j.includes('konseling') || j.includes('kebersihan') || j.includes('dapur');
+            })
+        );
+        
+        if (filterCategory === 'pendidik' && isKependidikan) return false;
+        if (filterCategory === 'kependidikan' && !isKependidikan) return false;
+
+        // Filter Search
+        if (searchKeyword.trim()) {
+            const kw = searchKeyword.toLowerCase();
+            const matchName = t.nama.toLowerCase().includes(kw);
+            const matchJabatan = t.riwayatJabatan?.some(r => r.jabatan.toLowerCase().includes(kw));
+            const matchStaf = t.kategoriStaf?.toLowerCase().includes(kw);
+            const matchPhone = t.telepon?.includes(kw);
+            return matchName || matchJabatan || matchStaf || matchPhone;
+        }
+
+        return true;
+    });
+
+    const totalPendidik = localSettings.tenagaPengajar.filter(t => t.jenisPegawai !== 'kependidikan').length;
+    const totalKependidikan = localSettings.tenagaPengajar.filter(t => t.jenisPegawai === 'kependidikan').length;
+
     const toggleSelectAll = () => {
-        if (selectedIds.length === localSettings.tenagaPengajar.length) {
+        if (selectedIds.length === filteredTeachers.length) {
             setSelectedIds([]);
         } else {
-            setSelectedIds(localSettings.tenagaPengajar.map(t => t.id));
+            setSelectedIds(filteredTeachers.map(t => t.id));
         }
     };
 
@@ -221,7 +259,10 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
     return (
         <div className="bg-white p-4 md:p-6 rounded-lg shadow-md mb-6">
             <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-4 border-b pb-3">
-                <h2 className="text-lg md:text-xl font-bold text-gray-700">Tenaga Pendidik & Kependidikan</h2>
+                <div>
+                    <h2 className="text-lg md:text-xl font-bold text-gray-700">Tenaga Pendidik & Kependidikan</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Kelola data guru (asatidz) dan staf tenaga kependidikan (TU, Kasir, Satpam, BK, dll).</p>
+                </div>
                 {selectedIds.length > 0 && (
                     <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3 animate-fade-in">
                         <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-100">{selectedIds.length} dipilih</span>
@@ -231,21 +272,84 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                     </div>
                 )}
             </div>
+
+            {/* Filter Kategori & Pencarian */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg text-xs">
+                    <button
+                        type="button"
+                        onClick={() => setFilterCategory('all')}
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all ${
+                            filterCategory === 'all'
+                                ? 'bg-white text-gray-800 shadow-xs'
+                                : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                        Semua ({localSettings.tenagaPengajar.length})
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setFilterCategory('pendidik')}
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                            filterCategory === 'pendidik'
+                                ? 'bg-white text-teal-800 shadow-xs'
+                                : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                        <i className="bi bi-mortarboard-fill text-teal-600"></i>
+                        Tenaga Pendidik ({totalPendidik})
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setFilterCategory('kependidikan')}
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                            filterCategory === 'kependidikan'
+                                ? 'bg-white text-indigo-800 shadow-xs'
+                                : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                        <i className="bi bi-person-gear text-indigo-600"></i>
+                        Tenaga Kependidikan ({totalKependidikan})
+                    </button>
+                </div>
+
+                <div className="relative">
+                    <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                    <input
+                        type="text"
+                        placeholder="Cari nama, jabatan, no telp..."
+                        value={searchKeyword}
+                        onChange={e => setSearchKeyword(e.target.value)}
+                        className="w-full sm:w-64 pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                    />
+                    {searchKeyword && (
+                        <button
+                            onClick={() => setSearchKeyword('')}
+                            className="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 text-xs"
+                        >
+                            <i className="bi bi-x-circle-fill"></i>
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div className="border rounded-lg max-h-[60vh] overflow-y-auto mb-4">
-                {localSettings.tenagaPengajar.length > 0 ? (
+                {filteredTeachers.length > 0 ? (
                     <ul className="divide-y text-sm">
                         <li className="bg-gray-50 p-2 flex items-center border-b sticky top-0 z-10">
                             <input 
                                 type="checkbox" 
-                                checked={selectedIds.length > 0 && selectedIds.length === localSettings.tenagaPengajar.length} 
+                                checked={selectedIds.length > 0 && selectedIds.length === filteredTeachers.length} 
                                 onChange={toggleSelectAll}
                                 className="w-4 h-4 text-teal-600 rounded mr-3 cursor-pointer" 
                             />
-                            <span className="text-xs font-bold text-gray-400 uppercase">Pilih Semua</span>
+                            <span className="text-xs font-bold text-gray-400 uppercase">Pilih Semua ({filteredTeachers.length})</span>
                         </li>
-                        {localSettings.tenagaPengajar.map(t => {
+                        {filteredTeachers.map(t => {
                             const status = getTeacherStatus(t);
                             const isSelected = selectedIds.includes(t.id);
+                            const isKependidikan = t.jenisPegawai === 'kependidikan';
+
                             return (
                             <li key={t.id} className={`flex justify-between items-center p-3 hover:bg-gray-50 group transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
                                 <div className="flex items-center gap-3">
@@ -256,23 +360,50 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                                         className="w-4 h-4 text-teal-600 rounded cursor-pointer" 
                                     />
                                     <div>
-                                        <p className="font-medium">{t.nama}</p>
-                                        <p className="text-xs text-gray-600">{status.jabatan} 
-                                            <span className={`ml-2 font-semibold text-${status.color}-600`}>({status.text})</span>
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-medium text-gray-900">{t.nama}</p>
+                                            {isKependidikan ? (
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                                                    <i className="bi bi-person-gear"></i> {t.kategoriStaf || 'Staf Kependidikan'}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1">
+                                                    <i className="bi bi-mortarboard"></i> Guru / Pengajar
+                                                </span>
+                                            )}
+                                            {t.kodeGuru && (
+                                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                                                    {t.kodeGuru}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            <span>{status.jabatan}</span>
+                                            <span className={`ml-2 font-medium text-${status.color}-600`}>({status.text})</span>
+                                            {t.telepon && (
+                                                <span className="ml-2 text-gray-400">
+                                                    <i className="bi bi-telephone mr-1"></i>{t.telepon}
+                                                </span>
+                                            )}
                                         </p>
                                     </div>
                                 </div>
                                     {canWrite && (
                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                             <button onClick={() => setTeacherModalData({ mode: 'edit', item: t })} className="text-blue-500 hover:text-blue-700 text-xs" aria-label={`Edit data ${t.nama}`}><i className="bi bi-pencil-square"></i></button>
-                                             <button onClick={() => handleRemoveTeacher(t.id)} className="text-red-500 hover:text-red-700 text-xs" aria-label={`Hapus data ${t.nama}`}><i className="bi bi-trash"></i></button>
+                                             <button onClick={() => setTeacherModalData({ mode: 'edit', item: t })} className="text-blue-500 hover:text-blue-700 text-xs p-1" aria-label={`Edit data ${t.nama}`}><i className="bi bi-pencil-square"></i></button>
+                                             <button onClick={() => handleRemoveTeacher(t.id)} className="text-red-500 hover:text-red-700 text-xs p-1" aria-label={`Hapus data ${t.nama}`}><i className="bi bi-trash"></i></button>
                                     </div>
                                     )}
                             </li>
                             )
                         })}
                     </ul>
-                ) : <p className="text-sm text-gray-400 p-3 text-center">Data kosong.</p>}
+                ) : (
+                    <div className="py-8 text-center text-gray-400 text-xs">
+                        <i className="bi bi-people text-2xl mb-1 block"></i>
+                        {searchKeyword ? 'Tidak ada tenaga pendidik/kependidikan yang cocok dengan kata kunci.' : 'Belum ada data tenaga pendidik / kependidikan.'}
+                    </div>
+                )}
             </div>
             {canWrite && (
                 <div className="flex gap-2">

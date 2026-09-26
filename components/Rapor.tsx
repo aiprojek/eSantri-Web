@@ -10,6 +10,7 @@ const TabDataNilai = lazy(() => import('./akademik/TabDataNilai').then((module) 
 const TabCetakRapor = lazy(() => import('./akademik/TabCetakRapor').then((module) => ({ default: module.TabCetakRapor })));
 const TabMonitoringNilai = lazy(() => import('./akademik/TabMonitoringNilai').then((module) => ({ default: module.TabMonitoringNilai })));
 const TabInputNilaiWali = lazy(() => import('./akademik/TabInputNilaiWali').then((module) => ({ default: module.TabInputNilaiWali })));
+const TabLegerNilai = lazy(() => import('./akademik/TabLegerNilai').then((module) => ({ default: module.TabLegerNilai })));
 
 const TabLoadingFallback = () => (
     <div className="flex h-48 items-center justify-center">
@@ -17,7 +18,7 @@ const TabLoadingFallback = () => (
     </div>
 );
 
-type RaporTabId = 'designer' | 'generator' | 'import' | 'monitoring' | 'data' | 'print' | 'input_wali';
+type RaporTabId = 'designer' | 'generator' | 'import' | 'monitoring' | 'data' | 'print' | 'input_wali' | 'leger';
 
 const Rapor: React.FC = () => {
     const { currentUser } = useAppContext();
@@ -29,25 +30,25 @@ const Rapor: React.FC = () => {
     const [activeTab, setActiveTab] = useState<RaporTabId>(isWaliKelas ? 'input_wali' : 'monitoring');
 
     const raporTabs = useMemo(() => {
-        const tabs: Array<{ value: RaporTabId; label: string; icon: string }> = [];
+        const tabs: Array<{ value: RaporTabId; label: string; icon: string; mobileLabel?: string }> = [];
 
         if (!isWaliKelas && canReadAkademik) {
-            tabs.push({ value: 'monitoring', label: 'Progres Nilai', icon: 'bi-activity' });
+            tabs.push({ value: 'monitoring', label: 'Progres Nilai', icon: 'bi-activity', mobileLabel: 'Progres' });
+        }
+        if (isWaliKelas || isAdmin || canWriteAkademik) {
+            tabs.push({ value: 'input_wali', label: 'Input Nilai', icon: 'bi-pencil-square', mobileLabel: 'Input' });
+            tabs.push({ value: 'leger', label: 'Leger Nilai', icon: 'bi-table', mobileLabel: 'Leger' });
+        }
+        if (canReadAkademik) {
+            tabs.push({ value: 'print', label: 'Cetak Rapor', icon: 'bi-printer', mobileLabel: 'Cetak' });
+        }
+        if (!isWaliKelas && canReadAkademik) {
+            tabs.push({ value: 'data', label: 'Review Data', icon: 'bi-database', mobileLabel: 'Review' });
         }
         if (!isWaliKelas && canWriteAkademik) {
             tabs.push(
-                { value: 'designer', label: 'Design & Template', icon: 'bi-grid-3x3' },
-                { value: 'generator', label: 'Generate Form', icon: 'bi-file-earmark-code' },
-                { value: 'import', label: 'Import Nilai', icon: 'bi-box-arrow-in-down' }
-            );
-        }
-        if (isWaliKelas || isAdmin || canWriteAkademik) {
-            tabs.push({ value: 'input_wali', label: 'Input Nilai Wali Kelas', icon: 'bi-pencil-square' });
-        }
-        if (!isWaliKelas && canReadAkademik) {
-            tabs.push(
-                { value: 'data', label: 'Review Data Nilai', icon: 'bi-database' },
-                { value: 'print', label: 'Cetak Rapor', icon: 'bi-printer' }
+                { value: 'designer', label: 'Design & Template', icon: 'bi-grid-3x3', mobileLabel: 'Desain' },
+                { value: 'generator', label: 'Generate Form', icon: 'bi-file-earmark-code', mobileLabel: 'Formulir' }
             );
         }
         return tabs;
@@ -70,7 +71,7 @@ const Rapor: React.FC = () => {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
             <PageHeader
                 eyebrow="Pendidikan"
                 title="Rapor"
@@ -83,15 +84,15 @@ const Rapor: React.FC = () => {
                     />
                 }
             />
-            <div className="app-panel rounded-panel p-6">
+            <div className="app-panel rounded-panel p-2 sm:p-4 lg:p-6 min-w-0 overflow-x-hidden">
                 <Suspense fallback={<TabLoadingFallback />}>
                     {activeTab === 'designer' && <TabDesainRapor />}
                     {activeTab === 'generator' && <TabGeneratorFormulir />}
-                    {activeTab === 'import' && <TabImportNilai />}
-                    {activeTab === 'monitoring' && <TabMonitoringNilai />}
+                    {activeTab === 'monitoring' && <TabMonitoringNilai onNavigateToTab={(tab) => setActiveTab(tab as RaporTabId)} />}
                     {activeTab === 'data' && <TabDataNilai />}
-                    {activeTab === 'print' && <TabCetakRapor />}
-                    {activeTab === 'input_wali' && <TabInputNilaiWali />}
+                    {activeTab === 'print' && <TabCetakRapor onNavigateToTab={(tab) => setActiveTab(tab as RaporTabId)} />}
+                    {(activeTab === 'input_wali' || activeTab === 'import') && <TabInputNilaiWali />}
+                    {activeTab === 'leger' && <TabLegerNilai onNavigateToInputWali={() => setActiveTab('input_wali')} />}
                 </Suspense>
             </div>
         </div>

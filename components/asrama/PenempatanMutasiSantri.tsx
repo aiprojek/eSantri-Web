@@ -5,6 +5,7 @@ import { db } from '../../db';
 import { Santri, Kamar, GedungAsrama, KesehatanRecord, AbsensiRecord } from '../../types';
 import { PindahKamarModal } from './PindahKamarModal';
 import { LabelPintuKamarModal } from './LabelPintuKamarModal';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const PenempatanMutasiSantri: React.FC = () => {
     const { settings, onSaveSettings, showConfirmation, showAlert, currentUser, showToast } = useAppContext();
@@ -32,6 +33,9 @@ export const PenempatanMutasiSantri: React.FC = () => {
     const [filterKelasId, setFilterKelasId] = useState<string>('');
     const [searchUnassigned, setSearchUnassigned] = useState('');
     const [globalSearch, setGlobalSearch] = useState('');
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+
+    const activeFilterCount = (filterKelasId ? 1 : 0) + (selectedGedungId !== '' ? 1 : 0);
 
     // Multi-select for unassigned santri
     const [selectedUnassignedIds, setSelectedUnassignedIds] = useState<number[]>([]);
@@ -355,8 +359,86 @@ export const PenempatanMutasiSantri: React.FC = () => {
                         </span>
                     </div>
 
-                    {/* Filter Kelas & Search */}
-                    <div className="space-y-2">
+                    {/* Mobile Search & Filter Drawer Trigger */}
+                    <div className="md:hidden flex items-center gap-2">
+                        <div className="relative flex-1">
+                            <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                            <input
+                                type="text"
+                                placeholder="Filter nama / NIS..."
+                                value={searchUnassigned}
+                                onChange={e => setSearchUnassigned(e.target.value)}
+                                className="app-input w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-lg"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsFilterDrawerOpen(true)}
+                            className={`app-button-secondary h-9 shrink-0 px-3 py-1.5 text-xs flex items-center gap-1.5 ${
+                                activeFilterCount > 0 ? 'border-teal-400 bg-teal-50 text-teal-800 font-bold' : ''
+                            }`}
+                        >
+                            <i className="bi bi-funnel-fill"></i>
+                            <span>Filter</span>
+                            {activeFilterCount > 0 && (
+                                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-teal-600 px-1 text-[10px] font-bold text-white">
+                                    {activeFilterCount}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Mobile Filter Drawer */}
+                    <MobileFilterDrawer
+                        isOpen={isFilterDrawerOpen}
+                        onClose={() => setIsFilterDrawerOpen(false)}
+                        title="Filter Penempatan Asrama"
+                        onReset={() => {
+                            setFilterKelasId('');
+                            setSelectedGedungId('');
+                            setSearchUnassigned('');
+                        }}
+                    >
+                        <div className="space-y-4 text-xs">
+                            <div>
+                                <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Rombel / Kelas</label>
+                                <select
+                                    value={filterKelasId}
+                                    onChange={e => setFilterKelasId(e.target.value)}
+                                    className="app-select w-full rounded-xl p-2.5 text-xs font-medium bg-white"
+                                >
+                                    <option value="">Semua Rombel / Kelas</option>
+                                    {settings.rombel.map(r => (
+                                        <option key={r.id} value={r.id}>{r.nama}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Gedung Asrama Tujuan</label>
+                                <select
+                                    value={selectedGedungId}
+                                    onChange={e => setSelectedGedungId(e.target.value ? Number(e.target.value) : '')}
+                                    className="app-select w-full rounded-xl p-2.5 text-xs font-medium bg-white"
+                                >
+                                    <option value="">Semua Gedung</option>
+                                    {settings.gedungAsrama.map(g => (
+                                        <option key={g.id} value={g.id}>{g.nama} ({g.jenis})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="rounded-xl border border-teal-100 bg-teal-50/70 p-3 text-center">
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Santri Tanpa Kamar</div>
+                                <div className="text-xl font-black text-teal-900 mt-0.5">
+                                    {unassignedSantri.length} <span className="text-xs font-bold uppercase text-teal-600">Santri</span>
+                                </div>
+                            </div>
+                        </div>
+                    </MobileFilterDrawer>
+
+                    {/* Desktop Filter Kelas & Search */}
+                    <div className="hidden md:block space-y-2">
                         <select
                             value={filterKelasId}
                             onChange={e => setFilterKelasId(e.target.value)}
@@ -471,13 +553,13 @@ export const PenempatanMutasiSantri: React.FC = () => {
                 {/* Right Panel: Room Cards & Placement (2 Cols) */}
                 <div className="lg:col-span-2 space-y-4">
                     {/* Filter Gedung */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200/80 shadow-2xs">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-gray-600">Pilih Gedung:</span>
-                            <div className="flex gap-1.5 flex-wrap">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 shadow-2xs">
+                        <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto">
+                            <span className="text-xs font-bold text-gray-600 shrink-0">Pilih Gedung:</span>
+                            <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
                                 <button
                                     onClick={() => setSelectedGedungId('')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 ${
                                         selectedGedungId === '' ? 'bg-teal-800 text-white shadow-xs' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                                 >
@@ -487,7 +569,7 @@ export const PenempatanMutasiSantri: React.FC = () => {
                                     <button
                                         key={g.id}
                                         onClick={() => setSelectedGedungId(g.id)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 ${
                                             selectedGedungId === g.id
                                                 ? 'bg-teal-800 text-white shadow-xs'
                                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -500,9 +582,11 @@ export const PenempatanMutasiSantri: React.FC = () => {
                         </div>
 
                         {selectedUnassignedIds.length > 0 && (
-                            <div className="text-xs font-bold text-teal-800 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-200 flex items-center gap-1.5">
-                                <i className="bi bi-info-circle-fill text-teal-600"></i>
-                                <span>{selectedUnassignedIds.length} santri siap ditempatkan</span>
+                            <div className="text-xs font-bold text-teal-800 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-200 flex items-center justify-between sm:justify-start gap-1.5 shrink-0">
+                                <span className="flex items-center gap-1.5">
+                                    <i className="bi bi-info-circle-fill text-teal-600"></i>
+                                    <span>{selectedUnassignedIds.length} santri siap ditempatkan</span>
+                                </span>
                             </div>
                         )}
                     </div>

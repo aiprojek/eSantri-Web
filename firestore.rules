@@ -46,7 +46,10 @@ service cloud.firestore {
         request.resource.data.ownerUid == request.auth.uid &&
         request.resource.data.tenantId == request.auth.uid &&
         request.resource.data.expiresAt > request.time;
-      allow update, delete: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.ownerUid == request.auth.uid ||
+        isTenantMember(resource.data.tenantId)
+      );
     }
 
     // Tenant Data

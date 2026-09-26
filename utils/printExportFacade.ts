@@ -95,10 +95,10 @@ export const printExportFacade = {
     async downloadExcelVisual(ctx: PrintExportContext): Promise<void> {
         await exportPreviewToExcelWorksheets(ctx.elementId, ctx.fileName);
     },
-    downloadHtml(ctx: PrintExportContext): void {
-        exportToHtml(ctx.elementId, ctx.fileName);
+    async downloadHtml(ctx: PrintExportContext): Promise<void> {
+        await exportToHtml(ctx.elementId, ctx.fileName);
     },
-    downloadWord(ctx: PrintExportContext): void {
-        exportToWord(ctx.elementId, ctx.fileName);
+    async downloadWord(ctx: PrintExportContext): Promise<void> {
+        await exportToWord(ctx.elementId, ctx.fileName);
     },
 };

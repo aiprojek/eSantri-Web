@@ -13,8 +13,9 @@ const TabCloud = React.lazy(() => import('./settings/tabs/TabCloud').then((modul
 const TabBackup = React.lazy(() => import('./settings/tabs/TabBackup').then((module) => ({ default: module.TabBackup })));
 const TabDiagnostik = React.lazy(() => import('./settings/tabs/TabDiagnostik').then((module) => ({ default: module.TabDiagnostik })));
 const TabDigitalAset = React.lazy(() => import('./settings/tabs/TabDigitalAset').then((module) => ({ default: module.TabDigitalAset })));
+const TabPanduan = React.lazy(() => import('./tentang/TabPanduan').then((module) => ({ default: module.TabPanduan })));
 
-type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'backup' | 'diagnostik' | 'digitalaset';
+type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'backup' | 'diagnostik' | 'digitalaset' | 'panduan';
 
 const SETTINGS_TABS: HeaderTabItem<SettingsTab>[] = [
     { value: 'umum', label: 'Umum', icon: 'bi-info-circle' },
@@ -24,6 +25,7 @@ const SETTINGS_TABS: HeaderTabItem<SettingsTab>[] = [
     { value: 'cloud', label: 'Sync Cloud', icon: 'bi-cloud-arrow-up' },
     { value: 'backup', label: 'Backup & Restore', icon: 'bi-hdd-fill' },
     { value: 'diagnostik', label: 'Diagnosa', icon: 'bi-heart-pulse-fill' },
+    { value: 'panduan', label: 'Panduan Sistem', icon: 'bi-book-half' },
 ];
 
 const Settings: React.FC = () => {
@@ -227,14 +229,17 @@ const Settings: React.FC = () => {
                     {activeTab === 'backup' && <TabBackup localSettings={localSettings} setLocalSettings={setLocalSettings} />}
                     {activeTab === 'diagnostik' && <TabDiagnostik />}
                     {activeTab === 'digitalaset' && <TabDigitalAset />}
+                    {activeTab === 'panduan' && <TabPanduan />}
                 </Suspense>
             </div>
             
-             <div className="sticky bottom-4 z-10 mt-6 flex justify-end">
-                <button onClick={handleSaveSettingsHandler} disabled={isSaving} className="app-button-primary min-w-[190px] px-8 py-3 disabled:cursor-not-allowed disabled:opacity-60">
-                    {isSaving ? <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Menyimpan...</span></> : <><i className="bi bi-save-fill mr-2"></i> Simpan Perubahan</>}
-                </button>
-            </div>
+            {activeTab !== 'panduan' && (
+                <div className="sticky bottom-4 z-10 mt-6 flex justify-end">
+                    <button onClick={handleSaveSettingsHandler} disabled={isSaving} className="app-button-primary min-w-[190px] px-8 py-3 disabled:cursor-not-allowed disabled:opacity-60">
+                        {isSaving ? <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Menyimpan...</span></> : <><i className="bi bi-save-fill mr-2"></i> Simpan Perubahan</>}
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

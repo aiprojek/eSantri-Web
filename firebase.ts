@@ -1,6 +1,7 @@
 import { getFirestore, Firestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { activeFirebaseConfig, isFirebaseClientConfigReady, getFirebaseApp } from './firebaseApp';
 import { handleFirestoreError, OperationType } from './firebaseErrors';
+import { auth } from './firebaseAuth';
 
 let _db: Firestore | null = null;
 
@@ -25,4 +26,4 @@ export const db: Firestore = new Proxy({} as Firestore, {
 
 // Export common firestore functions for easier use
 export { doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, getDocs, writeBatch, serverTimestamp };
-export { handleFirestoreError, OperationType, isFirebaseClientConfigReady };
+export { handleFirestoreError, OperationType, isFirebaseClientConfigReady, auth };

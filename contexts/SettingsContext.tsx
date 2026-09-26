@@ -192,6 +192,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             calendarEvents: await db.calendarEvents.toArray(),
             jadwalPelajaran: await db.jadwalPelajaran.toArray(),
             arsipJadwal: await db.arsipJadwal.toArray(),
+            jadwalUjian: await db.jadwalUjian.toArray(),
             payrollRecords: await db.payrollRecords.toArray(),
             piketSchedules: await db.piketSchedules.toArray(),
             produkKoperasi: await db.produkKoperasi.toArray(),

@@ -9,6 +9,8 @@ import { printToPdfNative } from '../utils/pdfGenerator';
 import { formatDate } from '../utils/formatters';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
+import { EmptyState } from './common/EmptyState';
+import { MobileFilterDrawer } from './common/MobileFilterDrawer';
 import { KesehatanDashboard } from './kesehatan/KesehatanDashboard';
 import {
     SuratSakitTemplate,
@@ -184,8 +186,8 @@ const StokObatView: React.FC<{ canWrite: boolean; initialFilter?: string | null 
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto border border-gray-200 rounded-xl">
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto border border-gray-200 rounded-xl">
                 <table className="w-full text-xs text-left">
                     <thead className="bg-gray-50 text-gray-700 font-semibold border-b border-gray-200 uppercase tracking-wider text-[11px]">
                         <tr>
@@ -287,6 +289,92 @@ const StokObatView: React.FC<{ canWrite: boolean; initialFilter?: string | null 
                         )}
                     </tbody>
                 </table>
+            </div>
+
+            {/* Mobile Card List */}
+            <div className="space-y-3 md:hidden">
+                {filteredObat.map(obat => {
+                    const minStok = obat.stokMinimum ?? 5;
+                    const isLowStock = obat.stok <= minStok;
+                    const isExpired = obat.tglKadaluarsa ? obat.tglKadaluarsa <= todayStr : false;
+                    const isExpiringSoon = obat.tglKadaluarsa ? (obat.tglKadaluarsa > todayStr && obat.tglKadaluarsa <= futureLimitStr) : false;
+
+                    return (
+                        <article key={obat.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-xs">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                                <div>
+                                    <h4 className="font-bold text-gray-900 text-sm">{obat.nama}</h4>
+                                    <span className="inline-block mt-0.5 bg-blue-50 text-blue-700 font-semibold px-2 py-0.5 rounded text-[10px]">
+                                        {obat.jenis}
+                                    </span>
+                                </div>
+                                <div className="text-right">
+                                    <div className="flex items-baseline justify-end gap-1">
+                                        <span className={`text-base font-bold ${isLowStock ? 'text-red-600' : 'text-emerald-700'}`}>
+                                            {obat.stok}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400">/ {minStok} {obat.satuan}</span>
+                                    </div>
+                                    {isLowStock && (
+                                        <span className="inline-block text-[9px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded font-bold">
+                                            Stok Menipis
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="text-xs text-gray-600 space-y-1 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-gray-400 text-[11px]">Kadaluarsa:</span>
+                                    <span className="font-medium text-gray-800">
+                                        {obat.tglKadaluarsa ? formatDate(obat.tglKadaluarsa) : '-'}
+                                    </span>
+                                </div>
+                                {isExpired && (
+                                    <div className="text-[10px] font-bold text-rose-600 flex items-center gap-1">
+                                        <i className="bi bi-x-circle-fill"></i> Sudah Kadaluarsa!
+                                    </div>
+                                )}
+                                {isExpiringSoon && (
+                                    <div className="text-[10px] font-bold text-amber-600 flex items-center gap-1">
+                                        <i className="bi bi-clock-history"></i> Segera Kadaluarsa
+                                    </div>
+                                )}
+                                {obat.keterangan && (
+                                    <p className="text-[11px] text-gray-500 pt-1 border-t border-gray-200">
+                                        {obat.keterangan}
+                                    </p>
+                                )}
+                            </div>
+
+                            {canWrite && (
+                                <div className="mt-3 pt-2 border-t border-gray-100 flex justify-end items-center gap-1.5">
+                                    <button
+                                        onClick={() => openModal(obat)}
+                                        className="px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 text-xs font-semibold flex items-center gap-1"
+                                    >
+                                        <i className="bi bi-pencil-square"></i> Edit
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(obat.id)}
+                                        className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-700 bg-rose-50 text-xs font-semibold flex items-center gap-1"
+                                    >
+                                        <i className="bi bi-trash"></i> Hapus
+                                    </button>
+                                </div>
+                            )}
+                        </article>
+                    );
+                })}
+
+                {filteredObat.length === 0 && (
+                    <EmptyState
+                        icon="bi-capsule"
+                        title="Data obat tidak ditemukan"
+                        description="Tidak ada data obat yang sesuai dengan filter atau kata kunci pencarian."
+                        compact
+                    />
+                )}
             </div>
 
             {/* Modal Input/Edit Obat */}
@@ -413,6 +501,9 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | '7days' | 'month'>('all');
+    const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+
+    const activeFilterCount = (statusFilter !== 'all' ? 1 : 0) + (dateRangeFilter !== 'all' ? 1 : 0) + (subTab !== 'all' ? 1 : 0);
 
     useEffect(() => {
         if (initialFilter === 'rawat-inap') {
@@ -797,8 +888,49 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
 
     return (
         <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-xs border border-gray-200">
-            {/* Top Bar with Sub-tabs & Action */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5">
+            {/* Mobile Action & Search / Filter Bar */}
+            <div className="md:hidden flex flex-col gap-2.5 mb-4">
+                {canWrite && (
+                    <button
+                        onClick={handleAddRecord}
+                        className="w-full bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition"
+                    >
+                        <i className="bi bi-clipboard2-pulse"></i> Catat Pemeriksaan Baru
+                    </button>
+                )}
+                <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                            <i className="bi bi-search text-xs"></i>
+                        </span>
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Cari santri, NIS, diagnosa..."
+                            className="app-input w-full pl-8 py-2 text-xs bg-white"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsFilterDrawerOpen(true)}
+                        className={`app-button-secondary h-9 shrink-0 px-3 py-1.5 text-xs flex items-center gap-1.5 ${
+                            activeFilterCount > 0 ? 'border-teal-400 bg-teal-50 text-teal-800 font-bold' : ''
+                        }`}
+                    >
+                        <i className="bi bi-funnel-fill"></i>
+                        <span>Filter</span>
+                        {activeFilterCount > 0 && (
+                            <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-teal-600 px-1 text-[10px] font-bold text-white">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            {/* Desktop Top Bar with Sub-tabs & Action */}
+            <div className="hidden md:flex justify-between items-center gap-4 mb-5">
                 {/* Sub-tab: Semua vs Sedang Dirawat */}
                 <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 text-xs font-semibold">
                     <button
@@ -829,17 +961,17 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                 {canWrite && (
                     <button
                         onClick={handleAddRecord}
-                        className="w-full md:w-auto bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-xs transition"
+                        className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-xs transition"
                     >
                         <i className="bi bi-clipboard2-pulse"></i> Catat Pemeriksaan Baru
                     </button>
                 )}
             </div>
 
-            {/* Filter Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-5 p-3.5 bg-gray-50/80 rounded-xl border border-gray-200 text-xs">
+            {/* Desktop Filter Bar */}
+            <div className="hidden md:grid grid-cols-12 gap-3 mb-5 p-3.5 bg-gray-50/80 rounded-xl border border-gray-200 text-xs">
                 {/* Search */}
-                <div className="sm:col-span-6 relative">
+                <div className="col-span-6 relative">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                         <i className="bi bi-search"></i>
                     </span>
@@ -853,7 +985,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                 </div>
 
                 {/* Status Filter */}
-                <div className="sm:col-span-3">
+                <div className="col-span-3">
                     <select
                         value={statusFilter}
                         onChange={e => setStatusFilter(e.target.value)}
@@ -868,7 +1000,7 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                 </div>
 
                 {/* Date Filter */}
-                <div className="sm:col-span-3">
+                <div className="col-span-3">
                     <select
                         value={dateRangeFilter}
                         onChange={e => setDateRangeFilter(e.target.value as any)}
@@ -881,6 +1013,86 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                     </select>
                 </div>
             </div>
+
+            {/* Mobile Filter Drawer */}
+            <MobileFilterDrawer
+                isOpen={isFilterDrawerOpen}
+                onClose={() => setIsFilterDrawerOpen(false)}
+                title="Filter Rekam Medis"
+                onReset={() => {
+                    setSubTab('all');
+                    setStatusFilter('all');
+                    setDateRangeFilter('all');
+                    setSearchQuery('');
+                }}
+            >
+                <div className="space-y-4 text-xs">
+                    <div>
+                        <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Kategori Tampilan</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setSubTab('all')}
+                                className={`p-2.5 rounded-xl border text-xs font-bold transition text-center ${
+                                    subTab === 'all' ? 'bg-teal-50 border-teal-500 text-teal-800' : 'bg-white border-gray-200 text-gray-700'
+                                }`}
+                            >
+                                Semua Riwayat
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSubTab('active')}
+                                className={`p-2.5 rounded-xl border text-xs font-bold transition text-center flex items-center justify-center gap-1 ${
+                                    subTab === 'active' ? 'bg-amber-50 border-amber-500 text-amber-900' : 'bg-white border-gray-200 text-gray-700'
+                                }`}
+                            >
+                                <span>Sedang Dirawat</span>
+                                {activeInpatientsCount > 0 && (
+                                    <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                                        {activeInpatientsCount}
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Status Pemeriksaan</label>
+                        <select
+                            value={statusFilter}
+                            onChange={e => setStatusFilter(e.target.value)}
+                            className="app-select w-full rounded-xl p-2.5 text-xs font-medium bg-white"
+                        >
+                            <option value="all">Semua Status</option>
+                            <option value="Rawat Inap (Pondok)">Rawat Inap (Pondok)</option>
+                            <option value="Rujuk RS/Klinik">Rujuk RS/Klinik</option>
+                            <option value="Rawat Jalan">Rawat Jalan</option>
+                            <option value="Sembuh">Sembuh</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="app-label mb-1.5 block text-xs font-bold text-slate-700">Rentang Waktu</label>
+                        <select
+                            value={dateRangeFilter}
+                            onChange={e => setDateRangeFilter(e.target.value as any)}
+                            className="app-select w-full rounded-xl p-2.5 text-xs font-medium bg-white"
+                        >
+                            <option value="all">Semua Tanggal</option>
+                            <option value="today">Hari Ini</option>
+                            <option value="7days">7 Hari Terakhir</option>
+                            <option value="month">Bulan Ini</option>
+                        </select>
+                    </div>
+
+                    <div className="rounded-xl border border-teal-100 bg-teal-50/70 p-3 text-center">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Hasil Filter</div>
+                        <div className="text-xl font-black text-teal-900 mt-0.5">
+                            {filteredRecords.length} <span className="text-xs font-bold uppercase text-teal-600">Catatan Medis</span>
+                        </div>
+                    </div>
+                </div>
+            </MobileFilterDrawer>
 
             {/* Desktop Table */}
             <div className="hidden md:block overflow-x-auto border border-gray-200 rounded-xl">
@@ -1113,9 +1325,12 @@ const RekamMedisView: React.FC<{ canWrite: boolean; initialFilter?: string | nul
                     );
                 })}
                 {filteredRecords.length === 0 && (
-                    <div className="p-8 text-center text-gray-500 italic bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                        Tidak ada riwayat pemeriksaan yang sesuai kriteria.
-                    </div>
+                    <EmptyState
+                        icon="bi-clipboard2-pulse"
+                        title="Tidak ada data rekam medis"
+                        description="Coba ubah kata kunci pencarian atau filter agar riwayat pemeriksaan muncul."
+                        compact
+                    />
                 )}
             </div>
 

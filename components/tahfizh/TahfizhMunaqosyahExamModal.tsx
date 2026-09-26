@@ -171,7 +171,7 @@ export const TahfizhMunaqosyahExamModal: React.FC<TahfizhMunaqosyahExamModalProp
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 sm:p-4 backdrop-blur-xs animate-fade-in overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3.5 sm:p-5 md:p-6 backdrop-blur-xs animate-fade-in overflow-y-auto">
             <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[95vh]">
                 {/* Modal Header */}
                 <div className="bg-gradient-to-r from-teal-800 via-emerald-800 to-teal-900 p-4 text-white flex items-center justify-between">

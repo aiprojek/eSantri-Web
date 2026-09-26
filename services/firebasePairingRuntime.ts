@@ -62,7 +62,11 @@ export const joinTenant = async (inviteId: string) => {
             joinedAt: serverTimestamp(),
         }, { merge: true });
 
-        await deleteDoc(inviteRef);
+        try {
+            await deleteDoc(inviteRef);
+        } catch (delError) {
+            console.warn('Invite consumed but deleteDoc failed (non-fatal):', delError);
+        }
         return invite.tenantId;
     } catch (error) {
         if (error instanceof Error && !error.message.startsWith('{')) {

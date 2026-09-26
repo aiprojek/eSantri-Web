@@ -59,8 +59,8 @@ const DEFAULT_GENDER_OPTIONS: SantriFilterOption[] = [
     { value: 'Perempuan', label: 'Perempuan' },
 ];
 
-const mobileLabelClass = 'app-label mb-1.5 ml-1 block';
-const mobileSelectClass = 'app-select rounded-[20px] p-4 text-base font-semibold disabled:opacity-50';
+const mobileLabelClass = 'app-label mb-1.5 ml-0.5 block text-xs font-bold text-slate-700';
+const mobileSelectClass = 'app-select rounded-xl py-2.5 px-3 text-sm font-semibold disabled:opacity-50';
 const desktopLabelClass = 'app-label mb-1.5 block pl-1 min-h-[1.25rem] truncate whitespace-nowrap';
 const desktopSelectClass = 'app-select h-10 text-sm font-semibold disabled:opacity-50';
 
@@ -91,6 +91,16 @@ export function SantriFilterBar<TFilters extends SantriFilterState>({
     const desktopFilterCount =
         [showJenjang, showKelas, showRombel, showStatus, showGender].filter(Boolean).length +
         (extraDesktop ? 1 : 0);
+
+    const activeFiltersCount = useMemo(() => {
+        let count = 0;
+        if (filters.jenjang) count++;
+        if (filters.kelas) count++;
+        if (filters.rombel) count++;
+        if (filters.status) count++;
+        if (filters.gender) count++;
+        return count;
+    }, [filters]);
 
     const availableKelas = useMemo(() => {
         if (!filters.jenjang) return settings.kelas;
@@ -236,10 +246,15 @@ export function SantriFilterBar<TFilters extends SantriFilterState>({
                     {showSearch && <div className="min-w-0 flex-1">{renderSearchInput(true)}</div>}
                     <button
                         onClick={() => setIsFilterDrawerOpen(true)}
-                        className="app-button-secondary h-11 shrink-0 px-4 py-2 text-sm"
+                        className={`app-button-secondary h-11 shrink-0 px-3.5 py-2 text-sm flex items-center gap-1.5 ${activeFiltersCount > 0 ? 'border-teal-400 bg-teal-50 text-teal-800 font-bold' : ''}`}
                     >
                         <i className="bi bi-funnel-fill"></i>
                         <span>Filter</span>
+                        {activeFiltersCount > 0 && (
+                            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-teal-600 px-1 text-[11px] font-bold text-white">
+                                {activeFiltersCount}
+                            </span>
+                        )}
                     </button>
                 </div>
             ) : showSearch ? (
@@ -274,24 +289,22 @@ export function SantriFilterBar<TFilters extends SantriFilterState>({
                     title={title}
                     onReset={resetFilters}
                 >
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                         {showSearch && (
-                            <div className="app-panel-soft space-y-4 rounded-[2rem] p-6">
-                                <div>
-                                    <label className={mobileLabelClass}>Cari Santri</label>
-                                    {renderSearchInput(true)}
-                                </div>
+                            <div className="app-panel-soft space-y-2 rounded-2xl p-4">
+                                <label className={mobileLabelClass}>Cari Santri</label>
+                                {renderSearchInput(true)}
                             </div>
                         )}
-                        <div className="app-panel-soft space-y-4 rounded-[2rem] p-6">
+                        <div className="app-panel-soft space-y-3.5 rounded-2xl p-4">
                             {renderCoreFields(true)}
                             {extraMobile}
                         </div>
                         {typeof resultCount === 'number' && (
-                            <div className="rounded-[2rem] border border-teal-100 bg-teal-50 p-6 text-center">
-                                <div className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-app-textMuted">Hasil Filter</div>
-                                <div className="text-3xl font-black text-app-text">
-                                    {resultCount} <span className="ml-1 text-sm font-bold uppercase tracking-widest text-app-textMuted">{resultLabel}</span>
+                            <div className="rounded-2xl border border-teal-100 bg-teal-50/70 p-4 text-center">
+                                <div className="mb-0.5 text-[10px] font-black uppercase tracking-[0.2em] text-app-textMuted">Hasil Filter</div>
+                                <div className="text-2xl font-black text-app-text">
+                                    {resultCount} <span className="ml-1 text-xs font-bold uppercase tracking-widest text-app-textMuted">{resultLabel}</span>
                                 </div>
                             </div>
                         )}

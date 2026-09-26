@@ -18,6 +18,8 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
     const { mode, item } = modalData;
     const [teacher, setTeacher] = useState<Partial<TenagaPengajar>>({});
 
+    const isNonPendidik = teacher.jenisPegawai === 'kependidikan';
+
     const days = [
         { val: 1, label: 'Senin' },
         { val: 2, label: 'Selasa' },
@@ -30,11 +32,28 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
 
     useEffect(() => {
         if (isOpen) {
-            setTeacher(item || {
+            let defaultJenis: 'pendidik' | 'kependidikan' = 'pendidik';
+            if (item?.jenisPegawai) {
+                defaultJenis = item.jenisPegawai;
+            } else if (item?.riwayatJabatan && item.riwayatJabatan.length > 0) {
+                const jbt = (item.riwayatJabatan[0].jabatan || '').toLowerCase();
+                if (jbt.includes('satpam') || jbt.includes('security') || jbt.includes('kasir') || jbt.includes('keuangan') || jbt.includes('tu') || jbt.includes('tata usaha') || jbt.includes('bk') || jbt.includes('konseling') || jbt.includes('kebersihan') || jbt.includes('dapur')) {
+                    defaultJenis = 'kependidikan';
+                }
+            }
+
+            setTeacher(item ? {
+                ...item,
+                jenisPegawai: defaultJenis,
+                kategoriStaf: item.kategoriStaf || 'Tata Usaha (TU)',
+            } : {
                 nama: '',
                 telepon: '',
                 email: '',
-                riwayatJabatan: [{ id: Date.now(), jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0] }],
+                status: 'Aktif',
+                jenisPegawai: 'pendidik',
+                kategoriStaf: 'Tata Usaha (TU)',
+                riwayatJabatan: [{ id: Date.now(), jabatan: 'Guru Mapel', tanggalMulai: new Date().toISOString().split('T')[0] }],
                 ketersediaanPengajar: [],
                 hariMasuk: [], 
                 jamMasuk: [],
@@ -158,7 +177,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
 
     const handleSave = () => {
         if (!teacher.nama?.trim()) {
-            showAlert('Input Tidak Lengkap', 'Nama tenaga pendidik tidak boleh kosong.');
+            showAlert('Input Tidak Lengkap', 'Nama pegawai / tenaga pendidik tidak boleh kosong.');
             return;
         }
         
@@ -167,14 +186,17 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
             nama: teacher.nama || '',
             telepon: teacher.telepon,
             email: teacher.email,
-            kodeGuru: teacher.kodeGuru,
+            status: teacher.status || 'Aktif',
+            jenisPegawai: teacher.jenisPegawai || 'pendidik',
+            kategoriStaf: teacher.kategoriStaf,
+            kodeGuru: isNonPendidik ? undefined : teacher.kodeGuru,
             riwayatJabatan: teacher.riwayatJabatan || [],
-            ketersediaanPengajar: teacher.ketersediaanPengajar || [],
-            hariMasuk: teacher.hariMasuk || [],
-            jamMasuk: teacher.jamMasuk || [],
-            availableRombelIds: teacher.availableRombelIds || [],
-            availableKelasIds: teacher.availableKelasIds || [],
-            kompetensiMapelIds: teacher.kompetensiMapelIds || []
+            ketersediaanPengajar: isNonPendidik ? [] : (teacher.ketersediaanPengajar || []),
+            hariMasuk: isNonPendidik ? [] : (teacher.hariMasuk || []),
+            jamMasuk: isNonPendidik ? [] : (teacher.jamMasuk || []),
+            availableRombelIds: isNonPendidik ? [] : (teacher.availableRombelIds || []),
+            availableKelasIds: isNonPendidik ? [] : (teacher.availableKelasIds || []),
+            kompetensiMapelIds: isNonPendidik ? [] : (teacher.kompetensiMapelIds || [])
         };
         onSave(teacherToSave);
     }
@@ -183,27 +205,138 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-start p-4 overflow-y-auto">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-8 flex flex-col max-h-[90vh]">
                 <div className="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-lg shrink-0">
-                    <h3 className="text-lg font-semibold text-gray-800">{mode === 'add' ? 'Tambah' : 'Edit'} Tenaga Pendidik</h3>
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-800">
+                            {mode === 'add' ? 'Tambah' : 'Edit'} {isNonPendidik ? 'Tenaga Kependidikan / Staf' : 'Tenaga Pendidik (Guru)'}
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            {isNonPendidik 
+                                ? 'Kelola data staf non-pengajar (TU, Kasir, Satpam, BK, dsb).' 
+                                : 'Kelola data guru/asatidz dan penugasan pengajaran.'}
+                        </p>
+                    </div>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Tutup modal"><i className="bi bi-x-lg"></i></button>
                 </div>
                 
                 <div className="p-6 space-y-6 overflow-y-auto flex-grow">
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div className="md:col-span-2">
-                             <label className="block mb-1 text-sm font-medium text-gray-700">Nama Lengkap</label>
-                             <input type="text" value={teacher.nama || ''} onChange={(e) => handleTeacherChange('nama', e.target.value)} autoFocus className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: Ust. Ahmad, S.Pd.I" />
-                         </div>
-                         <div>
-                             <label className="block mb-1 text-sm font-medium text-gray-700">Kode Guru (Opsional)</label>
-                             <input type="text" value={teacher.kodeGuru || ''} onChange={(e) => handleTeacherChange('kodeGuru', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: AH, 01, dll (Untuk Jadwal)" />
-                         </div>
-                         <div>
-                             <label className="block mb-1 text-sm font-medium text-gray-700">No. Telepon/WA</label>
-                             <input type="tel" value={teacher.telepon || ''} onChange={(e) => handleTeacherChange('telepon', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: 08123456789" />
-                         </div>
-                     </div>
+                    {/* PILIHAN JENIS PEGAWAI */}
+                    <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+                        <label className="block mb-2 text-xs font-bold text-gray-600 uppercase tracking-wider">Kategori Kepegawaian</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <label className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                                !isNonPendidik 
+                                    ? 'border-teal-600 bg-teal-50/70 text-teal-900 shadow-sm' 
+                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                            }`}>
+                                <input 
+                                    type="radio" 
+                                    name="jenisPegawai" 
+                                    value="pendidik" 
+                                    checked={!isNonPendidik} 
+                                    onChange={() => {
+                                        handleTeacherChange('jenisPegawai', 'pendidik');
+                                        if (teacher.riwayatJabatan?.length === 1 && !teacher.riwayatJabatan[0].jabatan) {
+                                            handleRiwayatChange(0, 'jabatan', 'Guru Mapel');
+                                        }
+                                    }} 
+                                    className="text-teal-600 focus:ring-teal-500" 
+                                />
+                                <div>
+                                    <p className="font-bold text-sm flex items-center gap-1.5">
+                                        <i className="bi bi-mortarboard-fill text-teal-600"></i> Tenaga Pendidik
+                                    </p>
+                                    <p className="text-[11px] text-gray-500">Guru, Ustadz/Ustadzah, Pengajar KBM</p>
+                                </div>
+                            </label>
 
-                    {/* KETERSEDIAAN PENGAJARAN (SIMPLIFIED) */}
+                            <label className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                                isNonPendidik 
+                                    ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 shadow-sm' 
+                                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                            }`}>
+                                <input 
+                                    type="radio" 
+                                    name="jenisPegawai" 
+                                    value="kependidikan" 
+                                    checked={isNonPendidik} 
+                                    onChange={() => {
+                                        handleTeacherChange('jenisPegawai', 'kependidikan');
+                                        if (teacher.riwayatJabatan?.length === 1 && (!teacher.riwayatJabatan[0].jabatan || teacher.riwayatJabatan[0].jabatan === 'Guru Mapel')) {
+                                            handleRiwayatChange(0, 'jabatan', teacher.kategoriStaf || 'Tata Usaha (TU)');
+                                        }
+                                    }} 
+                                    className="text-indigo-600 focus:ring-indigo-500" 
+                                />
+                                <div>
+                                    <p className="font-bold text-sm flex items-center gap-1.5">
+                                        <i className="bi bi-person-gear text-indigo-600"></i> Tenaga Kependidikan / Staf
+                                    </p>
+                                    <p className="text-[11px] text-gray-500">TU, Bendahara/Kasir, BK, Satpam, dll</p>
+                                </div>
+                            </label>
+                        </div>
+
+                        {isNonPendidik && (
+                            <div className="mt-3 pt-3 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block mb-1 text-xs font-semibold text-gray-700">Unit Kerja / Bidang Staf</label>
+                                    <select 
+                                        value={teacher.kategoriStaf || 'Tata Usaha (TU)'} 
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            handleTeacherChange('kategoriStaf', val);
+                                            if (teacher.riwayatJabatan?.length === 1) {
+                                                handleRiwayatChange(0, 'jabatan', val);
+                                            }
+                                        }} 
+                                        className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2"
+                                    >
+                                        <option value="Tata Usaha (TU)">Tata Usaha (TU) / Administrasi</option>
+                                        <option value="Keuangan / Kasir">Keuangan / Bendahara / Kasir</option>
+                                        <option value="Bimbingan Konseling (BK)">Bimbingan Konseling (BK) / Konselor</option>
+                                        <option value="Pengasuhan / Asrama">Pengasuhan / Pembina Asrama</option>
+                                        <option value="Keamanan / Satpam">Keamanan / Satpam / Pos Penjagaan</option>
+                                        <option value="Perpustakaan">Perpustakaan</option>
+                                        <option value="Kesehatan / UKS">Kesehatan / Poskestren / UKS</option>
+                                        <option value="Sarana & Prasarana">Sarana & Prasarana / Logistik</option>
+                                        <option value="Dapur & Konsumsi">Dapur & Konsumsi</option>
+                                        <option value="Lainnya">Lainnya / Umum</option>
+                                    </select>
+                                </div>
+                                <div className="flex items-center text-xs text-indigo-700 bg-indigo-50 p-2.5 rounded-lg border border-indigo-100">
+                                    <i className="bi bi-info-circle-fill mr-2 text-base shrink-0"></i>
+                                    <span>Staf non-pengajar tidak akan dimasukkan ke dalam penjadwalan KBM / jadwal pelajaran.</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2">
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Nama Lengkap</label>
+                            <input 
+                                type="text" 
+                                value={teacher.nama || ''} 
+                                onChange={(e) => handleTeacherChange('nama', e.target.value)} 
+                                autoFocus 
+                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" 
+                                placeholder={isNonPendidik ? "Contoh: Bpk. Bambang Sugiono" : "Contoh: Ust. Ahmad, S.Pd.I"} 
+                            />
+                        </div>
+                        {!isNonPendidik && (
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Kode Guru (Opsional)</label>
+                                <input type="text" value={teacher.kodeGuru || ''} onChange={(e) => handleTeacherChange('kodeGuru', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: AH, 01, dll (Untuk Jadwal)" />
+                            </div>
+                        )}
+                        <div className={isNonPendidik ? "md:col-span-2" : ""}>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">No. Telepon/WA</label>
+                            <input type="tel" value={teacher.telepon || ''} onChange={(e) => handleTeacherChange('telepon', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: 08123456789" />
+                        </div>
+                    </div>
+
+                    {/* KETERSEDIAAN PENGAJARAN (HANYA UNTUK PENDIDIK) */}
+                    {!isNonPendidik && (
                     <div className="bg-teal-50 p-4 rounded-lg border border-teal-100 shadow-sm">
                         <div className="flex justify-between items-center mb-3">
                             <h4 className="text-sm font-bold text-teal-800 flex items-center gap-2">
@@ -272,6 +405,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                             )}
                         </div>
                     </div>
+                    )}
 
                     <div className="pt-2 border-t mt-4 lg:grid lg:grid-cols-12 lg:gap-6 space-y-6 lg:space-y-0 text-white">
                         <div className="lg:col-span-12">
@@ -366,6 +500,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                         </div>
                     </div>
 
+                    {!isNonPendidik && (
                     <details className="pt-4 border-t group">
                         <summary className="text-sm font-bold text-gray-500 cursor-pointer hover:text-gray-700 flex items-center justify-between">
                             <span>Opsi Lanjutan & Kompetensi Mapel</span>
@@ -447,6 +582,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                             </div>
                         </div>
                     </details>
+                    )}
                 </div>
                 
                 <div className="p-4 border-t flex justify-end space-x-2 bg-gray-50 rounded-b-lg shrink-0">

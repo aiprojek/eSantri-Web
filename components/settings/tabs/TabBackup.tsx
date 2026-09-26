@@ -47,6 +47,7 @@ const RESTORE_TABLE_CONFIG: Array<{ key: string; label: string; table: any; alia
     { key: 'bukuTamu', label: 'Buku Tamu', table: db.bukuTamu },
     { key: 'jadwalPelajaran', label: 'Jadwal Pelajaran', table: db.jadwalPelajaran },
     { key: 'arsipJadwal', label: 'Arsip Jadwal', table: db.arsipJadwal },
+    { key: 'jadwalUjian', label: 'Jadwal Ujian', table: db.jadwalUjian },
     { key: 'payrollRecords', label: 'Payroll', table: db.payrollRecords },
     { key: 'piketSchedules', label: 'Piket', table: db.piketSchedules },
     { key: 'produkKoperasi', label: 'Produk Koperasi', table: db.produkKoperasi },

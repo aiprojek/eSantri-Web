@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { InspeksiKamar, JurnalAsrama } from '../../types';
+import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 
 export const JurnalInspeksiAsrama: React.FC = () => {
     const { settings, onSaveSettings, showConfirmation, showAlert, currentUser, showToast } = useAppContext();
@@ -28,6 +29,9 @@ export const JurnalInspeksiAsrama: React.FC = () => {
 
     const [filterGedungInspeksi, setFilterGedungInspeksi] = useState<number | ''>('');
     const [filterTanggalInspeksi, setFilterTanggalInspeksi] = useState<string>('');
+    const [isInspeksiFilterOpen, setIsInspeksiFilterOpen] = useState(false);
+
+    const activeInspeksiFilterCount = (filterGedungInspeksi ? 1 : 0) + (filterTanggalInspeksi ? 1 : 0);
 
     // Auto-calculate total and predikat
     const calculatePredikat = (total: number): InspeksiKamar['predikat'] => {
@@ -132,6 +136,9 @@ export const JurnalInspeksiAsrama: React.FC = () => {
 
     const [filterJenisJurnal, setFilterJenisJurnal] = useState<string>('');
     const [filterGedungJurnal, setFilterGedungJurnal] = useState<number | ''>('');
+    const [isJurnalFilterOpen, setIsJurnalFilterOpen] = useState(false);
+
+    const activeJurnalFilterCount = (filterJenisJurnal ? 1 : 0) + (filterGedungJurnal ? 1 : 0);
 
     const handleSaveJurnal = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -198,28 +205,30 @@ export const JurnalInspeksiAsrama: React.FC = () => {
     return (
         <div className="space-y-6">
             {/* Sub-tab Navigation */}
-            <div className="flex items-center gap-2 border-b border-gray-200 pb-3">
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 border-b border-gray-200 pb-3">
                 <button
                     onClick={() => setActiveSubTab('inspeksi')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                    className={`px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap text-center ${
                         activeSubTab === 'inspeksi'
                             ? 'bg-teal-800 text-white shadow-xs'
                             : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                     }`}
                 >
-                    <i className="bi bi-shield-check text-sm"></i>
-                    <span>Inspeksi Kebersihan Kamar (Sidak Nadhafah)</span>
+                    <i className="bi bi-shield-check text-sm shrink-0"></i>
+                    <span className="sm:hidden">Sidak Nadhafah</span>
+                    <span className="hidden sm:inline">Inspeksi Kebersihan (Sidak Nadhafah)</span>
                 </button>
                 <button
                     onClick={() => setActiveSubTab('jurnal')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                    className={`px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap text-center ${
                         activeSubTab === 'jurnal'
                             ? 'bg-teal-800 text-white shadow-xs'
                             : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                     }`}
                 >
-                    <i className="bi bi-journal-bookmark-fill text-sm"></i>
-                    <span>Jurnal Pembinaan &amp; Catatan Musyrif</span>
+                    <i className="bi bi-journal-bookmark-fill text-sm shrink-0"></i>
+                    <span className="sm:hidden">Jurnal Musyrif</span>
+                    <span className="hidden sm:inline">Jurnal Pembinaan &amp; Catatan Musyrif</span>
                 </button>
             </div>
 
@@ -374,8 +383,77 @@ export const JurnalInspeksiAsrama: React.FC = () => {
                                 <p className="text-[11px] text-gray-500">Log sidak berkala untuk evaluasi piala bergilir kamar terbersih.</p>
                             </div>
 
-                            {/* Filters */}
-                            <div className="flex gap-2 text-xs">
+                            {/* Mobile Filter Button */}
+                            <div className="flex sm:hidden items-center justify-between gap-2 w-full">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsInspeksiFilterOpen(true)}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all ${
+                                        activeInspeksiFilterCount > 0
+                                            ? 'bg-teal-50 text-teal-800 border-teal-300 shadow-xs'
+                                            : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    <i className="bi bi-funnel-fill text-teal-600"></i>
+                                    <span>Filter Riwayat</span>
+                                    {activeInspeksiFilterCount > 0 && (
+                                        <span className="w-4 h-4 rounded-full bg-teal-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                            {activeInspeksiFilterCount}
+                                        </span>
+                                    )}
+                                </button>
+                                {activeInspeksiFilterCount > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFilterGedungInspeksi('');
+                                            setFilterTanggalInspeksi('');
+                                        }}
+                                        className="text-[11px] text-gray-500 hover:text-red-600"
+                                    >
+                                        Reset Filter
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Mobile Filter Drawer for Inspeksi */}
+                            <MobileFilterDrawer
+                                isOpen={isInspeksiFilterOpen}
+                                onClose={() => setIsInspeksiFilterOpen(false)}
+                                title="Filter Riwayat Sidak Asrama"
+                                onReset={() => {
+                                    setFilterGedungInspeksi('');
+                                    setFilterTanggalInspeksi('');
+                                }}
+                            >
+                                <div className="space-y-3.5 text-xs">
+                                    <div>
+                                        <label className="block text-gray-700 font-bold mb-1">Filter Gedung</label>
+                                        <select
+                                            value={filterGedungInspeksi}
+                                            onChange={e => setFilterGedungInspeksi(e.target.value ? Number(e.target.value) : '')}
+                                            className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs font-medium"
+                                        >
+                                            <option value="">Semua Gedung</option>
+                                            {settings.gedungAsrama.map(g => (
+                                                <option key={g.id} value={g.id}>{g.nama}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-gray-700 font-bold mb-1">Filter Tanggal Sidak</label>
+                                        <input
+                                            type="date"
+                                            value={filterTanggalInspeksi}
+                                            onChange={e => setFilterTanggalInspeksi(e.target.value)}
+                                            className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs font-medium"
+                                        />
+                                    </div>
+                                </div>
+                            </MobileFilterDrawer>
+
+                            {/* Desktop Filters */}
+                            <div className="hidden sm:flex gap-2 text-xs">
                                 <select
                                     value={filterGedungInspeksi}
                                     onChange={e => setFilterGedungInspeksi(e.target.value ? Number(e.target.value) : '')}
@@ -604,8 +682,83 @@ export const JurnalInspeksiAsrama: React.FC = () => {
                                 <p className="text-[11px] text-gray-500">Catatan kronologis harian pengasuhan santri di asrama.</p>
                             </div>
 
-                            {/* Filters */}
-                            <div className="flex gap-2 text-xs">
+                            {/* Mobile Filter Button */}
+                            <div className="flex sm:hidden items-center justify-between gap-2 w-full">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsJurnalFilterOpen(true)}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all ${
+                                        activeJurnalFilterCount > 0
+                                            ? 'bg-indigo-50 text-indigo-800 border-indigo-300 shadow-xs'
+                                            : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    <i className="bi bi-funnel-fill text-indigo-600"></i>
+                                    <span>Filter Jurnal</span>
+                                    {activeJurnalFilterCount > 0 && (
+                                        <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                            {activeJurnalFilterCount}
+                                        </span>
+                                    )}
+                                </button>
+                                {activeJurnalFilterCount > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFilterJenisJurnal('');
+                                            setFilterGedungJurnal('');
+                                        }}
+                                        className="text-[11px] text-gray-500 hover:text-red-600"
+                                    >
+                                        Reset Filter
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Mobile Filter Drawer for Jurnal */}
+                            <MobileFilterDrawer
+                                isOpen={isJurnalFilterOpen}
+                                onClose={() => setIsJurnalFilterOpen(false)}
+                                title="Filter Kronologi Jurnal Asrama"
+                                onReset={() => {
+                                    setFilterJenisJurnal('');
+                                    setFilterGedungJurnal('');
+                                }}
+                            >
+                                <div className="space-y-3.5 text-xs">
+                                    <div>
+                                        <label className="block text-gray-700 font-bold mb-1">Filter Kategori Kegiatan</label>
+                                        <select
+                                            value={filterJenisJurnal}
+                                            onChange={e => setFilterJenisJurnal(e.target.value)}
+                                            className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs font-medium"
+                                        >
+                                            <option value="">Semua Kategori</option>
+                                            <option value="Kebersihan">Kebersihan</option>
+                                            <option value="Kedisiplinan">Kedisiplinan</option>
+                                            <option value="Pembinaan">Pembinaan</option>
+                                            <option value="Kunjungan Wali">Kunjungan Wali</option>
+                                            <option value="Kesehatan/P3K">Kesehatan</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-gray-700 font-bold mb-1">Filter Gedung</label>
+                                        <select
+                                            value={filterGedungJurnal}
+                                            onChange={e => setFilterGedungJurnal(e.target.value ? Number(e.target.value) : '')}
+                                            className="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs font-medium"
+                                        >
+                                            <option value="">Semua Gedung</option>
+                                            {settings.gedungAsrama.map(g => (
+                                                <option key={g.id} value={g.id}>{g.nama}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </MobileFilterDrawer>
+
+                            {/* Desktop Filters */}
+                            <div className="hidden sm:flex gap-2 text-xs">
                                 <select
                                     value={filterJenisJurnal}
                                     onChange={e => setFilterJenisJurnal(e.target.value)}

@@ -21,7 +21,7 @@ const TABLES_TO_SYNC = [
     'payrollRecords', 'produkKoperasi', 'transaksiKoperasi', 'riwayatStok', 'keuanganKoperasi',
     'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi', 'jurnalMengajar',
     'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions', 'bukuTamu',
-    'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'piketSchedules', 'users',
+    'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'jadwalUjian', 'piketSchedules', 'users',
     'auditLogs', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang',
     'warehouses', 'stockTransfers', 'digitalAssets', 'settings'
 ];
@@ -36,6 +36,10 @@ type HookRegistryItem = {
     deleting: (primKey: any) => void;
 };
 let registeredHooks: HookRegistryItem[] = [];
+
+let currentSyncSession = 0;
+
+const isNumericKeyTable = (tableName: string) => !['auditLogs', 'syncHistory', 'digitalAssets', 'settings'].includes(tableName);
 
 const beginCloudSync = () => {
     cloudSyncDepth += 1;
@@ -80,35 +84,54 @@ export const startFirebaseSync = (tenantId: string) => {
         return;
     }
 
+    const sessionToken = ++currentSyncSession;
+
     const activeTenantId = db.settings.toArray().then((settings) => settings[0]?.cloudSyncConfig?.firebasePairedTenantId || tenantId);
 
     activeTenantId.then((actualId) => {
+        if (sessionToken !== currentSyncSession) return;
+
         TABLES_TO_SYNC.forEach((tableName) => {
             const path = `tenants/${actualId}/${tableName}`;
             const isSettings = tableName === 'settings';
             const target = isSettings ? doc(fdb, path, 'main') : query(collection(fdb, path));
 
             const unsub = onSnapshot(target as never, async (snap: any) => {
+                if (sessionToken !== currentSyncSession) return;
                 beginCloudSync();
                 try {
+                    const isNum = isNumericKeyTable(tableName);
+
                     const processDoc = async (docData: any, docId: string) => {
                         if (tableName === 'users' && docData.isDefaultAdmin) return null;
 
+                        const rawId = docData.id ?? docData.santriId ?? docId;
+                        const targetId = isNum && rawId !== undefined && !isNaN(Number(rawId)) ? Number(rawId) : rawId;
+
                         const localItem = await (db as any)[tableName].get(
-                            isSettings ? (await (db as any)[tableName].toArray())[0]?.id : (docData.id || docData.santriId || docId)
+                            isSettings ? (await (db as any)[tableName].toArray())[0]?.id : targetId
                         );
                         const cloudTime = getTime(docData.lastModified);
                         const localTime = localItem ? getTime(localItem.lastModified) : 0;
 
+                        const normalizedDoc = { ...docData };
+                        if (isNum && targetId !== undefined) {
+                            if (tableName === 'saldoSantri') {
+                                normalizedDoc.santriId = targetId;
+                            } else {
+                                normalizedDoc.id = targetId;
+                            }
+                        }
+
                         if (!localItem || cloudTime > localTime) {
-                            return docData;
+                            return normalizedDoc;
                         }
 
                         if (cloudTime === localTime) {
-                            const { lastModified: _cloudTime, ...cloudData } = docData;
+                            const { lastModified: _cloudTime, ...cloudData } = normalizedDoc;
                             const { lastModified: _localTime, ...localData } = localItem;
                             if (JSON.stringify(cloudData) !== JSON.stringify(localData)) {
-                                return docData;
+                                return normalizedDoc;
                             }
                         }
 
@@ -123,6 +146,16 @@ export const startFirebaseSync = (tenantId: string) => {
                                 const local = await db.settings.toArray();
                                 if (local.length > 0) {
                                     const { id, ...rest } = result;
+                                    // Preserve local pairing configuration so spoke devices do not lose hub connection
+                                    const localPairedTenant = local[0].cloudSyncConfig?.firebasePairedTenantId;
+                                    const localProvider = local[0].cloudSyncConfig?.provider;
+                                    if (localPairedTenant) {
+                                        rest.cloudSyncConfig = {
+                                            ...(rest.cloudSyncConfig || {}),
+                                            firebasePairedTenantId: localPairedTenant,
+                                            provider: localProvider || 'firebase'
+                                        };
+                                    }
                                     await db.settings.update(local[0].id!, rest);
                                 } else {
                                     await db.settings.add(result);
@@ -139,7 +172,9 @@ export const startFirebaseSync = (tenantId: string) => {
                                 const result = await processDoc(data, change.doc.id);
                                 if (result) batch.push(result);
                             } else if (change.type === 'removed') {
-                                idsToDelete.push(data.id || data.santriId || change.doc.id);
+                                const rawDelId = data?.id ?? data?.santriId ?? change.doc.id;
+                                const delTargetId = isNum && rawDelId !== undefined && !isNaN(Number(rawDelId)) ? Number(rawDelId) : rawDelId;
+                                idsToDelete.push(delTargetId);
                             }
                         }
 
@@ -158,22 +193,42 @@ export const startFirebaseSync = (tenantId: string) => {
 
         TABLES_TO_SYNC.forEach((tableName) => {
             const table = (db as any)[tableName];
+            const isNum = isNumericKeyTable(tableName);
 
             const creatingHook = function (this: any, primKey: any, obj: any) {
                 if (isSyncingFromCloud) return;
+                const formatAndSend = (key: any) => {
+                    const finalKey = key ?? obj.id ?? obj.santriId;
+                    const normalizedKey = isNum && finalKey !== undefined && !isNaN(Number(finalKey)) ? Number(finalKey) : finalKey;
+                    const payload = {
+                        ...obj,
+                        ...(normalizedKey !== undefined && tableName !== 'saldoSantri' ? { id: normalizedKey } : {}),
+                        ...(tableName === 'saldoSantri' && normalizedKey !== undefined ? { santriId: normalizedKey } : {})
+                    };
+                    void syncLocalToFirebase(actualId, tableName, payload);
+                };
+
                 if (primKey !== undefined) {
-                    void syncLocalToFirebase(actualId, tableName, { ...obj, id: obj.id ?? primKey });
+                    formatAndSend(primKey);
                 } else if (this && typeof this.onsuccess === 'function') {
                     this.onsuccess = (key: any) => {
-                        void syncLocalToFirebase(actualId, tableName, { ...obj, id: obj.id ?? key });
+                        formatAndSend(key);
                     };
                 } else {
-                    void syncLocalToFirebase(actualId, tableName, obj);
+                    formatAndSend(undefined);
                 }
             };
-            const updatingHook = (mods: any, _primKey: any, obj: any) => {
+            const updatingHook = (mods: any, primKey: any, obj: any) => {
                 if (isSyncingFromCloud) return;
-                void syncLocalToFirebase(actualId, tableName, { ...obj, ...mods });
+                const targetId = obj?.id ?? primKey;
+                const normalizedId = isNum && targetId !== undefined && !isNaN(Number(targetId)) ? Number(targetId) : targetId;
+                const payload = {
+                    ...obj,
+                    ...mods,
+                    ...(normalizedId !== undefined && tableName !== 'saldoSantri' ? { id: normalizedId } : {}),
+                    ...(tableName === 'saldoSantri' && normalizedId !== undefined ? { santriId: normalizedId } : {})
+                };
+                void syncLocalToFirebase(actualId, tableName, payload);
             };
             const deletingHook = (primKey: any) => {
                 if (isSyncingFromCloud) return;
@@ -215,12 +270,35 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
             } else if (tableName === 'settings') {
                 const localSettings = await db.settings.toArray();
                 if (localSettings.length > 0) {
-                    await db.settings.update(localSettings[0].id!, items[0]);
+                    const localPairedTenant = localSettings[0].cloudSyncConfig?.firebasePairedTenantId;
+                    const localProvider = localSettings[0].cloudSyncConfig?.provider;
+                    const incomingSettings = { ...items[0] };
+                    if (localPairedTenant) {
+                        incomingSettings.cloudSyncConfig = {
+                            ...(incomingSettings.cloudSyncConfig || {}),
+                            firebasePairedTenantId: localPairedTenant,
+                            provider: localProvider || 'firebase'
+                        };
+                    }
+                    await db.settings.update(localSettings[0].id!, incomingSettings);
                 } else {
                     await db.settings.add(items[0]);
                 }
             } else {
-                await (db as any)[tableName].bulkPut(items);
+                const isNum = isNumericKeyTable(tableName);
+                const normalizedItems = isNum
+                    ? items.map((item) => {
+                        const rawId = item.id ?? item.santriId;
+                        if (rawId !== undefined && !isNaN(Number(rawId))) {
+                            if (tableName === 'saldoSantri') {
+                                return { ...item, santriId: Number(rawId) };
+                            }
+                            return { ...item, id: Number(rawId) };
+                        }
+                        return item;
+                    })
+                    : items;
+                await (db as any)[tableName].bulkPut(normalizedItems);
             }
         }
     } catch (error) {
@@ -282,6 +360,7 @@ export const deleteFromFirebase = async (tenantId: string, tableName: string, do
 
 export const pushAllToFirebase = async (tenantId: string) => {
     for (const tableName of TABLES_TO_SYNC) {
+        if (tableName === 'settings') continue; // Handled explicitly below as 'main'
         const items = await (db as any)[tableName].toArray();
 
         for (let i = 0; i < items.length; i += 500) {
@@ -315,7 +394,15 @@ export const syncPsbWithFirebaseHub = async (tenantId: string) => {
     try {
         const path = `tenants/${tenantId}/pendaftar`;
         const snapshot = await getDocs(collection(fdb, path));
-        const cloudItems = snapshot.docs.map((d) => d.data() as any);
+        const cloudItems = snapshot.docs.map((d) => {
+            const data = d.data() as any;
+            const rawId = data.id ?? d.id;
+            const parsedId = Number(rawId);
+            return {
+                ...data,
+                id: !isNaN(parsedId) ? parsedId : rawId,
+            };
+        });
         const localItems = await db.pendaftar.toArray();
 
         const localMap = new Map(localItems.map((item) => [item.id, item]));

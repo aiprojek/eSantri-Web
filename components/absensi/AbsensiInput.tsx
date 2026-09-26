@@ -395,10 +395,11 @@ export const AbsensiInput: React.FC = () => {
                             type="button"
                             onClick={handleStartInput}
                             disabled={!selectedRombelId || targetSantri.length === 0}
-                            className="w-full sm:w-auto px-8 py-3 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            className="w-full sm:w-auto px-6 sm:px-8 py-3 bg-teal-600 hover:bg-teal-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
                         >
                             <i className="bi bi-pencil-fill"></i>
-                            Mulai Input Absensi {selectedSesi}
+                            <span className="sm:hidden">Mulai Input Presensi</span>
+                            <span className="hidden sm:inline">Mulai Input Absensi {selectedSesi}</span>
                         </button>
                     </div>
                 </div>
@@ -464,13 +465,13 @@ export const AbsensiInput: React.FC = () => {
                     </div>
 
                     {/* Responsive Actions: Tabs & Quick Action Buttons */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
                         {/* View Mode Toggle: Grid vs Spreadsheet Table */}
-                        <div className="bg-gray-100/90 p-1 rounded-xl flex items-center gap-1 text-xs border border-gray-200/60 shadow-2xs">
+                        <div className="grid grid-cols-2 gap-1 sm:inline-flex bg-gray-100/90 p-1 rounded-xl text-xs border border-gray-200/60 shadow-2xs">
                             <button
                                 type="button"
                                 onClick={() => setViewMode('table')}
-                                className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all text-xs ${
+                                className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all text-xs whitespace-nowrap ${
                                     viewMode === 'table' ? 'bg-white text-teal-700 shadow-xs ring-1 ring-black/5' : 'text-gray-600 hover:text-gray-900'
                                 }`}
                             >
@@ -480,7 +481,7 @@ export const AbsensiInput: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => setViewMode('grid')}
-                                className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all text-xs ${
+                                className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all text-xs whitespace-nowrap ${
                                     viewMode === 'grid' ? 'bg-white text-teal-700 shadow-xs ring-1 ring-black/5' : 'text-gray-600 hover:text-gray-900'
                                 }`}
                             >
@@ -490,15 +491,16 @@ export const AbsensiInput: React.FC = () => {
                         </div>
 
                         {/* Action Buttons Group */}
-                        <div className="flex items-center gap-2">
+                        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
                             {/* Quick Mark All Present */}
                             <button
                                 type="button"
                                 onClick={handleMarkAllPresent}
-                                className="flex-1 sm:flex-initial px-3.5 py-2 bg-green-50 hover:bg-green-100 active:bg-green-200 text-green-700 border border-green-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                                className="px-3 py-2 bg-green-50 hover:bg-green-100 active:bg-green-200 text-green-700 border border-green-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-2xs whitespace-nowrap truncate"
                             >
-                                <i className="bi bi-check-all text-base"></i>
-                                <span>Set Semua Hadir</span>
+                                <i className="bi bi-check-all text-base shrink-0"></i>
+                                <span className="sm:hidden">Semua Hadir</span>
+                                <span className="hidden sm:inline">Set Semua Hadir</span>
                             </button>
 
                             {/* WA Blast to Absent Students */}
@@ -506,9 +508,9 @@ export const AbsensiInput: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={handleOpenWaBlast}
-                                    className="flex-1 sm:flex-initial px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all"
+                                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all whitespace-nowrap truncate"
                                 >
-                                    <i className="bi bi-whatsapp"></i>
+                                    <i className="bi bi-whatsapp shrink-0"></i>
                                     <span>Blast WA ({absentStudentItems.length})</span>
                                 </button>
                             )}

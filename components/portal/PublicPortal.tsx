@@ -3,70 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { PondokSettings, PortalAnnouncementPost, PsbConfig } from '../../types';
 import { LoadingFallback } from '../common/LoadingFallback';
 import { fetchPortalSettingsFromGas, PortalSantriSummary, submitPortalPsbToGas } from '../../services/portalGasService';
+import { PSB_STANDARD_FIELD_GROUPS } from '../psb/utils/psbUtils';
+import { MarkdownEditor } from '../common/MarkdownEditor';
 
-const fieldGroups = [
-    {
-        title: 'Identitas',
-        fields: [
-            { key: 'namaLengkap', label: 'Nama Lengkap (Sesuai Ijazah)' },
-            { key: 'namaHijrah', label: 'Nama Panggilan' },
-            { key: 'nisn', label: 'NISN' },
-            { key: 'nik', label: 'NIK' },
-            { key: 'jenisKelamin', label: 'Jenis Kelamin' },
-            { key: 'tempatLahir', label: 'Tempat Lahir' },
-            { key: 'tanggalLahir', label: 'Tanggal Lahir' },
-            { key: 'kewarganegaraan', label: 'Kewarganegaraan' },
-            { key: 'statusKeluarga', label: 'Status dalam Keluarga' },
-            { key: 'anakKe', label: 'Anak Ke' },
-            { key: 'jumlahSaudara', label: 'Jumlah Saudara' },
-        ]
-    },
-    {
-        title: 'Alamat & Kontak',
-        fields: [
-            { key: 'alamat', label: 'Jalan / Detail' },
-            { key: 'desaKelurahan', label: 'Desa / Kelurahan' },
-            { key: 'kecamatan', label: 'Kecamatan' },
-            { key: 'kabupatenKota', label: 'Kabupaten / Kota' },
-            { key: 'provinsi', label: 'Provinsi' },
-            { key: 'kodePos', label: 'Kode Pos' },
-        ]
-    },
-    {
-        title: 'Data Ayah',
-        fields: [
-            { key: 'namaAyah', label: 'Nama Ayah' },
-            { key: 'nikAyah', label: 'NIK Ayah' },
-            { key: 'statusAyah', label: 'Status Ayah (Hidup/Meninggal)' },
-            { key: 'pekerjaanAyah', label: 'Pekerjaan Ayah' },
-            { key: 'pendidikanAyah', label: 'Pendidikan Ayah' },
-            { key: 'penghasilanAyah', label: 'Penghasilan Ayah' },
-            { key: 'teleponAyah', label: 'No. HP Ayah' },
-        ]
-    },
-    {
-        title: 'Data Ibu',
-        fields: [
-            { key: 'namaIbu', label: 'Nama Ibu' },
-            { key: 'nikIbu', label: 'NIK Ibu' },
-            { key: 'statusIbu', label: 'Status Ibu (Hidup/Meninggal)' },
-            { key: 'pekerjaanIbu', label: 'Pekerjaan Ibu' },
-            { key: 'pendidikanIbu', label: 'Pendidikan Ibu' },
-            { key: 'penghasilanIbu', label: 'Penghasilan Ibu' },
-            { key: 'teleponIbu', label: 'No. HP Ibu' },
-        ]
-    },
-    {
-        title: 'Data Wali & Sekolah',
-        fields: [
-            { key: 'namaWali', label: 'Nama Wali' },
-            { key: 'nomorHpWali', label: 'No. HP / WhatsApp (Wali)' },
-            { key: 'hubunganWali', label: 'Hubungan Wali' },
-            { key: 'asalSekolah', label: 'Asal Sekolah' },
-            { key: 'alamatSekolahAsal', label: 'Alamat Sekolah Asal' },
-        ]
-    },
-];
+const fieldGroups = PSB_STANDARD_FIELD_GROUPS;
 
 export const PublicPortal: React.FC = () => {
     const [pathParts] = useState<string[]>(window.location.pathname.split('/').filter(p => p !== ''));
@@ -591,7 +531,7 @@ const PsbFormViewer: React.FC<{ settings: PondokSettings, config: PsbConfig, ten
                                      {groupFields.map(f => {
                                          const isRequired = (config.requiredStandardFields || []).includes(f.key);
                                          return (
-                                             <div key={f.key} className={`space-y-1.5 ${f.key === 'namaLengkap' || f.key === 'alamat' ? 'md:col-span-2' : ''}`}>
+                                             <div key={f.key} className={`space-y-1.5 ${f.key === 'namaLengkap' || f.key === 'alamat' || f.key === 'catatan' || f.type === 'markdown' || f.isFullWidth ? 'md:col-span-2' : ''}`}>
                                                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{f.label} {isRequired && <span className="text-red-500">*</span>}</label>
                                                  {f.key === 'jenisKelamin' ? (
                                                      <div className="flex gap-4 p-1">
@@ -602,10 +542,29 @@ const PsbFormViewer: React.FC<{ settings: PondokSettings, config: PsbConfig, ten
                                                              <input required={isRequired} type="radio" name={f.key} value="Perempuan" onChange={e => handleInputChange(f.key, e.target.value)} /> Perempuan
                                                          </label>
                                                      </div>
-                                                 ) : f.key.toLowerCase().includes('tanggal') ? (
-                                                     <input required={isRequired} type="date" className="w-full border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none border transition" onChange={e => handleInputChange(f.key, e.target.value)} />
+                                                 ) : (f.type === 'select' || (f.options && f.options.length > 0)) ? (
+                                                     <select 
+                                                         required={isRequired} 
+                                                         className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition"
+                                                         onChange={e => handleInputChange(f.key, e.target.value)}
+                                                     >
+                                                         <option value="">-- Pilih {f.label} --</option>
+                                                         {f.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                     </select>
+                                                 ) : (f.type === 'markdown' || f.key === 'catatan') ? (
+                                                     <MarkdownEditor 
+                                                         value={fields[f.key] || ''} 
+                                                         onChange={val => handleInputChange(f.key, val)}
+                                                         placeholder="Tulis catatan atau pesan orang tua (mendukung markdown)..."
+                                                         rows={3}
+                                                         required={isRequired}
+                                                     />
+                                                 ) : (f.type === 'date' || f.key.toLowerCase().includes('tanggal')) ? (
+                                                     <input required={isRequired} type="date" className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition" onChange={e => handleInputChange(f.key, e.target.value)} />
+                                                 ) : (f.type === 'number' || ['anakKe', 'jumlahSaudara', 'tinggiBadan', 'beratBadan', 'tahunLulusSebelumnya', 'targetJuz'].includes(f.key)) ? (
+                                                     <input required={isRequired} type="number" className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition" placeholder={f.label} onChange={e => handleInputChange(f.key, e.target.value)} />
                                                  ) : (
-                                                     <input required={isRequired} type="text" className="w-full border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none border transition" placeholder={f.label} onChange={e => handleInputChange(f.key, e.target.value)} />
+                                                     <input required={isRequired} type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition" placeholder={f.label} onChange={e => handleInputChange(f.key, e.target.value)} />
                                                  )}
                                              </div>
                                          );
@@ -629,6 +588,27 @@ const PsbFormViewer: React.FC<{ settings: PondokSettings, config: PsbConfig, ten
                                                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">{field.label} {field.required && <span className="text-red-500 font-black">*</span>}</label>
                                                 {field.type === 'paragraph' ? (
                                                     <textarea required={field.required} rows={3} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none" onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
+                                                ) : field.type === 'date' ? (
+                                                    <input required={field.required} type="date" className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm" onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
+                                                ) : field.type === 'markdown' ? (
+                                                    <MarkdownEditor 
+                                                        value={fields[`custom_${field.id}`] || ''} 
+                                                        onChange={val => handleInputChange(`custom_${field.id}`, val)}
+                                                        placeholder="Tulis jawaban atau catatan terformat..."
+                                                        rows={3}
+                                                        required={field.required}
+                                                    />
+                                                ) : field.type === 'number' ? (
+                                                    <input required={field.required} type="number" className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none bg-white text-sm" onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
+                                                ) : field.type === 'select' ? (
+                                                    <select 
+                                                        required={field.required} 
+                                                        className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm"
+                                                        onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)}
+                                                    >
+                                                        <option value="">-- Pilih {field.label} --</option>
+                                                        {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                    </select>
                                                 ) : field.type === 'file' ? (
                                                     <div className="relative group">
                                                         <input required={field.required} type="file" accept="image/*,application/pdf" className="w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-6 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 transition-all cursor-pointer" onChange={e => handleInputChange(`custom_${field.id}`, e.target.files?.[0])} />
@@ -639,6 +619,19 @@ const PsbFormViewer: React.FC<{ settings: PondokSettings, config: PsbConfig, ten
                                                         {field.options?.map(opt => (
                                                             <label key={opt} className="flex items-center gap-2 cursor-pointer border px-4 py-2.5 rounded-xl hover:bg-gray-50 has-[:checked]:bg-teal-50 has-[:checked]:border-teal-500 transition-all text-sm">
                                                                 <input type="radio" name={`custom_${field.id}`} value={opt} required={field.required} onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
+                                                                {opt}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                ) : field.type === 'checkbox' ? (
+                                                    <div className="flex flex-wrap gap-3">
+                                                        {field.options?.map(opt => (
+                                                            <label key={opt} className="flex items-center gap-2 cursor-pointer border px-4 py-2.5 rounded-xl hover:bg-gray-50 has-[:checked]:bg-teal-50 has-[:checked]:border-teal-500 transition-all text-sm">
+                                                                <input type="checkbox" name={`custom_${field.id}[]`} value={opt} onChange={e => {
+                                                                    const current = (fields[`custom_${field.id}`] as string[]) || [];
+                                                                    const next = e.target.checked ? [...current, opt] : current.filter(x => x !== opt);
+                                                                    handleInputChange(`custom_${field.id}`, next);
+                                                                }} />
                                                                 {opt}
                                                             </label>
                                                         ))}

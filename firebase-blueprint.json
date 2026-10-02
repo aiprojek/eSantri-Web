@@ -300,6 +300,43 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "jenjangId", "rombelId", "jenisUjian", "tanggal", "hari", "sesiKe", "jamMulai", "jamSelesai", "lastModified"]
+    },
+    "Buku": {
+      "title": "Buku",
+      "description": "Katalog koleksi buku dan pustaka perpustakaan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "kodeBuku": { "type": "string" },
+        "judul": { "type": "string" },
+        "penulis": { "type": "string" },
+        "penerbit": { "type": "string" },
+        "tahunTerbit": { "type": "number" },
+        "kategori": { "type": "string" },
+        "stok": { "type": "number" },
+        "lokasiRak": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "kodeBuku", "judul", "kategori", "stok", "lastModified"]
+    },
+    "Sirkulasi": {
+      "title": "Sirkulasi",
+      "description": "Catatan transaksi sirkulasi peminjaman dan pengembalian buku perpustakaan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "santriId": { "type": "number" },
+        "bukuId": { "type": "number" },
+        "tanggalPinjam": { "type": "string" },
+        "tanggalKembaliSeharusnya": { "type": "string" },
+        "tanggalDikembalikan": { "type": "string" },
+        "status": { "type": "string", "enum": ["Dipinjam", "Kembali", "Hilang", "Rusak"] },
+        "denda": { "type": "number" },
+        "catatan": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "santriId", "bukuId", "tanggalPinjam", "tanggalKembaliSeharusnya", "status", "lastModified"]
     }
   },
   "firestore": {
@@ -350,6 +387,14 @@
     "tenants/{tenantId}/jadwalUjian": {
       "schema": "JadwalUjian",
       "description": "Koleksi jadwal ujian & evaluasi KBM santri per tenant"
+    },
+    "tenants/{tenantId}/buku": {
+      "schema": "Buku",
+      "description": "Koleksi katalog buku perpustakaan per tenant"
+    },
+    "tenants/{tenantId}/sirkulasi": {
+      "schema": "Sirkulasi",
+      "description": "Koleksi transaksi sirkulasi perpustakaan per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

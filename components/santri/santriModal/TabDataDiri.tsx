@@ -29,32 +29,16 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
       validate: value => {
           if (!value) return true;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || isNaN(new Date(value).getTime())) {
-              return 'Format tanggal harus DD/MM/YYYY dan valid.';
+              return 'Format tanggal harus valid (YYYY-MM-DD atau pilih kalender).';
           }
           return true;
       }
   });
 
   const formTanggalLahir = watch('tanggalLahir');
-  const [displayTanggalLahir, setDisplayTanggalLahir] = useState('');
 
-  useEffect(() => {
-      if (formTanggalLahir && /^\d{4}-\d{2}-\d{2}$/.test(formTanggalLahir)) {
-          const [y, m, d] = formTanggalLahir.split('-');
-          setDisplayTanggalLahir(`${d}/${m}/${y}`);
-      } else {
-          setDisplayTanggalLahir(formTanggalLahir || '');
-      }
-  }, [formTanggalLahir]);
-
-  const handleDateBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-      const displayValue = e.target.value;
-      if (/^\d{2}\/\d{2}\/\d{4}$/.test(displayValue)) {
-          const [d, m, y] = displayValue.split('/');
-          setValue('tanggalLahir', `${y}-${m}-${d}`, { shouldDirty: true });
-      } else {
-          setValue('tanggalLahir', displayValue, { shouldDirty: true });
-      }
+  const handleDateChange = (val: string) => {
+      setValue('tanggalLahir', val, { shouldDirty: true });
       trigger('tanggalLahir');
   };
   // --- End Tanggal Lahir Logic ---
@@ -113,11 +97,9 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
             <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Lahir</label>
               <input
-                  type="text"
-                  placeholder="DD/MM/YYYY"
-                  value={displayTanggalLahir}
-                  onChange={e => setDisplayTanggalLahir(e.target.value)}
-                  onBlur={handleDateBlur}
+                  type="date"
+                  value={formTanggalLahir ? formTanggalLahir.split('T')[0] : ''}
+                  onChange={e => handleDateChange(e.target.value)}
                   className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.tanggalLahir ? 'border-red-500' : 'border-gray-300'}`}
               />
               <FormError error={errors.tanggalLahir} />
@@ -154,6 +136,27 @@ export const TabDataDiri: React.FC<TabDataDiriProps> = ({ formMethods, onGenerat
                   <option value="Laki-laki">Laki-laki</option>
                   <option value="Perempuan">Perempuan</option>
               </select>
+          </div>
+            <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Agama</label>
+              <select {...register('agama')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                  <option value="Islam">Islam</option>
+                  <option value="Lainnya">Lainnya</option>
+              </select>
+          </div>
+            <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">Golongan Darah</label>
+              <select {...register('golonganDarah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                  <option value="">- Belum Diketahui -</option>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="AB">AB</option>
+                  <option value="O">O</option>
+              </select>
+          </div>
+            <div className="lg:col-span-2">
+              <label className="block mb-1 text-sm font-medium text-gray-700">No. WhatsApp / HP Santri</label>
+              <input type="text" {...register('telepon')} placeholder="08xxxxxxxxxx" className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" />
           </div>
             <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">Kewarganegaraan</label>

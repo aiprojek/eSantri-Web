@@ -119,15 +119,16 @@ const getUnifiedPreviewPrintStyles = () => `
         font-style: italic !important;
     }
     #calendar-print-area .calendar-sheet {
-        width: 21cm !important;
-        min-height: 29.7cm !important;
+        width: 210mm !important;
+        max-width: 210mm !important;
+        min-height: 297mm !important;
         box-sizing: border-box !important;
-        overflow: hidden !important;
+        overflow: visible !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
     }
     #calendar-print-area .calendar-layout-1_sheet {
-        padding: 7mm 7mm 6mm 7mm !important;
+        padding: 4mm 5mm 3mm 5mm !important;
     }
     #calendar-print-area .calendar-layout-3_sheets {
         padding: 10mm 9mm 8mm 9mm !important;
@@ -409,7 +410,7 @@ const buildUnifiedHtmlDocument = async (
             .print-portrait { page: portrait; }
             .print-landscape { page: landscape; }
             ${isJadwalPrint ? '@page { margin: 6mm; size: A4 landscape; }' : ''}
-            ${isCalendarPrint ? '@page { margin: 0mm; size: A4 portrait; }' : ''}
+            ${isCalendarPrint ? '@page { margin: 4mm; size: A4 portrait; }' : ''}
             body { padding: 0 !important; background: #fff !important; }
             .printable-content-wrapper {
                 width: auto !important;
@@ -419,15 +420,22 @@ const buildUnifiedHtmlDocument = async (
                 z-index: 1 !important;
             }
             ${isCalendarPrint ? `
+            @page { margin: 0; size: A4 portrait; }
             #calendar-print-area .calendar-sheet {
                 width: 210mm !important;
+                max-width: 210mm !important;
                 min-height: 297mm !important;
                 height: 297mm !important;
-                margin: 0 !important;
+                margin: 0 auto !important;
                 box-sizing: border-box !important;
                 page-break-after: always !important;
                 break-after: page !important;
-                overflow: hidden !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid-page !important;
+                overflow: visible !important;
+            }
+            #calendar-print-area .calendar-layout-1_sheet {
+                padding: 4mm 5mm 3mm 5mm !important;
             }
             #calendar-print-area .calendar-sheet:last-child {
                 page-break-after: auto !important;

@@ -12,7 +12,7 @@ interface BulkBukuEditorProps {
 type EditableRow = Partial<Buku> & { tempId: number };
 
 export const BulkBukuEditor: React.FC<BulkBukuEditorProps> = ({ isOpen, onClose, onSave }) => {
-    const { showToast } = useAppContext();
+    const { showToast, settings, onSaveSettings } = useAppContext();
     const [rows, setRows] = useState<EditableRow[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [query, setQuery] = useState('');
@@ -21,6 +21,17 @@ export const BulkBukuEditor: React.FC<BulkBukuEditorProps> = ({ isOpen, onClose,
     const undoStackRef = useRef<EditableRow[][]>([]);
     const redoStackRef = useRef<EditableRow[][]>([]);
     const draftStorageKey = 'esantri:bulk-buku-draft';
+
+    const categoryOptions = useMemo(() => {
+        const configured = settings.perpusConfig?.kategoriKoleksi && settings.perpusConfig.kategoriKoleksi.length > 0
+            ? settings.perpusConfig.kategoriKoleksi
+            : ['Kitab Kuning', 'Buku Pelajaran', 'Umum', 'Referensi'];
+        const set = new Set(configured);
+        rows.forEach(r => {
+            if (r.kategori && r.kategori.trim()) set.add(r.kategori.trim());
+        });
+        return Array.from(set);
+    }, [settings.perpusConfig, rows]);
 
     const cloneRows = (source: EditableRow[]) => source.map((row) => ({ ...row }));
     const canUndo = undoStackRef.current.length > 0;
@@ -186,6 +197,24 @@ export const BulkBukuEditor: React.FC<BulkBukuEditorProps> = ({ isOpen, onClose,
             });
             
             await onSave(cleanData);
+
+            // Auto-persist new categories to settings so they are saved to cloud & backup
+            const currentConfigured = settings.perpusConfig?.kategoriKoleksi || ['Kitab Kuning', 'Buku Pelajaran', 'Umum', 'Referensi'];
+            const newCategories = cleanData
+                .map(b => b.kategori?.trim())
+                .filter((cat): cat is string => Boolean(cat) && !currentConfigured.some(c => c.toLowerCase() === cat.toLowerCase()));
+            
+            if (newCategories.length > 0) {
+                const uniqueNew = Array.from(new Set(newCategories));
+                onSaveSettings({
+                    ...settings,
+                    perpusConfig: {
+                        ...(settings.perpusConfig || { dendaPerHari: 1000, durasiPinjamDefault: 7, maksPinjamBuku: 3 }),
+                        kategoriKoleksi: [...currentConfigured, ...uniqueNew]
+                    }
+                }).catch(() => {});
+            }
+
             onClose();
         } catch (error) {
             showToast('Gagal menyimpan data.', 'error');
@@ -287,10 +316,9 @@ export const BulkBukuEditor: React.FC<BulkBukuEditorProps> = ({ isOpen, onClose,
                                                 onChange={e => updateRow(row.tempId, 'kategori', e.target.value)} 
                                                 className="w-full border-gray-300 rounded text-sm h-9 px-1"
                                             >
-                                                <option value="Kitab Kuning">Kitab Kuning</option>
-                                                <option value="Buku Pelajaran">Buku Pelajaran</option>
-                                                <option value="Umum">Umum</option>
-                                                <option value="Referensi">Referensi</option>
+                                                {categoryOptions.map(cat => (
+                                                    <option key={cat} value={cat}>{cat}</option>
+                                                ))}
                                             </select>
                                         </td>
 

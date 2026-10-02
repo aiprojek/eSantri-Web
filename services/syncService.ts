@@ -454,7 +454,14 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
                     if (localSettings.length > 0) {
                         const lSettings = localSettings[0];
                         if (getTime(mSettings.lastModified) >= getTime(lSettings.lastModified)) {
-                            await db.settings.update(lSettings.id!, mSettings);
+                            const { id: _, ...rest } = mSettings;
+                            if (lSettings.cloudSyncConfig) {
+                                rest.cloudSyncConfig = {
+                                    ...(rest.cloudSyncConfig || {}),
+                                    ...lSettings.cloudSyncConfig
+                                };
+                            }
+                            await db.settings.update(lSettings.id!, rest);
                         }
                     } else {
                         await db.settings.add(mSettings);
@@ -634,7 +641,14 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                     if (localSettings.length > 0) {
                         const local = localSettings[0];
                         if (getTime(incomingSettings.lastModified) > getTime(local.lastModified)) {
-                            await db.settings.update(local.id!, incomingSettings);
+                            const { id: _, ...rest } = incomingSettings;
+                            if (local.cloudSyncConfig) {
+                                rest.cloudSyncConfig = {
+                                    ...(rest.cloudSyncConfig || {}),
+                                    ...local.cloudSyncConfig
+                                };
+                            }
+                            await db.settings.update(local.id!, rest);
                         }
                     } else {
                         await db.settings.add(incomingSettings);

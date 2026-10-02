@@ -18,48 +18,25 @@ const DateInput: React.FC<{
         validate: value => {
             if (!value) return true; // Allow empty
             if (!/^\d{4}-\d{2}-\d{2}$/.test(value as string) || isNaN(new Date(value as string).getTime())) {
-                return 'Format tanggal harus DD/MM/YYYY dan valid.';
+                return 'Format tanggal harus valid (YYYY-MM-DD atau pilih kalender).';
             }
             return true;
         }
     });
 
-    const formValue = watch(fieldName);
-    const [displayValue, setDisplayValue] = useState('');
-
-    useEffect(() => {
-        // Safe cast since we know DateInput is used for string fields like dates
-        const value = formValue as string | undefined;
-        if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-            const [y, m, d] = value.split('-');
-            setDisplayValue(`${d}/${m}/${y}`);
-        } else {
-            setDisplayValue(value || '');
-        }
-    }, [formValue]);
-
-    const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-        const displayValue = e.target.value;
-        if (/^\d{2}\/\d{2}\/\d{4}$/.test(displayValue)) {
-            const [d, m, y] = displayValue.split('/');
-            setValue(fieldName, `${y}-${m}-${d}` as any, { shouldDirty: true });
-        } else {
-            setValue(fieldName, displayValue as any, { shouldDirty: true });
-        }
-        trigger(fieldName);
-    };
-
+    const formValue = watch(fieldName) as string | undefined;
     const error = fieldName.split('.').reduce((o: any, i) => o?.[i], errors);
 
     return (
         <div>
             <label className="block mb-1 text-sm font-medium text-gray-700">{label}</label>
             <input
-                type="text"
-                placeholder="DD/MM/YYYY"
-                value={displayValue}
-                onChange={e => setDisplayValue(e.target.value)}
-                onBlur={handleBlur}
+                type="date"
+                value={formValue ? formValue.split('T')[0] : ''}
+                onChange={e => {
+                    setValue(fieldName, e.target.value as any, { shouldDirty: true });
+                    trigger(fieldName);
+                }}
                 className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${error ? 'border-red-500' : 'border-gray-300'}`}
             />
             <FormError error={error} />

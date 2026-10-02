@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PondokSettings, TenagaPengajar, RiwayatJabatan } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { TeacherModal } from '../settings/modals/TeacherModal';
 import { BulkMasterEditor } from './modals/BulkMasterEditor';
+import { loadXLSX } from '../../utils/lazyClientLibs';
 
 interface TabTenagaPendidikProps {
     localSettings: PondokSettings;
@@ -20,8 +21,21 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
     const [isBulkOpen, setIsBulkOpen] = useState(false);
     const [bulkInitialData, setBulkInitialData] = useState<any[] | undefined>(undefined);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
-    const [filterCategory, setFilterCategory] = useState<'all' | 'pendidik' | 'kependidikan'>('all');
+    const [filterCategory, setFilterCategory] = useState<'all' | 'pendidik' | 'kependidikan' | 'wali_kelas' | 'tanpa_kontak'>('all');
     const [searchKeyword, setSearchKeyword] = useState('');
+    const [isExporting, setIsExporting] = useState(false);
+    const [isActionOpen, setIsActionOpen] = useState(false);
+    const actionRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (actionRef.current && !actionRef.current.contains(e.target as Node)) {
+                setIsActionOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const getTeacherStatus = (teacher: TenagaPengajar) => {
         if (!teacher.riwayatJabatan || teacher.riwayatJabatan.length === 0) {
@@ -212,6 +226,51 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
         setIsBulkOpen(true);
     };
 
+    const handleExportExcel = async () => {
+        setIsExporting(true);
+        try {
+            const XLSX = await loadXLSX();
+            const exportData = localSettings.tenagaPengajar.map((t, idx) => {
+                const status = getTeacherStatus(t);
+                const isKependidikan = t.jenisPegawai === 'kependidikan';
+                const waliRombel = localSettings.rombel.filter(r => r.waliKelasId === t.id).map(r => r.nama).join(', ');
+                const mapelList = (t.kompetensiMapelIds || [])
+                    .map(mId => localSettings.mataPelajaran.find(m => m.id === mId)?.nama)
+                    .filter(Boolean)
+                    .join(', ');
+
+                return {
+                    'No': idx + 1,
+                    'Nama Lengkap': t.nama,
+                    'Kode Guru': t.kodeGuru || '-',
+                    'Kategori': isKependidikan ? 'Tenaga Kependidikan' : 'Tenaga Pendidik',
+                    'Jabatan / Tugas': status.jabatan || (t.kategoriStaf || '-'),
+                    'Status Keaktifan': status.text || '-',
+                    'Wali Kelas': waliRombel || '-',
+                    'Mapel Diampu': mapelList || '-',
+                    'No. Telepon / WA': t.telepon || '-',
+                    'Email': t.email || '-'
+                };
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            XLSX.utils.book_append_sheet(wb, ws, "Tenaga Pendidik & Staf");
+            XLSX.writeFile(wb, `Data_Pendidik_Staf_${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast('Data tenaga pendidik berhasil diekspor ke Excel!', 'success');
+        } catch (error) {
+            console.error('Export error:', error);
+            showToast('Gagal mengekspor data tenaga pendidik.', 'error');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const totalPendidik = localSettings.tenagaPengajar.filter(t => t.jenisPegawai !== 'kependidikan').length;
+    const totalKependidikan = localSettings.tenagaPengajar.filter(t => t.jenisPegawai === 'kependidikan').length;
+    const totalWaliKelas = localSettings.tenagaPengajar.filter(t => localSettings.rombel.some(r => r.waliKelasId === t.id)).length;
+    const totalTanpaKontak = localSettings.tenagaPengajar.filter(t => !t.telepon || !t.telepon.trim()).length;
+
     const filteredTeachers = localSettings.tenagaPengajar.filter(t => {
         // Filter Category
         const isKependidikan = t.jenisPegawai === 'kependidikan' || (
@@ -220,9 +279,14 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                 return j.includes('satpam') || j.includes('security') || j.includes('kasir') || j.includes('keuangan') || j.includes('tu') || j.includes('tata usaha') || j.includes('bk') || j.includes('konseling') || j.includes('kebersihan') || j.includes('dapur');
             })
         );
+
+        const isWali = localSettings.rombel.some(r => r.waliKelasId === t.id);
+        const isTanpaKontak = !t.telepon || !t.telepon.trim();
         
         if (filterCategory === 'pendidik' && isKependidikan) return false;
         if (filterCategory === 'kependidikan' && !isKependidikan) return false;
+        if (filterCategory === 'wali_kelas' && !isWali) return false;
+        if (filterCategory === 'tanpa_kontak' && !isTanpaKontak) return false;
 
         // Filter Search
         if (searchKeyword.trim()) {
@@ -231,14 +295,12 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
             const matchJabatan = t.riwayatJabatan?.some(r => r.jabatan.toLowerCase().includes(kw));
             const matchStaf = t.kategoriStaf?.toLowerCase().includes(kw);
             const matchPhone = t.telepon?.includes(kw);
-            return matchName || matchJabatan || matchStaf || matchPhone;
+            const matchKode = t.kodeGuru?.toLowerCase().includes(kw);
+            return matchName || matchJabatan || matchStaf || matchPhone || matchKode;
         }
 
         return true;
     });
-
-    const totalPendidik = localSettings.tenagaPengajar.filter(t => t.jenisPegawai !== 'kependidikan').length;
-    const totalKependidikan = localSettings.tenagaPengajar.filter(t => t.jenisPegawai === 'kependidikan').length;
 
     const toggleSelectAll = () => {
         if (selectedIds.length === filteredTeachers.length) {
@@ -257,29 +319,142 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
     };
 
     return (
-        <div className="bg-white p-4 md:p-6 rounded-lg shadow-md mb-6">
-            <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-4 border-b pb-3">
+        <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-200 shadow-xs mb-6 space-y-4">
+            {/* Header & Actions */}
+            <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center border-b pb-4">
                 <div>
-                    <h2 className="text-lg md:text-xl font-bold text-gray-700">Tenaga Pendidik & Kependidikan</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Kelola data guru (asatidz) dan staf tenaga kependidikan (TU, Kasir, Satpam, BK, dll).</p>
+                    <h2 className="text-lg md:text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i className="bi bi-person-badge-fill text-teal-600"></i>
+                        Tenaga Pendidik & Kependidikan
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Kelola data guru (asatidz) dan staf tenaga kependidikan (TU, Kasir, Satpam, BK, Pengasuhan, dll).</p>
                 </div>
-                {selectedIds.length > 0 && (
-                    <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-3 animate-fade-in">
-                        <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-100">{selectedIds.length} dipilih</span>
-                        <button onClick={() => setSelectedIds([])} className="text-xs text-gray-500 hover:text-gray-700 underline text-left md:text-center">Batal</button>
-                        <button onClick={handleBulkEdit} className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 font-bold text-left md:text-center"><i className="bi bi-pencil-square mr-1"></i> Edit Massal</button>
-                        <button onClick={handleBulkDelete} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded border border-red-200 font-bold text-left md:text-center"><i className="bi bi-trash mr-1"></i> Hapus Massal</button>
-                    </div>
-                )}
+                
+                <div className="relative" ref={actionRef}>
+                    <button
+                        type="button"
+                        onClick={() => setIsActionOpen(!isActionOpen)}
+                        className="text-xs bg-teal-700 hover:bg-teal-800 text-white font-semibold px-3.5 py-2 rounded-lg shadow-xs flex items-center gap-2 transition"
+                    >
+                        <i className="bi bi-grid-fill"></i>
+                        <span>Menu Aksi</span>
+                        <i className={`bi bi-chevron-${isActionOpen ? 'up' : 'down'} text-[10px]`}></i>
+                    </button>
+
+                    {isActionOpen && (
+                        <div className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-30 animate-fade-in text-xs divide-y divide-gray-100">
+                            {canWrite && (
+                                <div className="py-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsActionOpen(false);
+                                            setTeacherModalData({ mode: 'add' });
+                                        }}
+                                        className="w-full text-left px-3.5 py-2 hover:bg-teal-50 flex items-center gap-2.5 text-gray-700 transition"
+                                    >
+                                        <i className="bi bi-plus-circle-fill text-teal-600 text-sm"></i>
+                                        <div>
+                                            <span className="font-semibold block text-gray-800">Tambah Manual</span>
+                                            <span className="text-[10px] text-gray-400">Input formulir data baru</span>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsActionOpen(false);
+                                            setBulkInitialData(undefined);
+                                            setIsBulkOpen(true);
+                                        }}
+                                        className="w-full text-left px-3.5 py-2 hover:bg-teal-50 flex items-center gap-2.5 text-gray-700 transition"
+                                    >
+                                        <i className="bi bi-table text-indigo-600 text-sm"></i>
+                                        <div>
+                                            <span className="font-semibold block text-gray-800">Tambah Massal</span>
+                                            <span className="text-[10px] text-gray-400">Editor spreadsheet cepat</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            )}
+                            <div className="py-1">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsActionOpen(false);
+                                        handleExportExcel();
+                                    }}
+                                    disabled={isExporting || localSettings.tenagaPengajar.length === 0}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center gap-2.5 text-gray-700 transition disabled:opacity-50"
+                                >
+                                    <i className="bi bi-file-earmark-excel-fill text-emerald-600 text-sm"></i>
+                                    <div>
+                                        <span className="font-semibold block text-emerald-800">Ekspor Excel</span>
+                                        <span className="text-[10px] text-gray-400">Unduh data (.xlsx)</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Filter Kategori & Pencarian */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
-                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg text-xs">
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span className="text-[11px] font-semibold text-gray-500 block uppercase">Total Pegawai</span>
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                        <span className="text-xl font-bold text-gray-800">{localSettings.tenagaPengajar.length}</span>
+                        <span className="text-[10px] text-gray-400">Orang</span>
+                    </div>
+                </div>
+                <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-lg">
+                    <span className="text-[11px] font-semibold text-teal-800 block uppercase">Pendidik (Guru)</span>
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                        <span className="text-xl font-bold text-teal-900">{totalPendidik}</span>
+                        <span className="text-[10px] text-teal-700">Asatidz</span>
+                    </div>
+                </div>
+                <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg">
+                    <span className="text-[11px] font-semibold text-indigo-800 block uppercase">Kependidikan (Staf)</span>
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                        <span className="text-xl font-bold text-indigo-900">{totalKependidikan}</span>
+                        <span className="text-[10px] text-indigo-700">Staf</span>
+                    </div>
+                </div>
+                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg">
+                    <span className="text-[11px] font-semibold text-blue-800 block uppercase">Wali Kelas Terplot</span>
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                        <span className="text-xl font-bold text-blue-900">{totalWaliKelas}</span>
+                        <span className="text-[10px] text-blue-700">Guru</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Bulk Selection Actions */}
+            {selectedIds.length > 0 && (
+                <div className="p-2.5 bg-teal-50 border border-teal-200 rounded-lg flex items-center justify-between gap-3 animate-fade-in text-xs">
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-teal-800 bg-white px-2 py-0.5 rounded border border-teal-200">{selectedIds.length} data terpilih</span>
+                        <button onClick={() => setSelectedIds([])} className="text-gray-500 hover:text-gray-700 underline">Batal</button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={handleBulkEdit} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md font-bold flex items-center gap-1 shadow-xs">
+                            <i className="bi bi-pencil-square"></i> Edit Massal
+                        </button>
+                        <button onClick={handleBulkDelete} className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-md font-bold flex items-center gap-1 shadow-xs">
+                            <i className="bi bi-trash"></i> Hapus Massal
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Filter Category & Search */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg text-xs overflow-x-auto scrollbar-thin">
                     <button
                         type="button"
                         onClick={() => setFilterCategory('all')}
-                        className={`px-3 py-1.5 rounded-md font-semibold transition-all ${
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all whitespace-nowrap ${
                             filterCategory === 'all'
                                 ? 'bg-white text-gray-800 shadow-xs'
                                 : 'text-gray-600 hover:text-gray-900'
@@ -290,37 +465,63 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                     <button
                         type="button"
                         onClick={() => setFilterCategory('pendidik')}
-                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                             filterCategory === 'pendidik'
                                 ? 'bg-white text-teal-800 shadow-xs'
                                 : 'text-gray-600 hover:text-gray-900'
                         }`}
                     >
                         <i className="bi bi-mortarboard-fill text-teal-600"></i>
-                        Tenaga Pendidik ({totalPendidik})
+                        Guru ({totalPendidik})
                     </button>
                     <button
                         type="button"
                         onClick={() => setFilterCategory('kependidikan')}
-                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                             filterCategory === 'kependidikan'
                                 ? 'bg-white text-indigo-800 shadow-xs'
                                 : 'text-gray-600 hover:text-gray-900'
                         }`}
                     >
                         <i className="bi bi-person-gear text-indigo-600"></i>
-                        Tenaga Kependidikan ({totalKependidikan})
+                        Staf ({totalKependidikan})
                     </button>
+                    <button
+                        type="button"
+                        onClick={() => setFilterCategory('wali_kelas')}
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                            filterCategory === 'wali_kelas'
+                                ? 'bg-white text-blue-800 shadow-xs'
+                                : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                        <i className="bi bi-person-check-fill text-blue-600"></i>
+                        Wali Kelas ({totalWaliKelas})
+                    </button>
+                    {totalTanpaKontak > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setFilterCategory('tanpa_kontak')}
+                            className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                                filterCategory === 'tanpa_kontak'
+                                    ? 'bg-amber-100 text-amber-900 shadow-xs'
+                                    : 'text-amber-700 hover:text-amber-900'
+                            }`}
+                        >
+                            <i className="bi bi-exclamation-triangle-fill text-amber-500"></i>
+                            Tanpa No. HP ({totalTanpaKontak})
+                        </button>
+                    )}
                 </div>
 
                 <div className="relative">
                     <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
                     <input
                         type="text"
-                        placeholder="Cari nama, jabatan, no telp..."
+                        placeholder="Cari nama, kode guru, tugas, no telp..."
                         value={searchKeyword}
                         onChange={e => setSearchKeyword(e.target.value)}
-                        className="w-full sm:w-64 pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                        className="w-full sm:w-64 pl-8 pr-7 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
                     />
                     {searchKeyword && (
                         <button
@@ -333,67 +534,96 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                 </div>
             </div>
 
-            <div className="border rounded-lg max-h-[60vh] overflow-y-auto mb-4">
+            {/* List */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden max-h-[60vh] overflow-y-auto">
                 {filteredTeachers.length > 0 ? (
-                    <ul className="divide-y text-sm">
-                        <li className="bg-gray-50 p-2 flex items-center border-b sticky top-0 z-10">
+                    <ul className="divide-y divide-gray-100 text-sm">
+                        <li className="bg-gray-50 p-2.5 flex items-center border-b sticky top-0 z-10">
                             <input 
                                 type="checkbox" 
                                 checked={selectedIds.length > 0 && selectedIds.length === filteredTeachers.length} 
                                 onChange={toggleSelectAll}
                                 className="w-4 h-4 text-teal-600 rounded mr-3 cursor-pointer" 
                             />
-                            <span className="text-xs font-bold text-gray-400 uppercase">Pilih Semua ({filteredTeachers.length})</span>
+                            <span className="text-xs font-bold text-gray-500 uppercase">Pilih Semua ({filteredTeachers.length})</span>
                         </li>
                         {filteredTeachers.map(t => {
                             const status = getTeacherStatus(t);
                             const isSelected = selectedIds.includes(t.id);
                             const isKependidikan = t.jenisPegawai === 'kependidikan';
+                            const waliRombel = localSettings.rombel.find(r => r.waliKelasId === t.id);
+                            const cleanPhone = t.telepon ? t.telepon.replace(/\D/g, '').replace(/^0/, '62') : '';
 
                             return (
-                            <li key={t.id} className={`flex justify-between items-center p-3 hover:bg-gray-50 group transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
-                                <div className="flex items-center gap-3">
+                            <li key={t.id} className={`flex justify-between items-center p-3 hover:bg-gray-50 group transition-colors ${isSelected ? 'bg-teal-50/70' : ''}`}>
+                                <div className="flex items-center gap-3 min-w-0">
                                     <input 
                                         type="checkbox" 
                                         checked={isSelected} 
                                         onChange={() => toggleSelectOne(t.id)}
-                                        className="w-4 h-4 text-teal-600 rounded cursor-pointer" 
+                                        className="w-4 h-4 text-teal-600 rounded cursor-pointer shrink-0" 
                                     />
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <p className="font-medium text-gray-900">{t.nama}</p>
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <p className="font-semibold text-gray-900 truncate">{t.nama}</p>
                                             {isKependidikan ? (
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1 shrink-0">
                                                     <i className="bi bi-person-gear"></i> {t.kategoriStaf || 'Staf Kependidikan'}
                                                 </span>
                                             ) : (
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1">
-                                                    <i className="bi bi-mortarboard"></i> Guru / Pengajar
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1 shrink-0">
+                                                    <i className="bi bi-mortarboard"></i> Guru
                                                 </span>
                                             )}
                                             {t.kodeGuru && (
-                                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200 shrink-0">
                                                     {t.kodeGuru}
                                                 </span>
                                             )}
-                                        </div>
-                                        <p className="text-xs text-gray-500 mt-0.5">
-                                            <span>{status.jabatan}</span>
-                                            <span className={`ml-2 font-medium text-${status.color}-600`}>({status.text})</span>
-                                            {t.telepon && (
-                                                <span className="ml-2 text-gray-400">
-                                                    <i className="bi bi-telephone mr-1"></i>{t.telepon}
+                                            {waliRombel && (
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 shrink-0">
+                                                    <i className="bi bi-person-check"></i> Wali: {waliRombel.nama}
                                                 </span>
                                             )}
-                                        </p>
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                                            <span>{status.jabatan}</span>
+                                            <span className={`font-medium text-${status.color}-600`}>({status.text})</span>
+                                            {t.kompetensiMapelIds && t.kompetensiMapelIds.length > 0 && (
+                                                <span className="text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded text-[10px] font-semibold">
+                                                    <i className="bi bi-book mr-1"></i>{t.kompetensiMapelIds.length} Mapel
+                                                </span>
+                                            )}
+                                            {t.telepon ? (
+                                                <div className="flex items-center gap-1 text-gray-600">
+                                                    <i className="bi bi-telephone text-gray-400"></i>
+                                                    <span>{t.telepon}</span>
+                                                    {cleanPhone && (
+                                                        <a
+                                                            href={`https://wa.me/${cleanPhone}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-emerald-600 hover:text-emerald-700 font-bold ml-1 text-[11px] flex items-center gap-0.5"
+                                                            title="Kirim pesan WhatsApp"
+                                                        >
+                                                            <i className="bi bi-whatsapp"></i>
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-amber-600 text-[11px] italic flex items-center gap-0.5">
+                                                    <i className="bi bi-exclamation-circle"></i> Belum ada telepon
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                                    {canWrite && (
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                             <button onClick={() => setTeacherModalData({ mode: 'edit', item: t })} className="text-blue-500 hover:text-blue-700 text-xs p-1" aria-label={`Edit data ${t.nama}`}><i className="bi bi-pencil-square"></i></button>
-                                             <button onClick={() => handleRemoveTeacher(t.id)} className="text-red-500 hover:text-red-700 text-xs p-1" aria-label={`Hapus data ${t.nama}`}><i className="bi bi-trash"></i></button>
+                                {canWrite && (
+                                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0 ml-2">
+                                        <button onClick={() => setTeacherModalData({ mode: 'edit', item: t })} className="text-blue-600 hover:text-blue-800 p-1.5 rounded hover:bg-blue-50 text-xs" aria-label={`Edit data ${t.nama}`} title="Edit"><i className="bi bi-pencil-square"></i></button>
+                                        <button onClick={() => handleRemoveTeacher(t.id)} className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 text-xs" aria-label={`Hapus data ${t.nama}`} title="Hapus"><i className="bi bi-trash"></i></button>
                                     </div>
-                                    )}
+                                )}
                             </li>
                             )
                         })}
@@ -405,12 +635,6 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                     </div>
                 )}
             </div>
-            {canWrite && (
-                <div className="flex gap-2">
-                    <button onClick={() => setTeacherModalData({mode: 'add'})} className="text-sm text-white bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg font-medium flex items-center gap-2 shadow-sm"><i className="bi bi-plus-circle"></i> Tambah Manual</button>
-                    <button onClick={() => { setBulkInitialData(undefined); setIsBulkOpen(true); }} className="text-sm text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 px-4 py-2 rounded-lg font-medium flex items-center gap-2"><i className="bi bi-table"></i> Tambah Banyak (Tabel)</button>
-                </div>
-            )}
             
             {teacherModalData && <TeacherModal isOpen={!!teacherModalData} onClose={() => setTeacherModalData(null)} onSave={handleSaveTeacher} modalData={teacherModalData} />}
             <BulkMasterEditor 
@@ -424,3 +648,4 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
         </div>
     );
 };
+

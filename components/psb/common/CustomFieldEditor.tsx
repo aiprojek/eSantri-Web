@@ -47,12 +47,16 @@ export const CustomFieldEditor: React.FC<{ fields: PsbCustomField[], onChange: (
                             <select 
                                 value={field.type} 
                                 onChange={(e) => updateField(index, { type: e.target.value as PsbFieldType })}
-                                className="w-full border rounded p-1.5 text-sm"
+                                className="w-full border rounded p-1.5 text-sm bg-white"
                             >
                                 <option value="text">Teks Singkat</option>
                                 <option value="paragraph">Paragraf / Essai</option>
+                                <option value="date">Tanggal (Date Picker)</option>
+                                <option value="markdown">Catatan / Markdown (Teks Terformat)</option>
+                                <option value="number">Angka / Nominal (Number)</option>
                                 <option value="radio">Pilihan Ganda (Radio)</option>
                                 <option value="checkbox">Kotak Centang (Checkbox)</option>
+                                <option value="select">Menu Pilihan (Dropdown Select)</option>
                                 <option value="file">Unggah Dokumen (PDF/JPG)</option>
                                 <option value="section">Judul Bagian (Section)</option>
                                 <option value="statement">Pernyataan / Info</option>
@@ -84,15 +88,31 @@ export const CustomFieldEditor: React.FC<{ fields: PsbCustomField[], onChange: (
                         )}
                     </div>
 
-                    {(field.type === 'radio' || field.type === 'checkbox') && (
+                    {field.type === 'markdown' && (
+                        <div className="mb-2 text-[11px] text-teal-800 bg-teal-50 border border-teal-200 rounded-lg p-2.5 flex items-center gap-2">
+                            <i className="bi bi-markdown text-base text-teal-700 shrink-0"></i>
+                            <span>Field ini akan menyediakan editor teks terformat dengan toolbar cepat (Tebal, Miring, Poin, Checklist) dan pratinjau markdown interaktif saat formulir diisi.</span>
+                        </div>
+                    )}
+
+                    {field.type === 'date' && (
+                        <div className="mb-2 text-[11px] text-blue-800 bg-blue-50 border border-blue-200 rounded-lg p-2.5 flex items-center gap-2">
+                            <i className="bi bi-calendar-event text-base text-blue-700 shrink-0"></i>
+                            <span>Menyediakan kontrol pemilih tanggal (Date Picker) kalender resmi dan kompatibel dengan format tanggal database santri.</span>
+                        </div>
+                    )}
+
+                    {(field.type === 'radio' || field.type === 'checkbox' || field.type === 'select') && (
                         <div className="mb-2">
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Opsi Jawaban (pisahkan dengan koma)</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">
+                                Opsi Pilihan (pisahkan dengan tanda koma)
+                            </label>
                             <input 
                                 type="text" 
                                 value={field.options?.join(', ') || ''} 
                                 onChange={(e) => updateField(index, { options: e.target.value.split(',').map(s => s.trim()) })}
-                                className="w-full border rounded p-1.5 text-sm"
-                                placeholder="Contoh: Ya, Tidak, Mungkin"
+                                className="w-full border rounded p-1.5 text-sm bg-white"
+                                placeholder={field.type === 'select' ? 'Contoh: Pilihan A, Pilihan B, Pilihan C' : 'Contoh: Ya, Tidak, Mungkin'}
                             />
                         </div>
                     )}

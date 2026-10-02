@@ -29,6 +29,26 @@ export const formatDateTime = (dateString?: string | Date) => {
     } catch (e) { return ''; }
 };
 
+/**
+ * Format Date to local YYYY-MM-DD string without timezone conversion bug.
+ */
+export const formatLocalDate = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
+/**
+ * Convert Latin/Western digits (0-9) to Eastern Arabic-Indic numerals (٠-٩)
+ */
+export const toArabicNumerals = (num: number | string | undefined | null): string => {
+    if (num === undefined || num === null || num === '') return '';
+    const str = String(num);
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return str.replace(/[0-9]/g, (d) => arabicDigits[parseInt(d, 10)]);
+};
+
 // Mendapatkan detail Hijriah dari tanggal Masehi dengan opsi Adjustment (Koreksi)
 // Note: date-fns tidak memiliki built-in Hijri, kita tetap gunakan Intl.DateTimeFormat
 export const getHijriDate = (date: Date, adjustment: number = 0) => {
@@ -52,10 +72,11 @@ export const getHijriDate = (date: Date, adjustment: number = 0) => {
         const month = parts.find(p => p.type === 'month')?.value || '';
         const year = parts.find(p => p.type === 'year')?.value || '';
         const monthIndex = parseInt(numericFormatter.format(adjustedDate)) - 1;
+        const dayArabic = toArabicNumerals(day);
 
-        return { day, month, year, monthIndex, full: `${day} ${month} ${year}` };
+        return { day, dayArabic, month, year, monthIndex, full: `${day} ${month} ${year}` };
     } catch (e) {
-        return { day: '', month: '', year: '', full: '' };
+        return { day: '', dayArabic: '', month: '', year: '', full: '' };
     }
 };
 
@@ -170,5 +191,71 @@ export const isSantriPutri = (santri?: { jenisKelamin?: string } | string | null
     const raw = typeof santri === 'string' ? santri : santri?.jenisKelamin;
     const g = String(raw || '').trim().toLowerCase();
     return g === 'perempuan' || g === 'p' || g === 'putri' || g === 'wanita' || g.startsWith('perem');
+};
+
+/**
+ * Resolves a concise, professional city/locality name for official letterheads & signatures.
+ * Avoids printing lengthy street names or house numbers.
+ * Example outputs: "Banyumas", "Kudus", "Kedungbanteng", "Jakarta Selatan"
+ */
+export const resolveTempatPesantren = (
+    settings?: { kabupatenKota?: string; tempatRaporDefault?: string; alamat?: string } | null,
+    fallback = 'Pesantren'
+): string => {
+    if (!settings) return fallback;
+
+    const cleanName = (str: string): string => {
+        return str
+            .replace(/^(kabupaten|kab\.|kota|kecamatan|kec\.)\s+/i, '')
+            .replace(/\b\d{5}\b/g, '') // remove postal code
+            .replace(/\b(Provinsi|Prov\.|Jawa Tengah|Jawa Barat|Jawa Timur|DKI Jakarta|DIY|DI Yogyakarta|Banten|Sumatera|Kalimantan|Sulawesi|Bali)\b.*/gi, '')
+            .replace(/,\s*$/, '')
+            .trim();
+    };
+
+    if (settings.kabupatenKota && settings.kabupatenKota.trim()) {
+        const cleaned = cleanName(settings.kabupatenKota.trim());
+        if (cleaned) return cleaned;
+    }
+    if (settings.tempatRaporDefault && settings.tempatRaporDefault.trim()) {
+        const cleaned = cleanName(settings.tempatRaporDefault.trim());
+        if (cleaned) return cleaned;
+    }
+
+    const rawAlamat = settings.alamat || '';
+    if (!rawAlamat.trim()) return fallback;
+
+    // 1. Try finding "Kabupaten X", "Kab. X", "Kota X"
+    const matchKabKota = rawAlamat.match(/(?:Kabupaten|Kab\.|Kota)\s+([A-Za-z\s]+?)(?:,|$|\.|\d|\b(?:Kec|Kecamatan|Desa|Kelurahan|Jawa|Sumatera|Kalimantan|Sulawesi|Bali|Nusa|Papua|Barat|Timur|Tengah|Selatan|Utara|Provinsi)\b)/i);
+    if (matchKabKota && matchKabKota[1]?.trim()) {
+        const candidate = cleanName(matchKabKota[1].trim());
+        if (candidate.length >= 2 && candidate.length <= 25) {
+            return candidate;
+        }
+    }
+
+    // 2. Try finding "Kecamatan X", "Kec. X"
+    const matchKec = rawAlamat.match(/(?:Kecamatan|Kec\.)\s+([A-Za-z\s]+?)(?:,|$|\.|\d|\b(?:Kab|Kabupaten|Kota|Desa|Kelurahan)\b)/i);
+    if (matchKec && matchKec[1]?.trim()) {
+        const candidate = cleanName(matchKec[1].trim());
+        if (candidate.length >= 2 && candidate.length <= 25) {
+            return candidate;
+        }
+    }
+
+    // 3. Comma-separated parts: pick non-street segment (searching from end backward)
+    const parts = rawAlamat.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length > 1) {
+        for (let i = parts.length - 1; i >= 0; i--) {
+            const p = parts[i];
+            if (/^(jl|jalan|dusun|kp|kampung|rt|rw|no\b|komplek|gedung)/i.test(p)) continue;
+            const cleaned = cleanName(p);
+            if (cleaned.length >= 2 && cleaned.length <= 25) {
+                return cleaned;
+            }
+        }
+    }
+
+    return fallback;
 };
 

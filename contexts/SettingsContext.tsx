@@ -43,6 +43,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             backupConfig: { ...initialSettings.backupConfig, ...(rawSettings.backupConfig || {}) },
             aiConfig: { ...initialSettings.aiConfig, ...(rawSettings.aiConfig || {}) },
             portalConfig: { ...initialSettings.portalConfig, ...(rawSettings.portalConfig || {}) },
+            perpusConfig: { ...initialSettings.perpusConfig, ...(rawSettings.perpusConfig || {}) },
             nisSettings: { 
                 ...initialSettings.nisSettings, 
                 ...(rawSettings.nisSettings || {}),

@@ -60,6 +60,18 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
     const [filterKategori, setFilterKategori] = useState('');
     const [searchBuku, setSearchBuku] = useState('');
 
+    // Dynamic Category Options from Settings & Books
+    const categoryOptions = useMemo(() => {
+        const configured = settings.perpusConfig?.kategoriKoleksi && settings.perpusConfig.kategoriKoleksi.length > 0
+            ? settings.perpusConfig.kategoriKoleksi
+            : ['Kitab Kuning', 'Buku Pelajaran', 'Umum', 'Referensi'];
+        const set = new Set(configured);
+        bukuList.forEach(b => {
+            if (b.kategori && b.kategori.trim()) set.add(b.kategori.trim());
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [settings.perpusConfig, bukuList]);
+
     // --- LOGIC KARTU ---
     const filteredSantri = useMemo(() => {
         return santriList.filter((s: Santri) => {
@@ -481,10 +493,9 @@ export const CetakPerpus: React.FC<CetakPerpusProps> = ({ bukuList }) => {
                             <label className="block text-xs font-bold text-gray-500 mb-1">Filter Kategori</label>
                             <select value={filterKategori} onChange={e => setFilterKategori(e.target.value)} className="w-full border rounded p-2 text-sm">
                                 <option value="">Semua Kategori</option>
-                                <option value="Kitab Kuning">Kitab Kuning</option>
-                                <option value="Buku Pelajaran">Buku Pelajaran</option>
-                                <option value="Umum">Umum</option>
-                                <option value="Referensi">Referensi</option>
+                                {categoryOptions.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
                             </select>
                         </div>
                         <div>

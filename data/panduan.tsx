@@ -3,6 +3,8 @@ import React from 'react';
 import { kurikulumPanduan } from './panduan/kurikulum';
 import { raporPanduan } from './panduan/rapor';
 import { akademikPanduan } from './panduan/akademik';
+import { perpustakaanPanduan } from './panduan/perpustakaan';
+import { kalenderPanduan } from './panduan/kalender';
 
 export interface PanduanStepData {
     title: string;
@@ -612,63 +614,83 @@ export const panduanData: PanduanSectionData[] = [
                 content: (
                     <div className="bg-teal-50 p-4 rounded-lg border-l-4 border-teal-500 text-sm text-gray-700 space-y-3">
                         <p>
-                            <strong>Data Master</strong> adalah pondasi operasional seluruh modul di eSantri Web (Santri, Absensi, Jadwal, Nilai, Rapor, hingga Keuangan). 
+                            <strong>Data Master</strong> adalah pondasi operasional seluruh modul di eSantri Web (Santri, Absensi, Jadwal, Nilai, Rapor, Asrama, hingga Keuangan). 
                             Pastikan data master dikonfigurasi secara urut dan lengkap sebelum memulai aktivitas harian.
                         </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
                             <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs">
                                 <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-diagram-3-fill text-teal-600"></i> 1. Struktur Pendidikan</span>
-                                <p className="text-[11px] text-gray-600">Jenjang (Marhalah) &rarr; Tingkat Kelas &rarr; Rombel (Kelas Paralel) & Wali Kelas.</p>
+                                <p className="text-[11px] text-gray-600">Jenjang (Marhalah) &rarr; Tingkat Kelas &rarr; Rombel & Wali Kelas.</p>
                             </div>
                             <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs">
-                                <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-person-workspace text-teal-600"></i> 2. Tenaga Pendidik (Guru)</span>
-                                <p className="text-[11px] text-gray-600">Profil pengajar, NIP/NIY, hari ketersediaan mengajar, & kompetensi mapel.</p>
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-person-workspace text-teal-600"></i> 2. Tenaga Pendidik & Staf</span>
+                                <p className="text-[11px] text-gray-600">Guru (asatidz) & staf kependidikan, kontak WA, & kompetensi mapel.</p>
                             </div>
                             <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs">
                                 <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-book-half text-teal-600"></i> 3. Mata Pelajaran</span>
-                                <p className="text-[11px] text-gray-600">Passing Grade (KKM), multi-modul/kitab, link unduh materi & link beli kitab.</p>
+                                <p className="text-[11px] text-gray-600">Passing Grade (KKM), multi-modul/kitab, & plotting pengampu.</p>
                             </div>
                             <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs">
                                 <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-calendar-event text-teal-600"></i> 4. Tahun Ajaran & Semester</span>
-                                <p className="text-[11px] text-gray-600">Penetapan semester aktif (Ganjil/Genap), tanggal periode, dan status arsip.</p>
+                                <p className="text-[11px] text-gray-600">Penetapan TA aktif & semester berjalan (Ganjil/Genap).</p>
+                            </div>
+                            <div className="bg-white p-2.5 rounded border border-teal-100 shadow-2xs sm:col-span-2 lg:col-span-2">
+                                <span className="font-bold text-teal-800 flex items-center gap-1.5 mb-1"><i className="bi bi-buildings-fill text-teal-600"></i> 5. Fasilitas & Asrama</span>
+                                <p className="text-[11px] text-gray-600">Gedung asrama putra/putri, kamar santri, daya tampung (kapasitas bed), serta pembina/musyrif kamar.</p>
+                            </div>
+                        </div>
+                        <div className="bg-white/80 p-2.5 rounded border border-teal-200 text-xs text-teal-900 flex items-start gap-2">
+                            <i className="bi bi-shield-check text-teal-700 text-base shrink-0 mt-0.5"></i>
+                            <div>
+                                <strong className="font-semibold block">Audit Integritas Data Master Otomatis</strong>
+                                <p className="text-[11px] text-teal-800 mt-0.5">
+                                    Sistem memindai potensi data yang belum lengkap secara otomatis: rombel tanpa wali kelas, mapel tanpa guru pengampu, jenjang tanpa kode NIS, pendidik tanpa kontak HP, dan kamar asrama yang melebihi kapasitas (overcapacity), lengkap dengan tombol pintas tindakan perbaikan.
+                                </p>
                             </div>
                         </div>
                     </div>
                 )
             },
             {
-                title: '1. Struktur Pendidikan: Jenjang, Kelas & Rombel',
+                title: '1. Struktur Pendidikan: Jenjang, Kelas, Rombel & Kuota Kapasitas',
                 content: (
                     <div className="space-y-3 text-sm">
                         <p>Hierarki pendidikan diatur secara terstruktur bertingkat:</p>
                         <ol className="list-decimal pl-5 space-y-2 bg-gray-50 p-3 rounded-lg border text-xs text-gray-700">
                             <li>
-                                <strong>Jenjang (Marhalah):</strong> Menentukan unit tingkatan utama lembaga (misal: <em>Salafiyah Ula, Wustho, Ulya, MTs, SMP, MA, SMK</em>).
+                                <strong>Jenjang (Marhalah):</strong> Menentukan unit tingkatan utama lembaga (misal: <em>Salafiyah Ula, Wustho, Ulya, MTs, SMP, MA, SMK</em>). Wajib mengisi <strong>Kode Jenjang</strong> karena digunakan sebagai prefiks generator Nomor Induk Santri (NIS) otomatis.
                             </li>
                             <li>
                                 <strong>Tingkat Kelas:</strong> Mengelompokkan tingkat kelas yang menginduk ke Jenjang tertentu (misal: <em>Kelas 1, 2, 3</em> atau <em>Kelas VII, VIII, IX</em>).
                             </li>
                             <li>
-                                <strong>Rombel (Rombongan Belajar / Kelas Paralel):</strong> Unit kelas riil tempat santri belajar (misal: <em>Kelas 7A, 7B, Ula-1 Putra</em>). Di sini Anda juga menetapkan <strong>Wali Kelas</strong> yang bertugas.
+                                <strong>Rombel (Rombongan Belajar / Kelas Paralel):</strong> Unit kelas riil tempat santri belajar (misal: <em>Kelas 7A, 7B, Ula-1 Putra</em>). Di sini Anda menetapkan <strong>Wali Kelas</strong> serta <strong>Kapasitas Maksimal</strong> santri.
                             </li>
                         </ol>
-                        <div className="text-[11px] bg-blue-50 border-l-4 border-blue-400 p-2.5 rounded text-blue-900">
-                            <strong>💡 Tips Cepat:</strong> Gunakan tombol <strong>"Tambah Banyak (Tabel)"</strong> di setiap tab untuk menginput banyak jenjang, kelas, atau rombel sekaligus layaknya di Excel.
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg text-emerald-900">
+                                <strong className="flex items-center gap-1.5"><i className="bi bi-bar-chart-fill text-emerald-600"></i> Visualisasi Kapasitas Real-time</strong>
+                                <p className="text-[11px] text-emerald-800 mt-1">Setiap kartu rombel menampilkan progress bar kapasitas: hijau (kuota aman), kuning (&gt;80% penuh), dan merah (penuh/melebihi kuota).</p>
+                            </div>
+                            <div className="bg-indigo-50 border border-indigo-200 p-2.5 rounded-lg text-indigo-900">
+                                <strong className="flex items-center gap-1.5"><i className="bi bi-copy text-indigo-600"></i> Fitur Kloning Rombel</strong>
+                                <p className="text-[11px] text-indigo-800 mt-1">Duplikasi rombel dengan 1 klik untuk mempercepat pembuatan rombel paralel baru dengan kapasitas dan setelan yang sama.</p>
+                            </div>
                         </div>
                     </div>
                 )
             },
             {
-                title: '2. Tenaga Pendidik: Kesanggupan Hari/Jam, Batasan Rombel & Sinkronisasi Kurikulum',
+                title: '2. Tenaga Pendidik & Staf: Pendidik, Kependidikan, Kontak WA & Pengampu',
                 content: (
                     <div className="space-y-3 text-sm">
-                        <p>Kelola data asatidz/guru pengampu secara terintegrasi dengan validasi jadwal otomatis:</p>
+                        <p>Kelola data asatidz/guru pengampu dan staf tenaga kependidikan secara terpadu:</p>
                         <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
-                            <li><strong>Biodata Lengkap:</strong> NIP/NIY, nama lengkap, gelar, jabatan utama, status kepegawaian (Tetap/Honorer).</li>
-                            <li><strong>Hari &amp; Jam Ketersediaan Mengajar:</strong> Atur hari masuk (Senin–Ahad) serta urutan <strong>Jam Pelajaran Ke-</strong> (misal: hanya jam 1 s/d 4) di mana guru bersedia mengajar. Pengaturan ini menjadi filter otomatis anti-bentrok pada modul <em>Jadwal Pelajaran</em> dan <em>Auto-Generate KBM</em>.</li>
-                            <li><strong>Batasan Rombel &amp; Kelas:</strong> Dapat membatasi guru agar hanya ditugaskan di rombel tertentu (misal: hanya mengajar kelas 7A Putra).</li>
+                            <li><strong>Kategori Pegawai:</strong> Pembedaan jelas antara <strong>Tenaga Pendidik (Guru/Asatidz)</strong> dan <strong>Tenaga Kependidikan (Staf TU, Kasir, Satpam, BK, Pengasuhan, dll)</strong>.</li>
+                            <li><strong>Kontak WhatsApp Terhubung:</strong> Setiap baris pendidik dilengkapi tombol pintas WhatsApp untuk menghubungi guru atau staf secara langsung dengan satu klik.</li>
                             <li><strong>Kompetensi Mapel &amp; Sinkronisasi 2 Arah:</strong> Tentukan mata pelajaran yang diampu. Perubahan pengampu di menu <em>Kurikulum &gt; Plotting Pengampu</em> otomatis tersinkronisasi realtime ke Data Master guru ini, begitu pula sebaliknya.</li>
-                            <li><strong>Pembuatan Akun Login Instan:</strong> Data guru dapat langsung diubah menjadi akun login staf dengan tombol <em>"Ambil dari Data Guru"</em> pada menu <em>Pengaturan &gt; Akun &amp; Pengguna</em>.</li>
+                            <li><strong>Jadwal & Ketersediaan Mengajar:</strong> Atur hari masuk dan jam pelajaran kesanggupan mengajar yang menjadi acuan anti-bentrok pada jadwal pelajaran otomatis.</li>
+                            <li><strong>Pembuatan Akun Login Instan:</strong> Data guru/staf dapat langsung dijadikan akun pengguna aplikasi melalui menu <em>Pengaturan &gt; Akun &amp; Pengguna &gt; Ambil dari Data Guru</em>.</li>
                         </ul>
                     </div>
                 )
@@ -686,57 +708,81 @@ export const panduanData: PanduanSectionData[] = [
                                 Anda <strong>TIDAK PERLU</strong> mengaturnya di dua tempat terpisah.
                             </p>
                             <p className="font-medium">
-                                💡 <em>Saran Alur:</em> Tab Data Master ini cukup dijadikan <strong>registri inventaris awal</strong> saat pertama kali mendaftarkan jenjang/marhalah. 
+                                💡 <em>Saran Alur:</em> Tab Data Master ini dijadikan <strong>registri inventaris awal</strong> saat pertama kali mendaftarkan marhalah. 
                                 Selanjutnya, seluruh operasional harian (KKM, alokasi jam/pekan, rumpun, silabus bab, kloning antar-jenjang, dan audit duplikasi) 
-                                <strong>100% dipusatkan di menu Akademik &gt; Kurikulum &gt; Mata Pelajaran &amp; Silabus</strong>.
+                                dipusatkan di menu <strong>Akademik &gt; Kurikulum &gt; Mata Pelajaran &amp; Silabus</strong>.
                             </p>
                         </div>
-                        <p className="text-xs text-gray-700">Fitur dasar pada registri Mata Pelajaran:</p>
+                        <p className="text-xs text-gray-700">Fitur pada registri Mata Pelajaran:</p>
                         <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-700">
-                            <li>Buka <strong>Data Master &gt; Mata Pelajaran</strong>, klik Tambah Mapel atau gunakan <strong>Tambah Massal</strong>.</li>
-                            <li>Tentukan <strong>Kode Mapel</strong>, <strong>Nama Mapel</strong>, <strong>Jenjang/Marhalah</strong>, dan <strong>KKM (Passing Grade)</strong>.</li>
-                            <li>
-                                <strong>Multi-Entri Modul/Kitab:</strong> Jika satu mapel menggunakan lebih dari 1 kitab/buku, ketikkan <strong>satu baris per item</strong> (atau gunakan tanda titik koma <code>;</code> pada mode Tambah Banyak).
-                            </li>
-                            <li>
-                                <strong>Link Unduh & Link Pembelian:</strong> Masukkan URL unduhan PDF/e-book modul atau tautan toko pembelian kitab fisik untuk memudahkan santri/wali santri.
-                            </li>
+                            <li>Buka <strong>Data Master &gt; Mata Pelajaran</strong>, gunakan dropdown <strong>Menu Aksi</strong> untuk Tambah Manual atau Tambah Massal.</li>
+                            <li>Tentukan <strong>Kode Mapel</strong>, <strong>Nama Mapel</strong>, <strong>Jenjang</strong>, dan <strong>KKM (Passing Grade)</strong>.</li>
+                            <li><strong>Multi-Entri Modul/Kitab:</strong> Jika satu mapel menggunakan lebih dari 1 kitab/buku, ketikkan satu baris per item (atau gunakan tanda titik koma <code>;</code> pada mode Tambah Massal).</li>
+                            <li><strong>Filter Status Pengampu:</strong> Filter cepat untuk memantau mapel mana saja yang sudah memiliki guru pengampu dan yang belum terpetakan.</li>
                         </ol>
-                        <div className="bg-gray-50 border p-2.5 rounded text-[11px] text-gray-600 font-mono">
-                            Contoh Input Kitab: <code>Fathul Qorib; Taqrib; Safinah</code>
-                        </div>
                     </div>
                 )
             },
             {
-                title: '4. Tahun Ajaran & Semester (Mobile Card & Desktop Table)',
+                title: '4. Tahun Ajaran & Semester Berjalan',
                 content: (
                     <div className="space-y-3 text-sm">
                         <p>Mengatur periode kalender akademik pondok:</p>
                         <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
-                            <li><strong>Tampilan Responsif Ganda:</strong> Pada layar desktop tampil berupa tabel penuh yang komprehensif, sedangkan pada layar ponsel otomatis beralih ke <strong>Mode Kartu / Accordion</strong> yang ringkas dan nyaman disentuh.</li>
-                            <li><strong>Status Aktif vs Arsip:</strong> Hanya ada 1 tahun ajaran & semester aktif yang menjadi target default pencatatan absensi, tagihan, dan rapor. Periode sebelumnya otomatis tersimpan sebagai arsip historis yang aman.</li>
+                            <li><strong>Tahun Ajaran Aktif:</strong> Hanya 1 tahun ajaran aktif yang menjadi basis pencatatan santri baru, keuangan, dan arsip riwayat.</li>
+                            <li><strong>Penetapan Semester Aktif (Ganjil / Genap):</strong> Tombol pemilihan semester aktif (Semester 1 / Ganjil atau Semester 2 / Genap) yang langsung mengontrol filter default nilai, pencatatan absensi harian, dan kalkulasi rapor tanpa perlu berpindah menu.</li>
+                            <li><strong>Tampilan Adaptif Desktop & Mobile:</strong> Tabel lengkap di layar komputer dan kartu accordion yang ringkas di layar smartphone.</li>
                         </ul>
                     </div>
                 )
             },
             {
-                title: '5. Fitur Bulk Grid & Indikator Belum Disimpan (Dirty State)',
+                title: '5. Fasilitas & Asrama: Gedung, Kamar, Kapasitas & Okupansi',
                 content: (
                     <div className="space-y-3 text-sm">
-                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs text-amber-900 space-y-1.5">
-                            <h5 className="font-bold flex items-center gap-1.5"><i className="bi bi-shield-exclamation text-amber-600"></i> Proteksi Kehilangan Data (Dirty State Warning)</h5>
-                            <p>Sistem dilengkapi sensor perubahan formulir. Jika Anda melakukan perubahan dan belum menekan tombol Simpan, indikator kuning peringatan akan aktif dan mencegah perpindahan halaman tanpa konfirmasi agar data tidak hilang secara tidak sengaja.</p>
-                        </div>
-                        <ul className="list-disc pl-5 space-y-1 text-xs text-gray-700">
-                            <li>Gunakan <strong>Keyboard Navigation</strong> (`Tab`, `Enter`, panah arah) saat menginput di tabel grid massal.</li>
-                            <li>Mendukung <strong>Copy-Paste langsung dari Excel / Spreadsheet</strong> (`Ctrl+C` & `Ctrl+V`).</li>
+                        <p>Manajemen sarana keasramaan santri secara terpadu:</p>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li><strong>Master Gedung Asrama:</strong> Mendaftarkan gedung asrama putra maupun putri, blok/lantai, serta penanggung jawab (Kepala Asrama).</li>
+                            <li><strong>Master Kamar & Kapasitas Bed:</strong> Setiap kamar memiliki nama/nomor, daya tampung maksimal tempat tidur (kapasitas bed), serta penugasan Pembina/Musyrif kamar.</li>
+                            <li><strong>Indikator Okupansi Real-time:</strong> Sistem menghitung otomatis jumlah santri aktif yang menempati kamar berdasarkan relasi data santri. Kamar dengan status <em>Tersedia</em>, <em>Penuh</em>, atau <em>Over-kapasitas</em> langsung terdeteksi pada kartu kamar dan audit integritas.</li>
+                            <li><strong>Ekspor Rekap Fasilitas (.xlsx):</strong> Rekapitulasi gedung, daftar kamar, kapasitas, dan okupansi dapat diekspor langsung ke spreadsheet Excel.</li>
                         </ul>
                     </div>
                 )
             },
             {
-                title: '6. SOP Multi-Admin Data Master: Protokol Real-Time (Cloud) & Hub-and-Spoke (Offline)',
+                title: '6. Navigasi Efisien: 1 Tombol Dropdown Terpadu (Menu Aksi)',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg text-xs text-slate-800 space-y-2">
+                            <h5 className="font-bold flex items-center gap-1.5 text-slate-900">
+                                <i className="bi bi-grid-fill text-teal-600"></i> Standardisasi Tombol Aksi Bersih &amp; Rapi
+                            </h5>
+                            <p>
+                                Untuk menjaga tata letak antarmuka tetap bersih, profesional, dan nyaman digunakan di desktop maupun smartphone, 
+                                tiga tombol yang sebelumnya terpisah (<em>Tambah Manual</em>, <em>Tambah Massal</em>, dan <em>Ekspor</em>) kini disatukan ke dalam 
+                                <strong>1 Tombol Dropdown: Menu Aksi</strong> di setiap tab Data Master:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                                <div className="bg-white p-2.5 rounded border border-slate-200">
+                                    <strong className="text-teal-700 block text-[11px] mb-1"><i className="bi bi-plus-circle-fill"></i> Tambah Manual</strong>
+                                    <p className="text-[10px] text-gray-600">Membuka formulir modal untuk input 1 data baru secara detail dan terstruktur.</p>
+                                </div>
+                                <div className="bg-white p-2.5 rounded border border-slate-200">
+                                    <strong className="text-indigo-700 block text-[11px] mb-1"><i className="bi bi-table"></i> Tambah Massal</strong>
+                                    <p className="text-[10px] text-gray-600">Membuka spreadsheet editor cepat dengan navigasi keyboard dan dukungan copy-paste dari Excel.</p>
+                                </div>
+                                <div className="bg-white p-2.5 rounded border border-slate-200">
+                                    <strong className="text-emerald-700 block text-[11px] mb-1"><i className="bi bi-file-earmark-excel-fill"></i> Ekspor Excel</strong>
+                                    <p className="text-[10px] text-gray-600">Mengunduh seluruh baris data master aktif ke format dokumen spreadsheet (.xlsx) resmi.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '7. SOP Standar Multi-Admin Data Master: Protokol Cloud Real-Time & Hub-and-Spoke',
                 content: (
                     <div className="space-y-4 text-sm text-gray-700">
                         <div className="bg-teal-50 p-4 rounded-xl border border-teal-200 space-y-2 text-xs">
@@ -745,9 +791,9 @@ export const panduanData: PanduanSectionData[] = [
                                 Standar Operasional Prosedur (SOP) Tata Kelola Data Master Multi-Admin
                             </h4>
                             <p className="text-teal-900 leading-relaxed">
-                                Data Master merupakan fondasi utama relasi database (Jenjang &rarr; Kelas &rarr; Rombel &rarr; Santri &rarr; Nilai &rarr; Tagihan). 
-                                Kesalahan penamaan atau penghapusan kelas secara sembarangan oleh salah satu admin dapat memicu data yatim (<em>orphan records</em>). 
-                                Ikuti standar alur kerja multi-admin berikut:
+                                Data Master merupakan fondasi utama relasi database (Jenjang &rarr; Kelas &rarr; Rombel &rarr; Santri &rarr; Nilai &rarr; Tagihan &rarr; Kamar Asrama). 
+                                Kesalahan penamaan atau penghapusan data secara sembarangan oleh salah satu admin dapat memicu data yatim (<em>orphan records</em>) di modul lain. 
+                                Pesantren wajib mematuhi standar kerja multi-admin berikut sesuai model koneksi yang digunakan:
                             </p>
                         </div>
 
@@ -756,28 +802,28 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-emerald-200 pb-1.5">
                                 <h5 className="font-bold text-emerald-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-[10px] font-black">A</span>
-                                    Model A: Cloud Real-Time (Firebase Firestore)
+                                    Model A: Cloud Real-Time (Firebase Firestore Terpadu)
                                 </h5>
                                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Aktif</span>
                             </div>
                             <p className="text-xs text-gray-600">
-                                Berlaku saat pesantren menggunakan koneksi Firebase terpusat dan seluruh admin terhubung ke internet/WiFi pondok.
+                                Berlaku saat pesantren menggunakan koneksi Firebase terpusat dan seluruh admin terhubung ke jaringan internet/WiFi pondok secara realtime.
                             </p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                                 <div className="p-2.5 bg-white rounded-lg border border-emerald-100 shadow-2xs space-y-1">
                                     <strong className="text-emerald-950 block font-semibold">
-                                        <i className="bi bi-cloud-check text-emerald-600"></i> Distribusi Perubahan Instan
+                                        <i className="bi bi-cloud-check text-emerald-600"></i> Distribusi Perubahan Instan (Auto-Broadcast)
                                     </strong>
                                     <p className="text-[11px] text-gray-600 leading-relaxed">
-                                        Saat Admin Pusat menambahkan Rombel baru atau mengubah guru wali kelas, data langsung terdistribusi dalam hitungan detik ke layar admin keuangan (tagihan), admin absensi harian, dan modul nilai rapor guru tanpa perlu refresh manual.
+                                        Saat Admin Pusat menekan tombol <strong>Simpan Perubahan</strong>, dokumen <code>tenants/{'{tenantId}'}/settings/main</code> otomatis diperbarui dan disebarkan ke seluruh laptop staf dalam hitungan detik via Firestore realtime listener tanpa perlu refresh halaman.
                                     </p>
                                 </div>
                                 <div className="p-2.5 bg-white rounded-lg border border-emerald-100 shadow-2xs space-y-1">
                                     <strong className="text-emerald-950 block font-semibold">
-                                        <i className="bi bi-arrow-repeat text-emerald-600"></i> Sinkronisasi 2-Arah Guru &amp; Kurikulum
+                                        <i className="bi bi-person-lines-fill text-emerald-600"></i> Aturan Pembagian Peran Tab (Anti-Konflik)
                                     </strong>
                                     <p className="text-[11px] text-gray-600 leading-relaxed">
-                                        Pengaturan kesanggupan hari/jam mengajar dan kompetensi mapel guru dapat diedit dari Data Master maupun dari modul Kurikulum. Seluruh perubahan langsung tersinkronisasi dua arah ke dokumen cloud.
+                                        Untuk mencegah bentrok edit bersamaan (<em>Last-Write-Wins</em>), bagi wewenang admin secara ketat: Admin Akademik mengelola Struktur & TA, Kurikulum mengelola Mapel & Jam Guru, Admin TU mengelola Biodata Guru/Staf, dan Pengasuhan mengelola Fasilitas Asrama.
                                     </p>
                                 </div>
                             </div>
@@ -788,32 +834,38 @@ export const panduanData: PanduanSectionData[] = [
                             <div className="flex items-center justify-between border-b border-indigo-200 pb-1.5">
                                 <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
                                     <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">B</span>
-                                    Model B: Hub-and-Spoke (Offline-First / Mode Pengepul)
+                                    Model B: Cloud Hub-and-Spoke (Offline-First / Mode Pengepul)
                                 </h5>
-                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Offline</span>
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Hybrid / Dropbox / WebDAV</span>
                             </div>
                             <p className="text-xs text-gray-600">
-                                Digunakan saat laptop staf/tata usaha bekerja secara offline atau tanpa koneksi internet stabil.
+                                Digunakan saat laptop staf/tata usaha marhalah bekerja secara mandiri (offline) atau lokasi jaringan antar kantor cabang terpisah.
                             </p>
                             <div className="space-y-2 text-xs">
                                 <div className="p-2.5 bg-white rounded-lg border border-indigo-100">
-                                    <strong className="text-indigo-950">1. Komputer HUB (Kantor Sekretariat / Kepala TU):</strong>
-                                    <p className="text-[11px] text-gray-600 mt-0.5">
-                                        Menjadi <em>Single Source of Truth</em> untuk seluruh kode jenjang, nama kelas, rombel, dan ID guru. Komputer HUB adalah satu-satunya pihak yang berwenang menambah atau menghapus jenjang dan tahun ajaran.
+                                    <strong className="text-indigo-950 font-bold flex items-center gap-1.5">
+                                        <i className="bi bi-hdd-network text-indigo-600"></i> 1. Komputer HUB (Kantor Sekretariat / Kepala TU Pusat):
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 mt-1">
+                                        Menjadi <strong>Single Source of Truth</strong> untuk seluruh kode jenjang, nama kelas, rombel, tahun ajaran, dan data guru. Komputer HUB adalah satu-satunya pihak yang berwenang menambah, menghapus, atau merombak struktur. Setelah selesai, Admin HUB melakukan <strong>Publikasikan Master Data</strong> ke Cloud.
                                     </p>
                                 </div>
                                 <div className="p-2.5 bg-white rounded-lg border border-indigo-100">
-                                    <strong className="text-indigo-950">2. Laptop SPOKE (Staf TU Marhalah / Wali Kelas):</strong>
-                                    <p className="text-[11px] text-gray-600 mt-0.5">
-                                        DILARANG mengubah nama jenjang atau memodifikasi ID rombel secara lokal di laptop spoke. Perubahan harus diajukan ke Admin HUB untuk menghindari ketidakcocokan identitas relasi data saat digabung.
+                                    <strong className="text-indigo-950 font-bold flex items-center gap-1.5">
+                                        <i className="bi bi-laptop text-indigo-600"></i> 2. Komputer SPOKE (Laptop TU Marhalah, Kasir, atau Wali Kelas):
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 mt-1">
+                                        Spoke menarik master data dengan tombol <strong>Tarik Master Data</strong>. Sistem secara otomatis memproteksi pengaturan pairing, token, dan peran lokal Spoke sehingga kredensial koneksi tidak tertimpa oleh akun Hub.
                                     </p>
                                 </div>
                                 <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-950 space-y-1">
-                                    <strong>⚡ Siklus Kerja Wajib Spoke Data Master:</strong>
-                                    <ol className="list-decimal pl-4 space-y-0.5 text-gray-700">
-                                        <li><strong>Tarik Master Terkini:</strong> Sebelum memulai tahun ajaran baru, unduh backup data master dari komputer HUB dan pulihkan (restore) ke laptop Spoke.</li>
-                                        <li><strong>Input Data Spesifik:</strong> Laptop Spoke menginput data santri baru atau nilai sesuai rombel yang ditugaskan tanpa merombak struktur induk.</li>
-                                        <li><strong>Kirim Kembali ke HUB:</strong> Ekspor backup dari Spoke, serahkan ke Admin HUB untuk diverifikasi dan dikonsolidasikan.</li>
+                                    <strong className="font-bold flex items-center gap-1.5">
+                                        <i className="bi bi-arrow-repeat text-amber-700"></i> Siklus Wajib Sinkronisasi Hub & Spoke:
+                                    </strong>
+                                    <ol className="list-decimal pl-4 space-y-1 text-gray-700">
+                                        <li><strong>Inisialisasi Awal Tahun:</strong> Komputer HUB menyelesaikan seluruh Data Master, lalu menerbitkan Master Data ke Cloud. Seluruh laptop Spoke melakukan <em>Tarik Master Data</em> sebelum menginput santri atau nilai.</li>
+                                        <li><strong>Larangan Modifikasi Struktur di Spoke:</strong> Spoke DILARANG KERAS mengubah nama jenjang atau menghapus rombel secara sepihak agar ID relasi tetap sinkron dengan server pusat.</li>
+                                        <li><strong>Unggah Transaksi Harian:</strong> Spoke mengunggah mutasi harian (data santri, absensi, tagihan) via tombol <em>Kirim Perubahan Staf</em>. Admin HUB memverifikasi dan menggabungkannya ke Master Data Utama.</li>
                                     </ol>
                                 </div>
                             </div>
@@ -836,8 +888,8 @@ export const panduanData: PanduanSectionData[] = [
                                     <tbody className="divide-y divide-gray-200 text-gray-600">
                                         <tr>
                                             <td className="border border-gray-200 p-1.5 font-semibold text-gray-900">Super Admin / Mudir</td>
-                                            <td className="border border-gray-200 p-1.5">Membuat Jenjang, Tingkat Kelas, Rombel, Tahun Ajaran, dan konversi akun staf.</td>
-                                            <td className="border border-gray-200 p-1.5 text-emerald-700 font-medium">Kuasa Mutlak (Penuh)</td>
+                                            <td className="border border-gray-200 p-1.5">Membuat Jenjang, Tingkat Kelas, Rombel, Tahun Ajaran, Fasilitas Asrama, dan konversi akun staf.</td>
+                                            <td className="border border-gray-200 p-1.5 text-emerald-700 font-medium">Kuasa Mutlak (Pusat HUB)</td>
                                         </tr>
                                         <tr>
                                             <td className="border border-gray-200 p-1.5 font-semibold text-gray-900">Tim Kurikulum / Akademik</td>
@@ -845,18 +897,38 @@ export const panduanData: PanduanSectionData[] = [
                                             <td className="border border-gray-200 p-1.5 text-blue-700 font-medium">Khusus Mapel &amp; Guru</td>
                                         </tr>
                                         <tr>
+                                            <td className="border border-gray-200 p-1.5 font-semibold text-gray-900">Bagian Kesantrian / Pengasuhan</td>
+                                            <td className="border border-gray-200 p-1.5">Mengatur gedung asrama, kapasitas kamar, dan penugasan musyrif kamar santri.</td>
+                                            <td className="border border-gray-200 p-1.5 text-indigo-700 font-medium">Khusus Asrama &amp; Kamar</td>
+                                        </tr>
+                                        <tr>
                                             <td className="border border-gray-200 p-1.5 font-semibold text-gray-900">Petugas Tata Usaha (TU)</td>
-                                            <td className="border border-gray-200 p-1.5">Mengisi biodata lengkap asatidz, NIP/NIY, kontak nomor HP, dan riwayat jabatan.</td>
+                                            <td className="border border-gray-200 p-1.5">Mengisi biodata asatidz, NIP/NIY, kontak nomor HP/WA, dan riwayat jabatan kepegawaian.</td>
                                             <td className="border border-gray-200 p-1.5 text-amber-700 font-medium">Biodata &amp; Kepegawaian</td>
                                         </tr>
                                         <tr>
                                             <td className="border border-gray-200 p-1.5 font-semibold text-gray-900">Wali Kelas &amp; Dewan Guru</td>
-                                            <td className="border border-gray-200 p-1.5">Melihat daftar rombel dan profil guru yang bertugas.</td>
+                                            <td className="border border-gray-200 p-1.5">Melihat daftar rombel, jadwal, dan profil penugasan.</td>
                                             <td className="border border-gray-200 p-1.5 text-gray-500">Read-Only (Hanya Lihat)</td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+
+                        {/* Checklist Pra-KBM */}
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1.5 text-xs text-blue-950">
+                            <strong className="flex items-center gap-1.5 font-bold text-blue-900">
+                                <i className="bi bi-card-checklist text-blue-600"></i> Checklist Audit Integritas Data Master Sebelum Memulai KBM:
+                            </strong>
+                            <ul className="list-disc pl-5 space-y-1 text-[11px] text-gray-700">
+                                <li>Pastikan seluruh <strong>Jenjang (Marhalah)</strong> telah memiliki <em>Kode Jenjang</em> untuk penomoran NIS otomatis.</li>
+                                <li>Pastikan setiap <strong>Rombel</strong> telah memiliki <em>Wali Kelas</em> definitif dan kuota kapasitas terisi.</li>
+                                <li>Pastikan seluruh <strong>Mata Pelajaran</strong> telah terisi KKM dan guru pengampu kompeten.</li>
+                                <li>Pastikan <strong>Tahun Ajaran Aktif</strong> dan <strong>Semester Berjalan</strong> (Ganjil/Genap) sudah ditetapkan.</li>
+                                <li>Pastikan seluruh <strong>Kamar Asrama</strong> tidak berstatus <em>Over-kapasitas</em> dan musyrif kamar telah diplot.</li>
+                                <li>Lakukan <strong>Ekspor Excel (.xlsx)</strong> di setiap tab sebagai salinan cadangan arsip fisik lembaga.</li>
+                            </ul>
                         </div>
 
                         {/* Pencegahan Kerusakan Relasi Data */}
@@ -865,7 +937,7 @@ export const panduanData: PanduanSectionData[] = [
                                 <i className="bi bi-exclamation-octagon-fill text-red-600"></i> Aturan Ketat Pencegahan Kerusakan Relasi (Foreign Key Safety):
                             </strong>
                             <p className="text-[11px] text-gray-700 leading-relaxed">
-                                Dilarang menghapus Rombel atau Jenjang yang masih memiliki riwayat santri aktif atau catatan nilai. Jika rombel sudah tidak digunakan di semester baru, ubah statusnya atau biarkan tanpa santri, jangan dihapus sembarangan agar buku rapor historis alumni tetap dapat dicetak dengan sempurna.
+                                Dilarang menghapus Rombel, Jenjang, atau Kamar yang masih memiliki santri aktif atau catatan nilai historis. Jika rombel/kamar sudah tidak digunakan pada semester baru, biarkan tanpa santri atau lakukan mutasi santri terlebih dahulu, jangan dihapus sembarangan agar buku rapor dan riwayat transaksi alumni tetap dapat diakses dengan sempurna.
                             </p>
                         </div>
                     </div>
@@ -4086,97 +4158,8 @@ export const panduanData: PanduanSectionData[] = [
             }
         ]
     },
-    {
-        id: 'kalender',
-        badge: 12,
-        badgeColor: 'yellow',
-        title: 'Kalender & Jadwal Ibadah',
-        steps: [
-            {
-                title: 'Input Agenda Kegiatan',
-                content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Kalender</strong>.</li>
-                        <li>Klik <strong>Tambah Agenda</strong> untuk memasukkan kegiatan secara manual satu per satu.</li>
-                        <li>Gunakan tombol <strong>Tambah Massal</strong> (ikon tabel) untuk memasukkan banyak agenda sekaligus (seperti Jadwal Ujian, Libur Semester, PHBI) dalam format tabel yang cepat.</li>
-                    </ul>
-                )
-            },
-             {
-                title: 'Manajemen Jadwal Piket Ibadah',
-                content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka tab <strong>Jadwal Piket Ibadah</strong> di menu Kalender.</li>
-                        <li>Pilih tanggal yang ingin diatur.</li>
-                        <li><strong>Manual:</strong> Klik tombol edit pada kolom Muadzin/Imam untuk memilih santri tertentu.</li>
-                        <li><strong>Otomatis:</strong> Klik tombol <strong>Auto Isi</strong>. Sistem akan memilih santri putra secara acak untuk mengisi slot yang kosong pada hari tersebut.</li>
-                    </ul>
-                )
-            },
-            {
-                title: 'Cetak Kalender Dinding (Custom)',
-                content: (
-                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 bg-gray-50 p-2 rounded">
-                        <li>Klik tombol <strong>Cetak / Export</strong>.</li>
-                        <li>Pilih <strong>Tema Desain</strong> (Classic, Modern, Ceria, dll) sesuai selera.</li>
-                        <li>Pilih <strong>Layout</strong>: 1 Lembar (untuk dinding kantor), 3 Lembar (Triwulan), atau 4 Lembar (Caturwulan).</li>
-                        <li><strong>Penanggalan:</strong> Pilih apakah angka utama adalah Masehi atau Hijriah.</li>
-                        <li>Anda juga bisa mengupload foto gedung pondok sebagai banner atau watermark.</li>
-                        <li>Klik Cetak untuk menghasilkan PDF siap print.</li>
-                    </ol>
-                )
-            }
-        ]
-    },
-    {
-        id: 'library',
-        badge: 13,
-        badgeColor: 'teal',
-        title: 'Perpustakaan Digital',
-        steps: [
-            {
-                title: 'Manajemen Katalog Buku',
-                content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka menu <strong>Perpustakaan &gt; Katalog Buku</strong>.</li>
-                        <li>Klik <strong>Tambah Buku</strong> untuk input satu per satu, atau <strong>Tambah Massal</strong> untuk input cepat menggunakan tabel.</li>
-                        <li>Isi data lengkap seperti Judul, Penulis, Penerbit, dan Lokasi Rak untuk memudahkan pencarian.</li>
-                    </ul>
-                )
-            },
-            {
-                title: 'Sirkulasi (Peminjaman & Pengembalian)',
-                content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Peminjaman:</strong> Di tab Sirkulasi, cari nama santri dan judul buku. Tentukan durasi pinjam, lalu klik "Proses Peminjaman".</li>
-                        <li><strong>Pengembalian:</strong> Masuk ke sub-menu "Pengembalian". Cari nama peminjam. Sistem otomatis menghitung denda jika terlambat. Klik "Kembalikan" untuk menyelesaikan.</li>
-                    </ul>
-                )
-            },
-             {
-                title: 'Cetak Kartu & Label',
-                content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li>Buka tab <strong>Cetak Kartu</strong>.</li>
-                        <li><strong>Kartu Anggota:</strong> Pilih santri untuk mencetak kartu perpustakaan dengan barcode.</li>
-                        <li><strong>Slip Buku:</strong> Cetak slip tanggal kembali untuk ditempel di belakang buku.</li>
-                        <li><strong>Label Punggung:</strong> Cetak label kode buku (Call Number) untuk ditempel di punggung buku (spine) agar mudah disusun di rak.</li>
-                    </ul>
-                )
-            },
-            {
-                title: 'Integrasi Komputer Perpustakaan',
-                color: 'teal',
-                content: (
-                    <div className="bg-teal-50 p-3 rounded border border-teal-200 text-sm">
-                        <strong>Saran Implementasi:</strong> Biasanya perpustakaan memiliki komputer khusus yang terpisah dari kantor admin.
-                        <br/>
-                        Gunakan <strong>Cloud Sync</strong> untuk menghubungkan komputer perpustakaan dengan database santri pusat. Pustakawan cukup login dengan akun staff terbatas untuk mengelola peminjaman.
-                    </div>
-                )
-            }
-        ]
-    },
+    kalenderPanduan,
+    perpustakaanPanduan,
     {
         id: 'offline',
         badge: 14,

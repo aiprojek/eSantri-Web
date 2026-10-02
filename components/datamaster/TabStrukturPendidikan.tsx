@@ -1,10 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PondokSettings, Jenjang, Kelas, Rombel } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { StructureModal } from '../settings/modals/StructureModal';
 import { BulkMasterEditor } from './modals/BulkMasterEditor';
+import { loadXLSX } from '../../utils/lazyClientLibs';
 
 type StructureItem = Jenjang | Kelas | Rombel;
 
@@ -32,6 +33,11 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
     const [selectedKelasIds, setSelectedKelasIds] = useState<number[]>([]);
     const [selectedRombelIds, setSelectedRombelIds] = useState<number[]>([]);
 
+    // Search state for each list
+    const [searchJenjang, setSearchJenjang] = useState('');
+    const [searchKelas, setSearchKelas] = useState('');
+    const [searchRombel, setSearchRombel] = useState('');
+
     // Calculate active teachers for dropdowns (Mudir, Wali Kelas)
     const activeTeachers = useMemo(() => {
         return localSettings.tenagaPengajar.filter(t => {
@@ -40,6 +46,74 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
             return !latestRiwayat.tanggalSelesai;
         });
     }, [localSettings.tenagaPengajar]);
+
+    const [isExporting, setIsExporting] = useState(false);
+    const [isActionOpen, setIsActionOpen] = useState(false);
+    const [actionSubmenu, setActionSubmenu] = useState<'none' | 'manual' | 'bulk'>('none');
+    const actionRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (actionRef.current && !actionRef.current.contains(e.target as Node)) {
+                setIsActionOpen(false);
+                setActionSubmenu('none');
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleExportStruktur = async () => {
+        setIsExporting(true);
+        try {
+            const XLSX = await loadXLSX();
+            const exportData = localSettings.rombel.map((r, idx) => {
+                const parentKelas = localSettings.kelas.find(k => k.id === r.kelasId);
+                const parentJenjang = parentKelas ? localSettings.jenjang.find(j => j.id === parentKelas.jenjangId) : undefined;
+                const wali = localSettings.tenagaPengajar.find(t => t.id === r.waliKelasId);
+                const santriCount = santriList.filter(s => s.rombelId === r.id && s.status === 'Aktif').length;
+                const kapasitas = r.kapasitas || 30;
+
+                return {
+                    'No': idx + 1,
+                    'Jenjang': parentJenjang?.nama || '-',
+                    'Kode Jenjang': parentJenjang?.kode || '-',
+                    'Tingkat / Kelas': parentKelas?.nama || '-',
+                    'Nama Rombel': r.nama,
+                    'Wali Kelas': wali?.nama || 'Belum Ditentukan',
+                    'Jumlah Santri': santriCount,
+                    'Kapasitas': kapasitas,
+                    'Sisa Kuota': Math.max(0, kapasitas - santriCount),
+                    'Status Kuota': santriCount >= kapasitas ? 'Penuh' : santriCount / kapasitas > 0.8 ? 'Hampir Penuh' : 'Tersedia'
+                };
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            XLSX.utils.book_append_sheet(wb, ws, "Struktur Rombel");
+            XLSX.writeFile(wb, `Struktur_Pendidikan_${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast('Struktur pendidikan berhasil diekspor ke Excel!', 'success');
+        } catch (e) {
+            console.error('Export error:', e);
+            showToast('Gagal mengekspor struktur pendidikan.', 'error');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleCloneRombel = (rombel: Rombel) => {
+        const list = [...localSettings.rombel];
+        const nextId = list.length > 0 ? Math.max(...list.map(r => r.id)) + 1 : 1;
+        const clonedName = `${rombel.nama} (Salinan)`;
+        const newRombel: Rombel = {
+            ...rombel,
+            id: nextId,
+            nama: clonedName,
+            waliKelasId: undefined
+        };
+        handleInputChange('rombel', [...list, newRombel]);
+        showToast(`Rombel "${clonedName}" berhasil diduplikasi.`, 'success');
+    };
 
     const handleSaveStructureItem = (item: StructureItem) => {
         if (!structureModalData) return;
@@ -182,6 +256,22 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
         const selectionState = listName === 'jenjang' ? selectedJenjangIds : listName === 'kelas' ? selectedKelasIds : selectedRombelIds;
         const setSelectionState = listName === 'jenjang' ? setSelectedJenjangIds : listName === 'kelas' ? setSelectedKelasIds : setSelectedRombelIds;
 
+        const searchQuery = listName === 'jenjang' ? searchJenjang : listName === 'kelas' ? searchKelas : searchRombel;
+        const setSearchQuery = listName === 'jenjang' ? setSearchJenjang : listName === 'kelas' ? setSearchKelas : setSearchRombel;
+
+        const filteredList = list.filter((i: any) => {
+            if (!searchQuery.trim()) return true;
+            const q = searchQuery.toLowerCase();
+            return (i.nama || '').toLowerCase().includes(q) || (i.kode || '').toLowerCase().includes(q);
+        });
+
+        const getSantriCount = (item: any) => {
+            if (listName === 'jenjang') return santriList.filter(s => s.jenjangId === item.id).length;
+            if (listName === 'kelas') return santriList.filter(s => s.kelasId === item.id).length;
+            if (listName === 'rombel') return santriList.filter(s => s.rombelId === item.id).length;
+            return 0;
+        };
+
         const handleBulkDelete = () => {
             if (selectionState.length === 0) return;
             if (listName === 'jenjang') {
@@ -323,12 +413,13 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
 
         return (
             <div className="mb-4 flex flex-col h-full bg-white border border-gray-100 rounded-xl shadow-sm p-4 overflow-hidden">
-                <div className="flex justify-between items-center mb-3">
+                <div className="flex justify-between items-center mb-2">
                     <h3 className="text-md font-bold text-gray-700 capitalize flex items-center gap-2">
                         {listName === 'jenjang' && <i className="bi bi-layers text-teal-600"></i>}
                         {listName === 'kelas' && <i className="bi bi-bar-chart-steps text-teal-600"></i>}
                         {listName === 'rombel' && <i className="bi bi-people text-teal-600"></i>}
                         {itemName}
+                        <span className="text-xs font-normal text-gray-400">({list.length})</span>
                     </h3>
                     {selectionState.length > 0 && (
                         <div className="flex items-center gap-2 text-xs">
@@ -338,23 +429,62 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                         </div>
                     )}
                 </div>
+
+                {list.length > 3 && (
+                    <div className="relative mb-2">
+                        <i className="bi bi-search absolute left-2.5 top-2 text-gray-400 text-xs"></i>
+                        <input
+                            type="text"
+                            placeholder={`Cari ${itemName.toLowerCase()}...`}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-7 pr-7 py-1 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600 text-xs">
+                                <i className="bi bi-x-circle-fill"></i>
+                            </button>
+                        )}
+                    </div>
+                )}
                 
-                <div className="border rounded-lg max-h-60 overflow-y-auto bg-gray-50 flex-grow scrollbar-thin">
-                    {list.length > 0 ? (
+                <div className="border rounded-lg max-h-64 overflow-y-auto bg-gray-50 flex-grow scrollbar-thin">
+                    {filteredList.length > 0 ? (
                         <ul className="divide-y">
                             <li className="bg-gray-100/80 p-1.5 flex items-center sticky top-0 z-10 border-b">
-                                <input type="checkbox" checked={list.length > 0 && selectionState.length === list.length} onChange={toggleSelectAll} className="w-3.5 h-3.5 text-teal-600 rounded mr-2 cursor-pointer" />
-                                <span className="text-[10px] font-bold text-gray-400 uppercase">Pilih Semua</span>
+                                <input type="checkbox" checked={filteredList.length > 0 && selectionState.length === filteredList.length} onChange={toggleSelectAll} className="w-3.5 h-3.5 text-teal-600 rounded mr-2 cursor-pointer" />
+                                <span className="text-[10px] font-bold text-gray-400 uppercase">Pilih Semua ({filteredList.length})</span>
                             </li>
-                            {list.map((item: any) => {
+                            {filteredList.map((item: any) => {
                                 const isSelected = selectionState.includes(item.id);
+                                const santriCount = getSantriCount(item);
+                                const kapasitas = listName === 'rombel' ? ((item as Rombel).kapasitas || 30) : undefined;
+                                const isFull = kapasitas ? santriCount >= kapasitas : false;
+                                const ratio = kapasitas ? Math.min(100, Math.round((santriCount / kapasitas) * 100)) : 0;
+
                                 return (
-                                <li key={item.id} className={`flex justify-between items-center p-2 hover:bg-white group transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
-                                    <div className="flex items-center gap-2">
-                                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelectOne(item.id)} className="w-3.5 h-3.5 text-teal-600 rounded cursor-pointer" />
-                                        <div className="text-sm">
-                                            <p className="font-medium">{item.nama} {(item as Jenjang).kode && <span className="font-normal text-gray-500">({(item as Jenjang).kode})</span>}</p>
-                                            <div className="text-[10px] text-gray-500 flex flex-wrap gap-x-2">
+                                <li key={item.id} className={`flex justify-between items-center p-2.5 hover:bg-white group transition-colors ${isSelected ? 'bg-teal-50' : ''}`}>
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelectOne(item.id)} className="w-3.5 h-3.5 text-teal-600 rounded cursor-pointer shrink-0" />
+                                        <div className="text-sm min-w-0 flex-1">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <p className="font-semibold text-gray-800 truncate">{item.nama}</p>
+                                                {(item as Jenjang).kode && <span className="text-[11px] font-mono font-medium text-gray-500 bg-gray-100 px-1 rounded">{(item as Jenjang).kode}</span>}
+                                                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold border ${santriCount > 0 ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                                                    {santriCount} santri
+                                                </span>
+                                                {kapasitas && (
+                                                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${isFull ? 'bg-rose-50 text-rose-700 border border-rose-200' : ratio > 80 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-gray-50 text-gray-500'}`}>
+                                                        {isFull ? 'Penuh' : `Kuota ${kapasitas}`}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {kapasitas && (
+                                                <div className="w-28 bg-gray-200 rounded-full h-1 mt-1 overflow-hidden">
+                                                    <div className={`h-full rounded-full transition-all ${isFull ? 'bg-rose-500' : ratio > 80 ? 'bg-amber-500' : 'bg-teal-500'}`} style={{ width: `${ratio}%` }}></div>
+                                                </div>
+                                            )}
+                                            <div className="text-[10px] text-gray-500 flex flex-wrap gap-x-2 mt-0.5">
                                                 {parentList && (
                                                     <span>
                                                         Induk: {(() => {
@@ -373,15 +503,18 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                                         </div>
                                     </div>
                                     {canWrite && (
-                                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                             <button onClick={() => setStructureModalData({ mode: 'edit', listName, item })} className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50" aria-label={`Edit ${itemName} ${item.nama}`}><i className="bi bi-pencil-square"></i></button>
-                                             <button onClick={() => handleRemoveItem(item.id)} className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50" aria-label={`Hapus ${itemName} ${item.nama}`}><i className="bi bi-trash"></i></button>
+                                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0 ml-2">
+                                             {listName === 'rombel' && (
+                                                 <button onClick={() => handleCloneRombel(item as Rombel)} className="text-teal-600 hover:text-teal-800 p-1.5 rounded hover:bg-teal-50" aria-label={`Duplikasi Rombel ${item.nama}`} title="Kloning / Duplikasi Rombel"><i className="bi bi-copy text-xs"></i></button>
+                                             )}
+                                             <button onClick={() => setStructureModalData({ mode: 'edit', listName, item })} className="text-blue-600 hover:text-blue-800 p-1.5 rounded hover:bg-blue-50" aria-label={`Edit ${itemName} ${item.nama}`} title="Edit"><i className="bi bi-pencil-square text-xs"></i></button>
+                                             <button onClick={() => handleRemoveItem(item.id)} className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50" aria-label={`Hapus ${itemName} ${item.nama}`} title="Hapus"><i className="bi bi-trash text-xs"></i></button>
                                         </div>
                                     )}
                                 </li>
                             )})}
                         </ul>
-                    ) : <p className="text-sm text-gray-400 p-3 text-center">Data kosong.</p>}
+                    ) : <p className="text-sm text-gray-400 p-4 text-center">{searchQuery ? 'Tidak ada data cocok.' : 'Data kosong.'}</p>}
                 </div>
                 {canWrite && (
                     <div className="flex gap-2 mt-2">
@@ -394,8 +527,191 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-            <h2 className="text-xl font-bold text-gray-700 mb-6 border-b pb-2">Struktur Pendidikan</h2>
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-xs mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b pb-4">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i className="bi bi-diagram-3-fill text-teal-600"></i>
+                        Struktur Pendidikan
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">Hierarki jenjang, tingkat kelas, serta rombongan belajar (rombel) dan wali kelas.</p>
+                </div>
+                <div className="relative" ref={actionRef}>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsActionOpen(!isActionOpen);
+                            setActionSubmenu('none');
+                        }}
+                        className="text-xs bg-teal-700 hover:bg-teal-800 text-white font-semibold px-3.5 py-2 rounded-lg shadow-xs flex items-center gap-2 transition"
+                    >
+                        <i className="bi bi-grid-fill"></i>
+                        <span>Menu Aksi</span>
+                        <i className={`bi bi-chevron-${isActionOpen ? 'up' : 'down'} text-[10px]`}></i>
+                    </button>
+
+                    {isActionOpen && (
+                        <div className="absolute right-0 mt-1.5 w-60 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-30 animate-fade-in text-xs divide-y divide-gray-100">
+                            {canWrite && (
+                                <div className="py-1">
+                                    {actionSubmenu === 'none' && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => setActionSubmenu('manual')}
+                                                className="w-full text-left px-3.5 py-2 hover:bg-teal-50 flex items-center justify-between text-gray-700 transition"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <i className="bi bi-plus-circle-fill text-teal-600 text-sm"></i>
+                                                    <div>
+                                                        <span className="font-semibold block text-gray-800">Tambah Manual</span>
+                                                        <span className="text-[10px] text-gray-400">Jenjang, kelas, atau rombel</span>
+                                                    </div>
+                                                </div>
+                                                <i className="bi bi-chevron-right text-gray-400 text-[10px]"></i>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setActionSubmenu('bulk')}
+                                                className="w-full text-left px-3.5 py-2 hover:bg-teal-50 flex items-center justify-between text-gray-700 transition"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <i className="bi bi-table text-indigo-600 text-sm"></i>
+                                                    <div>
+                                                        <span className="font-semibold block text-gray-800">Tambah Massal</span>
+                                                        <span className="text-[10px] text-gray-400">Editor multi baris cepat</span>
+                                                    </div>
+                                                </div>
+                                                <i className="bi bi-chevron-right text-gray-400 text-[10px]"></i>
+                                            </button>
+                                        </>
+                                    )}
+
+                                    {actionSubmenu === 'manual' && (
+                                        <div className="space-y-0.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setActionSubmenu('none')}
+                                                className="w-full text-left px-3 py-1.5 text-gray-400 hover:text-gray-700 font-semibold flex items-center gap-1.5 border-b border-gray-100 mb-1"
+                                            >
+                                                <i className="bi bi-arrow-left"></i> Kembali
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsActionOpen(false);
+                                                    setActionSubmenu('none');
+                                                    setStructureModalData({ mode: 'add', listName: 'jenjang' });
+                                                }}
+                                                className="w-full text-left px-3.5 py-1.5 hover:bg-teal-50 flex items-center gap-2 text-gray-700"
+                                            >
+                                                <i className="bi bi-mortarboard text-teal-600"></i>
+                                                <span>Tambah Jenjang Pendidikan</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsActionOpen(false);
+                                                    setActionSubmenu('none');
+                                                    setStructureModalData({ mode: 'add', listName: 'kelas' });
+                                                }}
+                                                className="w-full text-left px-3.5 py-1.5 hover:bg-teal-50 flex items-center gap-2 text-gray-700"
+                                            >
+                                                <i className="bi bi-collection text-teal-600"></i>
+                                                <span>Tambah Tingkat Kelas</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsActionOpen(false);
+                                                    setActionSubmenu('none');
+                                                    setStructureModalData({ mode: 'add', listName: 'rombel' });
+                                                }}
+                                                className="w-full text-left px-3.5 py-1.5 hover:bg-teal-50 flex items-center gap-2 text-gray-700"
+                                            >
+                                                <i className="bi bi-people text-teal-600"></i>
+                                                <span>Tambah Rombongan Belajar (Rombel)</span>
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {actionSubmenu === 'bulk' && (
+                                        <div className="space-y-0.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setActionSubmenu('none')}
+                                                className="w-full text-left px-3 py-1.5 text-gray-400 hover:text-gray-700 font-semibold flex items-center gap-1.5 border-b border-gray-100 mb-1"
+                                            >
+                                                <i className="bi bi-arrow-left"></i> Kembali
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsActionOpen(false);
+                                                    setActionSubmenu('none');
+                                                    setBulkInitialData(undefined);
+                                                    setBulkMode('jenjang');
+                                                }}
+                                                className="w-full text-left px-3.5 py-1.5 hover:bg-indigo-50 flex items-center gap-2 text-gray-700"
+                                            >
+                                                <i className="bi bi-table text-indigo-600"></i>
+                                                <span>Massal: Jenjang Pendidikan</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsActionOpen(false);
+                                                    setActionSubmenu('none');
+                                                    setBulkInitialData(undefined);
+                                                    setBulkMode('kelas');
+                                                }}
+                                                className="w-full text-left px-3.5 py-1.5 hover:bg-indigo-50 flex items-center gap-2 text-gray-700"
+                                            >
+                                                <i className="bi bi-table text-indigo-600"></i>
+                                                <span>Massal: Tingkat Kelas</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsActionOpen(false);
+                                                    setActionSubmenu('none');
+                                                    setBulkInitialData(undefined);
+                                                    setBulkMode('rombel');
+                                                }}
+                                                className="w-full text-left px-3.5 py-1.5 hover:bg-indigo-50 flex items-center gap-2 text-gray-700"
+                                            >
+                                                <i className="bi bi-table text-indigo-600"></i>
+                                                <span>Massal: Rombongan Belajar</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {actionSubmenu === 'none' && (
+                                <div className="py-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsActionOpen(false);
+                                            handleExportStruktur();
+                                        }}
+                                        disabled={isExporting || localSettings.rombel.length === 0}
+                                        className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center gap-2.5 text-gray-700 transition disabled:opacity-50"
+                                    >
+                                        <i className="bi bi-file-earmark-excel-fill text-emerald-600 text-sm"></i>
+                                        <div>
+                                            <span className="font-semibold block text-emerald-800">Ekspor Excel</span>
+                                            <span className="text-[10px] text-gray-400">Unduh struktur rombel (.xlsx)</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {renderListManager('jenjang', 'Jenjang Pendidikan')}
                 {renderListManager('kelas', 'Kelas', 'jenjang')}

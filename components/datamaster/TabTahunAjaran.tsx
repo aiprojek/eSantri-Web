@@ -87,14 +87,60 @@ export const TabTahunAjaran: React.FC<TabTahunAjaranProps> = ({ localSettings, h
     };
 
     const handleSetActive = (id: string) => {
-        persist(configuredYears.map((item) => ({ ...item, isActive: item.id === id })));
+        const next = configuredYears.map((item) => ({ ...item, isActive: item.id === id }));
+        const activeItem = next.find(item => item.isActive);
+        persist(next);
+        if (activeItem) {
+            handleInputChange('tahunAjaranAktif', activeItem.labelMasehi);
+        }
     };
 
     return (
         <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:p-6 space-y-5">
-            <div>
-                <h2 className="text-lg font-bold text-gray-800">Tahun Ajaran</h2>
-                <p className="text-sm text-gray-500">Masehi dipakai sebagai basis fungsi aplikasi, Hijriah opsional untuk tampilan kop laporan/surat.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <h2 className="text-lg font-bold text-gray-800">Tahun Ajaran &amp; Semester</h2>
+                    <p className="text-sm text-gray-500">Masehi dipakai sebagai basis fungsi aplikasi, Hijriah opsional untuk tampilan kop laporan/surat.</p>
+                </div>
+            </div>
+
+            {/* Panel Semester Aktif */}
+            <div className="p-4 bg-teal-50/70 border border-teal-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <h4 className="font-bold text-teal-900 text-sm flex items-center gap-2">
+                        <i className="bi bi-calendar2-check-fill text-teal-600"></i>
+                        Semester Aktif Berjalan
+                    </h4>
+                    <p className="text-xs text-teal-700 mt-0.5">
+                        Menentukan semester saat ini untuk filter nilai, pencatatan absensi, dan kalkulasi rapor.
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        type="button"
+                        disabled={!canWrite}
+                        onClick={() => handleInputChange('semesterAktif', 'Ganjil')}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            (localSettings.semesterAktif || 'Ganjil') === 'Ganjil'
+                                ? 'bg-teal-700 text-white shadow-xs'
+                                : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                        }`}
+                    >
+                        Semester Ganjil (1)
+                    </button>
+                    <button
+                        type="button"
+                        disabled={!canWrite}
+                        onClick={() => handleInputChange('semesterAktif', 'Genap')}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            localSettings.semesterAktif === 'Genap'
+                                ? 'bg-teal-700 text-white shadow-xs'
+                                : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                        }`}
+                    >
+                        Semester Genap (2)
+                    </button>
+                </div>
             </div>
 
             <div className="space-y-3 md:hidden">

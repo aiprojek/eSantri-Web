@@ -3,6 +3,7 @@ import { useAppContext } from '../../AppContext';
 import { PsbConfig, PondokSettings, PsbDesignStyle, PsbFormTemplate, PsbSubmissionMethod } from '../../types';
 import { CustomFieldEditor } from './common/CustomFieldEditor';
 import { getStandaloneDocumentStyles, getStandaloneDocumentStylesSync } from '../../utils/standaloneStyles';
+import { PSB_STANDARD_FIELD_GROUPS, PSB_DEFAULT_FIELD_HINTS } from './utils/psbUtils';
 
 interface PsbFormBuilderProps {
     config: PsbConfig;
@@ -44,110 +45,9 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         { id: 'ceria', label: 'Ceria (TPQ/TK)' }
     ];
 
-    // Default hint for each standard field
-    const DEFAULT_FIELD_HINTS: Record<string, string> = {
-        namaLengkap: 'Isi nama lengkap calon santri sesuai ijazah terakhir / akta kelahiran',
-        namaHijrah: 'Nama panggilan akrab sehari-hari di rumah / sekolah',
-        nisn: '10 digit Nomor Induk Siswa Nasional dari sekolah asal',
-        nik: '16 digit NIK santri sesuai Kartu Keluarga (KK)',
-        jenisKelamin: 'Pilih jenis kelamin calon santri',
-        tempatLahir: 'Kota/Kabupaten tempat lahir sesuai akta kelahiran',
-        tanggalLahir: 'Tanggal, bulan, dan tahun lahir calon santri',
-        kewarganegaraan: 'WNI (Warga Negara Indonesia) atau WNA',
-        statusKeluarga: 'Contoh: Anak Kandung / Anak Angkat / Yatim / Piatu',
-        anakKe: 'Urutan kelahiran anak dalam keluarga (angka)',
-        jumlahSaudara: 'Total jumlah saudara kandung / tiri (angka)',
-        alamat: 'Nama jalan, gang, nomor rumah, RT/RW atau dusun',
-        desaKelurahan: 'Nama kelurahan atau desa domisili saat ini',
-        kecamatan: 'Kecamatan tempat tinggal saat ini',
-        kabupatenKota: 'Kabupaten atau Kota domisili saat ini',
-        provinsi: 'Provinsi tempat tinggal',
-        kodePos: '5 digit kode pos domisili',
-        namaAyah: 'Nama lengkap ayah kandung (tanpa gelar disarankan)',
-        nikAyah: '16 digit NIK ayah kandung sesuai Kartu Keluarga',
-        statusAyah: 'Masih Hidup atau Meninggal Dunia',
-        pekerjaanAyah: 'Contoh: PNS, Wiraswasta, Petani, Guru, Karyawan',
-        pendidikanAyah: 'Pendidikan terakhir: SD / SMP / SMA / S1 / S2 / S3',
-        penghasilanAyah: 'Rata-rata per bulan (Contoh: Rp 3.000.000 - Rp 5.000.000)',
-        teleponAyah: 'Nomor WhatsApp aktif ayah untuk konfirmasi seleksi',
-        namaIbu: 'Nama lengkap ibu kandung sesuai KTP / KK',
-        nikIbu: '16 digit NIK ibu kandung sesuai Kartu Keluarga',
-        statusIbu: 'Masih Hidup atau Meninggal Dunia',
-        pekerjaanIbu: 'Pekerjaan ibu (atau Ibu Rumah Tangga / IRT)',
-        pendidikanIbu: 'Pendidikan terakhir: SD / SMP / SMA / S1 / S2 / S3',
-        penghasilanIbu: 'Rata-rata per bulan (atau Rp 0 jika IRT)',
-        teleponIbu: 'Nomor WhatsApp aktif ibu untuk koordinasi panitia',
-        namaWali: 'Nama lengkap wali jika tinggal bersama wali',
-        nomorHpWali: 'Nomor WhatsApp aktif wali murid',
-        hubunganWali: 'Contoh: Paman, Kakek, Kakak Kandung',
-        asalSekolah: 'Nama sekolah / madrasah sebelumnya (misal: SD Negeri 1 / MI Al-Hikmah)',
-        alamatSekolahAsal: 'Alamat atau kota sekolah asal calon santri'
-    };
-    
-    // Field Groups 
-    const fieldGroups = [
-        {
-            title: 'Identitas',
-            fields: [
-                { key: 'namaLengkap', label: 'Nama Lengkap (Sesuai Ijazah)' },
-                { key: 'namaHijrah', label: 'Nama Panggilan' },
-                { key: 'nisn', label: 'NISN' },
-                { key: 'nik', label: 'NIK' },
-                { key: 'jenisKelamin', label: 'Jenis Kelamin' },
-                { key: 'tempatLahir', label: 'Tempat Lahir' },
-                { key: 'tanggalLahir', label: 'Tanggal Lahir' },
-                { key: 'kewarganegaraan', label: 'Kewarganegaraan' },
-                { key: 'statusKeluarga', label: 'Status dalam Keluarga' },
-                { key: 'anakKe', label: 'Anak Ke' },
-                { key: 'jumlahSaudara', label: 'Jumlah Saudara' },
-            ]
-        },
-        {
-            title: 'Alamat & Kontak',
-            fields: [
-                { key: 'alamat', label: 'Jalan / Detail' },
-                { key: 'desaKelurahan', label: 'Desa / Kelurahan' },
-                { key: 'kecamatan', label: 'Kecamatan' },
-                { key: 'kabupatenKota', label: 'Kabupaten / Kota' },
-                { key: 'provinsi', label: 'Provinsi' },
-                { key: 'kodePos', label: 'Kode Pos' },
-            ]
-        },
-        {
-            title: 'Data Ayah',
-            fields: [
-                { key: 'namaAyah', label: 'Nama Ayah' },
-                { key: 'nikAyah', label: 'NIK Ayah' },
-                { key: 'statusAyah', label: 'Status Ayah (Hidup/Meninggal)' },
-                { key: 'pekerjaanAyah', label: 'Pekerjaan Ayah' },
-                { key: 'pendidikanAyah', label: 'Pendidikan Ayah' },
-                { key: 'penghasilanAyah', label: 'Penghasilan Ayah' },
-                { key: 'teleponAyah', label: 'No. HP Ayah' },
-            ]
-        },
-        {
-            title: 'Data Ibu',
-            fields: [
-                { key: 'namaIbu', label: 'Nama Ibu' },
-                { key: 'nikIbu', label: 'NIK Ibu' },
-                { key: 'statusIbu', label: 'Status Ibu (Hidup/Meninggal)' },
-                { key: 'pekerjaanIbu', label: 'Pekerjaan Ibu' },
-                { key: 'pendidikanIbu', label: 'Pendidikan Ibu' },
-                { key: 'penghasilanIbu', label: 'Penghasilan Ibu' },
-                { key: 'teleponIbu', label: 'No. HP Ibu' },
-            ]
-        },
-        {
-            title: 'Data Wali & Sekolah',
-            fields: [
-                { key: 'namaWali', label: 'Nama Wali' },
-                { key: 'nomorHpWali', label: 'No. HP / WhatsApp (Wali)' },
-                { key: 'hubunganWali', label: 'Hubungan Wali' },
-                { key: 'asalSekolah', label: 'Asal Sekolah' },
-                { key: 'alamatSekolahAsal', label: 'Alamat Sekolah Asal' },
-            ]
-        },
-    ];
+    // Shared standard field definitions and hints
+    const DEFAULT_FIELD_HINTS = PSB_DEFAULT_FIELD_HINTS;
+    const fieldGroups = PSB_STANDARD_FIELD_GROUPS;
 
     const toggleField = (key: string) => {
         const currentActive = localConfig.activeFields;
@@ -537,7 +437,51 @@ function doPost(e) {
                         </div>
                      </div>`;
                 }
-                return renderInput(f.label, f.key, f.key.toLowerCase().includes('tanggal') ? 'date' : 'text', '', isRequired, hint);
+
+                if (f.type === 'select' || (f.options && f.options.length > 0)) {
+                    const opts = f.options || [];
+                    const optionsHtml = opts.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+                    return `
+                    <div class="mb-4 break-inside-avoid">
+                        <label class="block text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${f.label} ${isRequired ? '<span class="text-red-500">*</span>' : ''}</label>
+                        ${hintHtml}
+                        <select name="${f.key}" ${isRequired ? 'required' : ''} class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 outline-none print:bg-transparent print:border-black ${style === 'classic' ? 'bg-transparent border-b-2 rounded-none border-gray-300 focus:border-[#1B4D3E] font-serif' : ''}">
+                            <option value="">-- Pilih ${f.label} --</option>
+                            ${optionsHtml}
+                        </select>
+                    </div>`;
+                }
+
+                if (f.type === 'markdown' || f.key === 'catatan') {
+                    return `
+                    <div class="mb-4 break-inside-avoid md:col-span-2">
+                        <div class="flex items-center justify-between mb-0.5">
+                            <label class="block text-sm font-bold print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${f.label} ${isRequired ? '<span class="text-red-500">*</span>' : ''}</label>
+                            <span class="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-mono border border-teal-200 print:hidden"><i class="bi bi-markdown mr-1"></i>Markdown</span>
+                        </div>
+                        ${hintHtml}
+                        <div class="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                            <div class="flex items-center gap-1.5 p-1.5 bg-gray-100 border-b border-gray-200 text-xs no-print">
+                                <button type="button" onclick="insertMd('field_${f.key}', '**', '**')" class="px-2 py-0.5 font-bold bg-white border rounded hover:bg-gray-50" title="Tebal">B</button>
+                                <button type="button" onclick="insertMd('field_${f.key}', '*', '*')" class="px-2 py-0.5 italic bg-white border rounded hover:bg-gray-50" title="Miring">I</button>
+                                <button type="button" onclick="insertMd('field_${f.key}', '### ')" class="px-2 py-0.5 font-semibold bg-white border rounded hover:bg-gray-50" title="Judul">H3</button>
+                                <button type="button" onclick="insertMd('field_${f.key}', '- ')" class="px-2 py-0.5 bg-white border rounded hover:bg-gray-50" title="Poin Bullets">• Poin</button>
+                                <button type="button" onclick="insertMd('field_${f.key}', '1. ')" class="px-2 py-0.5 bg-white border rounded hover:bg-gray-50" title="Daftar Angka">1. Angka</button>
+                                <button type="button" onclick="insertMd('field_${f.key}', '- [ ] ')" class="px-2 py-0.5 bg-white border rounded hover:bg-gray-50" title="Checklist">☑ Checklist</button>
+                                <button type="button" onclick="insertMd('field_${f.key}', '> ')" class="px-2 py-0.5 bg-white border rounded hover:bg-gray-50" title="Kutipan">&quot; Kutipan</button>
+                            </div>
+                            <textarea id="field_${f.key}" name="${f.key}" rows="3" ${isRequired ? 'required' : ''} class="w-full p-2.5 text-sm outline-none resize-y" placeholder="Catatan santri atau harapan wali murid... (Mendukung format markdown)"></textarea>
+                        </div>
+                    </div>`;
+                }
+
+                const inputType = f.type === 'date' || f.key.toLowerCase().includes('tanggal') 
+                    ? 'date' 
+                    : f.type === 'number' || ['anakKe', 'jumlahSaudara', 'tinggiBadan', 'beratBadan', 'tahunLulusSebelumnya', 'targetJuz'].includes(f.key)
+                    ? 'number'
+                    : 'text';
+
+                return renderInput(f.label, f.key, inputType, '', isRequired, hint);
             }).join('');
 
             return [`<section class="mb-8 break-inside-avoid">${header}<div class="grid grid-cols-1 md:grid-cols-2 gap-6 px-2">${fieldsHtml}</div></section>`];
@@ -550,6 +494,46 @@ function doPost(e) {
             if (field.type === 'statement') return `<div class="mb-4 text-sm text-justify leading-relaxed print:text-black ${style === 'classic' ? 'font-serif' : ''}">${field.label}</div>`;
             if (field.type === 'text') return renderInput(field.label, `custom_${field.id}`, 'text', '', field.required, hint);
             if (field.type === 'file') return renderInput(field.label, `custom_${field.id}`, 'file', '', field.required, hint);
+            if (field.type === 'date') return renderInput(field.label, `custom_${field.id}`, 'date', '', field.required, hint);
+            if (field.type === 'number') return renderInput(field.label, `custom_${field.id}`, 'number', '', field.required, hint);
+            
+            if (field.type === 'select') {
+                const opts = field.options?.filter(o => o.trim() !== '') || [];
+                const optionsHtml = opts.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+                return `
+                <div class="mb-4 break-inside-avoid">
+                    <label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label>
+                    ${hintHtml}
+                    <select name="custom_${field.id}" ${field.required ? 'required' : ''} class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 outline-none print:border-black ${style === 'classic' ? 'bg-transparent border-b-2 rounded-none border-gray-300 focus:border-[#1B4D3E] font-serif' : ''}">
+                        <option value="">-- Pilih ${field.label} --</option>
+                        ${optionsHtml}
+                    </select>
+                </div>`;
+            }
+
+            if (field.type === 'markdown') {
+                return `
+                <div class="mb-4 break-inside-avoid">
+                    <div class="flex items-center justify-between mb-0.5">
+                        <label class="block text-gray-600 text-sm font-bold print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label>
+                        <span class="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-mono border border-teal-200 print:hidden"><i class="bi bi-markdown mr-1"></i>Markdown</span>
+                    </div>
+                    ${hintHtml}
+                    <div class="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                        <div class="flex items-center gap-1.5 p-1.5 bg-gray-100 border-b border-gray-200 text-xs no-print">
+                            <button type="button" onclick="insertMd('custom_${field.id}', '**', '**')" class="px-2 py-0.5 font-bold bg-white border rounded hover:bg-gray-50" title="Tebal">B</button>
+                            <button type="button" onclick="insertMd('custom_${field.id}', '*', '*')" class="px-2 py-0.5 italic bg-white border rounded hover:bg-gray-50" title="Miring">I</button>
+                            <button type="button" onclick="insertMd('custom_${field.id}', '### ')" class="px-2 py-0.5 font-semibold bg-white border rounded hover:bg-gray-50" title="Judul">H3</button>
+                            <button type="button" onclick="insertMd('custom_${field.id}', '- ')" class="px-2 py-0.5 bg-white border rounded hover:bg-gray-50" title="Poin Bullets">• Poin</button>
+                            <button type="button" onclick="insertMd('custom_${field.id}', '1. ')" class="px-2 py-0.5 bg-white border rounded hover:bg-gray-50" title="Daftar Angka">1. Angka</button>
+                            <button type="button" onclick="insertMd('custom_${field.id}', '- [ ] ')" class="px-2 py-0.5 bg-white border rounded hover:bg-gray-50" title="Checklist">☑ Checklist</button>
+                            <button type="button" onclick="insertMd('custom_${field.id}', '> ')" class="px-2 py-0.5 bg-white border rounded hover:bg-gray-50" title="Kutipan">&quot; Kutipan</button>
+                        </div>
+                        <textarea id="custom_${field.id}" name="custom_${field.id}" rows="3" ${field.required ? 'required' : ''} class="w-full p-2.5 text-sm outline-none resize-y" placeholder="Catatan terformat markdown..."></textarea>
+                    </div>
+                </div>`;
+            }
+
             if (field.type === 'paragraph') return `<div class="mb-4 break-inside-avoid"><label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${field.label} ${field.required ? '<span class="text-red-500">*</span>' : ''}</label>${hintHtml}<textarea name="custom_${field.id}" rows="3" ${field.required ? 'required' : ''} class="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 outline-none print:bg-white print:border-black ${style === 'classic' ? 'bg-transparent border-b-2 rounded-none border-gray-300 focus:border-[#1B4D3E] font-serif' : ''}"></textarea></div>`;
             if (field.type === 'radio' || field.type === 'checkbox') {
                 const opts = field.options?.filter(o => o.trim() !== '') || [];
@@ -1111,7 +1095,22 @@ function finishHybridSubmit(){
     </style>
 </head>
 <body class="${bodyClass}">
-<div class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t text-center text-xs text-gray-500"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div>${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
+<div class="${wrapperClass}">${headerHtml}<form id="psbForm" onsubmit="event.preventDefault();"><div class="mb-6 break-inside-avoid"><label class="block font-bold mb-1 text-gray-700 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Jenjang Pendidikan</label><div class="font-bold text-lg p-2 bg-gray-50 border-b border-gray-300 print:border-none print:bg-transparent print:p-0 print:text-black ${style === 'classic' ? 'bg-transparent border-b-2 border-gray-300' : ''}">${jenjangName}</div><input type="hidden" name="jenjangId" value="${localConfig.targetJenjangId||''}" /></div>${activeFieldsHtml}${localConfig.requiredDocuments.length>0?`<div class="mt-8 mb-6 p-4 border rounded-lg break-inside-avoid ${style === 'classic' ? 'border-[#1B4D3E]/30 bg-[#f0fdf4]/30' : ''}"><h4 class="font-bold mb-3 ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">Checklist Persyaratan Berkas (Bawa Fisik)</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">${docsHtml}</div></div>`:''}${customFieldsHtml}<div class="mt-8 no-print space-y-3"><button type="button" id="submit-btn" onclick="submitForm()" class="w-full flex justify-center items-center gap-2 ${buttonColor} text-white font-bold py-3 rounded-lg transition shadow-md"><i class="${buttonIcon} text-xl"></i> ${buttonText}</button><p class="text-xs text-center text-gray-500 mt-2">${buttonSubtext}</p></div><div class="mt-8 pt-4 border-t text-center text-xs text-gray-500"><div>Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</div><div class="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div></div></form>${closeDiv}</div><script>
+function insertMd(elemId, before, after) {
+    after = after || '';
+    var el = document.getElementById(elemId);
+    if (!el) return;
+    var start = el.selectionStart || 0;
+    var end = el.selectionEnd || 0;
+    var current = el.value || '';
+    var sel = current.substring(start, end) || 'teks';
+    var rep = before + sel + after;
+    el.value = current.substring(0, start) + rep + current.substring(end);
+    el.focus();
+    el.setSelectionRange(start + before.length, start + before.length + sel.length);
+}
+</script>
+${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
     };
 
     const handleDownloadPdf = () => {

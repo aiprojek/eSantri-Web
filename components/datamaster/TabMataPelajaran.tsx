@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { PondokSettings, MataPelajaran, RumpunMapel, TenagaPengajar } from '../../types';
 import { useAppContext } from '../../AppContext';
 import { MapelModal } from '../settings/modals/MapelModal';
@@ -6,6 +6,7 @@ import { BulkMasterEditor } from './modals/BulkMasterEditor';
 import { AssignPengampuModal } from '../akademik/modals/AssignPengampuModal';
 import { TeacherAvailabilityModal } from '../akademik/modals/TeacherAvailabilityModal';
 import { cloneSingleMapelToJenjang } from '../../utils/mapelAuditUtils';
+import { loadXLSX } from '../../utils/lazyClientLibs';
 
 interface TabMataPelajaranProps {
     localSettings: PondokSettings;
@@ -50,6 +51,20 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [filterRumpun, setFilterRumpun] = useState<string>('ALL');
+    const [filterPengampu, setFilterPengampu] = useState<'ALL' | 'WITH_TEACHER' | 'NO_TEACHER'>('ALL');
+    const [isExporting, setIsExporting] = useState(false);
+    const [isActionOpen, setIsActionOpen] = useState(false);
+    const actionRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (actionRef.current && !actionRef.current.contains(e.target as Node)) {
+                setIsActionOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Jenjang Map
     const jenjangMap = useMemo(
@@ -70,6 +85,37 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({
         });
         return map;
     }, [localSettings.mataPelajaran, localSettings.tenagaPengajar]);
+
+    const handleExportExcel = async () => {
+        setIsExporting(true);
+        try {
+            const XLSX = await loadXLSX();
+            const exportData = localSettings.mataPelajaran.map((m, idx) => {
+                const jName = jenjangMap.get(m.jenjangId) || '-';
+                const pengampu = teachersMap.get(m.id)?.join(', ') || 'Belum Ada Pengampu';
+                return {
+                    'No': idx + 1,
+                    'Jenjang': jName,
+                    'Kode Mapel': m.kodeMapel || '-',
+                    'Nama Mata Pelajaran': m.nama,
+                    'Rumpun': m.rumpun,
+                    'KKM': m.kkm || 75,
+                    'Guru Pengampu': pengampu
+                };
+            });
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            XLSX.utils.book_append_sheet(wb, ws, "Mata Pelajaran");
+            XLSX.writeFile(wb, `Data_Mata_Pelajaran_${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast('Daftar mata pelajaran berhasil diekspor ke Excel!', 'success');
+        } catch (e) {
+            console.error('Export error:', e);
+            showToast('Gagal mengekspor mata pelajaran.', 'error');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     // Cross-jenjang detection set (names present across >1 jenjang)
     const crossJenjangNameSet = useMemo(() => {
@@ -284,20 +330,79 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({
                     )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                    {canWrite && (
-                        <button
-                            onClick={() => { setBulkInitialData(undefined); setIsBulkOpen(true); }}
-                            className="text-xs bg-teal-600 text-white hover:bg-teal-700 px-3 py-2 rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
-                        >
-                            <i className="bi bi-table"></i>
-                            <span>Tambah Massal</span>
-                        </button>
+                <div className="relative" ref={actionRef}>
+                    <button
+                        type="button"
+                        onClick={() => setIsActionOpen(!isActionOpen)}
+                        className="text-xs bg-teal-700 hover:bg-teal-800 text-white font-semibold px-3.5 py-2 rounded-lg shadow-xs flex items-center gap-2 transition"
+                    >
+                        <i className="bi bi-grid-fill"></i>
+                        <span>Menu Aksi</span>
+                        <i className={`bi bi-chevron-${isActionOpen ? 'up' : 'down'} text-[10px]`}></i>
+                    </button>
+
+                    {isActionOpen && (
+                        <div className="absolute right-0 mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-30 animate-fade-in text-xs divide-y divide-gray-100">
+                            {canWrite && (
+                                <div className="py-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsActionOpen(false);
+                                            if (localSettings.jenjang.length === 0) {
+                                                showToast('Silakan tambahkan jenjang pendidikan terlebih dahulu di tab Struktur.', 'info');
+                                                return;
+                                            }
+                                            setMapelModalData({ mode: 'add', jenjangId: localSettings.jenjang[0].id });
+                                        }}
+                                        className="w-full text-left px-3.5 py-2 hover:bg-teal-50 flex items-center gap-2.5 text-gray-700 transition"
+                                    >
+                                        <i className="bi bi-plus-circle-fill text-teal-600 text-sm"></i>
+                                        <div>
+                                            <span className="font-semibold block text-gray-800">Tambah Manual</span>
+                                            <span className="text-[10px] text-gray-400">Input formulir mapel baru</span>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsActionOpen(false);
+                                            setBulkInitialData(undefined);
+                                            setIsBulkOpen(true);
+                                        }}
+                                        className="w-full text-left px-3.5 py-2 hover:bg-teal-50 flex items-center gap-2.5 text-gray-700 transition"
+                                    >
+                                        <i className="bi bi-table text-indigo-600 text-sm"></i>
+                                        <div>
+                                            <span className="font-semibold block text-gray-800">Tambah Massal</span>
+                                            <span className="text-[10px] text-gray-400">Editor tabel kurikulum</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            )}
+                            <div className="py-1">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsActionOpen(false);
+                                        handleExportExcel();
+                                    }}
+                                    disabled={isExporting || localSettings.mataPelajaran.length === 0}
+                                    className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 flex items-center gap-2.5 text-gray-700 transition disabled:opacity-50"
+                                >
+                                    <i className="bi bi-file-earmark-excel-fill text-emerald-600 text-sm"></i>
+                                    <div>
+                                        <span className="font-semibold block text-emerald-800">Ekspor Excel</span>
+                                        <span className="text-[10px] text-gray-400">Unduh data mapel (.xlsx)</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>
 
-            {/* SEARCH & RUMPUN FILTER BAR */}
+            {/* SEARCH & RUMPUN & PENGAMPU FILTER BAR */}
             <div className="flex flex-col sm:flex-row items-center gap-2 mb-4 bg-gray-50 p-2.5 rounded-lg border border-gray-200">
                 <div className="relative flex-1 w-full">
                     <i className="bi bi-search absolute left-3 top-2.5 text-gray-400 text-xs"></i>
@@ -319,20 +424,35 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({
                     )}
                 </div>
 
-                <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
-                    <span className="text-[11px] font-bold text-gray-600 whitespace-nowrap">Rumpun:</span>
-                    <select
-                        value={filterRumpun}
-                        onChange={e => setFilterRumpun(e.target.value)}
-                        className="text-xs bg-white border border-gray-300 rounded-lg py-1.5 px-2 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    >
-                        <option value="ALL">Semua Rumpun</option>
-                        <option value="Diniyah">Diniyah / Kitab</option>
-                        <option value="Tahfizh">Tahfizh</option>
-                        <option value="Bahasa">Bahasa</option>
-                        <option value="Umum">Umum / Nasional</option>
-                        <option value="Muatan Lokal">Muatan Lokal</option>
-                    </select>
+                <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0 flex-wrap">
+                    <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-gray-600 whitespace-nowrap">Rumpun:</span>
+                        <select
+                            value={filterRumpun}
+                            onChange={e => setFilterRumpun(e.target.value)}
+                            className="text-xs bg-white border border-gray-300 rounded-lg py-1.5 px-2 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        >
+                            <option value="ALL">Semua Rumpun</option>
+                            <option value="Diniyah">Diniyah / Kitab</option>
+                            <option value="Tahfizh">Tahfizh</option>
+                            <option value="Bahasa">Bahasa</option>
+                            <option value="Umum">Umum / Nasional</option>
+                            <option value="Muatan Lokal">Muatan Lokal</option>
+                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-gray-600 whitespace-nowrap">Pengampu:</span>
+                        <select
+                            value={filterPengampu}
+                            onChange={e => setFilterPengampu(e.target.value as any)}
+                            className="text-xs bg-white border border-gray-300 rounded-lg py-1.5 px-2 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        >
+                            <option value="ALL">Semua</option>
+                            <option value="WITH_TEACHER">Sudah Ada Pengampu</option>
+                            <option value="NO_TEACHER">Belum Ada Pengampu</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -350,6 +470,11 @@ export const TabMataPelajaran: React.FC<TabMataPelajaranProps> = ({
                     }
                     if (filterRumpun !== 'ALL') {
                         mapelList = mapelList.filter(m => m.rumpun === filterRumpun);
+                    }
+                    if (filterPengampu === 'WITH_TEACHER') {
+                        mapelList = mapelList.filter(m => (teachersMap.get(m.id) || []).length > 0);
+                    } else if (filterPengampu === 'NO_TEACHER') {
+                        mapelList = mapelList.filter(m => (teachersMap.get(m.id) || []).length === 0);
                     }
 
                     const mapelIds = mapelList.map(m => m.id);

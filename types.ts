@@ -179,6 +179,7 @@ export interface Santri {
     berkebutuhanKhusus?: string;
     riwayatPenyakit?: string;
     hobi?: string[];
+    citaCita?: string;
     tinggiBadan?: number;
     beratBadan?: number;
     jarakKePondok?: string;
@@ -210,6 +211,9 @@ export interface Santri {
     kabupatenKota?: string;
     kodePos?: string;
 
+    catatan?: string; // Catatan khusus santri (format Markdown / teks terformat)
+    customData?: string; // Data kustom JSON dari formulir pendaftaran PSB
+
     riwayatStatus?: RiwayatStatus[];
     prestasi?: Prestasi[];
     pelanggaran?: Pelanggaran[];
@@ -238,6 +242,7 @@ export interface Rombel {
     kelasId: number;
     waliKelasId?: number; // TenagaPengajar ID
     waliKelasUserId?: number; // User ID for login access
+    kapasitas?: number;
 }
 
 export interface ConfigGaji {
@@ -412,6 +417,7 @@ export type SyncProvider = 'none' | 'dropbox' | 'webdav' | 'firebase';
 
 export interface CloudSyncConfig {
     provider: SyncProvider;
+    role?: 'hub' | 'spoke';
     dropboxAppKey?: string;
     dropboxAppSecret?: string; // New field for Secret
     dropboxRefreshToken?: string;
@@ -475,7 +481,7 @@ export interface JamPelajaran {
 
 // PSB Types
 export type PsbDesignStyle = 'classic' | 'modern' | 'bold' | 'dark' | 'ceria';
-export type PsbFieldType = 'text' | 'paragraph' | 'radio' | 'checkbox' | 'file' | 'section' | 'statement';
+export type PsbFieldType = 'text' | 'paragraph' | 'markdown' | 'date' | 'number' | 'radio' | 'checkbox' | 'select' | 'file' | 'section' | 'statement';
 export type PsbSubmissionMethod = 'whatsapp' | 'google_sheet' | 'hybrid' | 'portal';
 
 export interface PsbCustomField {
@@ -483,8 +489,10 @@ export interface PsbCustomField {
     type: PsbFieldType;
     label: string;
     required: boolean;
-    options?: string[]; // for radio/checkbox
+    options?: string[]; // for radio/checkbox/select
     hint?: string; // Petunjuk / format pengisian di bawah pertanyaan
+    defaultValue?: string;
+    placeholder?: string;
 }
 
 export interface PsbFormTemplate {
@@ -552,6 +560,8 @@ export interface AcademicYearConfig {
     hijriEndMonth?: number;
     hijriEndYear?: number;
     isActive: boolean;
+    semesterAktif?: 'Ganjil' | 'Genap';
+    status?: 'Aktif' | 'Mendatang' | 'Arsip';
 }
 
 export interface RaporSheet {
@@ -682,6 +692,7 @@ export interface PondokSettings {
     namaBendahara?: string;
     kabupatenKota?: string;
     tahunAjaranAktif?: string;
+    semesterAktif?: 'Ganjil' | 'Genap';
     
     jenjang: Jenjang[];
     kelas: Kelas[];
@@ -728,7 +739,16 @@ export interface PondokSettings {
     formatTanggalSyahadahDefault?: 'masehi' | 'hijriah_masehi' | 'hijriah';
     manualHijriSyahadahDefault?: string;
 
+    perpusConfig?: PerpusConfig;
+
     lastModified?: number;
+}
+
+export interface PerpusConfig {
+    dendaPerHari: number;
+    durasiPinjamDefault: number;
+    maksPinjamBuku?: number;
+    kategoriKoleksi?: string[];
 }
 
 export interface Tagihan {
@@ -1332,6 +1352,18 @@ export interface PiketSchedule {
     muadzinSantriId?: number;
     imamSantriId?: number;
     lastModified?: number;
+}
+
+export interface PiketPrintConfig {
+    tempat?: string;
+    leftTitle?: string;
+    leftName?: string;
+    rightTitle?: string;
+    rightName?: string;
+    judulKetentuan?: string;
+    ketentuanList?: string[];
+    showKetentuan?: boolean;
+    showTandaTangan?: boolean;
 }
 
 // KOPERASI TYPES

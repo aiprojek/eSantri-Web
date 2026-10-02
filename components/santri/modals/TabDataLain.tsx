@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { Santri, Prestasi, Pelanggaran } from '../../../types';
 import { FormSection } from '../santriModal/FormSection';
+import { MarkdownEditor } from '../../common/MarkdownEditor';
+import { MarkdownViewer } from '../../common/MarkdownViewer';
 
 interface TabDataLainProps {
   formMethods: UseFormReturn<Santri>;
@@ -17,6 +19,17 @@ export const TabDataLain: React.FC<TabDataLainProps> = ({ formMethods, openPrest
     const watchHobi = watch('hobi');
     const watchPrestasi = watch('prestasi');
     const watchPelanggaran = watch('pelanggaran');
+    const watchCatatan = watch('catatan') || '';
+    const watchCustomData = watch('customData') || '';
+
+    let parsedCustomData: Record<string, any> = {};
+    if (watchCustomData) {
+        try {
+            parsedCustomData = typeof watchCustomData === 'string' ? JSON.parse(watchCustomData) : watchCustomData;
+        } catch {
+            parsedCustomData = { 'Raw Data': watchCustomData };
+        }
+    }
 
     const handleDeletePrestasi = (id: number) => {
         const updatedPrestasi = (getValues('prestasi') || []).filter(p => p.id !== id);
@@ -42,7 +55,7 @@ export const TabDataLain: React.FC<TabDataLainProps> = ({ formMethods, openPrest
     }
   
     return (
-      <div>
+      <div className="space-y-6">
         <FormSection title="Data Periodik Santri">
             <div className="lg:col-span-1"><label className="block mb-1 text-sm font-medium text-gray-700">Tinggi Badan (cm)</label><input type="number" {...register('tinggiBadan', { valueAsNumber: true })} className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5" /></div>
             <div className="lg:col-span-1"><label className="block mb-1 text-sm font-medium text-gray-700">Berat Badan (kg)</label><input type="number" {...register('beratBadan', { valueAsNumber: true })} className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5" /></div>
@@ -51,7 +64,60 @@ export const TabDataLain: React.FC<TabDataLainProps> = ({ formMethods, openPrest
             <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Berkebutuhan Khusus</label><input type="text" {...register('berkebutuhanKhusus')} className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5" /></div>
             <div className="lg:col-span-4"><label className="block mb-1 text-sm font-medium text-gray-700">Riwayat Penyakit</label><textarea {...register('riwayatPenyakit')} rows={2} className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full p-2.5" /></div>
         </FormSection>
-          <div className="pt-6">
+
+        {/* Catatan Khusus Santri (Markdown Editor) */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-3">
+            <div className="flex items-center justify-between border-b pb-2">
+                <div>
+                    <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                        <i className="bi bi-journal-text text-teal-600"></i>
+                        Catatan Khusus Santri (Markdown)
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Catatan kepribadian, riwayat bimbingan, konseling, atau pesan orang tua saat pendaftaran PSB.</p>
+                </div>
+            </div>
+            <MarkdownEditor
+                value={watchCatatan}
+                onChange={(val) => setValue('catatan', val, { shouldDirty: true })}
+                placeholder="Tulis catatan khusus santri di sini... (Mendukung formatting Markdown seperti tebal, miring, poin, dan checklist)"
+                rows={4}
+            />
+        </div>
+
+        {/* Data Tambahan Kustom dari Pendaftaran PSB (Jika Ada) */}
+        {Object.keys(parsedCustomData).length > 0 && (
+            <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-200/70 space-y-3">
+                <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                    <h3 className="text-sm font-bold text-amber-950 flex items-center gap-2">
+                        <i className="bi bi-input-cursor-text text-amber-700"></i>
+                        Data Tambahan dari Formulir PSB (Kustom)
+                    </h3>
+                    <span className="text-[11px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">
+                        Hasil Migrasi Pendaftar
+                    </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {Object.entries(parsedCustomData).map(([key, val]) => {
+                        const strVal = typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val ?? '-');
+                        const isLong = strVal.length > 60 || strVal.includes('\n');
+                        return (
+                            <div key={key} className={`bg-white p-3 rounded-lg border border-amber-100 shadow-2xs ${isLong ? 'md:col-span-2' : ''}`}>
+                                <span className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                    {key.replace(/_/g, ' ')}
+                                </span>
+                                {isLong ? (
+                                    <MarkdownViewer content={strVal} className="text-sm text-gray-800" />
+                                ) : (
+                                    <span className="text-sm font-medium text-gray-800 break-words">{strVal}</span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+
+        <div className="pt-2">
             <h3 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4">Hobi</h3>
             <div className="flex items-center gap-2 mb-2">
                 <input type="text" value={newHobby} onChange={e => setNewHobby(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddHobby()} placeholder="Ketik hobi lalu Enter" className="bg-gray-50 border border-gray-300 text-sm rounded-lg w-full md:w-1/3 p-2.5" />
@@ -66,7 +132,7 @@ export const TabDataLain: React.FC<TabDataLainProps> = ({ formMethods, openPrest
                 ))}
             </div>
         </div>
-        <div className="pt-6">
+        <div className="pt-4">
             <h3 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4">Prestasi</h3>
             <div className="border rounded-lg max-h-60 overflow-y-auto">
                 {(watchPrestasi || []).length > 0 ? (
@@ -88,7 +154,7 @@ export const TabDataLain: React.FC<TabDataLainProps> = ({ formMethods, openPrest
             </div>
             <button onClick={() => openPrestasiModal(null)} type="button" className="mt-2 text-sm text-teal-600 hover:text-teal-800 font-medium">+ Tambah Prestasi</button>
         </div>
-        <div className="pt-6">
+        <div className="pt-4">
             <h3 className="text-base font-semibold text-gray-800 border-b pb-2 mb-4">Catatan Pelanggaran</h3>
             <div className="border rounded-lg max-h-60 overflow-y-auto">
                 {(watchPelanggaran || []).length > 0 ? (

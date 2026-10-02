@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { CalendarEvent, PondokSettings } from '../../types';
-import { formatDate, getHijriDate } from '../../utils/formatters';
+import { formatDate, getHijriDate, toArabicNumerals, formatLocalDate, resolveTempatPesantren } from '../../utils/formatters';
 
 interface CalendarPrintTemplateProps {
     year: number;
@@ -22,6 +22,8 @@ interface CalendarPrintTemplateProps {
     useAcademicPeriodLabel?: boolean;
     academicHijriStartMonthIndex?: number;
     academicHijriStartYear?: number;
+    showAgendaAppendix?: boolean;
+    customTempat?: string;
 }
 
 interface MonthData {
@@ -44,7 +46,9 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
     periodLabelHijriah,
     useAcademicPeriodLabel = false,
     academicHijriStartMonthIndex,
-    academicHijriStartYear
+    academicHijriStartYear,
+    showAgendaAppendix = true,
+    customTempat
 }) => {
     const dayNames = ["Ah", "Sn", "Sl", "Rb", "Km", "Jm", "Sb"];
     const hijriAdjustment = settings.hijriAdjustment || 0;
@@ -406,7 +410,7 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
     }, [monthsData, layout]);
 
     const getGridClass = () => {
-        if (layout === '1_sheet') return "grid grid-cols-3 gap-1.5 text-[6px]"; // Compact, fit A4 1 page
+        if (layout === '1_sheet') return "grid grid-cols-3 gap-1 text-[6px]"; // Compact, fit A4 1 page
         if (layout === '3_sheets') return "grid grid-cols-2 gap-5 text-[10px] content-start auto-rows-max"; // Balanced
         return "grid grid-cols-1 gap-5 text-[11px] content-start auto-rows-max"; // Detail
     };
@@ -433,16 +437,41 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
 
     return (
         <>
+            <style>{`
+                @page {
+                    size: A4 portrait;
+                    margin: 0;
+                }
+                @media print {
+                    .calendar-sheet {
+                        width: 210mm !important;
+                        height: 297mm !important;
+                        min-height: 297mm !important;
+                        max-height: 297mm !important;
+                        page-break-after: always !important;
+                        break-after: page !important;
+                        page-break-inside: avoid !important;
+                        break-inside: avoid-page !important;
+                        box-sizing: border-box !important;
+                    }
+                    .calendar-sheet:last-child {
+                        page-break-after: auto !important;
+                        break-after: auto !important;
+                    }
+                }
+            `}</style>
             {chunks.map((chunk, pageIndex) => (
                 <div
                     key={pageIndex}
-                    className={`printable-content-wrapper calendar-sheet calendar-layout-${layout} ${currentTheme.bg} ${currentTheme.text} flex flex-col relative overflow-hidden`}
+                    className={`printable-content-wrapper calendar-sheet calendar-layout-${layout} ${currentTheme.bg} ${currentTheme.text} flex flex-col justify-between relative overflow-hidden`}
                     style={{
-                        width: '21cm',
-                        minHeight: '29.7cm',
-                        padding: layout === '1_sheet' ? '8mm 8mm 7mm 8mm' : layout === '3_sheets' ? '11mm 10mm 9mm 10mm' : '13mm 12mm 10mm 12mm',
+                        width: '210mm',
+                        minHeight: '297mm',
+                        height: layout === '1_sheet' ? '297mm' : 'auto',
+                        padding: layout === '1_sheet' ? '5mm 6mm 4mm 6mm' : layout === '3_sheets' ? '10mm 10mm 8mm 10mm' : '12mm 12mm 9mm 12mm',
                         pageBreakAfter: pageIndex === chunks.length - 1 ? 'auto' : 'always',
                         breakInside: 'avoid',
+                        boxSizing: 'border-box',
                     }}
                 >
                     
@@ -464,95 +493,92 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
 
                     {/* Header */}
                     {showKop && (
-                        <div className={`calendar-sheet-header relative z-10 text-center ${layout === '1_sheet' ? 'mb-2 pb-1' : 'mb-3 pb-1.5'}`}>
-                            <h2 className={`${layout === '1_sheet' ? 'text-lg' : 'text-2xl'} font-bold uppercase ${currentTheme.header}`}>KALENDER PENDIDIKAN</h2>
-                            <h3 className={`${layout === '1_sheet' ? 'text-base' : 'text-xl'} font-bold uppercase mt-1 ${currentTheme.header}`}>{settings.namaPonpes}</h3>
-                            <p className={`${layout === '1_sheet' ? 'text-[10px]' : 'text-sm'} font-medium mt-1 tracking-wide uppercase opacity-75`}>{periodText}</p>
+                        <div className={`calendar-sheet-header relative z-10 text-center ${layout === '1_sheet' ? 'mb-1 pb-0.5' : 'mb-3 pb-1.5'}`}>
+                            <h2 className={`${layout === '1_sheet' ? 'text-base font-extrabold tracking-tight' : 'text-2xl font-bold'} uppercase ${currentTheme.header}`}>KALENDER PENDIDIKAN</h2>
+                            <h3 className={`${layout === '1_sheet' ? 'text-xs font-bold leading-tight' : 'text-xl font-bold mt-1'} uppercase ${currentTheme.header}`}>{settings.namaPonpes}</h3>
+                            <p className={`${layout === '1_sheet' ? 'text-[8.5px] mt-0.5' : 'text-sm mt-1'} font-medium tracking-wide uppercase opacity-75`}>{periodText}</p>
                         </div>
                     )}
                     {!showKop && (
-                        <div className={`calendar-sheet-header text-center relative z-10 ${layout === '1_sheet' ? 'mb-2' : 'mb-3'}`}>
-                            <h2 className={`${layout === '1_sheet' ? 'text-lg' : 'text-2xl'} font-bold uppercase ${currentTheme.header}`}>KALENDER PENDIDIKAN</h2>
-                            <p className={`${layout === '1_sheet' ? 'text-[10px]' : 'text-sm'} font-medium mt-1 tracking-wide uppercase opacity-75`}>{periodText}</p>
+                        <div className={`calendar-sheet-header text-center relative z-10 ${layout === '1_sheet' ? 'mb-1 pb-0.5' : 'mb-3'}`}>
+                            <h2 className={`${layout === '1_sheet' ? 'text-base font-extrabold' : 'text-2xl font-bold'} uppercase ${currentTheme.header}`}>KALENDER PENDIDIKAN</h2>
+                            <p className={`${layout === '1_sheet' ? 'text-[8.5px] mt-0.5' : 'text-sm mt-1'} font-medium tracking-wide uppercase opacity-75`}>{periodText}</p>
                         </div>
                     )}
 
                     {/* Content */}
                     <div className={`calendar-sheet-content ${getLayoutSpecificClass()} relative z-10`}>
                         {chunk.map(monthData => {
-                            // Filter Events for this specific grid duration
+                            // Filter Events for this specific grid duration using string comparison
+                            const mStartStr = formatLocalDate(monthData.start);
+                            const mEndStr = formatLocalDate(monthData.end);
+
                             const monthEvents = events.filter(e => {
-                                const start = new Date(e.startDate);
-                                const end = new Date(e.endDate);
-                                // Normalise
-                                start.setHours(0,0,0,0);
-                                end.setHours(0,0,0,0);
-                                // Check overlap
-                                return start <= monthData.end && end >= monthData.start;
+                                const eStart = (e.startDate || '').split('T')[0];
+                                const eEnd = (e.endDate || e.startDate || '').split('T')[0];
+                                return eStart <= mEndStr && eEnd >= mStartStr;
                             });
 
                             return (
                                 <div key={monthData.index} className={`border rounded-lg ${currentTheme.border} bg-white/80 backdrop-blur-sm flex flex-col overflow-hidden`}>
-                                    <div className={`${layout === '1_sheet' ? 'p-1.5' : 'p-2'} text-center font-bold ${currentTheme.monthTitle} flex flex-col justify-center border-b ${currentTheme.border}`}>
+                                    <div className={`${layout === '1_sheet' ? 'p-1' : 'p-2'} text-center font-bold ${currentTheme.monthTitle} flex flex-col justify-center border-b ${currentTheme.border}`}>
                                         {/* Main Title (Depending on mode) */}
-                                        <div className={`${layout === '1_sheet' ? 'text-sm' : layout === '3_sheets' ? 'text-base' : 'text-lg'} leading-tight ${primarySystem === 'Hijriah' ? currentTheme.hijriText : ''}`}>
+                                        <div className={`${layout === '1_sheet' ? 'text-xs font-bold' : layout === '3_sheets' ? 'text-base' : 'text-lg'} leading-tight ${primarySystem === 'Hijriah' ? currentTheme.hijriText : ''}`}>
                                             {monthData.titleMain}
                                         </div>
                                         {/* Sub Title */}
-                                        <div className={`${layout === '1_sheet' ? 'text-[8px]' : 'text-[9px]'} font-normal mt-0.5 ${primarySystem === 'Masehi' ? currentTheme.hijriText : 'opacity-70'}`}>
+                                        <div className={`${layout === '1_sheet' ? 'text-[7px]' : 'text-[9px]'} font-normal mt-0.5 ${primarySystem === 'Masehi' ? currentTheme.hijriText : 'opacity-70'}`}>
                                             {monthData.titleSub}
                                         </div>
                                     </div>
-                                    <div className={`grid grid-cols-7 text-center font-bold ${currentTheme.dayHeader} items-center border-b ${currentTheme.border} ${layout === '1_sheet' ? 'h-5 text-[9px]' : 'py-2'}`}>
+                                    <div className={`grid grid-cols-7 text-center font-bold ${currentTheme.dayHeader} items-center border-b ${currentTheme.border} ${layout === '1_sheet' ? 'h-4 text-[7.5px]' : 'py-2'}`}>
                                         {dayNames.map(d => <div key={d} className="flex items-center justify-center h-full leading-none">{d}</div>)}
                                     </div>
                                     <div className="grid grid-cols-7 text-center border-l border-t" style={{ borderColor: currentTheme.border.replace('border-', '#') }}>
                                         {monthData.days.map((date, idx) => {
                                             if (!date) {
-                                                return <div key={idx} className="p-1 border-r border-b bg-gray-50/30" style={{ borderColor: currentTheme.border.replace('border-', '#') }}></div>;
+                                                return <div key={idx} className="p-0.5 border-r border-b bg-gray-50/30" style={{ borderColor: currentTheme.border.replace('border-', '#') }}></div>;
                                             }
                                             const hijri = getHijriDate(date, hijriAdjustment);
+                                            const hijriDayArabic = toArabicNumerals(hijri.day);
                                             
-                                            // Determine Main vs Sub Numbers
-                                            const mainNum = primarySystem === 'Masehi' ? date.getDate() : hijri.day;
-                                            const subNum = primarySystem === 'Masehi' ? hijri.day : date.getDate();
+                                            // Determine Main vs Sub Numbers (Hijri uses Arabic numerals for distinct visual distinction)
+                                            const mainNum = primarySystem === 'Masehi' ? date.getDate() : hijriDayArabic;
+                                            const subNum = primarySystem === 'Masehi' ? hijriDayArabic : date.getDate();
                                             
-                                            // Check Events
+                                            // Check Events with timezone-proof local date string
+                                            const checkDateStr = formatLocalDate(date);
                                             const dayEvents = monthEvents.filter(e => {
-                                                const start = new Date(e.startDate);
-                                                const end = new Date(e.endDate);
-                                                start.setHours(0,0,0,0);
-                                                end.setHours(0,0,0,0);
-                                                const checkDate = new Date(date);
-                                                checkDate.setHours(0,0,0,0);
-                                                return checkDate >= start && checkDate <= end;
+                                                const eStart = (e.startDate || '').split('T')[0];
+                                                const eEnd = (e.endDate || e.startDate || '').split('T')[0];
+                                                return checkDateStr >= eStart && checkDateStr <= eEnd;
                                             });
 
                                             const isSunday = date.getDay() === 0;
                                             let textColor = isSunday ? 'text-red-600' : 'inherit';
 
-                                            const cellMinHeight = layout === '1_sheet' ? 'min-h-[15px]' : layout === '3_sheets' ? 'min-h-[34px]' : 'min-h-[38px]';
+                                            const cellMinHeight = layout === '1_sheet' ? 'min-h-[11px]' : layout === '3_sheets' ? 'min-h-[34px]' : 'min-h-[38px]';
 
                                             return (
-                                                <div key={idx} className={`p-1 border-r border-b relative h-full ${cellMinHeight} flex flex-col items-center justify-start transition-colors`} style={{ borderColor: currentTheme.border.replace('border-', '#') }}>
-                                                    <div className="flex justify-between w-full px-0.5 mb-0.5">
+                                                <div key={idx} className={`p-0.5 border-r border-b relative h-full ${cellMinHeight} flex flex-col items-center justify-start transition-colors`} style={{ borderColor: currentTheme.border.replace('border-', '#') }}>
+                                                    <div className="flex justify-between items-center w-full px-0.5 mb-0.5">
                                                         {/* Primary Number (Always Large) */}
-                                                        <span className={`z-10 relative ${textColor} ${layout === '1_sheet' ? 'text-[10px]' : 'text-xs'} font-bold leading-none`}>
+                                                        <span className={`z-10 relative ${textColor} ${layout === '1_sheet' ? 'text-[8.5px]' : 'text-xs'} font-bold leading-none ${primarySystem === 'Hijriah' ? 'font-serif' : ''}`}>
                                                             {mainNum}
                                                         </span>
                                                         
-                                                        {/* Secondary Number (Always Small) */}
-                                                        <span className={`z-10 relative ${textColor} text-[7px] font-medium opacity-70 leading-none`}>
+                                                        {/* Secondary Number (Hijri displayed in Eastern Arabic Numerals for instant clarity) */}
+                                                        <span className={`z-10 relative ${primarySystem === 'Masehi' ? 'text-teal-700 font-serif font-bold text-[7px]' : `${textColor} text-[7px] font-medium opacity-70`} leading-none`}>
                                                             {subNum}
                                                         </span>
                                                     </div>
 
                                                     {/* Event Indicators */}
-                                                    <div className="flex flex-wrap justify-center gap-0.5 mt-0.5 w-full">
+                                                    <div className="flex flex-wrap justify-center gap-0.5 mt-0.2 w-full">
                                                         {dayEvents.map(ev => (
                                                             <div 
                                                                 key={ev.id} 
-                                                                className={`w-full h-1 rounded-full ${ev.color.startsWith('#') ? '' : ev.color}`}
+                                                                className={`w-full ${layout === '1_sheet' ? 'h-0.5' : 'h-1'} rounded-full ${ev.color.startsWith('#') ? '' : ev.color}`}
                                                                 style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}
                                                             ></div>
                                                         ))}
@@ -561,39 +587,173 @@ export const CalendarPrintTemplate: React.FC<CalendarPrintTemplateProps> = ({
                                             );
                                         })}
                                     </div>
-                                    <div className={`border-t ${currentTheme.border} px-1.5 py-1 bg-white/70`}>
-                                        {monthEvents.length > 0 ? (
-                                            <div className={`${monthEvents.length > 3 ? 'grid grid-cols-2 gap-x-2 gap-y-1' : 'space-y-1'}`}>
+
+                                    {/* Month Events Summary */}
+                                    {layout === '1_sheet' ? (
+                                        monthEvents.length > 0 ? (
+                                            <div className={`border-t ${currentTheme.border} px-1.5 py-0.5 bg-white/70 space-y-0.5`}>
                                                 {monthEvents
-                                                    .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-                                                    .slice(0, layout === '1_sheet' ? 6 : layout === '3_sheets' ? 8 : 10)
+                                                    .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
                                                     .map(ev => (
-                                                        <div key={ev.id} className="flex items-center gap-1.5 text-[9px] leading-[1.35]">
+                                                        <div key={ev.id} className="flex items-center gap-1 text-[7px] leading-tight min-w-0 overflow-hidden" title={`${formatEventDateLabel(ev.startDate, ev.endDate)}: ${ev.title}`}>
                                                             <div
-                                                                className={`w-2 h-2 rounded-full shrink-0 border border-black/10 ${ev.color.startsWith('#') ? '' : ev.color}`}
+                                                                className={`w-1.5 h-1.5 rounded-full shrink-0 border border-black/10 ${ev.color.startsWith('#') ? '' : ev.color}`}
                                                                 style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}
                                                             ></div>
-                                                            <span className="break-words">
-                                                                <span className="font-semibold">{formatEventDateLabel(ev.startDate, ev.endDate)}:</span> {ev.title}
+                                                            <span className="truncate min-w-0 flex-1 leading-tight text-gray-800">
+                                                                <span className="font-semibold text-gray-900">{formatEventDateLabel(ev.startDate, ev.endDate)}:</span> {ev.title}
                                                             </span>
                                                         </div>
                                                     ))}
                                             </div>
-                                        ) : (
-                                            <p className="text-[9px] italic opacity-60">Belum ada agenda.</p>
-                                        )}
-                                    </div>
+                                        ) : null
+                                    ) : (
+                                        <div className={`border-t ${currentTheme.border} px-1.5 py-1 bg-white/70`}>
+                                            {monthEvents.length > 0 ? (
+                                                <div className={`${monthEvents.length > 3 ? 'grid grid-cols-2 gap-x-2 gap-y-1' : 'space-y-1'}`}>
+                                                    {monthEvents
+                                                        .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
+                                                        .map(ev => (
+                                                            <div key={ev.id} className="flex items-center gap-1.5 text-[9px] leading-normal min-w-0 overflow-hidden" title={`${formatEventDateLabel(ev.startDate, ev.endDate)}: ${ev.title}`}>
+                                                                <div
+                                                                    className={`w-2 h-2 rounded-full shrink-0 border border-black/10 ${ev.color.startsWith('#') ? '' : ev.color}`}
+                                                                    style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}
+                                                                ></div>
+                                                                <span className="truncate min-w-0 flex-1 text-gray-800">
+                                                                    <span className="font-semibold text-gray-900">{formatEventDateLabel(ev.startDate, ev.endDate)}:</span> {ev.title}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-[9px] italic opacity-60">Belum ada agenda.</p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
 
                     {/* App Footer */}
-                    <div className="calendar-sheet-footer pt-4 text-center text-[10px] text-gray-500 relative z-10">
+                    <div className={`calendar-sheet-footer ${layout === '1_sheet' ? 'pt-1' : 'pt-4'} text-center text-[8px] text-gray-400 relative z-10`}>
                         dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
                     </div>
                 </div>
             ))}
+
+            {/* Lampiran Rekapitulasi Lengkap Seluruh Agenda Pendidikan */}
+            {showAgendaAppendix && events.length > 0 && (
+                <div
+                    className={`printable-content-wrapper calendar-sheet calendar-appendix ${currentTheme.bg} ${currentTheme.text} flex flex-col relative overflow-hidden`}
+                    style={{
+                        width: '21cm',
+                        minHeight: '29.7cm',
+                        padding: '10mm 12mm 10mm 12mm',
+                        pageBreakBefore: 'always',
+                        breakBefore: 'page',
+                        breakInside: 'avoid',
+                    }}
+                >
+                    {/* Header Lampiran */}
+                    <div className="border-b-2 border-teal-800 pb-3 mb-4 text-center">
+                        <h2 className="text-base font-extrabold uppercase tracking-wide text-teal-900">
+                            LAMPIRAN REKAPITULASI AGENDA PENDIDIKAN
+                        </h2>
+                        <h3 className="text-sm font-bold uppercase text-gray-800 mt-0.5">
+                            {settings.namaPonpes || 'PONDOK PESANTREN'}
+                        </h3>
+                        <p className="text-[10px] text-gray-600 mt-0.5 font-medium uppercase tracking-wider">
+                            {periodText}
+                        </p>
+                    </div>
+
+                    {/* Tabel Agenda Lengkap Tanpa Ada Yang Disembunyikan */}
+                    <div className="flex-1 overflow-visible">
+                        <table className="w-full text-left border-collapse text-[10px]">
+                            <thead>
+                                <tr className="bg-teal-800 text-white font-bold text-center">
+                                    <th className="p-2 border border-teal-900 w-9">No</th>
+                                    <th className="p-2 border border-teal-900 w-36">Tanggal Masehi</th>
+                                    <th className="p-2 border border-teal-900 w-36">Tanggal Hijriah</th>
+                                    <th className="p-2 border border-teal-900">Nama Agenda / Kegiatan</th>
+                                    <th className="p-2 border border-teal-900 w-24">Kategori</th>
+                                    <th className="p-2 border border-teal-900 w-44">Keterangan</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-300">
+                                {[...events]
+                                    .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
+                                    .map((ev, idx) => {
+                                        const sD = new Date(ev.startDate + 'T00:00:00');
+                                        const eD = new Date((ev.endDate || ev.startDate) + 'T00:00:00');
+                                        const hStart = getHijriDate(sD, hijriAdjustment);
+                                        const hEnd = getHijriDate(eD, hijriAdjustment);
+                                        const hijriText = ev.startDate === ev.endDate
+                                            ? `${hStart.day} ${hStart.month} ${hStart.year} H`
+                                            : `${hStart.day} ${hStart.month} - ${hEnd.day} ${hEnd.month} ${hEnd.year} H`;
+
+                                        return (
+                                            <tr key={ev.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/70'}>
+                                                <td className="p-1.5 border border-gray-300 text-center font-semibold text-gray-600">
+                                                    {idx + 1}
+                                                </td>
+                                                <td className="p-1.5 border border-gray-300 font-medium">
+                                                    {formatEventDateLabel(ev.startDate, ev.endDate)}
+                                                </td>
+                                                <td className="p-1.5 border border-gray-300 text-teal-800 font-serif text-[9.5px]">
+                                                    {hijriText}
+                                                </td>
+                                                <td className="p-1.5 border border-gray-300 font-semibold text-gray-900">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div
+                                                            className={`w-2 h-2 rounded-full shrink-0 border border-black/10 ${ev.color.startsWith('#') ? '' : ev.color}`}
+                                                            style={ev.color.startsWith('#') ? { backgroundColor: ev.color } : {}}
+                                                        ></div>
+                                                        <span>{ev.title}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-1.5 border border-gray-300 text-center">
+                                                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200">
+                                                        {ev.category || 'Kegiatan'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-1.5 border border-gray-300 text-gray-600 text-[9.5px]">
+                                                    {ev.description || '-'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Tanda Tangan Pengesahan */}
+                    <div className="mt-8 flex justify-between items-start text-xs text-gray-800 break-inside-avoid">
+                        <div className="text-center w-52">
+                            <p>Mengetahui,</p>
+                            <p className="font-bold">Pengasuh / Pimpinan Pondok</p>
+                            <div className="h-16"></div>
+                            <p className="font-bold underline uppercase">
+                                ( {settings.namaMudir || '...........................................'} )
+                            </p>
+                        </div>
+                        <div className="text-center w-52">
+                            <p>{customTempat?.trim() || resolveTempatPesantren(settings)}, {formatDate(formatLocalDate(new Date()))}</p>
+                            <p className="font-bold">Bagian Kurikulum & Akademik</p>
+                            <div className="h-16"></div>
+                            <p className="font-bold underline uppercase">
+                                ( ........................................... )
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="pt-4 text-center text-[8px] text-gray-400">
+                        dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
+                    </div>
+                </div>
+            )}
         </>
     );
 };

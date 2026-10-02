@@ -308,16 +308,41 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     }
 
     const processPendaftarData = (data: any) => {
+        // Collect custom_ fields into customDataObj if not already present
+        const customDataObj: Record<string, any> = data.customData ? (typeof data.customData === 'string' ? JSON.parse(data.customData) : data.customData) : {};
+        Object.keys(data).forEach(key => {
+            if (key.startsWith('custom_')) {
+                const cleanKey = key.replace('custom_', '');
+                customDataObj[cleanKey] = data[key];
+            }
+        });
+
+        // Ensure alamat is properly shaped as Alamat object
+        let alamatObj: any = { detail: '' };
+        if (typeof data.alamat === 'object' && data.alamat !== null) {
+            alamatObj = { ...data.alamat };
+        } else {
+            alamatObj = {
+                detail: data.alamat || '',
+                desaKelurahan: data.desaKelurahan || '',
+                kecamatan: data.kecamatan || '',
+                kabupatenKota: data.kabupatenKota || '',
+                provinsi: data.provinsi || '',
+                kodePos: data.kodePos || ''
+            };
+        }
+
         const newPendaftar: Pendaftar = {
             id: Date.now(),
             ...data,
-            jenjangId: parseInt(data.jenjangId),
+            alamat: alamatObj,
+            jenjangId: parseInt(data.jenjangId) || settings.jenjang[0]?.id || 0,
             tanggalDaftar: data.tanggalDaftar || new Date().toISOString(),
-            // Fix: Add missing tanggalMasuk required by Pendaftar type (from Santri)
             tanggalMasuk: data.tanggalDaftar || new Date().toISOString(),
             status: 'Baru',
             kewarganegaraan: data.kewarganegaraan || 'WNI',
             gelombang: settings.psbConfig.activeGelombang,
+            customData: Object.keys(customDataObj).length > 0 ? JSON.stringify(customDataObj) : (data.customData || '{}'),
             lastModified: Date.now(),
         };
         db.pendaftar.add(newPendaftar).then(() => {
@@ -349,7 +374,9 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         }
     ) => {
         if (!canWrite) return;
-        const customData = pendaftar.customData ? JSON.parse(pendaftar.customData) : {};
+        const customData = pendaftar.customData ? (typeof pendaftar.customData === 'string' ? JSON.parse(pendaftar.customData) : pendaftar.customData) : {};
+        const pendaftarAny = pendaftar as any;
+
         const firstRiwayat: RiwayatStatus = {
             id: Date.now(),
             status: 'Masuk',
@@ -369,18 +396,33 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             tanggalLahir: pendaftar.tanggalLahir,
             jenisKelamin: pendaftar.jenisKelamin,
             kewarganegaraan: (pendaftar.kewarganegaraan as 'WNI' | 'WNA' | 'Keturunan') || 'WNI',
-            fotoUrl: 'https://placehold.co/150x200/e2e8f0/334155?text=Foto',
-            jenisSantri: 'Mondok - Baru',
+            agama: pendaftarAny.agama || customData.agama || 'Islam',
+            golonganDarah: pendaftarAny.golonganDarah || customData.golonganDarah || undefined,
+            fotoUrl: pendaftar.fotoUrl || 'https://placehold.co/150x200/e2e8f0/334155?text=Foto',
+            jenisSantri: pendaftarAny.jenisSantri || 'Mondok - Baru',
             
             // Address Mapping
             alamat: { 
-                detail: pendaftar.alamat.detail, 
-                desaKelurahan: pendaftar.alamat.desaKelurahan, 
-                kecamatan: pendaftar.alamat.kecamatan, 
-                kabupatenKota: pendaftar.alamat.kabupatenKota, 
-                provinsi: pendaftar.alamat.provinsi, 
-                kodePos: pendaftar.alamat.kodePos 
+                detail: pendaftar.alamat?.detail || (typeof pendaftar.alamat === 'string' ? pendaftar.alamat : '') || '', 
+                desaKelurahan: pendaftar.alamat?.desaKelurahan || pendaftarAny.desaKelurahan || '', 
+                kecamatan: pendaftar.alamat?.kecamatan || pendaftarAny.kecamatan || '', 
+                kabupatenKota: pendaftar.alamat?.kabupatenKota || pendaftarAny.kabupatenKota || '', 
+                provinsi: pendaftar.alamat?.provinsi || pendaftarAny.provinsi || '', 
+                kodePos: pendaftar.alamat?.kodePos || pendaftarAny.kodePos || '' 
             },
+
+            // Contact
+            telepon: pendaftarAny.telepon || pendaftarAny.noHp || customData.telepon || customData.noHp || pendaftar.teleponAyah || pendaftar.teleponIbu || '',
+            noHp: pendaftarAny.noHp || pendaftarAny.telepon || customData.noHp || '',
+
+            // Physical & Health
+            tinggiBadan: pendaftarAny.tinggiBadan ? Number(pendaftarAny.tinggiBadan) : (customData.tinggiBadan ? Number(customData.tinggiBadan) : undefined),
+            beratBadan: pendaftarAny.beratBadan ? Number(pendaftarAny.beratBadan) : (customData.beratBadan ? Number(customData.beratBadan) : undefined),
+            riwayatPenyakit: pendaftarAny.riwayatPenyakit || customData.riwayatPenyakit || undefined,
+            berkebutuhanKhusus: pendaftar.berkebutuhanKhusus || customData.berkebutuhanKhusus || undefined,
+            hobi: pendaftarAny.hobi ? (Array.isArray(pendaftarAny.hobi) ? pendaftarAny.hobi : [pendaftarAny.hobi]) : (customData.hobi ? [customData.hobi] : []),
+            citaCita: pendaftarAny.citaCita || customData.citaCita || undefined,
+            jarakKePondok: pendaftarAny.jarakKePondok || customData.jarakKePondok || undefined,
 
             // Parent Data Mapping
             namaAyah: pendaftar.namaAyah,
@@ -390,6 +432,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             pendidikanAyah: pendaftar.pendidikanAyah,
             penghasilanAyah: pendaftar.penghasilanAyah,
             teleponAyah: pendaftar.teleponAyah,
+            tempatLahirAyah: pendaftarAny.tempatLahirAyah || customData.tempatLahirAyah || undefined,
+            tanggalLahirAyah: pendaftarAny.tanggalLahirAyah || customData.tanggalLahirAyah || undefined,
 
             namaIbu: pendaftar.namaIbu,
             nikIbu: pendaftar.nikIbu,
@@ -398,14 +442,17 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             pendidikanIbu: pendaftar.pendidikanIbu,
             penghasilanIbu: pendaftar.penghasilanIbu,
             teleponIbu: pendaftar.teleponIbu,
+            tempatLahirIbu: pendaftarAny.tempatLahirIbu || customData.tempatLahirIbu || undefined,
+            tanggalLahirIbu: pendaftarAny.tanggalLahirIbu || customData.tanggalLahirIbu || undefined,
 
             namaWali: pendaftar.namaWali,
+            nikWali: pendaftarAny.nikWali || customData.nikWali || undefined,
             teleponWali: pendaftar.nomorHpWali,
-            statusWali: pendaftar.statusWali || customData.hubunganWali,
+            statusWali: pendaftar.statusWali || customData.hubunganWali || customData.statusWali,
             statusHidupWali: pendaftar.statusHidupWali,
-            pekerjaanWali: pendaftar.pekerjaanWali,
-            pendidikanWali: pendaftar.pendidikanWali,
-            penghasilanWali: pendaftar.penghasilanWali,
+            pekerjaanWali: pendaftar.pekerjaanWali || customData.pekerjaanWali || undefined,
+            pendidikanWali: pendaftar.pendidikanWali || customData.pendidikanWali || undefined,
+            penghasilanWali: pendaftar.penghasilanWali || customData.penghasilanWali || undefined,
 
             // Academic & Status
             jenjangId: pendaftar.jenjangId,
@@ -414,12 +461,20 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             status: 'Aktif',
             tanggalMasuk: new Date().toISOString().split('T')[0],
             sekolahAsal: pendaftar.asalSekolah,
+            asalSekolah: pendaftar.asalSekolah,
             alamatSekolahAsal: pendaftar.alamatSekolahAsal,
+            nomorIjazahSebelumnya: pendaftarAny.nomorIjazahSebelumnya || customData.nomorIjazahSebelumnya || undefined,
+            tahunLulusSebelumnya: pendaftarAny.tahunLulusSebelumnya || customData.tahunLulusSebelumnya || undefined,
+            targetJuz: pendaftarAny.targetJuz ? Number(pendaftarAny.targetJuz) : (customData.targetJuz ? Number(customData.targetJuz) : undefined),
             
             statusKeluarga: pendaftar.statusKeluarga,
             anakKe: pendaftar.anakKe,
             jumlahSaudara: pendaftar.jumlahSaudara,
-            berkebutuhanKhusus: pendaftar.berkebutuhanKhusus,
+
+            // Notes and Custom Fields Migration
+            catatan: pendaftar.catatan || customData.catatan || undefined,
+            customData: pendaftar.customData || (Object.keys(customData).length > 0 ? JSON.stringify(customData) : undefined),
+
             riwayatStatus: [firstRiwayat],
             lastModified: Date.now()
         };

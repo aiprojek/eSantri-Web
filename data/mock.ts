@@ -223,7 +223,24 @@ export const initialSettings: PondokSettings = {
     tanggalSyahadahDefault: '',
     tempatSyahadahDefault: '',
     formatTanggalSyahadahDefault: 'masehi',
-    manualHijriSyahadahDefault: ''
+    manualHijriSyahadahDefault: '',
+    perpusConfig: {
+        dendaPerHari: 1000,
+        durasiPinjamDefault: 7,
+        maksPinjamBuku: 3,
+        kategoriKoleksi: [
+            'Kitab Kuning',
+            'Buku Pelajaran',
+            'Umum',
+            'Referensi',
+            'Tafsir & Hadits',
+            'Fiqih & Ushul',
+            'Bahasa Arab',
+            'Kamus & Ensiklopedia',
+            'Sejarah Islam (Tarikh)',
+            'Akhlak & Tasawuf'
+        ]
+    }
 };
 
 export const initialSantri: Santri[] = [

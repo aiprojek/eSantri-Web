@@ -4,6 +4,8 @@ import { useAppContext } from '../../../AppContext';
 import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntimes';
 import { isFirebaseClientConfigReady } from '../../../firebaseStorage';
 import { getPsbRegistrationNumber, calculatePsbAverageScore } from '../utils/psbUtils';
+import { MarkdownEditor } from '../../common/MarkdownEditor';
+import { MarkdownViewer } from '../../common/MarkdownViewer';
 
 interface PendaftarModalProps {
     isOpen: boolean;
@@ -25,16 +27,20 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
     const [formData, setFormData] = useState<any>({
         nomorRegistrasi: '',
         namaLengkap: '',
+        namaHijrah: '',
         nisn: '',
         nik: '',
         jenisKelamin: 'Laki-laki',
         tempatLahir: '',
         tanggalLahir: '',
         kewarganegaraan: 'WNI',
+        agama: 'Islam',
+        golonganDarah: '',
         statusKeluarga: '',
         anakKe: undefined,
         jumlahSaudara: undefined,
-        berkebutuhanKhusus: '',
+        citaCita: '',
+        hobi: '',
         
         alamat: '', // Detail address as string
         desaKelurahan: '',
@@ -42,6 +48,14 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         kabupatenKota: '',
         provinsi: '',
         kodePos: '',
+        telepon: '',
+        jarakKePondok: '',
+
+        // Fisik & Kesehatan
+        tinggiBadan: undefined,
+        beratBadan: undefined,
+        riwayatPenyakit: '',
+        berkebutuhanKhusus: '',
 
         namaAyah: '',
         nikAyah: '',
@@ -50,6 +64,8 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         pendidikanAyah: '',
         penghasilanAyah: '',
         teleponAyah: '',
+        tempatLahirAyah: '',
+        tanggalLahirAyah: '',
         
         namaIbu: '',
         nikIbu: '',
@@ -58,8 +74,11 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         pendidikanIbu: '',
         penghasilanIbu: '',
         teleponIbu: '',
+        tempatLahirIbu: '',
+        tanggalLahirIbu: '',
 
         namaWali: '',
+        nikWali: '',
         nomorHpWali: '',
         statusWali: '',
         pekerjaanWali: '',
@@ -69,7 +88,11 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         jenjangId: 0,
         asalSekolah: '',
         alamatSekolahAsal: '',
+        nomorIjazahSebelumnya: '',
+        tahunLulusSebelumnya: '',
         jalurPendaftaran: 'Reguler',
+        jenisSantri: 'Mondok - Baru',
+        targetJuz: undefined,
         catatan: '',
         status: 'Baru',
         tanggalDaftar: new Date().toISOString(),
@@ -108,6 +131,30 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                 setFormData({
                     ...rest,
                     nomorRegistrasi: pendaftarData.nomorRegistrasi || '',
+                    namaHijrah: pendaftarData.namaHijrah || '',
+                    agama: pendaftarData.agama || 'Islam',
+                    golonganDarah: pendaftarData.golonganDarah || '',
+                    citaCita: pendaftarData.citaCita || '',
+                    hobi: Array.isArray(pendaftarData.hobi) ? pendaftarData.hobi.join(', ') : (pendaftarData.hobi || ''),
+                    telepon: pendaftarData.telepon || (pendaftarData as any).noHp || '',
+                    jarakKePondok: pendaftarData.jarakKePondok || '',
+                    tinggiBadan: pendaftarData.tinggiBadan ?? '',
+                    beratBadan: pendaftarData.beratBadan ?? '',
+                    riwayatPenyakit: pendaftarData.riwayatPenyakit || '',
+                    berkebutuhanKhusus: pendaftarData.berkebutuhanKhusus || '',
+                    tempatLahirAyah: pendaftarData.tempatLahirAyah || '',
+                    tanggalLahirAyah: pendaftarData.tanggalLahirAyah ? pendaftarData.tanggalLahirAyah.split('T')[0] : '',
+                    tempatLahirIbu: pendaftarData.tempatLahirIbu || '',
+                    tanggalLahirIbu: pendaftarData.tanggalLahirIbu ? pendaftarData.tanggalLahirIbu.split('T')[0] : '',
+                    nikWali: pendaftarData.nikWali || '',
+                    pekerjaanWali: pendaftarData.pekerjaanWali || '',
+                    pendidikanWali: pendaftarData.pendidikanWali || '',
+                    penghasilanWali: pendaftarData.penghasilanWali || '',
+                    nomorIjazahSebelumnya: pendaftarData.nomorIjazahSebelumnya || '',
+                    tahunLulusSebelumnya: pendaftarData.tahunLulusSebelumnya || '',
+                    jenisSantri: pendaftarData.jenisSantri || 'Mondok - Baru',
+                    targetJuz: pendaftarData.targetJuz ?? '',
+                    catatan: pendaftarData.catatan || '',
                     alamat: alamat?.detail || '',
                     desaKelurahan: alamat?.desaKelurahan || '',
                     kecamatan: alamat?.kecamatan || '',
@@ -156,25 +203,65 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                 setFormData({
                     nomorRegistrasi: '',
                     namaLengkap: '',
+                    namaHijrah: '',
                     nisn: '',
                     nik: '',
                     jenisKelamin: 'Laki-laki',
                     tempatLahir: '',
                     tanggalLahir: '',
                     kewarganegaraan: 'WNI',
+                    agama: 'Islam',
+                    golonganDarah: '',
+                    statusKeluarga: '',
+                    anakKe: undefined,
+                    jumlahSaudara: undefined,
+                    citaCita: '',
+                    hobi: '',
                     alamat: '',
                     desaKelurahan: '',
                     kecamatan: '',
                     kabupatenKota: '',
                     provinsi: '',
                     kodePos: '',
+                    telepon: '',
+                    jarakKePondok: '',
+                    tinggiBadan: undefined,
+                    beratBadan: undefined,
+                    riwayatPenyakit: '',
+                    berkebutuhanKhusus: '',
                     namaAyah: '',
+                    nikAyah: '',
+                    statusAyah: '',
+                    pekerjaanAyah: '',
+                    pendidikanAyah: '',
+                    penghasilanAyah: '',
+                    teleponAyah: '',
+                    tempatLahirAyah: '',
+                    tanggalLahirAyah: '',
                     namaIbu: '',
+                    nikIbu: '',
+                    statusIbu: '',
+                    pekerjaanIbu: '',
+                    pendidikanIbu: '',
+                    penghasilanIbu: '',
+                    teleponIbu: '',
+                    tempatLahirIbu: '',
+                    tanggalLahirIbu: '',
                     namaWali: '',
+                    nikWali: '',
                     nomorHpWali: '',
+                    statusWali: '',
+                    pekerjaanWali: '',
+                    pendidikanWali: '',
+                    penghasilanWali: '',
                     jenjangId: settings.jenjang[0]?.id || 0,
                     asalSekolah: '',
+                    alamatSekolahAsal: '',
+                    nomorIjazahSebelumnya: '',
+                    tahunLulusSebelumnya: '',
                     jalurPendaftaran: 'Reguler',
+                    jenisSantri: 'Mondok - Baru',
+                    targetJuz: undefined,
                     catatan: '',
                     status: 'Baru',
                     tanggalDaftar: new Date().toISOString(),
@@ -395,6 +482,19 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                 </div>
             );
         } else {
+            const isLongOrFormatted = stringVal.includes('\n') || stringVal.length > 60 || /[#*`_~]/.test(stringVal);
+            if (isLongOrFormatted) {
+                return (
+                    <div className="mt-1">
+                        <MarkdownEditor
+                            value={stringVal}
+                            onChange={(newVal) => handleCustomDataChange(key, newVal)}
+                            placeholder={`Isi ${key.replace(/_/g, ' ')}...`}
+                            rows={3}
+                        />
+                    </div>
+                );
+            }
             return (
                 <input 
                     type="text" 
@@ -460,7 +560,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                 </div>
                             </div>
 
-                            <h4 className="font-semibold text-gray-700 border-b pb-2 mt-6">Data Kependudukan & Lainnya</h4>
+                            <h4 className="font-semibold text-gray-700 border-b pb-2 mt-6">Data Kependudukan & Kontak</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">NIK (Nomor Induk Kependudukan)</label>
@@ -469,6 +569,27 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">NISN</label>
                                     <input type="text" value={formData.nisn || ''} onChange={e => handleChange('nisn', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Agama</label>
+                                    <select value={formData.agama || 'Islam'} onChange={e => handleChange('agama', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                        <option value="Islam">Islam</option>
+                                        <option value="Lainnya">Lainnya</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Golongan Darah</label>
+                                    <select value={formData.golonganDarah || ''} onChange={e => handleChange('golonganDarah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                        <option value="">- Belum Diketahui -</option>
+                                        <option value="A">A</option>
+                                        <option value="B">B</option>
+                                        <option value="AB">AB</option>
+                                        <option value="O">O</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">No. HP / WA Calon Santri</label>
+                                    <input type="text" value={formData.telepon || ''} onChange={e => handleChange('telepon', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="08xxxxxxxxxx" />
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Kewarganegaraan</label>
@@ -495,6 +616,30 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                         <option value="Anak Yatim Piatu">Anak Yatim Piatu</option>
                                         <option value="Anak Angkat">Anak Angkat</option>
                                     </select>
+                                </div>
+                            </div>
+
+                            <h4 className="font-semibold text-gray-700 border-b pb-2 mt-6">Data Fisik, Kesehatan & Bakat</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Tinggi Badan (cm)</label>
+                                    <input type="number" value={formData.tinggiBadan || ''} onChange={e => handleChange('tinggiBadan', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Contoh: 155" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Berat Badan (kg)</label>
+                                    <input type="number" value={formData.beratBadan || ''} onChange={e => handleChange('beratBadan', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Contoh: 45" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Hobi</label>
+                                    <input type="text" value={formData.hobi || ''} onChange={e => handleChange('hobi', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Membaca, Memanah..." />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Cita-Cita</label>
+                                    <input type="text" value={formData.citaCita || ''} onChange={e => handleChange('citaCita', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Ulama, Dokter..." />
+                                </div>
+                                <div className="md:col-span-2 lg:col-span-4">
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Riwayat Penyakit / Alergi Khusus</label>
+                                    <input type="text" value={formData.riwayatPenyakit || ''} onChange={e => handleChange('riwayatPenyakit', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Asma, alergi dingin, dll (kosongkan jika tidak ada)" />
                                 </div>
                             </div>
                         </div>
@@ -548,7 +693,17 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">NIK Ayah</label>
-                                        <input type="text" value={formData.nikAyah || ''} onChange={e => handleChange('nikAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        <input type="text" value={formData.nikAyah || ''} onChange={e => handleChange('nikAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" maxLength={16} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block mb-1 text-sm font-medium text-gray-700">Tempat Lahir</label>
+                                            <input type="text" value={formData.tempatLahirAyah || ''} onChange={e => handleChange('tempatLahirAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Lahir</label>
+                                            <input type="date" value={formData.tanggalLahirAyah ? formData.tanggalLahirAyah.split('T')[0] : ''} onChange={e => handleChange('tanggalLahirAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Status Ayah</label>
@@ -560,8 +715,22 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                         </select>
                                     </div>
                                     <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Terakhir</label>
+                                        <select value={formData.pendidikanAyah || ''} onChange={e => handleChange('pendidikanAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                            <option value="">- Pilih Pendidikan -</option>
+                                            {pendidikanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan</label>
                                         <input type="text" value={formData.pekerjaanAyah || ''} onChange={e => handleChange('pekerjaanAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Bulanan</label>
+                                        <select value={formData.penghasilanAyah || ''} onChange={e => handleChange('penghasilanAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                            <option value="">- Pilih Penghasilan -</option>
+                                            {penghasilanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Ayah</label>
@@ -578,7 +747,17 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">NIK Ibu</label>
-                                        <input type="text" value={formData.nikIbu || ''} onChange={e => handleChange('nikIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        <input type="text" value={formData.nikIbu || ''} onChange={e => handleChange('nikIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" maxLength={16} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block mb-1 text-sm font-medium text-gray-700">Tempat Lahir</label>
+                                            <input type="text" value={formData.tempatLahirIbu || ''} onChange={e => handleChange('tempatLahirIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block mb-1 text-sm font-medium text-gray-700">Tanggal Lahir</label>
+                                            <input type="date" value={formData.tanggalLahirIbu ? formData.tanggalLahirIbu.split('T')[0] : ''} onChange={e => handleChange('tanggalLahirIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Status Ibu</label>
@@ -590,8 +769,22 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                         </select>
                                     </div>
                                     <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Terakhir</label>
+                                        <select value={formData.pendidikanIbu || ''} onChange={e => handleChange('pendidikanIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                            <option value="">- Pilih Pendidikan -</option>
+                                            {pendidikanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan</label>
                                         <input type="text" value={formData.pekerjaanIbu || ''} onChange={e => handleChange('pekerjaanIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Bulanan</label>
+                                        <select value={formData.penghasilanIbu || ''} onChange={e => handleChange('penghasilanIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                            <option value="">- Pilih Penghasilan -</option>
+                                            {penghasilanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Ibu</label>
@@ -601,10 +794,14 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                             </div>
                             
                             <h4 className="font-semibold text-gray-700 border-b pb-2 mt-6">Data Wali (Jika Ada)</h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Nama Wali</label>
                                     <input type="text" value={formData.namaWali || ''} onChange={e => handleChange('namaWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">NIK Wali</label>
+                                    <input type="text" value={formData.nikWali || ''} onChange={e => handleChange('nikWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" maxLength={16} />
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Wali</label>
@@ -613,6 +810,17 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Hubungan dengan Santri</label>
                                     <input type="text" value={formData.statusWali || ''} onChange={e => handleChange('statusWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Paman, Kakek, dll" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan Wali</label>
+                                    <input type="text" value={formData.pekerjaanWali || ''} onChange={e => handleChange('pekerjaanWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Wali</label>
+                                    <select value={formData.penghasilanWali || ''} onChange={e => handleChange('penghasilanWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                        <option value="">- Pilih Penghasilan -</option>
+                                        {penghasilanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -915,8 +1123,13 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                         <div className="space-y-4">
                             <h4 className="font-semibold text-gray-700 border-b pb-2">Catatan & Data Kustom</h4>
                             <div>
-                                <label className="block mb-1 text-sm font-medium text-gray-700">Catatan Admin</label>
-                                <textarea rows={3} value={formData.catatan || ''} onChange={e => handleChange('catatan', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Catatan internal panitia..."></textarea>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Catatan Panitia / Harapan Wali (Markdown)</label>
+                                <MarkdownEditor
+                                    value={formData.catatan || ''}
+                                    onChange={val => handleChange('catatan', val)}
+                                    placeholder="Catatan khusus calon santri, riwayat wawancara, pesan orang tua (mendukung markdown)..."
+                                    rows={4}
+                                />
                             </div>
                             
                             {Object.keys(parsedCustomData).length > 0 && (

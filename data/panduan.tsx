@@ -5,6 +5,7 @@ import { raporPanduan } from './panduan/rapor';
 import { akademikPanduan } from './panduan/akademik';
 import { perpustakaanPanduan } from './panduan/perpustakaan';
 import { kalenderPanduan } from './panduan/kalender';
+import { financePanduan } from './panduan/finance';
 
 export interface PanduanStepData {
     title: string;
@@ -2996,119 +2997,7 @@ export const panduanData: PanduanSectionData[] = [
     kurikulumPanduan,
     raporPanduan,
     akademikPanduan,
-    {
-        id: 'finance',
-        badge: 9,
-        badgeColor: 'blue',
-        title: 'Keuangan & Pembayaran',
-        steps: [
-             {
-                title: 'Rekomendasi: Multi-User & Cloud (Wajib untuk Bendahara)',
-                color: 'red',
-                content: (
-                    <div className="bg-red-50 p-3 rounded border border-red-200 text-sm text-red-900">
-                        <p className="font-bold mb-1"><i className="bi bi-shield-lock-fill"></i> Keamanan Data Vital</p>
-                        <p className="mb-2">Data keuangan dan gaji sangat sensitif. Jangan gunakan akun Admin tunggal bersama-sama.</p>
-                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                            <li>Buat akun khusus untuk Bendahara (Role: Staff, Akses: Keuangan Write).</li>
-                            <li><strong>Wajib Multi-User:</strong> Aktifkan di Pengaturan agar setiap transaksi (SPP/Gaji) tercatat <em>siapa</em> yang menginputnya (Audit Trail).</li>
-                            <li><strong>Wajib Sync Cloud:</strong> Data keuangan adalah data vital. Sinkronisasi ke Dropbox atau <strong>Firebase</strong> memastikan data aman dan selalu ter-backup di cloud.</li>
-                        </ul>
-                    </div>
-                )
-            },
-            {
-                title: 'Siklus Tagihan & Pembayaran',
-                content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Pengaturan Biaya:</strong> Buat komponen biaya (SPP, Uang Gedung) di menu <em>Keuangan &gt; Pengaturan Biaya</em>.</li>
-                        <li><strong>Generate Tagihan:</strong> Buka <em>Status Pembayaran &gt; Generate Tagihan</em>. Lakukan setiap awal bulan untuk SPP.</li>
-                        <li><strong>Pembayaran:</strong> Cari santri di Status Pembayaran, klik tombol <strong>"Bayar"</strong>, centang bulan yang dibayar. Kuitansi tercetak otomatis.</li>
-                    </ul>
-                )
-            },
-            {
-                title: 'Uang Saku & Tabungan',
-                content: (
-                    <>
-                        <p>Fitur untuk mengelola uang jajan santri (Tabungan):</p>
-                        <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                            <li>Buka tab <strong>Uang Saku</strong>.</li>
-                            <li>Klik <strong>Deposit</strong> saat wali santri menitipkan uang.</li>
-                            <li>Klik <strong>Penarikan</strong> saat santri mengambil uang jajan.</li>
-                            <li>Cetak laporan "Rekening Koran" untuk laporan ke wali santri.</li>
-                        </ul>
-                    </>
-                )
-            },
-            {
-                title: 'Penggajian Guru (Payroll)',
-                content: (
-                     <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Konfigurasi:</strong> Buka tab <em>Penggajian &gt; Konfigurasi</em>. Isi Gaji Pokok, Tunjangan, dan Tarif JTM (Jam Tatap Muka) per guru.</li>
-                        <li><strong>Generate Bulanan:</strong> Buka tab <em>Generate Gaji</em>. Pilih Bulan/Tahun. Klik "Hitung Estimasi". Sistem otomatis menghitung total jam dari Jadwal Pelajaran.</li>
-                        <li><strong>Cetak & Posting:</strong> Periksa draft gaji. Jika sudah benar, klik "Posting Keuangan" untuk mencatat pengeluaran kas otomatis, lalu cetak Slip Gaji PDF.</li>
-                    </ul>
-                )
-            },
-             {
-                title: 'Setoran Kas (Closing Harian)',
-                content: (
-                    <>
-                        <p>Penting untuk validasi uang fisik kasir:</p>
-                        <ol className="list-decimal pl-5 space-y-1 text-sm mt-1 bg-gray-50 p-2 rounded">
-                            <li>Uang yang diterima kasir (SPP/Uang Saku) masuk status "Di Laci Kasir" (Pending).</li>
-                            <li>Buka menu <strong>Setoran Kas</strong> di sore hari.</li>
-                            <li>Centang semua transaksi hari itu, klik <strong>"Setor ke Buku Kas"</strong>.</li>
-                            <li>Uang resmi masuk ke Saldo Pondok (Buku Kas Umum).</li>
-                        </ol>
-                    </>
-                )
-            },
-            {
-                title: 'Buku Kas Umum (Filter, Preset, Ekspor)',
-                content: (
-                    <div className="space-y-2 text-sm">
-                        <p>Modul <strong>Buku Kas</strong> adalah buku besar kas pondok untuk memantau arus masuk/keluar dan posisi saldo aktual harian.</p>
-                        <p className="text-xs text-gray-600">Tujuan utamanya: memastikan uang fisik, transaksi kasir, dan laporan bendahara tetap sinkron.</p>
-                        <ol className="list-decimal pl-5 space-y-1 bg-gray-50 p-2 rounded">
-                            <li>Gunakan preset tanggal cepat: <strong>Hari Ini</strong>, <strong>7 Hari</strong>, atau <strong>30 Hari</strong>.</li>
-                            <li>Gunakan <strong>Reset Filter</strong> untuk kembali ke tampilan netral.</li>
-                            <li>Filter transaksi dengan kombinasi <strong>Tanggal</strong>, <strong>Jenis</strong>, dan <strong>Kategori</strong>.</li>
-                            <li>Ekspor hasil sesuai filter aktif via tombol <strong>CSV</strong> atau <strong>Excel</strong>.</li>
-                        </ol>
-                        <p className="text-xs text-gray-600">Catatan: file ekspor mengikuti data yang sedang tersaring, bukan seluruh transaksi.</p>
-                    </div>
-                )
-            },
-            {
-                title: 'Hubungan Buku Kas dengan Modul Keuangan Utama',
-                color: 'teal',
-                content: (
-                    <div className="space-y-3 text-sm">
-                        <div className="bg-teal-50 p-3 rounded border border-teal-200">
-                            <p className="font-semibold text-teal-800 mb-1">Alur data antar modul</p>
-                            <ol className="list-decimal pl-5 space-y-1 text-teal-900">
-                                <li><strong>Status Pembayaran:</strong> pembayaran santri tercatat lebih dulu sebagai transaksi operasional.</li>
-                                <li><strong>Setoran Kas:</strong> transaksi yang sudah divalidasi dipindahkan ke Buku Kas sebagai pemasukan resmi.</li>
-                                <li><strong>Penggajian:</strong> posting payroll menambahkan pengeluaran otomatis ke Buku Kas.</li>
-                                <li><strong>Buku Kas:</strong> menjadi titik kontrol akhir saldo kas pondok.</li>
-                            </ol>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded border border-gray-200">
-                            <p className="font-semibold mb-1">SOP ringkas bendahara</p>
-                            <ul className="list-disc pl-5 space-y-1">
-                                <li>Pagi: cek saldo akhir Buku Kas sebagai saldo awal kerja.</li>
-                                <li>Siang/Sore: lakukan <strong>Setoran Kas</strong> untuk transaksi kasir/pembayaran yang sudah valid.</li>
-                                <li>Akhir hari: cocokkan saldo Buku Kas dengan uang fisik/laporan transfer.</li>
-                                <li>Akhir pekan: ekspor CSV/Excel berdasarkan periode untuk arsip dan pelaporan pengurus.</li>
-                            </ul>
-                        </div>
-                    </div>
-                )
-            }
-        ]
-    },
+    financePanduan,
     {
         id: 'asrama',
         badge: 10,

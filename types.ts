@@ -759,6 +759,9 @@ export interface Tagihan {
     bulan: number;
     tahun: number;
     nominal: number;
+    nominalAwal?: number;
+    sudahDicicil?: number;
+    isCicilan?: boolean;
     status: 'Lunas' | 'Belum Lunas';
     tanggalLunas?: string;
     pembayaranId?: number;
@@ -772,7 +775,7 @@ export interface Pembayaran {
     tagihanIds: number[];
     jumlah: number;
     tanggal: string;
-    metode: 'Tunai' | 'Transfer';
+    metode: 'Tunai' | 'Transfer' | 'Potong Saldo';
     catatan?: string;
     disetorKeKas: boolean; // false = di laci, true = masuk kas umum
     deleted?: boolean;
@@ -782,6 +785,7 @@ export interface Pembayaran {
 export interface SaldoSantri {
     santriId: number;
     saldo: number;
+    limitHarian?: number;
     lastModified?: number;
 }
 
@@ -813,6 +817,7 @@ export interface TransaksiKas {
     jumlah: number;
     saldoSetelah: number;
     penanggungJawab: string;
+    rekening?: string;
     deleted?: boolean;
     lastModified?: number;
 }

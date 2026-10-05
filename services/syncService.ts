@@ -122,7 +122,10 @@ const validateSyncData = (data: any): boolean => {
     return false;
 };
 
-// ... WebDAV & Dropbox Helpers (unchanged) ...
+const getRecordKey = (tableName: string, item: any) => {
+    if (!item) return undefined;
+    return tableName === 'saldoSantri' ? item.santriId : item.id;
+};
 const getWebDAVClient = (config: CloudSyncConfig): WebDAVClient => {
     if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
         throw new Error("Konfigurasi WebDAV belum lengkap.");
@@ -423,12 +426,14 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
             if (!masterItems) return; 
             const table = (db as any)[tableName];
             const localItems = await table.toArray();
-            const localMap = new Map(localItems.map((i: any) => [i.id, i]));
+            const localMap = new Map(localItems.map((i: any) => [getRecordKey(tableName, i), i]));
             
             const itemsToPut: any[] = [];
             
             for (const mItem of masterItems) {
-                const lItem = localMap.get(mItem.id) as any;
+                const key = getRecordKey(tableName, mItem);
+                if (key === undefined) continue;
+                const lItem = localMap.get(key) as any;
                 if (lItem) {
                     const lTime = lItem.lastModified || 0;
                     const mTime = mItem.lastModified || 0;
@@ -566,7 +571,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
             if (rc.resolved) {
                 const targetList = data[rc.tableName];
                 if (targetList) {
-                    const idx = targetList.findIndex((item: any) => item.id === rc.recordId);
+                    const idx = targetList.findIndex((item: any) => getRecordKey(rc.tableName, item) === rc.recordId);
                     if (idx >= 0) {
                         targetList[idx] = rc.localData;
                     }
@@ -582,12 +587,14 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
             if (!incomingItems || incomingItems.length === 0) return;
             const table = (db as any)[tableName];
             const localItems = await table.toArray();
-            const localMap = new Map(localItems.map((i: any) => [i.id, i]));
+            const localMap = new Map(localItems.map((i: any) => [getRecordKey(tableName, i), i]));
             
             const itemsToPut: any[] = [];
             
             for (const incItem of incomingItems) {
-                const locItem = localMap.get(incItem.id) as any;
+                const recKey = getRecordKey(tableName, incItem);
+                if (recKey === undefined) continue;
+                const locItem = localMap.get(recKey) as any;
                 
                 if (locItem) {
                     const incTime = incItem.lastModified || 0;
@@ -601,12 +608,12 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                         if (incTime > locTime) {
                             itemsToPut.push(incItem);
                         } else {
-                             const alreadyResolved = resolvedConflicts?.find(r => r.tableName === tableName && r.recordId === incItem.id);
+                             const alreadyResolved = resolvedConflicts?.find(r => r.tableName === tableName && r.recordId === recKey);
                              if (!alreadyResolved) {
                                  conflicts.push({
-                                     id: `${tableName}-${incItem.id}`,
+                                     id: `${tableName}-${recKey}`,
                                      tableName,
-                                     recordId: incItem.id,
+                                     recordId: recKey,
                                      localData: locItem,
                                      cloudData: incItem,
                                      resolved: false

@@ -11,6 +11,8 @@ import { formatRupiah } from '../../utils/formatters';
 import { sendManualWA, formatWAMessage, WA_TEMPLATES } from '../../services/waService';
 import { SectionCard } from '../common/SectionCard';
 import { EmptyState } from '../common/EmptyState';
+import { loadXLSX } from '../../utils/lazyClientLibs';
+import { buildStandardExportFileName } from '../../utils/exportFileName';
 
 interface StatusPembayaranViewProps {
     onBayarClick: (santri: Santri) => void;
@@ -20,14 +22,14 @@ interface StatusPembayaranViewProps {
 }
 
 export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBayarClick, onHistoryClick, setPrintableSuratTagihanData, canWrite }) => {
-    const { settings, showConfirmation } = useAppContext();
+    const { settings, showConfirmation, showAlert, showToast } = useAppContext();
     const { santriList } = useSantriContext();
     const { tagihanList } = useFinanceContext();
     const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
     
     const [filters, setFilters] = useState({ search: '', jenjang: '', kelas: '', rombel: '', status: '', statusTunggakan: '' });
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const [itemsPerPage] = useState(10);
     const [selectedSantriIds, setSelectedSantriIds] = useState<number[]>([]);
     const btnBase = "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors";
     const btnWa = `${btnBase} border border-green-200 bg-green-50 text-green-700 hover:bg-green-100`;
@@ -37,15 +39,16 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
     const btnBulkWa = "flex items-center gap-2 rounded-md border border-green-200 bg-green-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-600";
 
     const tunggakanPerSantri = useMemo(() => {
-        const result = new Map<number, { total: number; count: number; tagihan: Tagihan[] }>();
+        const result = new Map<number, { total: number; count: number; hasCicilan: boolean; tagihan: Tagihan[] }>();
         tagihanList.forEach(t => {
             if (t.status === 'Belum Lunas') {
                 if (!result.has(t.santriId)) {
-                    result.set(t.santriId, { total: 0, count: 0, tagihan: [] });
+                    result.set(t.santriId, { total: 0, count: 0, hasCicilan: false, tagihan: [] });
                 }
                 const data = result.get(t.santriId)!;
                 data.total += t.nominal;
                 data.count += 1;
+                if (t.isCicilan) data.hasCicilan = true;
                 data.tagihan.push(t);
             }
         });
@@ -55,7 +58,7 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
     const dataTampilan = useMemo(() => {
         return santriList.map(santri => ({
             santri,
-            tunggakan: tunggakanPerSantri.get(santri.id) || { total: 0, count: 0, tagihan: [] }
+            tunggakan: tunggakanPerSantri.get(santri.id) || { total: 0, count: 0, hasCicilan: false, tagihan: [] }
         })).filter(item => {
             const searchLower = filters.search.toLowerCase();
             const nameMatch = item.santri.namaLengkap.toLowerCase().includes(searchLower);
@@ -103,13 +106,40 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
         }
     };
 
+    const handleExportExcel = async () => {
+        if (dataTampilan.length === 0) {
+            showToast('Tidak ada data untuk diekspor.', 'info');
+            return;
+        }
+        try {
+            const XLSX = await loadXLSX();
+            const rows = dataTampilan.map((d, idx) => ({
+                No: idx + 1,
+                NIS: d.santri.nis,
+                NamaSantri: d.santri.namaLengkap,
+                Rombel: settings.rombel.find(r => r.id === d.santri.rombelId)?.nama || '-',
+                StatusSantri: d.santri.status,
+                JumlahTagihanBelumLunas: d.tunggakan.count,
+                TotalTunggakan: d.tunggakan.total,
+                StatusPembayaran: d.tunggakan.total > 0 ? (d.tunggakan.hasCicilan ? 'Menunggak (Cicilan)' : 'Menunggak') : 'Lunas',
+            }));
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'StatusPembayaran');
+            XLSX.writeFile(wb, `${buildStandardExportFileName('status-pembayaran-santri', [])}.xlsx`);
+            showToast('Status Pembayaran berhasil diekspor ke Excel.', 'success');
+        } catch (e) {
+            showAlert('Ekspor Gagal', 'Terjadi kendala saat mengekspor data ke Excel.');
+        }
+    };
+
     const handleBulkAction = (action: 'print' | 'wa') => {
         const selectedData = selectedSantriIds
             .map(id => dataTampilan.find(d => d.santri.id === id))
             .filter(d => d && d.tunggakan.total > 0);
 
         if (selectedData.length === 0) {
-            alert('Tidak ada santri menunggak yang dipilih.');
+            showAlert('Perhatian', 'Tidak ada santri menunggak yang dipilih.');
             return;
         }
 
@@ -138,10 +168,19 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
     return (
         <SectionCard
             title="Status Pembayaran Santri"
-            description="Pantau tunggakan per santri, saring berdasarkan status santri maupun status tagihan, lalu lanjutkan ke pembayaran atau pengingat."
-            actions={canWrite ? (
-                <button onClick={() => setIsGenerateModalOpen(true)} className="app-button-primary w-full px-4 py-2 text-sm md:w-auto"><i className="bi bi-plus-circle"></i> Generate Tagihan</button>
-            ) : undefined}
+            description="Pantau tunggakan dan cicilan per santri, saring berdasarkan status santri maupun status tagihan, lalu lanjutkan ke pembayaran atau pengingat."
+            actions={
+                <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={handleExportExcel} className="app-button-secondary px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5">
+                        <i className="bi bi-file-earmark-spreadsheet text-emerald-600"></i> Ekspor Excel
+                    </button>
+                    {canWrite && (
+                        <button onClick={() => setIsGenerateModalOpen(true)} className="app-button-primary px-4 py-2 text-sm flex items-center gap-1.5">
+                            <i className="bi bi-plus-circle"></i> Generate Tagihan
+                        </button>
+                    )}
+                </div>
+            }
             contentClassName="space-y-4 p-5 sm:p-6"
         >
             <SantriFilterBar
@@ -253,7 +292,14 @@ export const StatusPembayaranView: React.FC<StatusPembayaranViewProps> = ({ onBa
                             <tr key={santri.id} className={selectedSantriIds.includes(santri.id) ? 'bg-teal-50/60' : 'hover:bg-teal-50/40'}>
                                 <td className="p-3"><input type="checkbox" checked={selectedSantriIds.includes(santri.id)} onChange={() => handleSelectOne(santri.id)} className="h-4 w-4 text-teal-600"/></td>
                                 <td className="whitespace-nowrap px-4 py-3"><div className="font-semibold text-slate-800">{santri.namaLengkap}</div><div className="text-xs text-slate-500">{santri.nis}</div></td>
-                                <td className="px-4 py-3 font-semibold text-red-600">{formatRupiah(tunggakan.total)}</td>
+                                <td className="px-4 py-3">
+                                    <span className="font-semibold text-red-600">{formatRupiah(tunggakan.total)}</span>
+                                    {tunggakan.hasCicilan && (
+                                        <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">
+                                            Cicilan Aktif
+                                        </span>
+                                    )}
+                                </td>
                                 <td className="px-4 py-3 text-slate-600">{tunggakan.count} tagihan</td>
                                 <td className="px-4 py-3 text-center space-x-2">
                                     <button 

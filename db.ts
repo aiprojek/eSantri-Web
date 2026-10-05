@@ -52,7 +52,7 @@ export class ESantriDatabase extends Dexie {
 
   constructor() {
     super('eSantriDB');
-    (this as any).version(51).stores({ // Bump version
+    (this as any).version(51).stores({
       santri: '++id, nis, namaLengkap, kamarId, lastModified',
       settings: '++id, lastModified',
       tagihan: '++id, santriId, &[santriId+biayaId+tahun+bulan], status, lastModified',
@@ -95,9 +95,12 @@ export class ESantriDatabase extends Dexie {
       warehouses: '++id, nama, kode, isDefault, lastModified',
       stockTransfers: '++id, tanggal, produkId, dariWarehouseId, keWarehouseId, lastModified',
       digitalAssets: 'id, type, lastModified'
-    })
-.upgrade(async (tx: any) => {
-       // Migration logic if needed
+    });
+
+    (this as any).version(52).stores({
+      tagihan: '++id, santriId, [santriId+biayaId+bulan+tahun], [santriId+biayaId], status, lastModified'
+    }).upgrade(async () => {
+       // Removes unique constraint &[santriId+biayaId+tahun+bulan] to support partial payments (cicilan)
     });
   }
 }

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAppContext } from '../AppContext';
 import { useFinanceContext } from '../contexts/FinanceContext';
@@ -13,6 +13,14 @@ import { Pagination } from './common/Pagination';
 import { PageHeader } from './common/PageHeader';
 import { SectionCard } from './common/SectionCard';
 import { EmptyState } from './common/EmptyState';
+
+const DEFAULT_REKENING_LIST = [
+    'Kas Tunai Bendahara',
+    'Bank Syariah Indonesia (BSI)',
+    'Bank Muamalat',
+    'Bank BRI / Mandiri',
+    'Kas Kecil Operasional',
+];
 
 const StatCard: React.FC<{ icon: string; title: string; value: string | number; color: string; textColor: string }> = ({ icon, title, value, color, textColor }) => (
     <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-start gap-4 transition-transform hover:-translate-y-1">
@@ -31,34 +39,156 @@ interface TransaksiModalProps {
     onClose: () => void;
     onSave: (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => Promise<void>;
     existingKategori: string[];
+    defaultPj: string;
 }
 
-const TransaksiModal: React.FC<TransaksiModalProps> = ({ isOpen, onClose, onSave, existingKategori }) => {
+const TransaksiModal: React.FC<TransaksiModalProps> = ({ isOpen, onClose, onSave, existingKategori, defaultPj }) => {
     const { register, handleSubmit, formState: { errors, isSubmitting }, watch, reset } = useForm<Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>>({
-        defaultValues: { jenis: 'Pemasukan', kategori: '', deskripsi: '', jumlah: 0, penanggungJawab: '', }
+        defaultValues: { jenis: 'Pemasukan', kategori: '', deskripsi: '', jumlah: 0, penanggungJawab: defaultPj, rekening: 'Kas Tunai Bendahara' }
     });
     const jenis = watch('jenis');
-    useEffect(() => { if (isOpen) { reset(); } }, [isOpen, reset]);
+    useEffect(() => {
+        if (isOpen) {
+            reset({ jenis: 'Pemasukan', kategori: '', deskripsi: '', jumlah: 0, penanggungJawab: defaultPj, rekening: 'Kas Tunai Bendahara' });
+        }
+    }, [isOpen, reset, defaultPj]);
     if (!isOpen) return null;
     const onSubmit = async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => { await onSave(data); onClose(); };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex justify-center items-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
                 <form onSubmit={handleSubmit(onSubmit)}>
-                    <div className="p-5 border-b"><h3 className="text-lg font-semibold text-gray-800">Tambah Transaksi Kas</h3></div>
+                    <div className="p-5 border-b bg-slate-50"><h3 className="text-lg font-bold text-gray-800">Tambah Transaksi Kas</h3></div>
                     <div className="p-5 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block mb-1 text-sm font-medium text-gray-700">Jenis Transaksi</label><select {...register('jenis')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="Pemasukan">Pemasukan</option><option value="Pengeluaran">Pengeluaran</option></select></div>
-                            <div><label className="block mb-1 text-sm font-medium text-gray-700">Jumlah (Rp)</label><input type="number" {...register('jumlah', { required: 'Jumlah wajib diisi', valueAsNumber: true, min: { value: 1, message: 'Jumlah harus lebih dari 0' }})} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.jumlah ? 'border-red-500' : 'border-gray-300'}`} />{errors.jumlah && <p className="text-xs text-red-600 mt-1">{errors.jumlah.message}</p>}</div>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Jenis Transaksi</label>
+                                <select {...register('jenis')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                    <option value="Pemasukan">Pemasukan</option>
+                                    <option value="Pengeluaran">Pengeluaran</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Jumlah (Rp)</label>
+                                <input type="number" {...register('jumlah', { required: 'Jumlah wajib diisi', valueAsNumber: true, min: { value: 1, message: 'Jumlah harus lebih dari 0' }})} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.jumlah ? 'border-red-500' : 'border-gray-300'}`} />
+                                {errors.jumlah && <p className="text-xs text-red-600 mt-1">{errors.jumlah.message}</p>}
+                            </div>
                         </div>
-                        <div><label className="block mb-1 text-sm font-medium text-gray-700">Kategori</label><input list="kategori-list" {...register('kategori', { required: 'Kategori wajib diisi' })} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.kategori ? 'border-red-500' : 'border-gray-300'}`} placeholder="cth: Donasi, Operasional, Listrik" /><datalist id="kategori-list">{existingKategori.map(k => <option key={k} value={k} />)}</datalist>{errors.kategori && <p className="text-xs text-red-600 mt-1">{errors.kategori.message}</p>}</div>
-                        <div><label className="block mb-1 text-sm font-medium text-gray-700">Deskripsi</label><textarea {...register('deskripsi', { required: 'Deskripsi wajib diisi' })} rows={3} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.deskripsi ? 'border-red-500' : 'border-gray-300'}`}></textarea>{errors.deskripsi && <p className="text-xs text-red-600 mt-1">{errors.deskripsi.message}</p>}</div>
-                         <div><label className="block mb-1 text-sm font-medium text-gray-700">Penanggung Jawab</label><input type="text" {...register('penanggungJawab', { required: 'Penanggung Jawab wajib diisi' })} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.penanggungJawab ? 'border-red-500' : 'border-gray-300'}`}/>{errors.penanggungJawab && <p className="text-xs text-red-600 mt-1">{errors.penanggungJawab.message}</p>}</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Pos Kas / Rekening</label>
+                                <select {...register('rekening')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
+                                    {DEFAULT_REKENING_LIST.map(r => <option key={r} value={r}>{r}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block mb-1 text-sm font-medium text-gray-700">Kategori</label>
+                                <input list="kategori-list" {...register('kategori', { required: 'Kategori wajib diisi' })} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.kategori ? 'border-red-500' : 'border-gray-300'}`} placeholder="cth: Donasi, Operasional" />
+                                <datalist id="kategori-list">{existingKategori.map(k => <option key={k} value={k} />)}</datalist>
+                                {errors.kategori && <p className="text-xs text-red-600 mt-1">{errors.kategori.message}</p>}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Deskripsi</label>
+                            <textarea {...register('deskripsi', { required: 'Deskripsi wajib diisi' })} rows={2} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.deskripsi ? 'border-red-500' : 'border-gray-300'}`}></textarea>
+                            {errors.deskripsi && <p className="text-xs text-red-600 mt-1">{errors.deskripsi.message}</p>}
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">Penanggung Jawab</label>
+                            <input type="text" {...register('penanggungJawab', { required: 'Penanggung Jawab wajib diisi' })} className={`bg-gray-50 border text-gray-900 text-sm rounded-lg w-full p-2.5 ${errors.penanggungJawab ? 'border-red-500' : 'border-gray-300'}`}/>
+                            {errors.penanggungJawab && <p className="text-xs text-red-600 mt-1">{errors.penanggungJawab.message}</p>}
+                        </div>
                     </div>
-                    <div className="p-4 border-t flex justify-end space-x-2">
-                        <button type="button" onClick={onClose} className="text-gray-500 bg-white hover:bg-gray-100 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5">Batal</button>
-                        <button type="submit" disabled={isSubmitting} className={`text-white font-medium rounded-lg text-sm px-5 py-2.5 ${jenis === 'Pemasukan' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} disabled:bg-gray-300`}>{isSubmitting ? 'Menyimpan...' : 'Simpan Transaksi'}</button>
+                    <div className="p-4 border-t bg-slate-50 flex justify-end space-x-2">
+                        <button type="button" onClick={onClose} className="text-gray-600 bg-white hover:bg-gray-100 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5">Batal</button>
+                        <button type="submit" disabled={isSubmitting} className={`text-white font-semibold rounded-lg text-sm px-5 py-2.5 ${jenis === 'Pemasukan' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} disabled:bg-gray-300`}>{isSubmitting ? 'Menyimpan...' : 'Simpan Transaksi'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+interface MutasiModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onMutasi: (from: string, to: string, jumlah: number, deskripsi: string, pj: string) => Promise<void>;
+    defaultPj: string;
+}
+
+const MutasiKasModal: React.FC<MutasiModalProps> = ({ isOpen, onClose, onMutasi, defaultPj }) => {
+    const [fromRekening, setFromRekening] = useState('Kas Tunai Bendahara');
+    const [toRekening, setToRekening] = useState('Bank Syariah Indonesia (BSI)');
+    const [jumlah, setJumlah] = useState<number>(0);
+    const [deskripsi, setDeskripsi] = useState('');
+    const [pj, setPj] = useState(defaultPj);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            setJumlah(0);
+            setDeskripsi('');
+            setPj(defaultPj);
+        }
+    }, [isOpen, defaultPj]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (fromRekening === toRekening || jumlah <= 0) return;
+        setIsSubmitting(true);
+        try {
+            await onMutasi(fromRekening, toRekening, jumlah, deskripsi || 'Pindah buku / Setor tunai ke bank', pj || 'Bendahara');
+            onClose();
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex justify-center items-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                <form onSubmit={handleSubmit}>
+                    <div className="p-5 border-b bg-slate-50">
+                        <h3 className="text-lg font-bold text-slate-800">Mutasi Kas Antar Pos / Rekening</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Pindahkan dana antar kas tunai dan rekening bank tanpa mengubah total saldo akhir.</p>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        <div>
+                            <label className="block mb-1 text-xs font-semibold uppercase text-slate-600">Dari Pos Kas (Sumber)</label>
+                            <select value={fromRekening} onChange={e => setFromRekening(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm font-medium">
+                                {DEFAULT_REKENING_LIST.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-xs font-semibold uppercase text-slate-600">Ke Pos Kas (Tujuan)</label>
+                            <select value={toRekening} onChange={e => setToRekening(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm font-medium">
+                                {DEFAULT_REKENING_LIST.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            {fromRekening === toRekening && (
+                                <p className="text-xs text-red-600 mt-1">Pos sumber dan tujuan tidak boleh sama.</p>
+                            )}
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-xs font-semibold uppercase text-slate-600">Nominal Mutasi (Rp)</label>
+                            <input type="number" min={1} value={jumlah || ''} onChange={e => setJumlah(Number(e.target.value) || 0)} required className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm font-bold" placeholder="Contoh: 5000000" />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-xs font-semibold uppercase text-slate-600">Keterangan Mutasi</label>
+                            <input type="text" value={deskripsi} onChange={e => setDeskripsi(e.target.value)} required placeholder="Contoh: Setor tunai kas laci ke BSI" className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                        </div>
+                        <div>
+                            <label className="block mb-1 text-xs font-semibold uppercase text-slate-600">Penanggung Jawab</label>
+                            <input type="text" value={pj} onChange={e => setPj(e.target.value)} required className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                        </div>
+                    </div>
+                    <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium rounded-lg border bg-white hover:bg-gray-50">Batal</button>
+                        <button type="submit" disabled={isSubmitting || fromRekening === toRekening || jumlah <= 0} className="px-4 py-2 text-sm font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:bg-gray-300">
+                            {isSubmitting ? 'Memproses...' : 'Simpan Mutasi'}
+                        </button>
                     </div>
                 </form>
             </div>
@@ -68,12 +198,14 @@ const TransaksiModal: React.FC<TransaksiModalProps> = ({ isOpen, onClose, onSave
 
 const BukuKas: React.FC = () => {
     const { showToast, showAlert, currentUser } = useAppContext();
-    const { onAddTransaksiKas } = useFinanceContext();
+    const { transaksiKasList, onAddTransaksiKas, onMutasiKas } = useFinanceContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isMutasiModalOpen, setIsMutasiModalOpen] = useState(false);
     
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.bukukas === 'write';
+    const defaultPj = currentUser?.fullName || currentUser?.username || 'Bendahara';
 
-    const [filters, setFilters] = useState({ startDate: '', endDate: '', jenis: '', kategori: '' });
+    const [filters, setFilters] = useState({ startDate: '', endDate: '', jenis: '', kategori: '', rekening: '' });
     
     // Pagination State (Replacing full list load)
     const [transactions, setTransactions] = useState<TransaksiKas[]>([]);
@@ -85,6 +217,7 @@ const BukuKas: React.FC = () => {
     
     // Stats State (Calculated separately for full view)
     const [stats, setStats] = useState({ totalPemasukan: 0, totalPengeluaran: 0, saldoAkhir: 0 });
+    const [rekeningBalances, setRekeningBalances] = useState<Record<string, number>>({});
     const [existingKategori, setExistingKategori] = useState<string[]>([]);
     const [filteredRows, setFilteredRows] = useState<TransaksiKas[]>([]);
     const fetchRunIdRef = useRef(0);
@@ -104,7 +237,7 @@ const BukuKas: React.FC = () => {
     };
 
     const resetFilters = () => {
-        setFilters({ startDate: '', endDate: '', jenis: '', kategori: '' });
+        setFilters({ startDate: '', endDate: '', jenis: '', kategori: '', rekening: '' });
     };
 
     const fetchTransactions = useCallback(async () => {
@@ -114,6 +247,15 @@ const BukuKas: React.FC = () => {
             const startDate = filters.startDate ? new Date(`${filters.startDate}T00:00:00`).getTime() : null;
             const endDate = filters.endDate ? new Date(`${filters.endDate}T23:59:59`).getTime() : null;
             const kategoriQuery = filters.kategori.trim().toLowerCase();
+
+            // Calculate per-rekening balances across all transactions
+            const allTx = await db.transaksiKas.filter(t => !t.deleted).toArray();
+            const rekMap: Record<string, number> = {};
+            allTx.forEach(t => {
+                const rek = t.rekening || 'Kas Tunai Bendahara';
+                const delta = t.jenis === 'Pemasukan' ? t.jumlah : -t.jumlah;
+                rekMap[rek] = (rekMap[rek] || 0) + delta;
+            });
 
             // Use indexed range by tanggal first, then apply remaining predicates in one pass.
             let baseCollection = db.transaksiKas.orderBy('tanggal').reverse();
@@ -132,9 +274,12 @@ const BukuKas: React.FC = () => {
 
             const allMatching = await baseCollection
                 .filter(t => {
+                    if (t.deleted) return false;
                     const jenisMatch = !filters.jenis || t.jenis === filters.jenis;
                     const kategoriMatch = !kategoriQuery || t.kategori.toLowerCase().includes(kategoriQuery);
-                    return jenisMatch && kategoriMatch;
+                    const rek = t.rekening || 'Kas Tunai Bendahara';
+                    const rekMatch = !filters.rekening || rek === filters.rekening;
+                    return jenisMatch && kategoriMatch && rekMatch;
                 })
                 .toArray();
 
@@ -143,6 +288,7 @@ const BukuKas: React.FC = () => {
             const count = allMatching.length;
             setTotalItems(count);
             setFilteredRows(allMatching);
+            setRekeningBalances(rekMap);
 
             const offset = (currentPage - 1) * itemsPerPage;
             setTransactions(allMatching.slice(offset, offset + itemsPerPage));
@@ -155,8 +301,7 @@ const BukuKas: React.FC = () => {
                 uniqueCats.add(t.kategori);
             });
             
-            const absoluteLastTx = await db.transaksiKas.orderBy('tanggal').last();
-            const saldoAkhir = absoluteLastTx?.saldoSetelah || 0;
+            const saldoAkhir = Object.values(rekMap).reduce((sum, val) => sum + val, 0);
 
             if (runId !== fetchRunIdRef.current) return;
             setStats({ totalPemasukan, totalPengeluaran, saldoAkhir });
@@ -177,22 +322,34 @@ const BukuKas: React.FC = () => {
 
     useEffect(() => {
         fetchTransactions();
-    }, [fetchTransactions]);
+    }, [fetchTransactions, transaksiKasList]);
 
     const handleSave = async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => {
         if (!canWrite) return;
         try { 
             await onAddTransaksiKas(data); 
             showToast('Transaksi berhasil ditambahkan.', 'success'); 
-            fetchTransactions(); // Refresh list
+            fetchTransactions();
         } catch (e) { 
             showAlert('Gagal Menyimpan', (e as Error).message); 
+        }
+    };
+
+    const handleMutasi = async (from: string, to: string, jumlah: number, deskripsi: string, pj: string) => {
+        if (!canWrite) return;
+        try {
+            await onMutasiKas(from, to, jumlah, deskripsi, pj);
+            showToast(`Mutasi sebesar ${formatRupiah(jumlah)} dari ${from} ke ${to} berhasil dicatat.`, 'success');
+            fetchTransactions();
+        } catch (e) {
+            showAlert('Gagal Mutasi Kas', (e as Error).message);
         }
     };
 
     const buildExportRows = () => {
         return filteredRows.map((t) => ({
             Tanggal: new Date(t.tanggal).toLocaleString('id-ID', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+            PosRekening: t.rekening || 'Kas Tunai Bendahara',
             Jenis: t.jenis,
             Kategori: t.kategori,
             Deskripsi: t.deskripsi,
@@ -322,16 +479,54 @@ const BukuKas: React.FC = () => {
         <div className="w-full space-y-6">
             <PageHeader
                 eyebrow="Keuangan & Aset"
-                title="Buku Kas Umum"
-                description="Catat dan pantau arus kas masuk serta keluar dengan filter, statistik, dan riwayat transaksi yang lebih rapi."
-                actions={canWrite ? (<button onClick={() => setIsModalOpen(true)} className="app-button-primary px-4 py-2.5 text-sm"><i className="bi bi-plus-lg"></i> Tambah Transaksi</button>) : undefined}
+                title="Buku Kas Umum & Multi-Pos Rekening"
+                description="Catat dan pantau arus kas masuk, keluar, serta mutasi antar pos kas (Tunai & Bank) dengan pelacakan saldo terperinci."
+                actions={canWrite ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button onClick={() => setIsMutasiModalOpen(true)} className="app-button-secondary px-4 py-2.5 text-sm font-semibold flex items-center gap-1.5">
+                            <i className="bi bi-arrow-left-right text-teal-600"></i> Mutasi Antar Kas
+                        </button>
+                        <button onClick={() => setIsModalOpen(true)} className="app-button-primary px-4 py-2.5 text-sm flex items-center gap-1.5">
+                            <i className="bi bi-plus-lg"></i> Tambah Transaksi
+                        </button>
+                    </div>
+                ) : undefined}
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatCard title="Total Pemasukan (Filter)" value={formatRupiah(stats.totalPemasukan)} icon="bi-arrow-down-circle-fill" color="bg-green-100 text-green-600" textColor="text-green-600" />
                 <StatCard title="Total Pengeluaran (Filter)" value={formatRupiah(stats.totalPengeluaran)} icon="bi-arrow-up-circle-fill" color="bg-red-100 text-red-600" textColor="text-red-600" />
-                <StatCard title="Saldo Akhir (Aktual)" value={formatRupiah(stats.saldoAkhir)} icon="bi-wallet2" color="bg-blue-100 text-blue-600" textColor="text-blue-600" />
+                <StatCard title="Total Saldo Kas (Aktual)" value={formatRupiah(stats.saldoAkhir)} icon="bi-wallet2" color="bg-blue-100 text-blue-600" textColor="text-blue-600" />
             </div>
+
+            {Object.keys(rekeningBalances).length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Posisi Saldo per Pos Kas / Rekening</h4>
+                        {filters.rekening && (
+                            <button onClick={() => setFilters(f => ({ ...f, rekening: '' }))} className="text-xs text-teal-600 font-semibold hover:underline">
+                                Tampilkan Semua Pos
+                            </button>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {Object.entries(rekeningBalances).map(([rek, bal]) => (
+                            <button
+                                key={rek}
+                                type="button"
+                                onClick={() => setFilters(f => ({ ...f, rekening: f.rekening === rek ? '' : rek }))}
+                                className={`text-left p-3 rounded-xl border transition-all ${filters.rekening === rek ? 'border-teal-500 bg-teal-50/60 ring-1 ring-teal-500' : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100/70'}`}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-slate-600 truncate">{rek}</span>
+                                    <i className={`bi ${rek.toLowerCase().includes('bank') ? 'bi-bank text-blue-600' : 'bi-cash-coin text-teal-600'} text-sm`}></i>
+                                </div>
+                                <p className={`text-base font-bold mt-1 ${bal < 0 ? 'text-red-600' : 'text-slate-800'}`}>{formatRupiah(bal)}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div id="buku-kas-export-area">
             <SectionCard title="Transaksi Kas" description="Gunakan filter untuk menelusuri transaksi dan memantau posisi saldo." contentClassName="overflow-hidden">
@@ -346,7 +541,7 @@ const BukuKas: React.FC = () => {
                         <button type="button" disabled={isExporting} onClick={handleExportCsv} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-filetype-csv'} mr-1`}></i>{isExporting ? 'Memproses...' : 'CSV'}</button>
                         <button type="button" disabled={isExporting} onClick={handleExportExcel} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-60 disabled:cursor-not-allowed"><i className={`bi ${isExporting ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-spreadsheet'} mr-1`}></i>{isExporting ? 'Memproses...' : 'Excel'}</button>
                     </div>
-                    <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-4">
+                    <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-5">
                         <div>
                             <label className="app-label mb-1.5 block pl-1">Tanggal Mulai</label>
                             <input type="date" value={filters.startDate} onChange={e => setFilters(f => ({...f, startDate: e.target.value}))} className="app-input h-10 w-full rounded-md px-3 text-sm"/>
@@ -354,6 +549,13 @@ const BukuKas: React.FC = () => {
                         <div>
                             <label className="app-label mb-1.5 block pl-1">Tanggal Akhir</label>
                             <input type="date" value={filters.endDate} onChange={e => setFilters(f => ({...f, endDate: e.target.value}))} className="app-input h-10 w-full rounded-md px-3 text-sm"/>
+                        </div>
+                        <div>
+                            <label className="app-label mb-1.5 block pl-1">Pos Kas / Rekening</label>
+                            <select value={filters.rekening} onChange={e => setFilters(f => ({...f, rekening: e.target.value}))} className="app-select h-10 w-full px-3 text-sm">
+                                <option value="">Semua Pos Kas</option>
+                                {DEFAULT_REKENING_LIST.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
                         </div>
                         <div>
                             <label className="app-label mb-1.5 block pl-1">Jenis Transaksi</label>
@@ -365,7 +567,7 @@ const BukuKas: React.FC = () => {
                         </div>
                         <div>
                             <label className="app-label mb-1.5 block pl-1">Kategori</label>
-                            <input type="text" value={filters.kategori} onChange={e => setFilters(f => ({...f, kategori: e.target.value}))} placeholder="Cari kategori..." className="app-input h-10 w-full min-w-[180px] rounded-md px-3 text-sm"/>
+                            <input type="text" value={filters.kategori} onChange={e => setFilters(f => ({...f, kategori: e.target.value}))} placeholder="Cari kategori..." className="app-input h-10 w-full min-w-[160px] rounded-md px-3 text-sm"/>
                         </div>
                     </div>
                 </div>
@@ -378,6 +580,7 @@ const BukuKas: React.FC = () => {
                                     <div>
                                         <p className="text-xs text-slate-500">{new Date(t.tanggal).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
                                         <p className="mt-1 text-sm font-semibold text-slate-800">{t.kategori}</p>
+                                        <span className="inline-block mt-0.5 text-[10px] font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700">{t.rekening || 'Kas Tunai Bendahara'}</span>
                                     </div>
                                     <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${t.jenis === 'Pemasukan' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                                         {t.jenis}
@@ -407,6 +610,7 @@ const BukuKas: React.FC = () => {
                         <thead className="sticky top-0 z-10 border-b border-app-border">
                             <tr>
                                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                                <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Pos Kas</th>
                                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Kategori</th>
                                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Deskripsi</th>
                                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-right">Pemasukan</th>
@@ -418,6 +622,7 @@ const BukuKas: React.FC = () => {
                             {transactions.map(t => (
                                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">{new Date(t.tanggal).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap"><span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">{t.rekening || 'Kas Tunai Bendahara'}</span></td>
                                     <td className="px-6 py-4 whitespace-nowrap"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{t.kategori}</span></td>
                                     <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title={t.deskripsi}>{t.deskripsi}{t.penanggungJawab && <div className="text-xs text-gray-400 mt-0.5">Oleh: {t.penanggungJawab}</div>}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-green-600">{t.jenis === 'Pemasukan' ? formatRupiah(t.jumlah) : '-'}</td>
@@ -425,7 +630,7 @@ const BukuKas: React.FC = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-gray-800">{formatRupiah(t.saldoSetelah)}</td>
                                 </tr>
                             ))}
-                             {transactions.length === 0 && !isLoading && <tr><td colSpan={6} className="p-4"><EmptyState icon="bi-inbox" title="Tidak ada transaksi" description="Tidak ada transaksi yang cocok dengan filter buku kas saat ini." /></td></tr>}
+                             {transactions.length === 0 && !isLoading && <tr><td colSpan={7} className="p-4"><EmptyState icon="bi-inbox" title="Tidak ada transaksi" description="Tidak ada transaksi yang cocok dengan filter buku kas saat ini." /></td></tr>}
                         </tbody>
                     </table>
                     </div>
@@ -436,9 +641,11 @@ const BukuKas: React.FC = () => {
                 </div>
             </SectionCard>
             </div>
-            {isModalOpen && <TransaksiModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSave} existingKategori={existingKategori} />}
+            {isModalOpen && <TransaksiModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSave} existingKategori={existingKategori} defaultPj={defaultPj} />}
+            {isMutasiModalOpen && <MutasiKasModal isOpen={isMutasiModalOpen} onClose={() => setIsMutasiModalOpen(false)} onMutasi={handleMutasi} defaultPj={defaultPj} />}
         </div>
     );
 };
 
 export default BukuKas;
+

@@ -95,12 +95,24 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
         );
 
         const jumlahSantriMenunggak = santriMenunggakIds.size;
+
+        const totalSeluruhTagihan = tagihanList.reduce((sum, t) => sum + (Number(t.nominal) || 0), 0);
+        const totalTagihanLunas = tagihanList
+            .filter(t => t.status === 'Lunas')
+            .reduce((sum, t) => sum + (Number(t.nominal) || 0), 0);
+        const collectionRate = totalSeluruhTagihan > 0 ? (totalTagihanLunas / totalSeluruhTagihan) * 100 : 100;
+
+        const kasBelumDisetor = pembayaranList
+            .filter(p => !p.disetorKeKas)
+            .reduce((sum, p) => sum + p.jumlah, 0);
         
         return {
             totalTunggakan,
             penerimaanBulanIni,
             penerimaanTahunIni,
             jumlahSantriMenunggak,
+            collectionRate,
+            kasBelumDisetor,
         };
     }, [santriList, tagihanList, pembayaranList]);
 
@@ -208,7 +220,21 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
                 </div>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {stats.kasBelumDisetor > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                            <i className="bi bi-box-arrow-in-down text-lg"></i>
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-amber-900">Terdapat Dana Pembayaran Belum Disetor ke Buku Kas</h4>
+                            <p className="text-xs text-amber-700">Sebesar <strong>{formatRupiah(stats.kasBelumDisetor)}</strong> masih berstatus di laci kasir. Lakukan rekonsiliasi pada tab <strong>Setoran Kas</strong>.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                  <StatCard 
                     title="Total Tunggakan Aktif" 
                     value={formatRupiah(stats.totalTunggakan)} 
@@ -226,6 +252,12 @@ export const FinanceDashboard: React.FC<{ santriList: Santri[], tagihanList: Tag
                     value={formatRupiah(stats.penerimaanTahunIni)} 
                     icon="bi-bar-chart-line-fill" 
                     color="bg-blue-500"
+                />
+                <StatCard 
+                    title="Rasio Kolektibilitas" 
+                    value={`${stats.collectionRate.toFixed(1)}%`} 
+                    icon="bi-pie-chart-fill" 
+                    color="bg-teal-600"
                 />
                  <StatCard 
                     title="Santri Aktif Menunggak" 

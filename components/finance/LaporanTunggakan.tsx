@@ -4,16 +4,18 @@ import { useFinanceContext } from '../../contexts/FinanceContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { useAppContext } from '../../AppContext';
 import { formatRupiah } from '../../utils/formatters';
-import { Tagihan, Santri } from '../../types';
+import { Tagihan } from '../../types';
 import { sendManualWA, formatWAMessage, WA_TEMPLATES } from '../../services/waService';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { SectionCard } from '../common/SectionCard';
 import { EmptyState } from '../common/EmptyState';
+import { loadXLSX } from '../../utils/lazyClientLibs';
+import { buildStandardExportFileName } from '../../utils/exportFileName';
 
 export const LaporanTunggakan: React.FC = () => {
     const { tagihanList } = useFinanceContext();
     const { santriList } = useSantriContext();
-    const { settings } = useAppContext();
+    const { settings, showAlert, showToast } = useAppContext();
     
     const [filterJenjang, setFilterJenjang] = useState('');
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -37,10 +39,9 @@ export const LaporanTunggakan: React.FC = () => {
             if (!santri || santri.status !== 'Aktif') return;
             if (filterJenjang && santri.jenjangId !== parseInt(filterJenjang)) return;
 
-            // Hitung umur tagihan
-            // Asumsi tanggal jatuh tempo adalah tanggal 10 bulan tagihan
+            // Hitung umur tagihan berdasarkan tanggal 10 bulan tagihan
             const dueDate = new Date(t.tahun, t.bulan - 1, 10);
-            const diffTime = Math.abs(today.getTime() - dueDate.getTime());
+            const diffTime = Math.max(0, today.getTime() - dueDate.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             if (!report.has(t.santriId)) {
@@ -78,13 +79,39 @@ export const LaporanTunggakan: React.FC = () => {
 
     const handlePrint = () => window.print();
 
+    const handleExportExcel = async () => {
+        if (agingData.length === 0) {
+            showToast('Tidak ada data piutang untuk diekspor.', 'info');
+            return;
+        }
+        try {
+            const XLSX = await loadXLSX();
+            const rows = agingData.map((item, idx) => ({
+                No: idx + 1,
+                NamaSantri: item.nama,
+                Kelas: item.kelas,
+                'Lancar (0-30 Hari)': item.lancar,
+                'Perhatian (31-90 Hari)': item.kurangLancar,
+                'Macet (>90 Hari)': item.macet,
+                TotalTunggakan: item.total,
+            }));
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'UmurPiutang');
+            XLSX.writeFile(wb, `${buildStandardExportFileName('laporan-umur-piutang', [])}.xlsx`);
+            showToast('Laporan Umur Piutang berhasil diekspor ke Excel.', 'success');
+        } catch (e) {
+            showAlert('Ekspor Gagal', 'Gagal mengekspor laporan umur piutang.');
+        }
+    };
+
     const handleSendDuesWA = (santriId: number, total: number) => {
         const santri = santriList.find(s => s.id === santriId);
         if (!santri) return;
 
         const phone = santri.teleponAyah || santri.teleponIbu || santri.teleponWali;
         if (!phone) {
-            alert("Nomor telepon orang tua tidak tersedia!");
+            showAlert("Nomor Tidak Tersedia", "Nomor telepon orang tua/wali santri belum diisi di profil santri.");
             return;
         }
 
@@ -126,6 +153,9 @@ export const LaporanTunggakan: React.FC = () => {
                         <option value="">Semua Jenjang</option>
                         {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                     </select>
+                    <button onClick={handleExportExcel} className="app-button-secondary h-10 px-4 text-sm flex items-center gap-1.5">
+                        <i className="bi bi-file-earmark-spreadsheet text-emerald-600"></i> Ekspor Excel
+                    </button>
                     <button onClick={handlePrint} className="app-button-secondary h-10 px-4 text-sm">
                         <i className="bi bi-printer"></i> Cetak
                     </button>

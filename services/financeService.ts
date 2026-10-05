@@ -121,6 +121,7 @@ export const generatePayrollDraft = async (
     // Check if payroll already exists for this period
     const existing = await dexieDb.payrollRecords
         .where({ bulan: month, tahun: year })
+        .filter((r: any) => !r.deleted)
         .toArray();
         
     const existingMap = new Map(existing.map(r => [r.guruId, r]));

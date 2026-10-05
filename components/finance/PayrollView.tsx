@@ -172,7 +172,7 @@ const PayrollConfigTab: React.FC<{ settings: any, onSave: (d: any) => void }> = 
 // --- GENERATE TAB ---
 const GeneratePayrollTab: React.FC<{ settings: any }> = ({ settings }) => {
     const { showToast, showConfirmation, currentUser } = useAppContext();
-    const { onSetorKeKas } = useFinanceContext();
+    const { onAddTransaksiKas } = useFinanceContext();
     const [month, setMonth] = useState(new Date().getMonth() + 1);
     const [year, setYear] = useState(new Date().getFullYear());
     const [weeks, setWeeks] = useState(4);
@@ -217,18 +217,15 @@ const GeneratePayrollTab: React.FC<{ settings: any }> = ({ settings }) => {
             `Anda akan menyimpan ${drafts.length} slip gaji dengan total ${formatRupiah(totalPayout)}. Data ini akan dicatat sebagai Pengeluaran di Buku Kas.`,
             async () => {
                 try {
-                    await db.payrollRecords.bulkAdd(drafts);
-                    // Add transaction to Cashflow
-                    await db.transaksiKas.add({
-                        id: Date.now(),
-                        tanggal: new Date().toISOString(),
+                    const nowTs = Date.now();
+                    await db.payrollRecords.bulkPut(drafts.map((d, idx) => ({ ...d, id: d.id || (nowTs * 1000 + idx), lastModified: nowTs })));
+                    await onAddTransaksiKas({
                         jenis: 'Pengeluaran',
                         kategori: 'Gaji & Honor',
                         deskripsi: `Penggajian Periode ${month}/${year} (${drafts.length} Guru)`,
                         jumlah: totalPayout,
-                        saldoSetelah: 0, // Will be recalc by service logic usually, or handle here manually if needed but FinanceContext handles basic adds
                         penanggungJawab: currentUser?.fullName || 'Admin',
-                        lastModified: Date.now()
+                        rekening: 'Kas Tunai Bendahara'
                     });
                     
                     showToast('Penggajian berhasil di-posting!', 'success');
@@ -340,13 +337,20 @@ const GeneratePayrollTab: React.FC<{ settings: any }> = ({ settings }) => {
 
 // --- HISTORY TAB ---
 const PayrollHistoryTab: React.FC<{ settings: any }> = ({ settings }) => {
-    const history = useLiveQuery(() => db.payrollRecords.orderBy('id').reverse().toArray(), []) || [];
+    const { showConfirmation, showToast } = useAppContext();
+    const history = useLiveQuery(() => db.payrollRecords.orderBy('id').reverse().filter((r: any) => !r.deleted).toArray(), []) || [];
     const [previewRecord, setPreviewRecord] = useState<PayrollRecord | null>(null);
 
     const handleDelete = (id: number) => {
-        if(confirm('Hapus riwayat gaji ini?')) {
-            db.payrollRecords.delete(id);
-        }
+        showConfirmation(
+            'Hapus Riwayat Gaji?',
+            'Apakah Anda yakin ingin menghapus riwayat slip gaji ini?',
+            async () => {
+                await db.payrollRecords.update(id, { deleted: true, lastModified: Date.now() } as any);
+                showToast('Riwayat gaji dihapus.', 'success');
+            },
+            { confirmColor: 'red', confirmText: 'Ya, Hapus' }
+        );
     };
 
     return (

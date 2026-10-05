@@ -298,12 +298,12 @@ export const startFirebaseSync = (tenantId: string) => {
 };
 
 export const downloadAllFromFirebase = async (tenantId: string) => {
-    isSyncingFromCloud = true;
+    beginCloudSync();
     try {
         for (const tableName of TABLES_TO_SYNC) {
             const path = `tenants/${tenantId}/${tableName}`;
             const snapshot = await getDocs(collection(fdb, path));
-            const items = snapshot.docs.map((item) => item.data() as any);
+            const items = snapshot.docs.map((item) => ({ ...item.data(), _docId: item.id }) as any);
 
             if (items.length === 0) {
                 continue;
@@ -312,14 +312,15 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
             if (tableName === 'users') {
                 const localUsers = await db.users.toArray();
                 const filteredItems = items.filter((user) => !user.isDefaultAdmin || !localUsers.some((localUser) => localUser.isDefaultAdmin));
-                const normalizedUsers = filteredItems.map((user) => migrateUserPermissions(user as any).user);
+                const normalizedUsers = filteredItems.map(({ _docId, ...user }) => migrateUserPermissions(user as any).user);
                 await db.users.bulkPut(normalizedUsers);
             } else if (tableName === 'settings') {
                 const localSettings = await db.settings.toArray();
+                const { _docId, ...cleanSetting } = items[0];
                 if (localSettings.length > 0) {
                     const localPairedTenant = localSettings[0].cloudSyncConfig?.firebasePairedTenantId;
                     const localProvider = localSettings[0].cloudSyncConfig?.provider;
-                    const incomingSettings = { ...items[0] };
+                    const incomingSettings = { ...cleanSetting };
                     if (localPairedTenant) {
                         incomingSettings.cloudSyncConfig = {
                             ...(incomingSettings.cloudSyncConfig || {}),
@@ -329,22 +330,22 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
                     }
                     await db.settings.update(localSettings[0].id!, incomingSettings);
                 } else {
-                    await db.settings.add(items[0]);
+                    await db.settings.add(cleanSetting);
                 }
             } else {
                 const isNum = isNumericKeyTable(tableName);
-                const normalizedItems = isNum
-                    ? items.map((item) => {
-                        const rawId = item.id ?? item.santriId;
-                        if (rawId !== undefined && !isNaN(Number(rawId))) {
-                            if (tableName === 'saldoSantri') {
-                                return { ...item, santriId: Number(rawId) };
-                            }
-                            return { ...item, id: Number(rawId) };
+                const normalizedItems = items.map(({ _docId, ...item }) => {
+                    const rawId = item.id ?? item.santriId ?? _docId;
+                    if (isNum && rawId !== undefined && !isNaN(Number(rawId))) {
+                        if (tableName === 'saldoSantri') {
+                            return { ...item, santriId: Number(rawId) };
                         }
-                        return item;
-                    })
-                    : items;
+                        return { ...item, id: Number(rawId) };
+                    }
+                    return rawId !== undefined && item.id === undefined && tableName !== 'saldoSantri'
+                        ? { ...item, id: rawId }
+                        : item;
+                });
                 await (db as any)[tableName].bulkPut(normalizedItems);
             }
         }
@@ -352,7 +353,7 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
         console.error('Error downloading all from Firebase:', error);
         throw error;
     } finally {
-        isSyncingFromCloud = false;
+        endCloudSync();
     }
 };
 

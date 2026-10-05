@@ -14,10 +14,14 @@ export const getDashboardAnalytics = async (): Promise<AnalyticsData> => {
     const cashflow: { month: string, income: number, expense: number }[] = [];
     for (let i = 5; i >= 0; i--) {
         const date = subMonths(new Date(), i);
-        const start = startOfMonth(date).getTime();
-        const end = endOfMonth(date).getTime();
+        const start = startOfMonth(date).toISOString();
+        const end = endOfMonth(date).toISOString();
         
-        const transactions = await db.transaksiKas.where('tanggal').between(start, end).toArray();
+        const transactions = await db.transaksiKas
+            .where('tanggal')
+            .between(start, end, true, true)
+            .filter(t => !t.deleted)
+            .toArray();
         const income = transactions.filter(t => t.jenis === 'Pemasukan').reduce((acc, curr) => acc + curr.jumlah, 0);
         const expense = transactions.filter(t => t.jenis === 'Pengeluaran').reduce((acc, curr) => acc + curr.jumlah, 0);
         

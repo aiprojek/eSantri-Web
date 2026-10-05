@@ -18,6 +18,7 @@ const PANDUAN_ORDER: string[] = [
     'perpustakaan',
     'kalender',
     'finance',
+    'bukukas',
     'asrama',
     'koperasi',
     'laporan_lanjutan',

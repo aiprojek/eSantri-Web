@@ -805,6 +805,7 @@ export interface ChartOfAccount {
     kode: string;
     nama: string;
     kategori: 'Harta' | 'Kewajiban' | 'Modal' | 'Pendapatan' | 'Beban';
+    deleted?: boolean;
     lastModified?: number;
 }
 

@@ -6,6 +6,7 @@ import { akademikPanduan } from './panduan/akademik';
 import { perpustakaanPanduan } from './panduan/perpustakaan';
 import { kalenderPanduan } from './panduan/kalender';
 import { financePanduan } from './panduan/finance';
+import { bukukasPanduan } from './panduan/bukukas';
 
 export interface PanduanStepData {
     title: string;
@@ -2998,6 +2999,7 @@ export const panduanData: PanduanSectionData[] = [
     raporPanduan,
     akademikPanduan,
     financePanduan,
+    bukukasPanduan,
     {
         id: 'asrama',
         badge: 10,

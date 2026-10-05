@@ -201,6 +201,7 @@ export const exportArusKasToExcel = async (data: TransaksiKas[], fileName: strin
     const excelData = data.map((t, index) => ({
         'No': index + 1,
         'Tanggal': formatExcelDate(t.tanggal),
+        'Pos Kas / Rekening': t.rekening || 'Kas Tunai Bendahara',
         'Jenis': t.jenis,
         'Kategori': t.kategori,
         'Deskripsi': t.deskripsi,

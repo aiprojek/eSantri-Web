@@ -5,7 +5,7 @@ export const financePanduan: PanduanSectionData = {
     id: 'finance',
     badge: 9,
     badgeColor: 'blue',
-    title: 'Keuangan Santri, Buku Kas Multi-Pos & SOP Multi-Admin (Real-Time vs Hub & Spoke)',
+    title: 'Keuangan Santri: Tagihan, Cicilan, Uang Saku & SOP Multi-Kasir',
     steps: [
         {
             title: 'Ikhtisar Ekosistem Keuangan Terpadu & Keamanan Audit',
@@ -165,14 +165,16 @@ export const financePanduan: PanduanSectionData = {
                         <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
                             <h5 className="font-bold text-emerald-950 flex items-center gap-1.5">
                                 <i className="bi bi-arrow-left-right text-emerald-600 text-sm"></i>
-                                2. Buku Kas Multi-Pos &amp; Mutasi Antar Kas
+                                2. Buku Kas Multi-Pos, COA, Koreksi &amp; Bukti Kas (BKM/BKK)
                             </h5>
                             <p className="text-gray-600 leading-relaxed">
-                                Menu <strong>Buku Kas</strong> menampilkan kartu saldo terpisah untuk setiap Pos Rekening sekaligus <strong>Saldo Akhir Gabungan</strong>:
+                                Menu <strong>Buku Kas</strong> menyediakan pengelolaan arus kas komprehensif dengan perhitungan <strong>Saldo Berjalan Dinamis (Dynamic Running Balance)</strong>:
                             </p>
                             <ul className="list-disc pl-4 space-y-1 text-gray-700">
-                                <li><strong>Filter per Pos Kas:</strong> Klik langsung salah satu kartu rekening di bagian atas (misal <code>Bank BSI</code>) untuk menyaring mutasi khusus rekening tersebut.</li>
-                                <li><strong>Tombol Mutasi Kas:</strong> Gunakan saat memindahkan dana antar rekening internal (misal menyetor uang tunai Rp 10.000.000 dari <code>Kas Tunai Bendahara</code> ke <code>Bank BSI</code>). Sistem otomatis mencatat Pengeluaran di pos asal dan Pemasukan di pos tujuan secara seimbang.</li>
+                                <li><strong>Bagan Akun / Master Kategori (COA):</strong> Klik tombol <em>Bagan Akun (COA)</em> lalu klik <strong>"Muat Preset Pesantren"</strong> untuk mengisi kode akun standar (401–405 Pendapatan, 501–507 Beban). Saat input transaksi, tombol cepat COA otomatis menyesuaikan jenis Pemasukan/Pengeluaran.</li>
+                                <li><strong>Input Tanggal Nota (Backdate), Edit &amp; Hapus:</strong> Anda dapat menyesuaikan tanggal transaksi sesuai nota fisik, mengoreksi transaksi via tombol <em>Edit</em>, atau membatalkannya via tombol <em>Hapus</em> (<em>soft-delete</em> aman sinkronisasi).</li>
+                                <li><strong>Filter Pos Kas &amp; Rekap Kategori:</strong> Klik kartu rekening di bagian atas untuk melihat <em>Saldo Berjalan khusus rekening tersebut</em>, atau klik <strong>Lihat Rekap per Kategori</strong> untuk menganalisis persentase pos pemasukan &amp; pengeluaran.</li>
+                                <li><strong>Mutasi Kas &amp; Cetak Bukti Kas (BKM/BKK):</strong> Gunakan <em>Mutasi Antar Kas</em> (lengkap dengan indikator saldo pos sumber) untuk pindah buku, serta klik ikon cetak (🖨️) pada baris transaksi untuk mencetak <strong>Bukti Kas Masuk (BKM)</strong> atau <strong>Bukti Kas Keluar (BKK)</strong> resmi ber-kop pondok.</li>
                             </ul>
                         </div>
                     </div>

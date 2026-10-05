@@ -52,14 +52,28 @@ export const FinanceSummaryTemplate: React.FC<{ santriList: Santri[], tagihanLis
 // --- ARUS KAS ---
 export const LaporanArusKasTemplate: React.FC<{ settings: PondokSettings; options: any }> = ({ settings, options }) => {
     const { filteredKas, allKas, kasStartDate, kasEndDate } = options;
-    const startDate = new Date(kasStartDate);
-    const lastTxBeforePeriod = allKas.filter((t: any) => new Date(t.tanggal) < startDate).sort((a: any, b: any) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())[0];
-    const saldoAwal = lastTxBeforePeriod ? lastTxBeforePeriod.saldoSetelah : 0;
-    const saldoAkhir = filteredKas.length > 0 ? filteredKas[0].saldoSetelah : saldoAwal;
-    
-    // Safety Update: Ensure values are numbers
-    const totalPemasukan = filteredKas.filter((t: any) => t.jenis === 'Pemasukan').reduce((sum: number, t: any) => sum + (Number(t.jumlah) || 0), 0);
-    const totalPengeluaran = filteredKas.filter((t: any) => t.jenis === 'Pengeluaran').reduce((sum: number, t: any) => sum + (Number(t.jumlah) || 0), 0);
+    const startDate = new Date(`${kasStartDate}T00:00:00`);
+    const saldoAwal = (allKas || [])
+        .filter((t: any) => !t.deleted && new Date(t.tanggal) < startDate)
+        .reduce((acc: number, t: any) => acc + (t.jenis === 'Pemasukan' ? (Number(t.jumlah) || 0) : -(Number(t.jumlah) || 0)), 0);
+
+    const sortedPeriodKas = [...(filteredKas || [])]
+        .filter((t: any) => !t.deleted)
+        .sort((a: any, b: any) => {
+            const diff = new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime();
+            return diff !== 0 ? diff : (a.id || 0) - (b.id || 0);
+        });
+
+    let runningSaldo = saldoAwal;
+    const rowsWithRunning = sortedPeriodKas.map((t: any) => {
+        const amt = Number(t.jumlah) || 0;
+        runningSaldo += t.jenis === 'Pemasukan' ? amt : -amt;
+        return { ...t, dynamicSaldo: runningSaldo };
+    });
+
+    const totalPemasukan = rowsWithRunning.filter((t: any) => t.jenis === 'Pemasukan').reduce((sum: number, t: any) => sum + (Number(t.jumlah) || 0), 0);
+    const totalPengeluaran = rowsWithRunning.filter((t: any) => t.jenis === 'Pengeluaran').reduce((sum: number, t: any) => sum + (Number(t.jumlah) || 0), 0);
+    const saldoAkhir = saldoAwal + totalPemasukan - totalPengeluaran;
 
     return (
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt' }}>
@@ -76,15 +90,15 @@ export const LaporanArusKasTemplate: React.FC<{ settings: PondokSettings; option
                 </table>
                 <table className="w-full text-left border-collapse border border-black text-xs mt-6">
                     <thead className="bg-gray-200 uppercase">
-                        <tr><th className="p-1 border border-black w-8">No</th><th className="p-1 border border-black">Tanggal</th><th className="p-1 border border-black">Kategori</th><th className="p-1 border border-black">Deskripsi</th><th className="p-1 border border-black text-right">Pemasukan</th><th className="p-1 border border-black text-right">Pengeluaran</th><th className="p-1 border border-black text-right">Saldo</th></tr>
+                        <tr><th className="p-1 border border-black w-8">No</th><th className="p-1 border border-black">Tanggal</th><th className="p-1 border border-black">Pos Kas</th><th className="p-1 border border-black">Kategori</th><th className="p-1 border border-black">Deskripsi</th><th className="p-1 border border-black text-right">Pemasukan</th><th className="p-1 border border-black text-right">Pengeluaran</th><th className="p-1 border border-black text-right">Saldo</th></tr>
                     </thead>
                     <tbody>
-                        {filteredKas.length > 0 ? [...filteredKas].reverse().map((t: any, index: number) => (
+                        {rowsWithRunning.length > 0 ? rowsWithRunning.map((t: any, index: number) => (
                             <tr key={t.id}>
-                                <td className="p-1 border border-black text-center">{index + 1}</td><td className="p-1 border border-black">{formatDateTime(t.tanggal)}</td><td className="p-1 border border-black">{t.kategori}</td><td className="p-1 border border-black">{t.deskripsi}</td>
-                                <td className="p-1 border border-black text-right text-green-700">{t.jenis === 'Pemasukan' ? formatRupiah(t.jumlah) : '-'}</td><td className="p-1 border border-black text-right text-red-700">{t.jenis === 'Pengeluaran' ? formatRupiah(t.jumlah) : '-'}</td><td className="p-1 border border-black text-right font-semibold">{formatRupiah(t.saldoSetelah)}</td>
+                                <td className="p-1 border border-black text-center">{index + 1}</td><td className="p-1 border border-black">{formatDateTime(t.tanggal)}</td><td className="p-1 border border-black">{t.rekening || 'Kas Tunai Bendahara'}</td><td className="p-1 border border-black">{t.kategori}</td><td className="p-1 border border-black">{t.deskripsi}</td>
+                                <td className="p-1 border border-black text-right text-green-700">{t.jenis === 'Pemasukan' ? formatRupiah(t.jumlah) : '-'}</td><td className="p-1 border border-black text-right text-red-700">{t.jenis === 'Pengeluaran' ? formatRupiah(t.jumlah) : '-'}</td><td className="p-1 border border-black text-right font-semibold">{formatRupiah(t.dynamicSaldo)}</td>
                             </tr>
-                        )) : <tr><td colSpan={7} className="text-center p-4 italic text-gray-500">Tidak ada transaksi.</td></tr>}
+                        )) : <tr><td colSpan={8} className="text-center p-4 italic text-gray-500">Tidak ada transaksi.</td></tr>}
                     </tbody>
                 </table>
             </div>

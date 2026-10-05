@@ -337,12 +337,175 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "santriId", "bukuId", "tanggalPinjam", "tanggalKembaliSeharusnya", "status", "lastModified"]
+    },
+    "Tagihan": {
+      "title": "Tagihan",
+      "description": "Tagihan biaya pendidikan, syahriah, dan cicilan santri",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "santriId": { "type": "number" },
+        "biayaId": { "type": "number" },
+        "deskripsi": { "type": "string" },
+        "bulan": { "type": "number" },
+        "tahun": { "type": "number" },
+        "nominal": { "type": "number" },
+        "nominalAwal": { "type": "number" },
+        "sudahDicicil": { "type": "number" },
+        "isCicilan": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["Lunas", "Belum Lunas"] },
+        "tanggalLunas": { "type": "string" },
+        "pembayaranId": { "type": "number" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "santriId", "biayaId", "deskripsi", "bulan", "tahun", "nominal", "status", "lastModified"]
+    },
+    "Pembayaran": {
+      "title": "Pembayaran",
+      "description": "Bukti transaksi pembayaran tagihan santri di loket kasir",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "santriId": { "type": "number" },
+        "tagihanIds": { "type": "array" },
+        "tanggal": { "type": "string" },
+        "jumlah": { "type": "number" },
+        "metode": { "type": "string", "enum": ["Tunai", "Transfer", "Potong Saldo"] },
+        "catatan": { "type": "string" },
+        "disetorKeKas": { "type": "boolean" },
+        "verifikasiStatus": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "santriId", "tagihanIds", "tanggal", "jumlah", "metode", "lastModified"]
+    },
+    "SaldoSantri": {
+      "title": "SaldoSantri",
+      "description": "Posisi saldo tabungan / uang saku santri beserta limit penarikan harian",
+      "type": "object",
+      "properties": {
+        "santriId": { "type": "number" },
+        "saldo": { "type": "number" },
+        "limitHarian": { "type": "number" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["santriId", "saldo", "lastModified"]
+    },
+    "TransaksiSaldo": {
+      "title": "TransaksiSaldo",
+      "description": "Riwayat mutasi deposit dan penarikan uang saku santri",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "santriId": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "jenis": { "type": "string", "enum": ["Deposit", "Penarikan"] },
+        "jumlah": { "type": "number" },
+        "saldoSetelah": { "type": "number" },
+        "keterangan": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "santriId", "tanggal", "jenis", "jumlah", "saldoSetelah", "lastModified"]
+    },
+    "TransaksiKas": {
+      "title": "TransaksiKas",
+      "description": "Catatan arus kas masuk, kas keluar, dan mutasi antar pos rekening pada Buku Kas Umum",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "jenis": { "type": "string", "enum": ["Pemasukan", "Pengeluaran"] },
+        "kategori": { "type": "string" },
+        "deskripsi": { "type": "string" },
+        "jumlah": { "type": "number" },
+        "saldoSetelah": { "type": "number" },
+        "penanggungJawab": { "type": "string" },
+        "rekening": { "type": "string" },
+        "buktiUrl": { "type": "string" },
+        "coaId": { "type": "number" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "tanggal", "jenis", "kategori", "deskripsi", "jumlah", "saldoSetelah", "lastModified"]
+    },
+    "ChartOfAccount": {
+      "title": "ChartOfAccount",
+      "description": "Master Bagan Akun (COA) untuk standarisasi kategori Buku Kas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "kode": { "type": "string" },
+        "nama": { "type": "string" },
+        "kategori": { "type": "string", "enum": ["Harta", "Kewajiban", "Modal", "Pendapatan", "Beban"] },
+        "saldoNormal": { "type": "string", "enum": ["Debit", "Kredit"] },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "kode", "nama", "kategori", "lastModified"]
+    },
+    "PayrollRecord": {
+      "title": "PayrollRecord",
+      "description": "Arsip slip gaji dan bisyarah ustadz/staf bulanan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "guruId": { "type": "number" },
+        "namaGuru": { "type": "string" },
+        "jabatan": { "type": "string" },
+        "bulan": { "type": "number" },
+        "tahun": { "type": "number" },
+        "tanggalBayar": { "type": "string" },
+        "gajiPokok": { "type": "number" },
+        "tunjanganJabatan": { "type": "number" },
+        "totalJamMengajar": { "type": "number" },
+        "nominalPerJam": { "type": "number" },
+        "totalHonorMengajar": { "type": "number" },
+        "bonusLain": { "type": "number" },
+        "potongan": { "type": "number" },
+        "catatanPotongan": { "type": "string" },
+        "totalDiterima": { "type": "number" },
+        "status": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "guruId", "namaGuru", "bulan", "tahun", "tanggalBayar", "totalDiterima", "lastModified"]
     }
   },
   "firestore": {
     "tenants/{tenantId}/santri": {
       "schema": "Santri",
       "description": "Koleksi data santri per tenant"
+    },
+    "tenants/{tenantId}/tagihan": {
+      "schema": "Tagihan",
+      "description": "Koleksi tagihan biaya pendidikan santri per tenant"
+    },
+    "tenants/{tenantId}/pembayaran": {
+      "schema": "Pembayaran",
+      "description": "Koleksi riwayat pembayaran tagihan santri per tenant"
+    },
+    "tenants/{tenantId}/saldoSantri": {
+      "schema": "SaldoSantri",
+      "description": "Koleksi posisi saldo uang saku santri per tenant"
+    },
+    "tenants/{tenantId}/transaksiSaldo": {
+      "schema": "TransaksiSaldo",
+      "description": "Koleksi mutasi uang saku santri per tenant"
+    },
+    "tenants/{tenantId}/transaksiKas": {
+      "schema": "TransaksiKas",
+      "description": "Koleksi transaksi Buku Kas Umum multi-pos per tenant"
+    },
+    "tenants/{tenantId}/chartOfAccounts": {
+      "schema": "ChartOfAccount",
+      "description": "Koleksi master Bagan Akun (COA) Buku Kas per tenant"
+    },
+    "tenants/{tenantId}/payrollRecords": {
+      "schema": "PayrollRecord",
+      "description": "Koleksi slip penggajian asatidz per tenant"
     },
     "tenants/{tenantId}/users": {
       "schema": "User",

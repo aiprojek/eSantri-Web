@@ -1,10 +1,25 @@
 
 import React, { createContext, useContext } from 'react';
 import { useLiveQuery } from "dexie-react-hooks";
-import { Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas } from '../types';
+import { Tagihan, Pembayaran, SaldoSantri, TransaksiSaldo, TransaksiKas, ChartOfAccount } from '../types';
 import { db } from '../db';
 import { generateTagihanBulanan, generateTagihanAwal } from '../services/financeService';
 import { useSettingsContext } from './SettingsContext';
+
+const DEFAULT_PESANTREN_COA: Array<Omit<ChartOfAccount, 'id'>> = [
+  { kode: '401', nama: 'Syahriah / SPP Santri', kategori: 'Pendapatan' },
+  { kode: '402', nama: 'Infaq & Donasi Muhsinin', kategori: 'Pendapatan' },
+  { kode: '403', nama: 'Wakaf & Hibah Pembangunan', kategori: 'Pendapatan' },
+  { kode: '404', nama: 'Hasil Usaha Koperasi & Kantin', kategori: 'Pendapatan' },
+  { kode: '405', nama: 'Bantuan Pemerintah / BOS', kategori: 'Pendapatan' },
+  { kode: '501', nama: 'Konsumsi & Dapur Santri', kategori: 'Beban' },
+  { kode: '502', nama: 'Listrik, Air & Internet', kategori: 'Beban' },
+  { kode: '503', nama: 'Gaji & Bisyarah Asatidz', kategori: 'Beban' },
+  { kode: '504', nama: 'Pemeliharaan Gedung & Asrama', kategori: 'Beban' },
+  { kode: '505', nama: 'ATK & Kesekretariatan', kategori: 'Beban' },
+  { kode: '506', nama: 'Kesehatan Santri (Poskestren)', kategori: 'Beban' },
+  { kode: '507', nama: 'Kegiatan & Ekstrakurikuler Santri', kategori: 'Beban' },
+];
 
 interface FinanceContextType {
   tagihanList: Tagihan[];
@@ -12,14 +27,20 @@ interface FinanceContextType {
   saldoSantriList: SaldoSantri[];
   transaksiSaldoList: TransaksiSaldo[];
   transaksiKasList: TransaksiKas[];
+  coaList: ChartOfAccount[];
   onGenerateTagihanBulanan: (tahun: number, bulan: number) => Promise<{ generated: number; skipped: number }>;
   onGenerateTagihanAwal: () => Promise<{ generated: number; skipped: number }>;
   onAddPembayaran: (data: Omit<Pembayaran, 'id'>, partialAmounts?: Record<number, number>) => Promise<Pembayaran>;
   onAddTransaksiSaldo: (data: Omit<TransaksiSaldo, 'id' | 'saldoSetelah' | 'tanggal'>) => Promise<void>;
   onUpdateLimitHarian: (santriId: number, limitHarian: number) => Promise<void>;
-  onAddTransaksiKas: (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => Promise<void>;
-  onMutasiKas: (fromRekening: string, toRekening: string, jumlah: number, deskripsi: string, pj: string) => Promise<void>;
+  onAddTransaksiKas: (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'> & { tanggal?: string }) => Promise<void>;
+  onUpdateTransaksiKas: (id: number, data: Partial<Omit<TransaksiKas, 'id'>>) => Promise<void>;
+  onDeleteTransaksiKas: (id: number) => Promise<void>;
+  onMutasiKas: (fromRekening: string, toRekening: string, jumlah: number, deskripsi: string, pj: string, tanggal?: string) => Promise<void>;
   onSetorKeKas: (pembayaranIds: number[], total: number, tanggal: string, pj: string, catatan: string, rekeningTujuan?: string) => Promise<void>;
+  onSaveCoa: (coa: Omit<ChartOfAccount, 'id'> & { id?: number }) => Promise<void>;
+  onDeleteCoa: (id: number) => Promise<void>;
+  onSeedDefaultCoa: () => Promise<number>;
 }
 
 const FinanceContext = createContext<FinanceContextType | null>(null);
@@ -32,6 +53,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const saldoSantriList = useLiveQuery(() => db.saldoSantri.filter((s: any) => !s.deleted).toArray(), []) || [];
   const transaksiSaldoList = useLiveQuery(() => db.transaksiSaldo.filter((t: any) => !t.deleted).toArray(), []) || [];
   const transaksiKasList = useLiveQuery(() => db.transaksiKas.filter((t: TransaksiKas) => !t.deleted).toArray(), []) || [];
+  const coaList = useLiveQuery(() => db.chartOfAccounts.filter((c: ChartOfAccount) => !c.deleted).toArray(), []) || [];
 
   const addTimestamp = (data: any) => ({ ...data, lastModified: Date.now() });
   const idCounterRef = React.useRef(0);
@@ -40,9 +62,28 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return Date.now() * 1000 + idCounterRef.current;
   };
 
-  const calculateActiveKasSaldo = async (): Promise<number> => {
-    const allActive = await db.transaksiKas.filter((t: TransaksiKas) => !t.deleted).toArray();
-    return allActive.reduce((acc, t) => acc + (t.jenis === 'Pemasukan' ? t.jumlah : -t.jumlah), 0);
+  const calculateActiveKasSaldo = async (upToDateIso?: string, excludeId?: number): Promise<number> => {
+    const allActive = await db.transaksiKas.filter((t: TransaksiKas) => !t.deleted && t.id !== excludeId).toArray();
+    const cutoffMs = upToDateIso ? new Date(upToDateIso).getTime() : null;
+    return allActive
+      .filter((t: TransaksiKas) => {
+        if (cutoffMs === null || Number.isNaN(cutoffMs)) return true;
+        return new Date(t.tanggal).getTime() <= cutoffMs;
+      })
+      .reduce((acc, t) => acc + (t.jenis === 'Pemasukan' ? t.jumlah : -t.jumlah), 0);
+  };
+
+  const getDeterministicCoaId = (kode: string): number => {
+    const clean = kode.trim().toUpperCase();
+    if (/^\d+$/.test(clean)) {
+      return 100000 + parseInt(clean, 10);
+    }
+    let hash = 0;
+    for (let i = 0; i < clean.length; i++) {
+      hash = ((hash << 5) - hash) + clean.charCodeAt(i);
+      hash |= 0;
+    }
+    return 200000 + Math.abs(hash % 800000);
   };
 
   const onGenerateTagihanBulanan = async (tahun: number, bulan: number) => {
@@ -184,9 +225,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
   };
 
-  const onAddTransaksiKas = async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'>) => {
+  const onAddTransaksiKas = async (data: Omit<TransaksiKas, 'id' | 'saldoSetelah' | 'tanggal'> & { tanggal?: string }) => {
       await (db as any).transaction('rw', db.transaksiKas, async () => {
-          const lastSaldo = await calculateActiveKasSaldo();
+          const targetIso = data.tanggal || new Date().toISOString();
+          const lastSaldo = await calculateActiveKasSaldo(targetIso);
           let newSaldo = lastSaldo;
           if (data.jenis === 'Pemasukan') newSaldo += data.jumlah;
           else newSaldo -= data.jumlah;
@@ -195,17 +237,54 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
               ...data,
               rekening: data.rekening || 'Kas Tunai Bendahara',
               id: generateUniqueId(),
-              tanggal: new Date().toISOString(),
+              tanggal: targetIso,
               saldoSetelah: newSaldo,
+              deleted: false,
               lastModified: Date.now()
           } as TransaksiKas);
       });
   };
 
-  const onMutasiKas = async (fromRekening: string, toRekening: string, jumlah: number, deskripsi: string, pj: string) => {
+  const onUpdateTransaksiKas = async (id: number, data: Partial<Omit<TransaksiKas, 'id'>>) => {
       await (db as any).transaction('rw', db.transaksiKas, async () => {
-          const nowIso = new Date().toISOString();
-          const currentTotalSaldo = await calculateActiveKasSaldo();
+          const existing = await db.transaksiKas.get(id);
+          if (!existing) throw new Error('Transaksi tidak ditemukan.');
+          const merged = {
+              ...existing,
+              ...data,
+              id,
+              rekening: data.rekening || existing.rekening || 'Kas Tunai Bendahara',
+          };
+          const priorSaldo = await calculateActiveKasSaldo(merged.tanggal, id);
+          const updatedSaldo = priorSaldo + (merged.jenis === 'Pemasukan' ? merged.jumlah : -merged.jumlah);
+          await db.transaksiKas.put({
+              ...merged,
+              saldoSetelah: updatedSaldo,
+              deleted: false,
+              lastModified: Date.now()
+          } as TransaksiKas);
+      });
+  };
+
+  const onDeleteTransaksiKas = async (id: number) => {
+      await (db as any).transaction('rw', db.transaksiKas, async () => {
+          const existing = await db.transaksiKas.get(id);
+          if (!existing) return;
+          await db.transaksiKas.put({
+              ...existing,
+              id,
+              deleted: true,
+              lastModified: Date.now()
+          } as TransaksiKas);
+      });
+  };
+
+  const onMutasiKas = async (fromRekening: string, toRekening: string, jumlah: number, deskripsi: string, pj: string, tanggal?: string) => {
+      await (db as any).transaction('rw', db.transaksiKas, async () => {
+          const baseDate = tanggal ? new Date(tanggal) : new Date();
+          const nowIso = baseDate.toISOString();
+          const inIso = new Date(baseDate.getTime() + 10).toISOString();
+          const currentTotalSaldo = await calculateActiveKasSaldo(nowIso);
 
           const outId = generateUniqueId();
           await db.transaksiKas.put({
@@ -218,13 +297,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
               saldoSetelah: currentTotalSaldo - jumlah,
               penanggungJawab: pj,
               rekening: fromRekening,
+              deleted: false,
               lastModified: Date.now()
           } as TransaksiKas);
 
           const inId = generateUniqueId();
           await db.transaksiKas.put({
               id: inId,
-              tanggal: new Date(Date.now() + 10).toISOString(),
+              tanggal: inIso,
               jenis: 'Pemasukan',
               kategori: 'Mutasi Kas Masuk',
               deskripsi: `[Mutasi dari ${fromRekening}] ${deskripsi}`,
@@ -232,6 +312,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
               saldoSetelah: currentTotalSaldo,
               penanggungJawab: pj,
               rekening: toRekening,
+              deleted: false,
               lastModified: Date.now() + 1
           } as TransaksiKas);
       });
@@ -239,18 +320,27 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const onSetorKeKas = async (pembayaranIds: number[], total: number, tanggal: string, pj: string, catatan: string, rekeningTujuan: string = 'Kas Tunai Bendahara') => {
       await (db as any).transaction('rw', db.pembayaran, db.transaksiKas, async () => {
-          // 1. Mark payments as deposited
-          for(const pid of pembayaranIds) {
-              await db.pembayaran.update(pid, { disetorKeKas: true, lastModified: Date.now() });
+          const nowTs = Date.now();
+          // 1. Mark payments as deposited using full put() for multi-admin sync safety
+          for (const pid of pembayaranIds) {
+              const existingPay = await db.pembayaran.get(pid);
+              if (existingPay) {
+                  await db.pembayaran.put({
+                      ...existingPay,
+                      disetorKeKas: true,
+                      lastModified: nowTs
+                  });
+              }
           }
 
           // 2. Add Kas Entry
-          const lastSaldo = await calculateActiveKasSaldo();
+          const targetIso = tanggal || new Date().toISOString();
+          const lastSaldo = await calculateActiveKasSaldo(targetIso);
           const newSaldo = lastSaldo + total;
 
           await db.transaksiKas.put({
               id: generateUniqueId(),
-              tanggal: tanggal || new Date().toISOString(),
+              tanggal: targetIso,
               jenis: 'Pemasukan',
               kategori: 'Setoran Pembayaran Santri',
               deskripsi: catatan,
@@ -258,9 +348,69 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
               saldoSetelah: newSaldo,
               penanggungJawab: pj,
               rekening: rekeningTujuan,
-              lastModified: Date.now()
+              deleted: false,
+              lastModified: nowTs
           } as TransaksiKas);
       });
+  };
+
+  const onSaveCoa = async (coa: Omit<ChartOfAccount, 'id'> & { id?: number }) => {
+      const normalizedKode = coa.kode.trim();
+      const existingByKode = await db.chartOfAccounts
+          .where('kode')
+          .equals(normalizedKode)
+          .first();
+
+      if (existingByKode && !existingByKode.deleted && coa.id && existingByKode.id !== coa.id) {
+          throw new Error(`Kode akun "${normalizedKode}" sudah digunakan oleh akun "${existingByKode.nama}".`);
+      }
+
+      const id = coa.id || existingByKode?.id || getDeterministicCoaId(normalizedKode);
+      await db.chartOfAccounts.put({
+          ...coa,
+          kode: normalizedKode,
+          id,
+          deleted: false,
+          lastModified: Date.now()
+      });
+  };
+
+  const onDeleteCoa = async (id: number) => {
+      await (db as any).transaction('rw', db.chartOfAccounts, async () => {
+          const existing = await db.chartOfAccounts.get(id);
+          if (!existing) return;
+          await db.chartOfAccounts.put({
+              ...existing,
+              id,
+              deleted: true,
+              lastModified: Date.now()
+          });
+      });
+  };
+
+  const onSeedDefaultCoa = async (): Promise<number> => {
+      const existing = await db.chartOfAccounts.toArray();
+      const existingByKode = new Map<string, ChartOfAccount>(existing.map((c: ChartOfAccount) => [c.kode.trim(), c]));
+      const toInsert: ChartOfAccount[] = [];
+      const nowTs = Date.now();
+
+      for (const item of DEFAULT_PESANTREN_COA) {
+          const found = existingByKode.get(item.kode);
+          if (!found || found.deleted) {
+              const deterministicId = found?.id || (100000 + parseInt(item.kode, 10));
+              toInsert.push({
+                  ...item,
+                  id: deterministicId,
+                  deleted: false,
+                  lastModified: nowTs
+              });
+          }
+      }
+
+      if (toInsert.length > 0) {
+          await db.chartOfAccounts.bulkPut(toInsert);
+      }
+      return toInsert.length;
   };
 
   return (
@@ -270,14 +420,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       saldoSantriList,
       transaksiSaldoList,
       transaksiKasList,
+      coaList,
       onGenerateTagihanBulanan,
       onGenerateTagihanAwal,
       onAddPembayaran,
       onAddTransaksiSaldo,
       onUpdateLimitHarian,
       onAddTransaksiKas,
+      onUpdateTransaksiKas,
+      onDeleteTransaksiKas,
       onMutasiKas,
-      onSetorKeKas
+      onSetorKeKas,
+      onSaveCoa,
+      onDeleteCoa,
+      onSeedDefaultCoa
     }}>
       {children}
     </FinanceContext.Provider>

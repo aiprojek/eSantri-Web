@@ -472,6 +472,206 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "guruId", "namaGuru", "bulan", "tahun", "tanggalBayar", "totalDiterima", "lastModified"]
+    },
+    "ProdukKoperasi": {
+      "title": "ProdukKoperasi",
+      "description": "Katalog produk, stok multi-gudang, varian, dan harga grosir Koperasi & Kantin Santri",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nama": { "type": "string" },
+        "kategori": { "type": "string" },
+        "hargaBeli": { "type": "number" },
+        "hargaJual": { "type": "number" },
+        "stok": { "type": "number" },
+        "minStok": { "type": "number" },
+        "satuan": { "type": "string" },
+        "barcode": { "type": "string" },
+        "supplierId": { "type": "number" },
+        "hasVarian": { "type": "boolean" },
+        "varian": { "type": "array" },
+        "grosir": { "type": "array" },
+        "warehouseStocks": { "type": "object" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "nama", "kategori", "hargaBeli", "hargaJual", "stok", "lastModified"]
+    },
+    "TransaksiKoperasi": {
+      "title": "TransaksiKoperasi",
+      "description": "Catatan transaksi penjualan POS Koperasi & Kantin Santri (Tunai, Tabungan, Non-Tunai, Hutang/Kasbon, atau Dibatalkan)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "tipePembeli": { "type": "string", "enum": ["Santri", "Guru", "Umum"] },
+        "pembeliId": { "type": "number" },
+        "namaPembeli": { "type": "string" },
+        "metodePembayaran": { "type": "string", "enum": ["Tunai", "Tabungan", "Non-Tunai", "Hutang"] },
+        "catatanPembayaran": { "type": "string" },
+        "warehouseId": { "type": "number" },
+        "items": { "type": "array" },
+        "totalBelanja": { "type": "number" },
+        "diskonId": { "type": "number" },
+        "diskonNama": { "type": "string" },
+        "potonganDiskon": { "type": "number" },
+        "totalFinal": { "type": "number" },
+        "bayar": { "type": "number" },
+        "kembali": { "type": "number" },
+        "kembalianMasukSaldo": { "type": "boolean" },
+        "statusTransaksi": { "type": "string", "enum": ["Lunas", "Belum Lunas", "Dibatalkan"] },
+        "sisaTagihan": { "type": "number" },
+        "alasanBatal": { "type": "string" },
+        "dibatalkanOleh": { "type": "string" },
+        "tanggalBatal": { "type": "string" },
+        "kasir": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "tanggal", "tipePembeli", "namaPembeli", "metodePembayaran", "items", "totalFinal", "statusTransaksi", "lastModified"]
+    },
+    "RiwayatStok": {
+      "title": "RiwayatStok",
+      "description": "Log mutasi stok masuk, keluar, penjualan, retur, koreksi opname, dan transfer gudang koperasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "produkId": { "type": "number" },
+        "warehouseId": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "tipe": { "type": "string", "enum": ["Masuk", "Keluar", "Penjualan", "Koreksi", "Transfer", "Retur"] },
+        "jumlah": { "type": "number" },
+        "stokAwal": { "type": "number" },
+        "stokAkhir": { "type": "number" },
+        "keterangan": { "type": "string" },
+        "operator": { "type": "string" },
+        "varian": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "produkId", "tanggal", "tipe", "jumlah", "stokAwal", "stokAkhir", "lastModified"]
+    },
+    "KeuanganKoperasi": {
+      "title": "KeuanganKoperasi",
+      "description": "Jurnal arus kas internal, laba kotor/bersih, kulakan, dan setoran hasil usaha koperasi ke Buku Kas Pondok",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "jenis": { "type": "string", "enum": ["Pemasukan", "Pengeluaran"] },
+        "kategori": { "type": "string" },
+        "deskripsi": { "type": "string" },
+        "jumlah": { "type": "number" },
+        "laba": { "type": "number" },
+        "metode": { "type": "string" },
+        "transaksiId": { "type": "number" },
+        "isDisetorKePondok": { "type": "boolean" },
+        "operator": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "tanggal", "jenis", "kategori", "deskripsi", "jumlah", "lastModified"]
+    },
+    "PembayaranHutang": {
+      "title": "PembayaranHutang",
+      "description": "Riwayat cicilan dan pelunasan kasbon/piutang belanja koperasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "transaksiId": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "jumlah": { "type": "number" },
+        "metode": { "type": "string", "enum": ["Tunai", "Tabungan", "Non-Tunai"] },
+        "operator": { "type": "string" },
+        "catatan": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "transaksiId", "tanggal", "jumlah", "metode", "lastModified"]
+    },
+    "PendingOrder": {
+      "title": "PendingOrder",
+      "description": "Daftar antrean pesanan kasir yang ditahan sementara (Hold Order)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "customerName": { "type": "string" },
+        "customerType": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "items": { "type": "array" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "customerName", "timestamp", "items", "lastModified"]
+    },
+    "Diskon": {
+      "title": "Diskon",
+      "description": "Master voucher & diskon promo Koperasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nama": { "type": "string" },
+        "tipe": { "type": "string", "enum": ["Persen", "Nominal"] },
+        "nilai": { "type": "number" },
+        "aktif": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "nama", "tipe", "nilai", "lastModified"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Data pemasok / distributor barang Koperasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nama": { "type": "string" },
+        "kontak": { "type": "string" },
+        "telepon": { "type": "string" },
+        "email": { "type": "string" },
+        "alamat": { "type": "string" },
+        "npwp": { "type": "string" },
+        "status": { "type": "string" },
+        "keterangan": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "nama", "lastModified"]
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "Data lokasi gudang dan etalase penjualan Koperasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nama": { "type": "string" },
+        "kode": { "type": "string" },
+        "lokasi": { "type": "string" },
+        "penanggungJawab": { "type": "string" },
+        "keterangan": { "type": "string" },
+        "isDefault": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "nama", "kode", "lastModified"]
+    },
+    "StockTransfer": {
+      "title": "StockTransfer",
+      "description": "Riwayat mutasi/transfer stok antar gudang Koperasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "tanggal": { "type": "string" },
+        "produkId": { "type": "number" },
+        "dariWarehouseId": { "type": "number" },
+        "keWarehouseId": { "type": "number" },
+        "qty": { "type": "number" },
+        "operator": { "type": "string" },
+        "keterangan": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "tanggal", "produkId", "dariWarehouseId", "keWarehouseId", "qty", "lastModified"]
     }
   },
   "firestore": {
@@ -506,6 +706,46 @@
     "tenants/{tenantId}/payrollRecords": {
       "schema": "PayrollRecord",
       "description": "Koleksi slip penggajian asatidz per tenant"
+    },
+    "tenants/{tenantId}/produkKoperasi": {
+      "schema": "ProdukKoperasi",
+      "description": "Koleksi produk, varian, grosir & stok per gudang Koperasi per tenant"
+    },
+    "tenants/{tenantId}/transaksiKoperasi": {
+      "schema": "TransaksiKoperasi",
+      "description": "Koleksi transaksi penjualan POS Koperasi per tenant"
+    },
+    "tenants/{tenantId}/riwayatStok": {
+      "schema": "RiwayatStok",
+      "description": "Koleksi riwayat mutasi stok Koperasi per tenant"
+    },
+    "tenants/{tenantId}/keuanganKoperasi": {
+      "schema": "KeuanganKoperasi",
+      "description": "Koleksi jurnal keuangan & laba rugi Koperasi per tenant"
+    },
+    "tenants/{tenantId}/pembayaranHutang": {
+      "schema": "PembayaranHutang",
+      "description": "Koleksi cicilan/pelunasan kasbon Koperasi per tenant"
+    },
+    "tenants/{tenantId}/pendingOrders": {
+      "schema": "PendingOrder",
+      "description": "Koleksi pesanan tunda (Hold Order) POS Koperasi per tenant"
+    },
+    "tenants/{tenantId}/diskon": {
+      "schema": "Diskon",
+      "description": "Koleksi diskon & promo Koperasi per tenant"
+    },
+    "tenants/{tenantId}/suppliers": {
+      "schema": "Supplier",
+      "description": "Koleksi data pemasok/supplier Koperasi per tenant"
+    },
+    "tenants/{tenantId}/warehouses": {
+      "schema": "Warehouse",
+      "description": "Koleksi gudang/lokasi etalase Koperasi per tenant"
+    },
+    "tenants/{tenantId}/stockTransfers": {
+      "schema": "StockTransfer",
+      "description": "Koleksi riwayat transfer stok antar gudang Koperasi per tenant"
     },
     "tenants/{tenantId}/users": {
       "schema": "User",

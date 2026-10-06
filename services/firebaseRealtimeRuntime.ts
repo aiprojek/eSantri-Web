@@ -39,6 +39,13 @@ let registeredHooks: HookRegistryItem[] = [];
 
 let currentSyncSession = 0;
 
+let runtimeIdCounter = Math.floor(Math.random() * 500);
+const runtimeDeviceSalt = Math.floor(Math.random() * 500);
+const generateSyncSafeNumericId = (): number => {
+    runtimeIdCounter = (runtimeIdCounter + 1) % 1000;
+    return Date.now() * 1000 + ((runtimeIdCounter + runtimeDeviceSalt) % 1000);
+};
+
 const isNumericKeyTable = (tableName: string) => !['auditLogs', 'syncHistory', 'digitalAssets', 'settings'].includes(tableName);
 
 const sanitizeForFirestore = (val: any): any => {
@@ -244,8 +251,13 @@ export const startFirebaseSync = (tenantId: string) => {
 
             const creatingHook = function (this: any, primKey: any, obj: any) {
                 if (isSyncingFromCloud) return;
+                let assignedId = primKey ?? obj?.id ?? obj?.santriId;
+                if (assignedId === undefined && isNum && tableName !== 'saldoSantri' && obj && typeof obj === 'object') {
+                    assignedId = generateSyncSafeNumericId();
+                    obj.id = assignedId;
+                }
                 const formatAndSend = (key: any) => {
-                    const finalKey = key ?? obj.id ?? obj.santriId;
+                    const finalKey = key ?? obj?.id ?? obj?.santriId ?? assignedId;
                     const normalizedKey = isNum && finalKey !== undefined && !isNaN(Number(finalKey)) ? Number(finalKey) : finalKey;
                     const payload = {
                         ...obj,
@@ -255,10 +267,17 @@ export const startFirebaseSync = (tenantId: string) => {
                     void syncLocalToFirebase(actualId, tableName, payload);
                 };
 
-                if (primKey !== undefined) {
-                    formatAndSend(primKey);
-                } else if (this && typeof this.onsuccess === 'function') {
-                    this.onsuccess = (key: any) => {
+                if (assignedId !== undefined) {
+                    formatAndSend(assignedId);
+                    if (primKey === undefined && tableName !== 'saldoSantri') {
+                        return assignedId;
+                    }
+                } else if (this) {
+                    const prevOnSuccess = this.onsuccess;
+                    this.onsuccess = function (key: any) {
+                        if (typeof prevOnSuccess === 'function') {
+                            prevOnSuccess.apply(this, arguments as any);
+                        }
                         formatAndSend(key);
                     };
                 } else {
@@ -267,6 +286,10 @@ export const startFirebaseSync = (tenantId: string) => {
             };
             const updatingHook = (mods: any, primKey: any, obj: any) => {
                 if (isSyncingFromCloud) return;
+                if (tableName === 'settings' && mods && typeof mods === 'object') {
+                    const modKeys = Object.keys(mods);
+                    if (modKeys.length === 1 && modKeys[0] === 'cloudSyncConfig') return;
+                }
                 const targetId = obj?.id ?? obj?.santriId ?? primKey;
                 const normalizedId = isNum && targetId !== undefined && !isNaN(Number(targetId)) ? Number(targetId) : targetId;
                 const mergedObj = applyDexieMods(obj, mods);
@@ -384,8 +407,12 @@ export const syncLocalToFirebase = async (tenantId: string, tableName: string, d
     }
 
     try {
+        const rawData = { ...data };
+        if (tableName === 'settings') {
+            delete rawData.cloudSyncConfig;
+        }
         const cleanPayload = sanitizeForFirestore({
-            ...data,
+            ...rawData,
             lastModified: data.lastModified || Date.now(),
         });
         await setDoc(doc(fdb, path, docId), cleanPayload, { merge: true });
@@ -430,7 +457,9 @@ export const pushAllToFirebase = async (tenantId: string) => {
 
     const settings = await db.settings.toArray();
     if (settings.length > 0) {
-        await setDoc(doc(fdb, `tenants/${tenantId}/settings`, 'main'), sanitizeForFirestore(settings[0]));
+        const cleanSettings = { ...settings[0] };
+        delete (cleanSettings as any).cloudSyncConfig;
+        await setDoc(doc(fdb, `tenants/${tenantId}/settings`, 'main'), sanitizeForFirestore({ ...cleanSettings, lastModified: Date.now() }), { merge: true });
         await syncPublicPortalConfig(tenantId, settings[0] as PondokSettings);
     }
 };

@@ -740,8 +740,22 @@ export interface PondokSettings {
     manualHijriSyahadahDefault?: string;
 
     perpusConfig?: PerpusConfig;
+    koperasiSettings?: KoperasiSettingsConfig;
 
     lastModified?: number;
+}
+
+export interface KoperasiSettingsConfig {
+    headerLine1: string;
+    headerLine2: string;
+    footerText: string;
+    paperSize: '58mm' | '80mm';
+    autoPrint: boolean;
+    defaultLimitKasbon?: number;
+    printerMethod?: 'browser' | 'bluetooth' | 'usb' | 'rawbt';
+    printerName?: string;
+    cashDrawerKick?: boolean;
+    feedLines?: number;
 }
 
 export interface PerpusConfig {
@@ -797,6 +811,8 @@ export interface TransaksiSaldo {
     jumlah: number;
     keterangan: string;
     saldoSetelah: number;
+    operator?: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1427,6 +1443,7 @@ export interface TransaksiKoperasi {
     namaPembeli: string;
     metodePembayaran: 'Tunai' | 'Tabungan' | 'Non-Tunai' | 'Hutang';
     catatanPembayaran?: string; // Ref No, Bukti Trf
+    warehouseId?: number;
     
     items: CartItem[];
     totalBelanja: number;
@@ -1439,11 +1456,15 @@ export interface TransaksiKoperasi {
     kembali?: number;
     kembalianMasukSaldo?: boolean;
 
-    // Hutang Logic
+    // Hutang & Void Logic
     statusTransaksi: 'Lunas' | 'Belum Lunas' | 'Dibatalkan';
     sisaTagihan?: number;
+    alasanBatal?: string;
+    dibatalkanOleh?: string;
+    tanggalBatal?: string;
     
     kasir: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1459,16 +1480,23 @@ export interface RiwayatStok {
     keterangan?: string;
     operator: string;
     varian?: string;
+    deleted?: boolean;
+    lastModified?: number;
 }
 
 export interface KeuanganKoperasi {
     id: number;
     tanggal: string;
     jenis: 'Pemasukan' | 'Pengeluaran';
-    kategori: string; // Operasional, Kulakan, Gaji Pegawai
+    kategori: string; // Operasional, Kulakan, Gaji Pegawai, Penjualan, Setor ke Kas Pondok
     deskripsi: string;
     jumlah: number;
+    laba?: number;
+    metode?: 'Tunai' | 'Non-Tunai (Tabungan)' | 'Transfer';
+    isDisetorKePondok?: boolean;
+    transaksiId?: number;
     operator: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1478,6 +1506,8 @@ export interface PendingOrder {
     timestamp: string;
     items: CartItem[];
     customerType?: 'Santri' | 'Umum' | 'Guru';
+    deleted?: boolean;
+    lastModified?: number;
 }
 
 export interface Diskon {
@@ -1486,6 +1516,8 @@ export interface Diskon {
     tipe: 'Persen' | 'Nominal';
     nilai: number;
     aktif: boolean;
+    deleted?: boolean;
+    lastModified?: number;
 }
 
 export interface Supplier {
@@ -1499,6 +1531,7 @@ export interface Supplier {
     kategori?: string[]; // e.g., ["Sembako", "Alat Tulis"]
     keterangan?: string;
     status?: 'Aktif' | 'Non-Aktif';
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1524,6 +1557,7 @@ export interface StockTransfer {
     qty: number;
     keterangan?: string;
     operator: string;
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1535,6 +1569,8 @@ export interface PembayaranHutang {
     metode: 'Tunai' | 'Tabungan' | 'Non-Tunai';
     operator: string;
     catatan?: string;
+    deleted?: boolean;
+    lastModified?: number;
 }
 
 export enum ReportType {

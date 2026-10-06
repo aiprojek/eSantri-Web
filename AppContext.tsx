@@ -342,13 +342,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [santriCtx.santriList, sets.settings?.namaPonpes]);
 
     const onDeleteSampleData = async () => { 
-        await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, db.arsipSurat, async () => { 
+        await (db as any).transaction('rw', db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.chartOfAccounts, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.jadwalUjian, db.jurnalMengajar, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, db.pembayaranHutang, db.diskon, db.suppliers, db.warehouses, db.stockTransfers, db.arsipSurat, async () => { 
             await db.santri.clear(); await db.tagihan.clear(); await db.pembayaran.clear(); 
             await db.saldoSantri.clear(); await db.transaksiSaldo.clear(); await db.transaksiKas.clear(); 
+            await db.chartOfAccounts.clear();
             await db.auditLogs.clear(); await db.absensi.clear(); 
             await db.tahfizh.clear(); await db.kesehatanRecords.clear(); await db.bkSessions.clear(); await db.bukuTamu.clear();
             await db.buku.clear(); await db.sirkulasi.clear(); await db.inventaris.clear(); await db.calendarEvents.clear();
-            await db.jadwalPelajaran.clear(); await db.arsipJadwal.clear(); await db.pendaftar.clear(); await db.raporRecords.clear();
+            await db.jadwalPelajaran.clear(); await db.arsipJadwal.clear(); await db.jadwalUjian.clear(); await db.jurnalMengajar.clear();
+            await db.pendaftar.clear(); await db.raporRecords.clear();
             
             // New Modules Clear
             await db.payrollRecords.clear();
@@ -358,6 +360,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await db.riwayatStok.clear();
             await db.keuanganKoperasi.clear();
             await db.pendingOrders.clear();
+            await db.pembayaranHutang.clear();
+            await db.diskon.clear();
+            await db.suppliers.clear();
+            await db.warehouses.clear();
+            await db.stockTransfers.clear();
             await db.arsipSurat.clear();
         });
         localStorage.setItem('eSantriSampleDataDeleted', 'true');
@@ -365,18 +372,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const onResetToSampleData = async () => {
-        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, db.arsipSurat, async () => {
+        await (db as any).transaction('rw', db.settings, db.santri, db.tagihan, db.pembayaran, db.saldoSantri, db.transaksiSaldo, db.transaksiKas, db.chartOfAccounts, db.auditLogs, db.absensi, db.tahfizh, db.kesehatanRecords, db.bkSessions, db.bukuTamu, db.buku, db.sirkulasi, db.inventaris, db.calendarEvents, db.jadwalPelajaran, db.arsipJadwal, db.jadwalUjian, db.jurnalMengajar, db.pendaftar, db.raporRecords, db.users, db.payrollRecords, db.piketSchedules, db.produkKoperasi, db.transaksiKoperasi, db.riwayatStok, db.keuanganKoperasi, db.pendingOrders, db.pembayaranHutang, db.diskon, db.suppliers, db.warehouses, db.stockTransfers, db.arsipSurat, async () => {
             // Bersihkan semua tabel
             await db.santri.clear(); await db.tagihan.clear(); await db.pembayaran.clear(); 
             await db.saldoSantri.clear(); await db.transaksiSaldo.clear(); await db.transaksiKas.clear(); 
+            await db.chartOfAccounts.clear();
             await db.auditLogs.clear(); await db.absensi.clear(); 
             await db.tahfizh.clear(); await db.kesehatanRecords.clear(); await db.bkSessions.clear(); await db.bukuTamu.clear();
             await db.buku.clear(); await db.sirkulasi.clear(); await db.inventaris.clear(); await db.calendarEvents.clear();
-            await db.jadwalPelajaran.clear(); await db.arsipJadwal.clear(); await db.pendaftar.clear(); await db.raporRecords.clear();
+            await db.jadwalPelajaran.clear(); await db.arsipJadwal.clear(); await db.jadwalUjian.clear(); await db.jurnalMengajar.clear();
+            await db.pendaftar.clear(); await db.raporRecords.clear();
             await db.payrollRecords.clear(); await db.piketSchedules.clear();
             await db.produkKoperasi.clear(); await db.transaksiKoperasi.clear();
             await db.riwayatStok.clear(); await db.keuanganKoperasi.clear();
             await db.pendingOrders.clear();
+            await db.pembayaranHutang.clear(); await db.diskon.clear();
+            await db.suppliers.clear(); await db.warehouses.clear(); await db.stockTransfers.clear();
             await db.arsipSurat.clear();
             await db.settings.clear();
 

@@ -7,6 +7,7 @@ import { perpustakaanPanduan } from './panduan/perpustakaan';
 import { kalenderPanduan } from './panduan/kalender';
 import { financePanduan } from './panduan/finance';
 import { bukukasPanduan } from './panduan/bukukas';
+import { koperasiPanduan } from './panduan/koperasi';
 
 export interface PanduanStepData {
     title: string;
@@ -1707,82 +1708,6 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     {
-        id: 'koperasi',
-        badge: 14,
-        badgeColor: 'pink',
-        title: 'Koperasi & Kantin',
-        steps: [
-            {
-                title: 'Rekomendasi: Akun Khusus Penjaga Toko (Multi-User)',
-                color: 'purple',
-                content: (
-                    <div className="bg-pink-50 p-3 rounded border border-pink-200 text-sm text-pink-900">
-                        <strong>KEAMANAN DATA:</strong> Jangan berikan akses Admin penuh kepada penjaga koperasi/kantin.
-                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                            <li>Buat user baru di <em>Pengaturan &gt; Akun</em>.</li>
-                            <li>Pilih role <strong>Staff</strong>.</li>
-                            <li>Matikan semua akses kecuali <strong>Koperasi</strong>.</li>
-                            <li>Dengan ini, penjaga toko hanya bisa berjualan dan tidak bisa mengintip data SPP atau BK santri.</li>
-                        </ul>
-                    </div>
-                )
-            },
-            {
-                title: 'Manajemen Produk & Stok Opname',
-                content: (
-                    <ul className="list-disc pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Input Produk:</strong> Masuk tab <em>Produk & Stok</em>. Gunakan "Tambah Massal" untuk input cepat. Scan barcode barang agar kasir lebih cepat.</li>
-                        <li><strong>Stok Menipis:</strong> Aktifkan filter "Stok Menipis" di daftar produk untuk melihat barang yang perlu dibeli (kulakan).</li>
-                        <li><strong>Stok Opname:</strong> Klik tombol <em>Stok Opname</em>. Masukkan jumlah fisik barang di rak pada kolom yang tersedia. Sistem otomatis menghitung selisih dan mencatatnya sebagai koreksi stok.</li>
-                    </ul>
-                )
-            },
-            {
-                title: 'Transaksi Kasir (POS) & Printer Bluetooth',
-                content: (
-                    <ol className="list-decimal pl-5 space-y-1 text-sm mt-1">
-                        <li><strong>Hubungkan Printer:</strong> Di tab <em>Pengaturan</em>, klik "Cari & Hubungkan Printer" untuk pairing dengan thermal printer Bluetooth.</li>
-                        <li><strong>Scan Barcode:</strong> Arahkan kursor ke kolom pencarian, scan barang.</li>
-                        <li><strong>Pilih Pelanggan:</strong> 
-                            <ul className="list-disc pl-4 text-xs">
-                                <li><strong>Santri:</strong> Gunakan Saldo Tabungan (Cashless). Jika saldo kurang, transaksi ditolak.</li>
-                                <li><strong>Umum:</strong> Pembayaran Tunai.</li>
-                            </ul>
-                        </li>
-                        <li><strong>Metode Bayar:</strong> Pilih Tunai, Tabungan, atau <strong>Hutang/Kasbon</strong>.</li>
-                        <li><strong>Checkout:</strong> Klik Bayar. Struk akan tercetak otomatis jika printer terhubung.</li>
-                    </ol>
-                )
-            },
-            {
-                title: 'Manajemen Hutang (Kasbon) & Pelunasan',
-                content: (
-                     <div className="text-sm">
-                         <p className="mb-2">Jika santri/pembeli tidak membawa uang:</p>
-                         <ol className="list-decimal pl-5 space-y-1">
-                             <li>Saat checkout, pilih metode <strong>Hutang</strong>. Transaksi akan tercatat tapi uang belum masuk kas.</li>
-                             <li>Untuk melihat daftar hutang, buka tab <strong>Kasbon (Hutang)</strong>.</li>
-                             <li>Jika pembeli datang membayar, klik tombol <strong>Lunasi</strong> pada transaksi tersebut.</li>
-                             <li>Pilih metode pelunasan (Tunai/Potong Tabungan). Setelah lunas, uang baru akan tercatat sebagai Pemasukan di laporan keuangan.</li>
-                         </ol>
-                     </div>
-                )
-            },
-            {
-                title: 'Laporan Keuangan Toko',
-                content: (
-                     <div className="text-sm">
-                         <p className="mb-2">Sistem memisahkan laporan operasional toko dengan keuangan pondok pusat.</p>
-                         <ul className="list-disc pl-5 space-y-1">
-                             <li><strong>Tab Riwayat:</strong> Fokus pada omset penjualan dan barang keluar.</li>
-                             <li><strong>Tab Laba Rugi:</strong> Fokus pada profit bersih. Anda bisa mencatat pengeluaran operasional toko (Gaji penjaga, Listrik Toko, Plastik) di sini agar Laba Bersih terlihat akurat.</li>
-                         </ul>
-                     </div>
-                )
-            }
-        ]
-    },
-    {
         id: 'kesehatan',
         badge: 6,
         badgeColor: 'red',
@@ -3000,6 +2925,7 @@ export const panduanData: PanduanSectionData[] = [
     akademikPanduan,
     financePanduan,
     bukukasPanduan,
+    koperasiPanduan,
     {
         id: 'asrama',
         badge: 10,
@@ -4187,9 +4113,9 @@ export const panduanData: PanduanSectionData[] = [
                 title: 'Keuangan & Operasional',
                 content: (
                     <ul className="list-disc pl-5 space-y-1 text-sm">
-                        <li><strong>Keuangan:</strong> Manajemen tagihan (SPP/Uang Pangkal), pembayaran, dan penggajian guru.</li>
-                        <li><strong>Buku Kas:</strong> Pencatatan arus kas masuk/keluar pondok (Buku Kas Umum).</li>
-                        <li><strong>Koperasi & Kantin:</strong> Sistem kasir (POS) sederhana dengan stok barang dan parkir pesanan.</li>
+                        <li><strong>Keuangan:</strong> Manajemen tagihan (SPP/Uang Pangkal), pembayaran, tabungan santri, dan penggajian guru.</li>
+                        <li><strong>Buku Kas:</strong> Pencatatan arus kas masuk/keluar pondok multi-pos rekening, Bagan Akun (COA), dan cetak BKM/BKK.</li>
+                        <li><strong>Koperasi &amp; Kantin:</strong> Sistem POS layar sentuh, Kasir Tabungan cepat, Multi-Gudang, Vendor/Supplier, Kasbon &amp; cicilan, Void/Retur, cetak struk Printer Thermal Bluetooth, dan Laba Rugi terintegrasi Buku Kas.</li>
                         <li><strong>Sarana Prasarana:</strong> Inventaris barang, lokasi, dan kondisi aset pondok.</li>
                     </ul>
                 )
@@ -4780,48 +4706,6 @@ export const panduanData: PanduanSectionData[] = [
                                 <p className="text-gray-600 leading-relaxed">
                                     Tentukan petugas piket yang memegang ponsel fisik nomor pengirim WhatsApp untuk merespons pertanyaan wali santri secara cepat, santun, dan mengedepankan tabayyun.
                                 </p>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-        ]
-    },
-    {
-        id: 'koperasi_pro',
-        badge: 'NEW',
-        badgeColor: 'blue',
-        title: 'Koperasi Profesional (Warehouse & Vendor)',
-        steps: [
-            {
-                title: 'Multi-Warehouse (Gudang)',
-                content: (
-                    <div className="space-y-3">
-                        <p className="text-sm text-gray-700">Filter ini memungkinkan koperasi pondok mengelola stok di berbagai lokasi (misal: Toko Atas, Toko Bawah, Gudang Utama).</p>
-                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-xs text-blue-800">
-                            <strong>Penting:</strong> Setiap mutasi barang (Stok Masuk/Rusak) wajib memilih gudang tujuan agar data sebaran stok tetap akurat.
-                        </div>
-                        <ul className="list-disc pl-5 text-sm space-y-1">
-                            <li><strong>Tambah Gudang:</strong> Masukkan kode dan nama gudang di tab <em>Gudang</em>.</li>
-                            <li><strong>Sebaran Stok:</strong> Di form produk, tab <em>Stok Per Gudang</em> menampilkan jumlah barang di tiap lokasi.</li>
-                            <li><strong>Transfer Stok:</strong> Gunakan tombol <em>Transfer Stok</em> untuk memindahkan barang antar gudang tanpa mengubah total stok sistem.</li>
-                        </ul>
-                    </div>
-                )
-            },
-            {
-                title: 'Vendor Management',
-                content: (
-                    <div className="space-y-3">
-                        <p className="text-sm text-gray-700">Kelola database pemasok barang secara profesional lengkap dengan data legalitas dan kategori.</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="bg-white p-3 border rounded-lg shadow-sm">
-                                <h5 className="font-bold text-xs mb-1 text-teal-700">Kategori Vendor</h5>
-                                <p className="text-[11px] text-gray-500">Grupkan vendor berdasarkan apa yang mereka pasok (misal: Alat Tulis, Konveksi, Sembako).</p>
-                            </div>
-                            <div className="bg-white p-3 border rounded-lg shadow-sm">
-                                <h5 className="font-bold text-xs mb-1 text-teal-700">Status Vendor</h5>
-                                <p className="text-[11px] text-gray-500">Filter vendor aktif atau non-aktif untuk menjaga kualitas rantai pasok pondok.</p>
                             </div>
                         </div>
                     </div>

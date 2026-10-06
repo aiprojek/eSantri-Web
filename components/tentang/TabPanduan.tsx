@@ -33,7 +33,6 @@ const PANDUAN_ORDER: string[] = [
     'fitur',
     'jurnal_mengajar',
     'cetak_kartu',
-    'koperasi_pro',
 ];
 
 const PanduanLangkah: React.FC<{ number: number; title: string; children: React.ReactNode; isLast?: boolean; color?: string }> = ({ number, title, children, isLast = false, color = 'teal' }) => {

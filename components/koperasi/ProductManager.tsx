@@ -7,13 +7,14 @@ import { useAppContext } from '../../AppContext';
 import { ProdukKoperasi, RiwayatStok, GrosirTier, VarianProduk } from '../../types';
 import { formatRupiah, formatDateTime } from '../../utils/formatters';
 import { BulkProductEditor } from './modals/BulkProductEditor';
+import { generateKoperasiId } from './Shared';
 
 export const ProductManager: React.FC = () => {
     const { showToast, showConfirmation, currentUser } = useAppContext();
     const products = useLiveQuery(() => db.produkKoperasi.filter(p => !p.deleted).toArray(), []) || [];
-    const suppliers = useLiveQuery(() => db.suppliers.toArray(), []) || [];
-    const warehouses = useLiveQuery(() => db.warehouses.toArray(), []) || [];
-    const history = useLiveQuery(() => db.riwayatStok.orderBy('tanggal').reverse().limit(200).toArray(), []) || [];
+    const suppliers = useLiveQuery(() => db.suppliers.filter(s => !s.deleted).toArray(), []) || [];
+    const warehouses = useLiveQuery(() => db.warehouses.filter(w => !w.deleted).toArray(), []) || [];
+    const history = useLiveQuery(() => db.riwayatStok.orderBy('tanggal').reverse().filter(r => !r.deleted).limit(200).toArray(), []) || [];
     
     // Tab State
     const [activeTab, setActiveTab] = useState<'manage' | 'log'>('manage');
@@ -29,6 +30,7 @@ export const ProductManager: React.FC = () => {
     // NEW: Stock Opname State
     const [isOpnameModalOpen, setIsOpnameModalOpen] = useState(false);
     const [opnameData, setOpnameData] = useState<Record<number, number>>({});
+    const [opnameSearch, setOpnameSearch] = useState('');
     
     const [editingProduct, setEditingProduct] = useState<ProdukKoperasi | null>(null);
     
@@ -41,6 +43,8 @@ export const ProductManager: React.FC = () => {
     // Stock Form State
     const [selectedStockProduct, setSelectedStockProduct] = useState<ProdukKoperasi | null>(null);
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<number | ''>('');
+    const [selectedStockVarian, setSelectedStockVarian] = useState<string>('');
+    const [recordKulakanExpense, setRecordKulakanExpense] = useState<boolean>(true);
     const [stockSearchTerm, setStockSearchTerm] = useState('');
     const [stockQty, setStockQty] = useState<number>(1);
     const [stockNotes, setStockNotes] = useState('');
@@ -86,6 +90,10 @@ export const ProductManager: React.FC = () => {
     const handleOpenStockModal = (type: 'Masuk' | 'Koreksi') => {
         setStockActionType(type);
         setSelectedStockProduct(null);
+        setSelectedStockVarian('');
+        setRecordKulakanExpense(type === 'Masuk');
+        const defWh = warehouses.find(w => w.isDefault) || warehouses[0];
+        setSelectedWarehouseId(defWh ? defWh.id : '');
         setStockSearchTerm('');
         setStockQty(1);
         setStockNotes('');
@@ -94,6 +102,7 @@ export const ProductManager: React.FC = () => {
 
     const handleSelectProductForStock = (p: ProdukKoperasi) => {
         setSelectedStockProduct(p);
+        setSelectedStockVarian(p.hasVarian && p.varian && p.varian.length > 0 ? p.varian[0].nama : '');
         setStockSearchTerm(''); 
     };
 
@@ -104,48 +113,102 @@ export const ProductManager: React.FC = () => {
         }
 
         try {
-            const whId = Number(selectedWarehouseId);
-            if (!whId) {
+            const whId = selectedWarehouseId ? Number(selectedWarehouseId) : undefined;
+            if (warehouses.length > 0 && !whId) {
                 showToast('Pilih gudang tujuan.', 'error');
                 return;
             }
 
             let newTotalStock = selectedStockProduct.stok;
             const newWarehouseStocks = { ...(selectedStockProduct.warehouseStocks || {}) };
-            
+            let updatedVarian = selectedStockProduct.varian ? [...selectedStockProduct.varian] : undefined;
+
             if (stockActionType === 'Masuk') {
-                newTotalStock += stockQty;
-                newWarehouseStocks[whId] = (newWarehouseStocks[whId] || 0) + stockQty;
+                if (selectedStockProduct.hasVarian && updatedVarian && selectedStockVarian) {
+                    const vIdx = updatedVarian.findIndex(v => v.nama === selectedStockVarian);
+                    if (vIdx > -1) {
+                        updatedVarian[vIdx] = { ...updatedVarian[vIdx], stok: updatedVarian[vIdx].stok + stockQty };
+                        newTotalStock = updatedVarian.reduce((sum, v) => sum + v.stok, 0);
+                    } else {
+                        newTotalStock += stockQty;
+                    }
+                } else {
+                    newTotalStock += stockQty;
+                }
+                if (whId) {
+                    newWarehouseStocks[whId] = (newWarehouseStocks[whId] || 0) + stockQty;
+                }
             } else {
                 if (selectedStockProduct.stok < stockQty) {
                     showToast('Stok total tidak cukup untuk dikurangi.', 'error');
                     return;
                 }
-                if ((newWarehouseStocks[whId] || 0) < stockQty) {
+                if (whId && newWarehouseStocks[whId] !== undefined && newWarehouseStocks[whId] < stockQty) {
                     showToast('Stok gudang terpilih tidak cukup untuk dikurangi.', 'error');
                     return;
                 }
-                newTotalStock -= stockQty; 
-                newWarehouseStocks[whId] = (newWarehouseStocks[whId] || 0) - stockQty;
+                if (selectedStockProduct.hasVarian && updatedVarian && selectedStockVarian) {
+                    const vIdx = updatedVarian.findIndex(v => v.nama === selectedStockVarian);
+                    if (vIdx > -1) {
+                        if (updatedVarian[vIdx].stok < stockQty) {
+                            showToast(`Stok varian ${selectedStockVarian} tidak mencukupi.`, 'error');
+                            return;
+                        }
+                        updatedVarian[vIdx] = { ...updatedVarian[vIdx], stok: updatedVarian[vIdx].stok - stockQty };
+                        newTotalStock = updatedVarian.reduce((sum, v) => sum + v.stok, 0);
+                    } else {
+                        newTotalStock -= stockQty;
+                    }
+                } else {
+                    newTotalStock -= stockQty;
+                }
+                if (whId) {
+                    newWarehouseStocks[whId] = Math.max(0, (newWarehouseStocks[whId] || 0) - stockQty);
+                }
             }
 
-            await (db as any).transaction('rw', db.produkKoperasi, db.riwayatStok, async () => {
-                await db.produkKoperasi.update(selectedStockProduct.id, { 
-                    stok: newTotalStock, 
+            const now = Date.now();
+            const nowIso = new Date().toISOString();
+
+            await (db as any).transaction('rw', [db.produkKoperasi, db.riwayatStok, db.keuanganKoperasi], async () => {
+                await db.produkKoperasi.put({
+                    ...selectedStockProduct,
+                    stok: newTotalStock,
+                    varian: updatedVarian,
                     warehouseStocks: newWarehouseStocks,
-                    lastModified: Date.now() 
+                    lastModified: now
                 });
-                await db.riwayatStok.add({
+                await db.riwayatStok.put({
+                    id: generateKoperasiId(),
                     produkId: selectedStockProduct.id,
                     warehouseId: whId,
-                    tanggal: new Date().toISOString(),
+                    tanggal: nowIso,
                     tipe: stockActionType,
                     jumlah: stockQty,
                     stokAwal: selectedStockProduct.stok,
                     stokAkhir: newTotalStock,
                     keterangan: stockNotes || (stockActionType === 'Masuk' ? 'Restock Barang' : 'Barang Rusak/Hilang'),
-                    operator: currentUser?.username || 'Admin'
+                    operator: currentUser?.fullName || currentUser?.username || 'Admin',
+                    varian: selectedStockVarian || undefined,
+                    deleted: false,
+                    lastModified: now
                 } as RiwayatStok);
+
+                if (stockActionType === 'Masuk' && recordKulakanExpense && selectedStockProduct.hargaBeli > 0) {
+                    const totalCost = stockQty * selectedStockProduct.hargaBeli;
+                    await db.keuanganKoperasi.put({
+                        id: generateKoperasiId(),
+                        tanggal: nowIso,
+                        jenis: 'Pengeluaran',
+                        kategori: 'Kulakan / Beli Stok',
+                        deskripsi: `Restock ${selectedStockProduct.nama} (${stockQty} ${selectedStockProduct.satuan})${stockNotes ? ' - ' + stockNotes : ''}`,
+                        jumlah: totalCost,
+                        metode: 'Tunai',
+                        operator: currentUser?.fullName || currentUser?.username || 'Admin',
+                        deleted: false,
+                        lastModified: now
+                    } as any);
+                }
             });
 
             showToast(`Stok ${selectedStockProduct.nama} berhasil ${stockActionType === 'Masuk' ? 'ditambahkan' : 'dikurangi'}.`, 'success');
@@ -195,6 +258,12 @@ export const ProductManager: React.FC = () => {
                 ? sanitizedVarian.reduce((sum, v) => sum + (Number(v.stok) || 0), 0) 
                 : Math.max(0, (totalWhStock || Number(data.stok) || 0));
 
+            const defWh = warehouses.find(w => w.isDefault) || warehouses[0];
+            let computedWarehouseStocks = data.warehouseStocks ? { ...data.warehouseStocks } : {};
+            if (defWh && totalWhStock === 0 && totalStok > 0) {
+                computedWarehouseStocks = { [defWh.id]: totalStok };
+            }
+
             const finalData = { 
                 ...data, 
                 nama: data.nama.trim(),
@@ -205,21 +274,31 @@ export const ProductManager: React.FC = () => {
                 minStok,
                 hasVarian,
                 varian: sanitizedVarian,
-                grosir: sanitizedGrosir
+                grosir: sanitizedGrosir,
+                warehouseStocks: computedWarehouseStocks
             };
 
+            const now = Date.now();
             if (editingProduct) {
-                await db.produkKoperasi.put({ ...finalData, id: editingProduct.id, lastModified: Date.now() });
+                await db.produkKoperasi.put({ ...editingProduct, ...finalData, id: editingProduct.id, lastModified: now });
                 showToast('Produk diperbarui.', 'success');
             } else {
-                const id = Date.now();
-                await db.produkKoperasi.add({ ...finalData, id, lastModified: Date.now() });
-                // Log stok awal hanya jika bukan varian (varian handling complex for initial log, skipped for simplicity)
-                if (totalStok > 0 && !hasVarian) {
-                    await db.riwayatStok.add({
-                        produkId: id, tanggal: new Date().toISOString(), tipe: 'Masuk',
-                        jumlah: totalStok, stokAwal: 0, stokAkhir: totalStok,
-                        keterangan: 'Stok Awal', operator: currentUser?.username || 'Admin'
+                const id = generateKoperasiId();
+                await db.produkKoperasi.put({ ...finalData, id, deleted: false, lastModified: now });
+                if (totalStok > 0) {
+                    await db.riwayatStok.put({
+                        id: generateKoperasiId(),
+                        produkId: id,
+                        warehouseId: defWh?.id,
+                        tanggal: new Date().toISOString(),
+                        tipe: 'Masuk',
+                        jumlah: totalStok,
+                        stokAwal: 0,
+                        stokAkhir: totalStok,
+                        keterangan: 'Stok Awal Produk Baru',
+                        operator: currentUser?.fullName || currentUser?.username || 'Admin',
+                        deleted: false,
+                        lastModified: now
                     } as RiwayatStok);
                 }
                 showToast('Produk ditambahkan.', 'success');
@@ -272,7 +351,9 @@ export const ProductManager: React.FC = () => {
     const handleSaveOpname = async () => {
         const updates: any[] = [];
         const logs: any[] = [];
+        const now = Date.now();
         const timestamp = new Date().toISOString();
+        const defWh = warehouses.find(w => w.isDefault) || warehouses[0];
 
         Object.keys(opnameData).forEach(idStr => {
             const id = Number(idStr);
@@ -281,22 +362,35 @@ export const ProductManager: React.FC = () => {
             
             if (product && product.stok !== fisik) {
                 const diff = fisik - product.stok;
-                updates.push(db.produkKoperasi.update(id, { stok: fisik, lastModified: Date.now() }));
+                const updatedWhStocks = product.warehouseStocks ? { ...product.warehouseStocks } : {};
+                if (defWh && updatedWhStocks[defWh.id] !== undefined) {
+                    updatedWhStocks[defWh.id] = Math.max(0, updatedWhStocks[defWh.id] + diff);
+                }
+                updates.push(db.produkKoperasi.put({
+                    ...product,
+                    stok: fisik,
+                    warehouseStocks: updatedWhStocks,
+                    lastModified: now
+                }));
                 logs.push({
+                    id: generateKoperasiId(),
                     produkId: id,
+                    warehouseId: defWh?.id,
                     tanggal: timestamp,
                     tipe: 'Koreksi',
                     jumlah: Math.abs(diff),
                     stokAwal: product.stok,
                     stokAkhir: fisik,
                     keterangan: `Stok Opname (Selisih ${diff > 0 ? '+' : ''}${diff})`,
-                    operator: currentUser?.username || 'Admin'
+                    operator: currentUser?.fullName || currentUser?.username || 'Admin',
+                    deleted: false,
+                    lastModified: now
                 });
             }
         });
 
         if (updates.length > 0) {
-            await Promise.all([...updates, db.riwayatStok.bulkAdd(logs)]);
+            await Promise.all([...updates, db.riwayatStok.bulkPut(logs)]);
             showToast(`${updates.length} produk disesuaikan.`, 'success');
             setIsOpnameModalOpen(false);
             setOpnameData({});
@@ -307,32 +401,38 @@ export const ProductManager: React.FC = () => {
 
     // --- Bulk & CSV Logic ---
     const handleBulkSave = async (newProducts: Omit<ProdukKoperasi, 'id'>[]) => {
-        // ... (Existing bulk save logic) ...
         try {
             const timestamp = Date.now();
-            const productsToAdd: ProdukKoperasi[] = newProducts.map((p, idx) => ({
+            const defWh = warehouses.find(w => w.isDefault) || warehouses[0];
+            const productsToAdd: ProdukKoperasi[] = newProducts.map((p) => ({
                 ...p,
                 minStok: p.minStok || 5,
-                id: timestamp + idx,
+                id: generateKoperasiId(),
+                warehouseStocks: defWh && p.stok > 0 ? { [defWh.id]: p.stok } : {},
+                deleted: false,
                 lastModified: timestamp
             }));
 
-            await db.produkKoperasi.bulkAdd(productsToAdd);
+            await db.produkKoperasi.bulkPut(productsToAdd);
             
-             // Log initial stock for items with stock > 0
+            // Log initial stock for items with stock > 0
             const stockLogs = productsToAdd.filter(p => p.stok > 0).map(p => ({
+                id: generateKoperasiId(),
                 produkId: p.id,
+                warehouseId: defWh?.id,
                 tanggal: new Date().toISOString(),
                 tipe: 'Masuk' as const,
                 jumlah: p.stok,
                 stokAwal: 0,
                 stokAkhir: p.stok,
                 keterangan: 'Stok Awal (Bulk Add)',
-                operator: currentUser?.username || 'Admin'
+                operator: currentUser?.fullName || currentUser?.username || 'Admin',
+                deleted: false,
+                lastModified: timestamp
             }));
 
             if (stockLogs.length > 0) {
-                await db.riwayatStok.bulkAdd(stockLogs as any);
+                await db.riwayatStok.bulkPut(stockLogs as any);
             }
 
             showToast(`${productsToAdd.length} produk berhasil ditambahkan.`, 'success');
@@ -447,9 +547,19 @@ export const ProductManager: React.FC = () => {
                                                 <div className="text-[9px] text-gray-400">Min: {p.minStok || 5}</div>
                                             </td>
                                             <td className="p-3 text-center">
-                                                <div className="flex justify-center gap-2">
-                                                    <button onClick={() => openProductModal(p)} className="text-blue-600 hover:text-blue-800"><i className="bi bi-pencil-square"></i></button>
-                                                    <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-800"><i className="bi bi-trash"></i></button>
+                                                <div className="flex justify-center gap-1.5">
+                                                    <button
+                                                        onClick={() => {
+                                                            handleOpenStockModal('Masuk');
+                                                            handleSelectProductForStock(p);
+                                                        }}
+                                                        className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-100"
+                                                        title="Tambah Stok Cepat"
+                                                    >
+                                                        +Stok
+                                                    </button>
+                                                    <button onClick={() => openProductModal(p)} className="w-8 h-8 rounded border border-blue-200 text-blue-600 hover:bg-blue-50 inline-flex items-center justify-center"><i className="bi bi-pencil-square"></i></button>
+                                                    <button onClick={() => handleDelete(p.id)} className="w-8 h-8 rounded border border-red-200 text-red-600 hover:bg-red-50 inline-flex items-center justify-center"><i className="bi bi-trash"></i></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -464,42 +574,50 @@ export const ProductManager: React.FC = () => {
                         {filteredProducts.map(p => {
                             const isLow = p.stok <= (p.minStok || 5);
                             return (
-                                <div key={p.id} className={`border rounded-lg p-3 ${isLow ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
+                                <div key={p.id} className={`border rounded-xl p-3.5 shadow-2xs ${isLow ? 'bg-red-50/40 border-red-200' : 'bg-white border-slate-200'}`}>
                                     <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                            <div className="font-semibold text-sm text-gray-800">{p.nama}</div>
-                                            <div className="text-[11px] text-gray-500">{p.kategori}</div>
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-sm text-slate-800">{p.nama}</div>
+                                            <div className="text-xs text-slate-500">{p.kategori} {p.barcode ? `· ${p.barcode}` : ''}</div>
                                         </div>
-                                        <div className="flex gap-2 shrink-0">
-                                            <button onClick={() => openProductModal(p)} className="text-blue-600 hover:text-blue-800"><i className="bi bi-pencil-square"></i></button>
-                                            <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:text-red-800"><i className="bi bi-trash"></i></button>
-                                        </div>
-                                    </div>
-                                    <div className="mt-2 flex flex-wrap gap-1">
-                                        {p.hasVarian && <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold">Varian</span>}
-                                        {p.grosir && p.grosir.length > 0 && <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold">Grosir</span>}
-                                        {isLow && <span className="px-1.5 py-0.5 rounded bg-red-200 text-red-700 text-[10px] font-bold">Stok Rendah</span>}
-                                    </div>
-                                    <div className="mt-2 text-[11px] text-gray-500 font-mono">{p.barcode ? `UPC: ${p.barcode}` : 'Tanpa barcode'}</div>
-                                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                                        <div className="rounded-md bg-gray-50 border border-gray-200 p-2">
-                                            <div className="text-gray-500">Harga Beli</div>
-                                            <div className="font-medium text-gray-700">{formatRupiah(p.hargaBeli)}</div>
-                                        </div>
-                                        <div className="rounded-md bg-green-50 border border-green-200 p-2">
-                                            <div className="text-green-700">Harga Jual</div>
-                                            <div className="font-bold text-green-800">{formatRupiah(p.hargaJual)}</div>
+                                        <div className="flex gap-1.5 shrink-0">
+                                            <button
+                                                onClick={() => {
+                                                    handleOpenStockModal('Masuk');
+                                                    handleSelectProductForStock(p);
+                                                }}
+                                                className="min-h-[36px] px-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1"
+                                            >
+                                                <i className="bi bi-plus-circle"></i> Stok
+                                            </button>
+                                            <button onClick={() => openProductModal(p)} className="w-9 h-9 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 flex items-center justify-center" aria-label="Edit Produk"><i className="bi bi-pencil-square"></i></button>
+                                            <button onClick={() => handleDelete(p.id)} className="w-9 h-9 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center" aria-label="Hapus Produk"><i className="bi bi-trash"></i></button>
                                         </div>
                                     </div>
-                                    <div className="mt-2 text-xs">
-                                        <span className={`font-bold ${isLow ? 'text-red-600' : 'text-gray-700'}`}>Stok: {p.stok} {p.satuan}</span>
-                                        <span className="text-gray-500"> · Min: {p.minStok || 5}</span>
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {p.hasVarian && <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold">Varian</span>}
+                                        {p.grosir && p.grosir.length > 0 && <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">Grosir</span>}
+                                        {isLow && <span className="px-2 py-0.5 rounded bg-red-200 text-red-800 text-[10px] font-bold">Stok Menipis</span>}
+                                    </div>
+                                    <div className="mt-2.5 grid grid-cols-3 gap-2 text-xs">
+                                        <div className="rounded-lg bg-slate-50 border border-slate-200 p-2">
+                                            <div className="text-[10px] text-slate-500">H. Beli</div>
+                                            <div className="font-semibold text-slate-700 tabular-nums">{formatRupiah(p.hargaBeli)}</div>
+                                        </div>
+                                        <div className="rounded-lg bg-teal-50 border border-teal-200 p-2">
+                                            <div className="text-[10px] text-teal-700">H. Jual</div>
+                                            <div className="font-bold text-teal-900 tabular-nums">{formatRupiah(p.hargaJual)}</div>
+                                        </div>
+                                        <div className={`rounded-lg border p-2 ${isLow ? 'bg-red-100/60 border-red-300' : 'bg-slate-50 border-slate-200'}`}>
+                                            <div className="text-[10px] text-slate-500">Stok (Min {p.minStok || 5})</div>
+                                            <div className={`font-bold tabular-nums ${isLow ? 'text-red-700' : 'text-slate-800'}`}>{p.stok} {p.satuan}</div>
+                                        </div>
                                     </div>
                                 </div>
                             );
                         })}
                         {filteredProducts.length === 0 && (
-                            <div className="border rounded-lg p-6 text-center text-sm text-gray-400">Tidak ada produk ditemukan.</div>
+                            <div className="border rounded-xl p-6 text-center text-sm text-slate-400">Tidak ada produk ditemukan.</div>
                         )}
                     </div>
                 </>
@@ -581,22 +699,22 @@ export const ProductManager: React.FC = () => {
 
             {/* MODAL EDIT PRODUK - TABBED */}
             {isProductModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-60 z-[70] flex justify-center items-center p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl h-[90vh] flex flex-col">
-                        <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
-                            <h3 className="font-bold text-gray-800">{editingProduct ? 'Edit Produk' : 'Tambah Produk'}</h3>
-                            <button onClick={() => setIsProductModalOpen(false)}><i className="bi bi-x-lg"></i></button>
+                <div className="fixed inset-0 bg-black/65 backdrop-blur-xs z-[70] flex justify-center items-end sm:items-center p-0 sm:p-4">
+                    <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-2xl h-[92vh] sm:h-[90vh] flex flex-col overflow-hidden">
+                        <div className="p-4 border-b flex justify-between items-center bg-slate-50 shrink-0">
+                            <h3 className="font-bold text-slate-800">{editingProduct ? 'Edit Produk' : 'Tambah Produk'}</h3>
+                            <button onClick={() => setIsProductModalOpen(false)} className="w-9 h-9 rounded-lg hover:bg-slate-200 flex items-center justify-center"><i className="bi bi-x-lg"></i></button>
                         </div>
 
                         {/* Modal Tabs */}
-                        <div className="flex border-b">
-                            <button onClick={() => setModalTab('info')} className={`flex-1 py-3 text-sm font-medium ${modalTab === 'info' ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50' : 'text-gray-500 hover:bg-gray-50'}`}>Info Dasar</button>
-                            <button onClick={() => setModalTab('varian')} className={`flex-1 py-3 text-sm font-medium ${modalTab === 'varian' ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50' : 'text-gray-500 hover:bg-gray-50'}`}>Varian</button>
-                            <button onClick={() => setModalTab('grosir')} className={`flex-1 py-3 text-sm font-medium ${modalTab === 'grosir' ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50' : 'text-gray-500 hover:bg-gray-50'}`}>Harga Grosir</button>
-                            <button onClick={() => setModalTab('stok_gudang')} className={`flex-1 py-3 text-sm font-medium ${modalTab === 'stok_gudang' ? 'border-b-2 border-teal-600 text-teal-600 bg-teal-50' : 'text-gray-500 hover:bg-gray-50'}`}>Stok Per Gudang</button>
+                        <div className="flex border-b overflow-x-auto scrollbar-none shrink-0">
+                            <button onClick={() => setModalTab('info')} className={`flex-1 py-3 px-3 text-xs sm:text-sm font-bold whitespace-nowrap ${modalTab === 'info' ? 'border-b-2 border-teal-600 text-teal-700 bg-teal-50/60' : 'text-slate-500 hover:bg-slate-50'}`}>Info Dasar</button>
+                            <button onClick={() => setModalTab('varian')} className={`flex-1 py-3 px-3 text-xs sm:text-sm font-bold whitespace-nowrap ${modalTab === 'varian' ? 'border-b-2 border-teal-600 text-teal-700 bg-teal-50/60' : 'text-slate-500 hover:bg-slate-50'}`}>Varian ({tempVarian.length})</button>
+                            <button onClick={() => setModalTab('grosir')} className={`flex-1 py-3 px-3 text-xs sm:text-sm font-bold whitespace-nowrap ${modalTab === 'grosir' ? 'border-b-2 border-teal-600 text-teal-700 bg-teal-50/60' : 'text-slate-500 hover:bg-slate-50'}`}>Grosir ({tempGrosir.length})</button>
+                            <button onClick={() => setModalTab('stok_gudang')} className={`flex-1 py-3 px-3 text-xs sm:text-sm font-bold whitespace-nowrap ${modalTab === 'stok_gudang' ? 'border-b-2 border-teal-600 text-teal-700 bg-teal-50/60' : 'text-slate-500 hover:bg-slate-50'}`}>Stok Gudang</button>
                         </div>
 
-                        <form onSubmit={handleSubmit(onSubmitProduct)} className="flex-grow overflow-y-auto p-6">
+                        <form onSubmit={handleSubmit(onSubmitProduct)} className="flex-grow overflow-y-auto p-4 sm:p-6">
                             
                             {modalTab === 'info' && (
                                 <div className="space-y-4">
@@ -634,16 +752,16 @@ export const ProductManager: React.FC = () => {
                                 <div>
                                     <div className="flex justify-between items-center mb-3">
                                         <h4 className="text-sm font-bold">Daftar Varian Produk</h4>
-                                        <button type="button" onClick={addVarian} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded hover:bg-green-700">+ Tambah Varian</button>
+                                        <button type="button" onClick={addVarian} className="min-h-[36px] text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-700">+ Tambah Varian</button>
                                     </div>
                                     {tempVarian.length === 0 && <p className="text-sm text-gray-400 italic text-center py-4">Belum ada varian (Contoh: Rasa Coklat, Ukuran L). Produk menggunakan stok & harga utama.</p>}
-                                    <div className="space-y-2">
+                                    <div className="space-y-2.5">
                                         {tempVarian.map((v, idx) => (
-                                            <div key={idx} className="flex gap-2 items-center bg-gray-50 p-2 rounded border">
-                                                <input type="text" value={v.nama} onChange={e => updateVarian(idx, 'nama', e.target.value)} placeholder="Nama Varian (Coklat)" className="flex-grow border rounded p-1.5 text-sm" />
-                                                <input type="number" value={v.harga} onChange={e => updateVarian(idx, 'harga', parseInt(e.target.value))} placeholder="Harga" className="w-24 border rounded p-1.5 text-sm" title="Harga Jual Varian" />
-                                                <input type="number" value={v.stok} onChange={e => updateVarian(idx, 'stok', parseInt(e.target.value))} placeholder="Stok" className="w-20 border rounded p-1.5 text-sm" title="Stok Varian" />
-                                                <button type="button" onClick={() => removeVarian(idx)} className="text-red-500 p-1 hover:bg-red-100 rounded"><i className="bi bi-trash"></i></button>
+                                            <div key={idx} className="grid grid-cols-12 sm:flex gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                                                <input type="text" value={v.nama} onChange={e => updateVarian(idx, 'nama', e.target.value)} placeholder="Nama Varian (Coklat)" className="col-span-12 sm:flex-grow border rounded-lg p-2 text-sm bg-white" />
+                                                <input type="number" value={v.harga} onChange={e => updateVarian(idx, 'harga', parseInt(e.target.value))} placeholder="Harga" className="col-span-6 sm:w-28 border rounded-lg p-2 text-sm bg-white" title="Harga Jual Varian" />
+                                                <input type="number" value={v.stok} onChange={e => updateVarian(idx, 'stok', parseInt(e.target.value))} placeholder="Stok" className="col-span-4 sm:w-20 border rounded-lg p-2 text-sm bg-white" title="Stok Varian" />
+                                                <button type="button" onClick={() => removeVarian(idx)} className="col-span-2 sm:w-9 h-9 text-red-500 hover:bg-red-100 rounded-lg flex items-center justify-center"><i className="bi bi-trash"></i></button>
                                             </div>
                                         ))}
                                     </div>
@@ -654,17 +772,21 @@ export const ProductManager: React.FC = () => {
                                 <div>
                                     <div className="flex justify-between items-center mb-3">
                                         <h4 className="text-sm font-bold">Aturan Harga Grosir</h4>
-                                        <button type="button" onClick={addGrosir} className="text-xs bg-orange-500 text-white px-3 py-1.5 rounded hover:bg-orange-600">+ Tambah Aturan</button>
+                                        <button type="button" onClick={addGrosir} className="min-h-[36px] text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-orange-600">+ Tambah Aturan</button>
                                     </div>
                                     <p className="text-xs text-gray-500 mb-3">Harga grosir berlaku jika pembelian mencapai jumlah minimal tertentu.</p>
-                                    <div className="space-y-2">
+                                    <div className="space-y-2.5">
                                         {tempGrosir.map((g, idx) => (
-                                            <div key={idx} className="flex gap-2 items-center bg-orange-50 p-2 rounded border border-orange-100">
-                                                <span className="text-sm text-gray-600">Beli Minimal:</span>
-                                                <input type="number" value={g.minQty} onChange={e => updateGrosir(idx, 'minQty', parseInt(e.target.value))} className="w-20 border rounded p-1.5 text-sm" />
-                                                <span className="text-sm text-gray-600">Harga Satuan Jadi:</span>
-                                                <input type="number" value={g.harga} onChange={e => updateGrosir(idx, 'harga', parseInt(e.target.value))} className="flex-grow border rounded p-1.5 text-sm font-bold" />
-                                                <button type="button" onClick={() => removeGrosir(idx)} className="text-red-500 p-1 hover:bg-red-100 rounded"><i className="bi bi-trash"></i></button>
+                                            <div key={idx} className="grid grid-cols-12 sm:flex gap-2 items-center bg-orange-50 p-2.5 rounded-xl border border-orange-100">
+                                                <div className="col-span-5 sm:w-auto flex items-center gap-1.5">
+                                                    <span className="text-xs text-gray-600 whitespace-nowrap">Min Qty:</span>
+                                                    <input type="number" value={g.minQty} onChange={e => updateGrosir(idx, 'minQty', parseInt(e.target.value))} className="w-full sm:w-20 border rounded-lg p-2 text-sm bg-white" />
+                                                </div>
+                                                <div className="col-span-5 sm:flex-grow flex items-center gap-1.5">
+                                                    <span className="text-xs text-gray-600 whitespace-nowrap">Harga:</span>
+                                                    <input type="number" value={g.harga} onChange={e => updateGrosir(idx, 'harga', parseInt(e.target.value))} className="w-full border rounded-lg p-2 text-sm font-bold bg-white" />
+                                                </div>
+                                                <button type="button" onClick={() => removeGrosir(idx)} className="col-span-2 sm:w-9 h-9 text-red-500 hover:bg-red-100 rounded-lg flex items-center justify-center"><i className="bi bi-trash"></i></button>
                                             </div>
                                         ))}
                                         {tempGrosir.length === 0 && <p className="text-sm text-gray-400 italic text-center py-4">Tidak ada aturan grosir.</p>}
@@ -767,21 +889,39 @@ export const ProductManager: React.FC = () => {
 
                             {selectedStockProduct && (
                                 <>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-600 mb-1">Gudang Tujuan *</label>
-                                        <select 
-                                            value={selectedWarehouseId} 
-                                            onChange={e => setSelectedWarehouseId(Number(e.target.value))} 
-                                            className="w-full border rounded p-2 text-sm bg-white"
-                                        >
-                                            <option value="">-- Pilih Gudang --</option>
-                                            {warehouses.map(w => (
-                                                <option key={w.id} value={w.id}>
-                                                    {w.nama} (Stok: {selectedStockProduct.warehouseStocks?.[w.id] || 0})
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                    {warehouses.length > 0 && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-600 mb-1">Gudang Tujuan *</label>
+                                            <select 
+                                                value={selectedWarehouseId} 
+                                                onChange={e => setSelectedWarehouseId(Number(e.target.value))} 
+                                                className="w-full border rounded p-2 text-sm bg-white"
+                                            >
+                                                <option value="">-- Pilih Gudang --</option>
+                                                {warehouses.map(w => (
+                                                    <option key={w.id} value={w.id}>
+                                                        {w.nama} (Stok: {selectedStockProduct.warehouseStocks?.[w.id] || 0})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                    {selectedStockProduct.hasVarian && selectedStockProduct.varian && selectedStockProduct.varian.length > 0 && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-600 mb-1">Pilih Varian Produk *</label>
+                                            <select
+                                                value={selectedStockVarian}
+                                                onChange={e => setSelectedStockVarian(e.target.value)}
+                                                className="w-full border rounded p-2 text-sm bg-white font-medium"
+                                            >
+                                                {selectedStockProduct.varian.map((v, idx) => (
+                                                    <option key={idx} value={v.nama}>
+                                                        {v.nama} (Stok: {v.stok})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
                                     <div>
                                         <label className="block text-xs font-bold text-gray-600 mb-1">Jumlah {stockActionType} *</label>
                                         <div className="flex items-center gap-2">
@@ -806,6 +946,21 @@ export const ProductManager: React.FC = () => {
                                             placeholder={stockActionType === 'Masuk' ? "cth: Kulakan Pasar Besar" : "cth: Kedaluwarsa, Dimakan Tikus"} 
                                         />
                                     </div>
+                                    {stockActionType === 'Masuk' && selectedStockProduct.hargaBeli > 0 && (
+                                        <div className="pt-1">
+                                            <label className="flex items-center gap-2 cursor-pointer bg-green-50 p-2.5 rounded border border-green-200 text-xs text-green-900">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={recordKulakanExpense}
+                                                    onChange={e => setRecordKulakanExpense(e.target.checked)}
+                                                    className="rounded text-green-600"
+                                                />
+                                                <span>
+                                                    Catat otomatis sebagai <strong>Pengeluaran Kulakan</strong> di Keuangan Koperasi ({formatRupiah(stockQty * selectedStockProduct.hargaBeli)})
+                                                </span>
+                                            </label>
+                                        </div>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -825,47 +980,62 @@ export const ProductManager: React.FC = () => {
             
              {/* STOCK OPNAME MODAL (NEW) */}
              {isOpnameModalOpen && (
-                 <div className="fixed inset-0 bg-black bg-opacity-70 z-[80] flex justify-center items-center p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[90vh] flex flex-col">
-                        <div className="p-4 border-b flex justify-between items-center bg-purple-50 rounded-t-lg">
-                            <h3 className="font-bold text-lg text-purple-900"><i className="bi bi-clipboard-check"></i> Formulir Stok Opname</h3>
-                            <button onClick={() => setIsOpnameModalOpen(false)}><i className="bi bi-x-lg text-gray-500"></i></button>
+                 <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-[80] flex justify-center items-end sm:items-center p-0 sm:p-4">
+                    <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-4xl h-[92vh] sm:h-[90vh] flex flex-col overflow-hidden">
+                        <div className="p-4 border-b flex justify-between items-center bg-purple-50 shrink-0">
+                            <h3 className="font-bold text-base sm:text-lg text-purple-900 flex items-center gap-2"><i className="bi bi-clipboard-check"></i> Formulir Stok Opname</h3>
+                            <button onClick={() => setIsOpnameModalOpen(false)} className="w-9 h-9 rounded-lg hover:bg-purple-100 flex items-center justify-center"><i className="bi bi-x-lg text-slate-500"></i></button>
                         </div>
-                        <div className="p-4 bg-yellow-50 text-sm text-yellow-800 border-b border-yellow-200">
-                            <strong>Instruksi:</strong> Isi kolom "Fisik" sesuai jumlah barang nyata di rak. Kosongkan jika stok sesuai sistem. Selisih akan otomatis tercatat sebagai "Koreksi".
+                        <div className="p-3 sm:p-4 bg-amber-50 text-xs sm:text-sm text-amber-900 border-b border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+                            <div>
+                                <strong>Instruksi:</strong> Isi kolom "Fisik" sesuai jumlah nyata di rak. Selisih otomatis tercatat sebagai "Koreksi".
+                            </div>
+                            <div className="relative w-full sm:w-64 shrink-0">
+                                <input
+                                    type="text"
+                                    value={opnameSearch}
+                                    onChange={e => setOpnameSearch(e.target.value)}
+                                    placeholder="Cari produk saat opname..."
+                                    className="w-full pl-8 pr-3 py-1.5 min-h-[38px] bg-white border border-amber-300 rounded-lg text-xs sm:text-sm"
+                                />
+                                <i className="bi bi-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            </div>
                         </div>
                         <div className="flex-grow overflow-auto p-0">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-gray-100 text-gray-600 sticky top-0 z-10">
+                            <table className="w-full text-xs sm:text-sm text-left">
+                                <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
                                     <tr>
-                                        <th className="p-3">Nama Produk</th>
-                                        <th className="p-3 text-center">Stok Sistem</th>
-                                        <th className="p-3 text-center w-32">Stok Fisik</th>
-                                        <th className="p-3 text-center">Selisih</th>
+                                        <th className="p-2.5 sm:p-3">Nama Produk</th>
+                                        <th className="p-2.5 sm:p-3 text-center">Sistem</th>
+                                        <th className="p-2.5 sm:p-3 text-center w-28 sm:w-32">Stok Fisik</th>
+                                        <th className="p-2.5 sm:p-3 text-center">Selisih</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y">
-                                    {[...products].sort((a,b) => a.nama.localeCompare(b.nama)).map(p => {
+                                <tbody className="divide-y divide-slate-100">
+                                    {[...products]
+                                        .filter(p => !opnameSearch || p.nama.toLowerCase().includes(opnameSearch.toLowerCase()) || p.kategori.toLowerCase().includes(opnameSearch.toLowerCase()))
+                                        .sort((a,b) => a.nama.localeCompare(b.nama))
+                                        .map(p => {
                                         const fisik = opnameData[p.id] !== undefined ? opnameData[p.id] : p.stok;
                                         const diff = fisik - p.stok;
                                         const isChanged = diff !== 0;
                                         return (
-                                            <tr key={p.id} className={`hover:bg-gray-50 ${isChanged ? 'bg-yellow-50' : ''}`}>
-                                                <td className="p-3 font-medium">
+                                            <tr key={p.id} className={`hover:bg-slate-50 ${isChanged ? 'bg-amber-50/70' : ''}`}>
+                                                <td className="p-2.5 sm:p-3 font-medium text-slate-800">
                                                     {p.nama}
-                                                    {p.hasVarian && <span className="text-[10px] text-blue-600 ml-1">(Total Varian)</span>}
+                                                    {p.hasVarian && <span className="text-[10px] text-blue-600 ml-1 block sm:inline">(Total Varian)</span>}
                                                 </td>
-                                                <td className="p-3 text-center text-gray-500">{p.stok}</td>
+                                                <td className="p-2.5 sm:p-3 text-center text-slate-500 tabular-nums">{p.stok}</td>
                                                 <td className="p-2 text-center">
                                                     <input 
                                                         type="number" 
-                                                        className={`w-20 text-center border rounded p-1 font-bold ${isChanged ? 'border-purple-400 bg-white' : 'border-gray-300'}`}
+                                                        className={`w-20 sm:w-24 min-h-[38px] text-center border rounded-lg p-1.5 font-bold tabular-nums ${isChanged ? 'border-purple-500 bg-white ring-1 ring-purple-300' : 'border-slate-300'}`}
                                                         value={opnameData[p.id] ?? ''} 
                                                         placeholder={p.stok.toString()}
                                                         onChange={(e) => handleOpnameChange(p.id, parseInt(e.target.value) || 0)}
                                                     />
                                                 </td>
-                                                <td className={`p-3 text-center font-bold ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                                <td className={`p-2.5 sm:p-3 text-center font-bold tabular-nums ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                                                     {diff > 0 ? `+${diff}` : diff}
                                                 </td>
                                             </tr>
@@ -874,9 +1044,9 @@ export const ProductManager: React.FC = () => {
                                 </tbody>
                             </table>
                         </div>
-                        <div className="p-4 border-t flex justify-end gap-2 bg-gray-50 rounded-b-lg">
-                            <button onClick={() => setIsOpnameModalOpen(false)} className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-200 text-sm">Batal</button>
-                            <button onClick={handleSaveOpname} className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold text-sm shadow-sm">Simpan Penyesuaian</button>
+                        <div className="p-3.5 sm:p-4 border-t flex justify-end gap-2 bg-slate-50 shrink-0">
+                            <button onClick={() => setIsOpnameModalOpen(false)} className="min-h-[42px] px-4 py-2 border border-slate-300 bg-white rounded-xl text-slate-700 hover:bg-slate-100 text-xs sm:text-sm font-semibold">Batal</button>
+                            <button onClick={handleSaveOpname} className="min-h-[42px] px-5 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 font-bold text-xs sm:text-sm shadow-xs">Simpan Penyesuaian</button>
                         </div>
                     </div>
                 </div>

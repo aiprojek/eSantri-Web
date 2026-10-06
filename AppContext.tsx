@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useLiveQuery } from "dexie-react-hooks";
 import { SuratTemplate, ArsipSurat, AuditLog, PondokSettings } from './types';
 import { db } from './db';
-import { logActivity as logActivityHelper } from './services/logService';
+import { logActivity as logActivityHelper, setupGlobalAuditHooks } from './services/logService';
 import { initialSantri, initialSettings } from './data/mock';
 import { loadSyncService } from './utils/lazyCloudServices';
 
@@ -227,6 +227,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Global Dexie listener for reactive pendingChanges badge & Hub-and-Spoke Auto-Sync
     useEffect(() => {
+        setupGlobalAuditHooks();
+    }, []);
+
+    useEffect(() => {
         const watchedTables = [
             'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas',
             'chartOfAccounts', 'payrollRecords', 'produkKoperasi', 'transaksiKoperasi', 'riwayatStok',
@@ -234,7 +238,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             'jurnalMengajar', 'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions',
             'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'jadwalUjian',
             'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'warehouses',
-            'stockTransfers', 'digitalAssets'
+            'stockTransfers', 'digitalAssets', 'auditLogs'
         ];
         let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -366,15 +370,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const onSaveSettingsWithSync = useCallback(async (newSettings: PondokSettings) => {
+        const oldSettings = sets.settings ? JSON.parse(JSON.stringify(sets.settings)) : null;
         await sets.onSaveSettings(newSettings);
+        await logActivity('settings', 'UPDATE', String(newSettings.id || 1), oldSettings, newSettings);
         triggerAutoSync();
-    }, [sets.onSaveSettings, triggerAutoSync]);
+    }, [sets.onSaveSettings, sets.settings, logActivity, triggerAutoSync]);
 
     // Surat Actions
-    const onSaveSuratTemplate = async (template: SuratTemplate) => { const withTs = addTimestamp(template); if (template.id) { await db.suratTemplates.put(withTs); await logActivity('suratTemplates', 'UPDATE', template.id.toString()); } else { const newId = generateUniqueId(); const newItem = { ...withTs, id: newId }; await db.suratTemplates.put(newItem); await logActivity('suratTemplates', 'INSERT', newId.toString()); } triggerAutoSync(); };
-    const onDeleteSuratTemplate = async (id: number) => { const item = suratTemplates.find(t => t.id === id); if(!item) return; const deletedItem = { ...item, deleted: true, lastModified: Date.now() }; await db.suratTemplates.put(deletedItem); await logActivity('suratTemplates', 'DELETE', id.toString()); triggerAutoSync(); };
-    const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => { const id = generateUniqueId(); const withTs = addTimestamp({ ...surat, id }); await db.arsipSurat.put(withTs as ArsipSurat); await logActivity('arsipSurat', 'INSERT', id.toString()); triggerAutoSync(); };
-    const onDeleteArsipSurat = async (id: number) => { const item = arsipSuratList.find(a => a.id === id); if(!item) return; const deletedItem = { ...item, deleted: true, lastModified: Date.now() }; await db.arsipSurat.put(deletedItem); await logActivity('arsipSurat', 'DELETE', id.toString()); triggerAutoSync(); };
+    const onSaveSuratTemplate = async (template: SuratTemplate) => {
+        const withTs = addTimestamp(template);
+        if (template.id) {
+            const existing = suratTemplates.find(t => t.id === template.id) || null;
+            await db.suratTemplates.put(withTs);
+            await logActivity('suratTemplates', 'UPDATE', template.id.toString(), existing, withTs);
+        } else {
+            const newId = generateUniqueId();
+            const newItem = { ...withTs, id: newId };
+            await db.suratTemplates.put(newItem);
+            await logActivity('suratTemplates', 'INSERT', newId.toString(), null, newItem);
+        }
+        triggerAutoSync();
+    };
+    const onDeleteSuratTemplate = async (id: number) => {
+        const item = suratTemplates.find(t => t.id === id);
+        if (!item) return;
+        const deletedItem = { ...item, deleted: true, lastModified: Date.now() };
+        await db.suratTemplates.put(deletedItem);
+        await logActivity('suratTemplates', 'DELETE', id.toString(), item, null);
+        triggerAutoSync();
+    };
+    const onSaveArsipSurat = async (surat: Omit<ArsipSurat, 'id'>) => {
+        const id = generateUniqueId();
+        const withTs = addTimestamp({ ...surat, id });
+        await db.arsipSurat.put(withTs as ArsipSurat);
+        await logActivity('arsipSurat', 'INSERT', id.toString(), null, withTs);
+        triggerAutoSync();
+    };
+    const onDeleteArsipSurat = async (id: number) => {
+        const item = arsipSuratList.find(a => a.id === id);
+        if (!item) return;
+        const deletedItem = { ...item, deleted: true, lastModified: Date.now() };
+        await db.arsipSurat.put(deletedItem);
+        await logActivity('arsipSurat', 'DELETE', id.toString(), item, null);
+        triggerAutoSync();
+    };
 
     // Sample Data Detection & Reset
     const isSampleDataDetected = useMemo(() => {

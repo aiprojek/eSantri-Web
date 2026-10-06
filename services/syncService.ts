@@ -3,6 +3,7 @@ import { CloudSyncConfig, SyncFileRecord, ConflictItem } from '../types';
 import { db } from '../db';
 import { createClient, WebDAVClient } from 'webdav';
 import { migrateUserPermissions } from './permissionMigrationService';
+import { setAuditSyncMute } from './logService';
 
 const MASTER_FILENAME = 'master_data.json';
 const MASTER_CONFIG_FILENAME = 'master_config.json';
@@ -488,7 +489,12 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
             }
             
             if (itemsToPut.length > 0) {
-                await table.bulkPut(itemsToPut);
+                setAuditSyncMute(true);
+                try {
+                    await table.bulkPut(itemsToPut);
+                } finally {
+                    setTimeout(() => setAuditSyncMute(false), 120);
+                }
             }
         };
 
@@ -671,8 +677,13 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
             }
             
             if (conflicts.length === 0 && itemsToPut.length > 0) {
-                 await table.bulkPut(itemsToPut);
-                 recordCount += itemsToPut.length;
+                 setAuditSyncMute(true);
+                 try {
+                     await table.bulkPut(itemsToPut);
+                     recordCount += itemsToPut.length;
+                 } finally {
+                     setTimeout(() => setAuditSyncMute(false), 120);
+                 }
             }
         };
         

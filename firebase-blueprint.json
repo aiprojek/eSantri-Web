@@ -704,6 +704,24 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "kode", "nama", "jenis", "kategori", "kondisi", "lokasi", "tanggalPerolehan", "sumber", "hargaPerolehan", "lastModified"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Log jejak audit aktivitas sistem dan perubahan data per tenant",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "table_name": { "type": "string" },
+        "operation": { "type": "string", "enum": ["INSERT", "UPDATE", "DELETE"] },
+        "record_id": { "type": "string" },
+        "old_data": { "type": "object" },
+        "new_data": { "type": "object" },
+        "changed_by": { "type": "string" },
+        "username": { "type": "string" },
+        "created_at": { "type": "string" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "table_name", "operation", "record_id", "created_at"]
     }
   },
   "firestore": {
@@ -834,6 +852,10 @@
     "tenants/{tenantId}/inventaris": {
       "schema": "Inventaris",
       "description": "Koleksi aset, tanah/bangunan, wakaf & sarpras per tenant"
+    },
+    "tenants/{tenantId}/auditLogs": {
+      "schema": "AuditLog",
+      "description": "Koleksi log jejak audit aktivitas sistem dan perubahan data per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

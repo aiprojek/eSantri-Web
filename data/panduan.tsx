@@ -8,6 +8,7 @@ import { kalenderPanduan } from './panduan/kalender';
 import { financePanduan } from './panduan/finance';
 import { bukukasPanduan } from './panduan/bukukas';
 import { koperasiPanduan } from './panduan/koperasi';
+import { auditlogPanduan } from './panduan/auditlog';
 
 export interface PanduanStepData {
     title: string;
@@ -3975,6 +3976,7 @@ export const panduanData: PanduanSectionData[] = [
             }
         ]
     },
+    auditlogPanduan,
     kalenderPanduan,
     perpustakaanPanduan,
     {
@@ -4130,7 +4132,7 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Buku Tamu:</strong> Pencatatan kunjungan tamu dan pengawasan keamanan.</li>
                         <li><strong>WhatsApp Center:</strong> Broadcast pesan massal ke wali santri untuk tagihan, pengumuman, dan laporan.</li>
                         <li><strong>Surat Menyurat:</strong> Pembuatan surat resmi, tagihan, dan arsip digital.</li>
-                        <li><strong>Log Aktivitas (Audit):</strong> Jejak perubahan data oleh user untuk kontrol dan evaluasi.</li>
+                        <li><strong>Pusat Audit &amp; Log Aktivitas:</strong> Auto-capture perubahan lintas 33 tabel, deteksi aksi sensitif/hapus, inspeksi forensik (<em>Before vs After Diff</em>), pemulihan data (<em>Rollback/Restore</em>), dan ekspor laporan audit.</li>
                     </ul>
                 )
             },
@@ -4145,6 +4147,252 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Portal Wali Santri:</strong> Akses informasi santri (Nilai, Absen, Keuangan) bagi orang tua secara online.</li>
                         <li><strong>Multi-Platform:</strong> Tersedia dalam versi Web, Desktop (Tauri), dan Android.</li>
                     </ul>
+                )
+            }
+        ]
+    },
+    {
+        id: 'auditlog',
+        badge: 'UPDATE',
+        badgeColor: 'purple',
+        title: 'Pusat Audit & Log Aktivitas (Forensik & Rollback)',
+        steps: [
+            {
+                title: '1. SOP Pengawasan Multi-Admin: Real-Time Sync (Firebase) vs Hub-and-Spoke',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-shield-lock-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Jejak Audit (Audit Trail) di Lingkungan Multi-Admin Pesantren:</strong>
+                                Ketika banyak staf (Bendahara, Kasir Koperasi, Staf TU, Musyrif Asrama, Petugas Sarpras) mengelola data secara bersamaan, <strong>Pusat Audit &amp; Log Aktivitas</strong> menjadi instrumen pengawasan internal pimpinan yayasan untuk mendeteksi kesalahan input, melacak penghapusan transaksi sensitif, serta memulihkan data (<em>Rollback</em>) tanpa kehilangan histori.
+                            </div>
+                        </div>
+
+                        {/* Model A: Realtime */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Cloud Real-Time Audit Stream (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Live Monitoring</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Saat mode Firebase Realtime aktif, koleksi <code>tenants/{'{tenantId}'}/auditLogs</code> disinkronkan secara langsung antar perangkat:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-broadcast text-teal-600 mr-1"></i> Pantauan Detik Itu Juga
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Setiap transaksi kas, perubahan saldo tabungan, penghapusan barang koperasi, atau edit data santri di perangkat staf akan langsung tampil di halaman Audit Log Pimpinan/Auditor secara <em>real-time</em> tanpa perlu <em>refresh</em>.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-cpu-fill text-teal-600 mr-1"></i> Auto-Capture 33 Tabel
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Mesin <code>setupGlobalAuditHooks</code> otomatis merekam operasi <code>INSERT</code>, <code>UPDATE</code>, dan <code>DELETE</code> (termasuk <em>Soft-Delete</em>) beserta identitas sesi akun petugas aktif (<code>eSantriCurrentUser</code>).
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-funnel-fill text-teal-600 mr-1"></i> Proteksi Anti-Duplikasi Sync
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat perangkat menerima aliran data sinkronisasi dari Cloud, sistem otomatis mengaktifkan <code>setAuditSyncMute</code> agar sinkronisasi masuk tidak memicu pencatatan log berulang.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B: Hub and Spoke */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Dropbox / Nextcloud / WebDAV / Offline)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Rekonsiliasi Terpusat</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Pada mode Offline / Hub-and-Spoke, jejak audit tetap bekerja penuh meskipun staf mengoperasikan aplikasi tanpa internet:
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950 block mb-1">A. Pencatatan Offline di Perangkat Staf (Spoke):</strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Seluruh aktivitas tambah, ubah, dan hapus data yang dilakukan staf secara <em>offline</em> tetap direkam secara utuh di tabel <code>auditLogs</code> lokal perangkat staf lengkap dengan waktu kejadian sebenarnya (<em>timestamp</em> asli) dan nama akun staf.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950 block mb-1">B. Setor &amp; Penggabungan Log ke Komputer Pusat (Hub):</strong>
+                                    <ol className="list-decimal pl-4 mt-1 space-y-1 text-[11px] text-gray-600">
+                                        <li>Saat staf mengeklik <strong>&quot;Kirim Perubahan (Upload Staff Changes)&quot;</strong>, paket perubahan turut menyertakan seluruh catatan <code>auditLogs</code> baru dari perangkat staf tersebut.</li>
+                                        <li>Ketika Admin Pusat mengeklik <strong>&quot;Gabungkan Perubahan Staff (Merge Changes)&quot;</strong> di Pusat Sinkronisasi, seluruh jejak audit dari berbagai staf disatukan ke dalam database Master di komputer Pusat tanpa menghasilkan log duplikat.</li>
+                                        <li>Auditor / Pimpinan di komputer Pusat dapat memfilter berdasarkan <strong>Dropdown Admin / Petugas</strong> untuk meninjau rincian pekerjaan masing-masing staf.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Aturan Emas Akun */}
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-950 space-y-1">
+                            <strong className="font-bold flex items-center gap-1.5 text-rose-900">
+                                <i className="bi bi-exclamation-octagon-fill text-rose-600"></i> SOP Wajib Akuntabilitas Akun (Larangan Berbagi Password):
+                            </strong>
+                            <p className="text-[11px] text-gray-700 leading-relaxed">
+                                Agar kolom <strong>Petugas / Admin</strong> di Audit Log memiliki kekuatan pembuktian yang sah, setiap operator wajib dibuatkan akun masing-masing di menu <em>Pengaturan &gt; Akun &amp; Pengguna</em>. Dilarang menggunakan 1 akun <code>admin</code> secara beramai-ramai, dan wajib melakukan <strong>Logout</strong> saat meninggalkan komputer piket/kasir bersama.
+                            </p>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '2. Empat Kartu KPI Eksekutif & Deteksi Dini Aksi Sensitif (High-Risk Monitoring)',
+                color: 'blue',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Bagian atas halaman <strong>Pusat Audit &amp; Log Aktivitas</strong> menyajikan 4 indikator pengawasan cepat yang dapat diklik langsung sebagai filter:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-teal-50/60 p-3 rounded-xl border border-teal-200 space-y-1">
+                                <strong className="text-teal-900 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-activity text-teal-600"></i> 1. Total Jejak Audit &amp; Aktivitas Hari Ini
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Menampilkan total rekaman log yang tersimpan di dalam database beserta jumlah aktivitas yang terjadi pada hari berjalan.
+                                </p>
+                            </div>
+                            <div className="bg-blue-50/60 p-3 rounded-xl border border-blue-200 space-y-1">
+                                <strong className="text-blue-900 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-pencil-square text-blue-600"></i> 2. Input &amp; Pembaruan (INSERT &amp; UPDATE)
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Merinci jumlah penambahan data baru (<code>+Baru</code>) dibandingkan dengan jumlah revisi/pengeditan data (<code>Revisi</code>).
+                                </p>
+                            </div>
+                            <div className="bg-red-50/60 p-3 rounded-xl border border-red-200 space-y-1">
+                                <strong className="text-red-900 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-trash3-fill text-red-600"></i> 3. Data Dihapus (DELETE / Soft-Delete)
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Menghitung seluruh tindakan penghapusan data. <strong>Klik kartu ini</strong> untuk langsung menyaring daftar log khusus peristiwa penghapusan data.
+                                </p>
+                            </div>
+                            <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200 space-y-1">
+                                <strong className="text-amber-900 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-shield-exclamation text-amber-600"></i> 4. Aksi Sensitif &amp; Kas
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Memantau aktivitas pada modul keuangan dan sistem berisiko tinggi (<em>Buku Kas Umum, Pembayaran SPP, Tagihan, Saldo Tabungan, Kas Koperasi, Sarpras, Pengaturan</em>, dan <em>Akun User</em>). <strong>Klik kartu ini</strong> untuk memfokuskan audit pada transaksi sensitif.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '3. Kamus Modul Bahasa Indonesia & Ringkasan Kontekstual Cerdas',
+                color: 'green',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Audit Log dilengkapi penerjemah skema otomatis sehingga pimpinan pondok maupun tim pemeriksa yayasan yang bukan berlatar belakang IT dapat membaca setiap log dengan jelas:
+                        </p>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li>
+                                <strong>Label Modul Ramah Pengguna:</strong> Nama tabel teknis diterjemahkan otomatis beserta ikon dan kategori modulnya (contoh: <code>transaksiKas</code> ditampilkan sebagai <strong>Buku Kas Umum</strong>, <code>saldoSantri</code> sebagai <strong>Saldo Tabungan Santri</strong>, <code>inventaris</code> sebagai <strong>Sarpras, Aset &amp; Wakaf</strong>).
+                            </li>
+                            <li>
+                                <strong>Ringkasan Objek pada INSERT &amp; DELETE:</strong> Setiap baris penambahan maupun penghapusan data langsung menampilkan nama santri, nama barang, deskripsi kas, kode aset/surat, lokasi, hingga nominal Rupiah yang terkait di tabel utama tanpa harus membuka detail satu per satu.
+                            </li>
+                            <li>
+                                <strong>Sorotan Perubahan Field pada UPDATE:</strong> Menampilkan nilai lama (dicoret merah) dan nilai baru (hijau tebal) dengan pemformatan mata uang Rupiah otomatis untuk atribut nominal/harga/saldo.
+                            </li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: '4. Pencarian Forensik Multi-Dimensi (Isi JSON, Modul, Petugas & Rentang Waktu)',
+                color: 'indigo',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Untuk menelusuri insiden spesifik (misalnya mencari siapa yang mengubah nominal tagihan santri tertentu minggu lalu), kombinasikan 5 filter berikut:
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-700 bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+                            <li>
+                                <strong>Kotak Pencarian Global (Deep Payload Search):</strong> Ketik nama santri, nama barang koperasi/sarpras, nomor surat, angka nominal, atau ID Record. Sistem memindai hingga ke dalam isi <code>old_data</code> dan <code>new_data</code>.
+                            </li>
+                            <li>
+                                <strong>Filter Modul / Tabel:</strong> Saring berdasarkan modul spesifik yang dikelompokkan per kategori (<em>Keuangan, Koperasi, Sarpras, Kesantrian, Akademik, Layanan, Sistem</em>).
+                            </li>
+                            <li>
+                                <strong>Filter Admin / Petugas:</strong> Pilih nama akun staf tertentu untuk mengevaluasi seluruh pekerjaan yang dilakukan oleh petugas tersebut.
+                            </li>
+                            <li>
+                                <strong>Filter Jenis Operasi:</strong> Pilih antara <code>INSERT</code> (Tambah), <code>UPDATE</code> (Ubah), <code>DELETE</code> (Hapus), atau <strong>⚡ Khusus Aksi Sensitif &amp; Kas</strong>.
+                            </li>
+                            <li>
+                                <strong>Filter Rentang Waktu Cepat &amp; Kustom:</strong> Gunakan tombol cepat <em>Hari Ini</em>, <em>7 Hari</em>, <em>30 Hari</em>, atau klik <em>Pilih Tanggal</em> untuk menentukan rentang tanggal awal dan akhir secara presisi.
+                            </li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: '5. Modal Inspeksi Forensik (Before vs After Diff) & Fitur Pulihkan Data (Rollback)',
+                color: 'orange',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Setiap baris log dilengkapi tombol <strong>&quot;Inspeksi&quot;</strong> (<i className="bi bi-eye text-teal-600"></i>) dan tombol <strong>&quot;Pulihkan&quot;</strong> (<i className="bi bi-arrow-counterclockwise text-amber-600"></i>):
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="p-3.5 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-bold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-columns-gap text-teal-600 text-base"></i> Tabel Perbandingan Utuh &amp; Raw JSON
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Jendela <strong>Inspeksi Audit</strong> menampilkan tabel perbandingan seluruh atribut (<em>Nilai Sebelum vs Nilai Sesudah</em>) secara lengkap tanpa dipotong, menandai baris atribut yang berubah dengan warna kuning/merah/hijau, serta menyediakan tab <strong>Data Mentah (Raw JSON)</strong> untuk pemeriksaan teknis mendalam.
+                                </p>
+                            </div>
+                            <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 shadow-2xs space-y-1.5">
+                                <strong className="font-bold text-amber-950 flex items-center gap-1.5">
+                                    <i className="bi bi-arrow-counterclockwise text-amber-600 text-base"></i> Pemulihan Data Instan (Rollback / Restore)
+                                </strong>
+                                <p className="text-gray-700 text-[11px] leading-relaxed">
+                                    Khusus <strong>Administrator Utama</strong>, apabila ditemukan data yang tidak sengaja terhapus (<code>DELETE</code>) atau salah diubah (<code>UPDATE</code>), klik tombol <strong>&quot;Pulihkan&quot;</strong>. Sistem akan mengembalikan rekaman tersebut ke kondisi sebelumnya (<code>old_data</code>, <code>deleted: false</code>) di tabel asalnya dan langsung menyinkronkannya kembali ke Cloud!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '6. Ekspor Laporan Audit (Excel & Cetak Resmi) serta Pemeliharaan Retensi Log',
+                color: 'purple',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <ul className="list-disc pl-5 space-y-2 text-xs text-gray-700">
+                            <li>
+                                <strong>Ekspor Excel (.xlsx) Lengkap:</strong> Klik tombol <strong>&quot;Ekspor Excel&quot;</strong> untuk mengunduh seluruh baris log sesuai filter aktif ke dalam lembar kerja spreadsheet (lengkap dengan kolom Waktu, Petugas, Kategori, Nama Modul, ID Record, Operasi, Ringkasan Objek, serta JSON Sebelum &amp; Sesudah).
+                            </li>
+                            <li>
+                                <strong>Cetak Laporan Audit Resmi Ber-Kop:</strong> Klik tombol <strong>&quot;Cetak&quot;</strong> untuk mencetak laporan jejak audit yang otomatis dilengkapi Kop Resmi Pondok Pesantren untuk arsip pengawasan internal yayasan.
+                            </li>
+                            <li>
+                                <strong>Manajemen Retensi Log (&gt;90 Hari):</strong> Agar ukuran database lokal (IndexedDB) dan penyimpanan Cloud tetap ramping dan cepat setelah pemakaian berbulan-bulan, Administrator Utama dapat mengekspor arsip log ke Excel terlebih dahulu, lalu mengeklik tombol <strong>&quot;Retensi &gt;90 Hari&quot;</strong> untuk membersihkan catatan log yang telah berusia lebih dari 3 bulan.
+                            </li>
+                        </ul>
+                    </div>
                 )
             }
         ]

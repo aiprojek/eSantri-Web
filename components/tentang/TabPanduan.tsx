@@ -29,6 +29,7 @@ const PANDUAN_ORDER: string[] = [
     'firebase',
     'admin',
     'surat',
+    'auditlog',
     'offline',
     'maintenance',
     'fitur',

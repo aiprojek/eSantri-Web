@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { PondokSettings } from '../types';
 import { migrateUserPermissions } from './permissionMigrationService';
+import { setAuditSyncMute } from './logService';
 import { isFirebaseClientConfigReady } from '../firebaseApp';
 import {
   db as fdb,
@@ -98,11 +99,13 @@ const applyDexieMods = (baseObj: any, mods: Record<string, any>) => {
 const beginCloudSync = () => {
     cloudSyncDepth += 1;
     isSyncingFromCloud = cloudSyncDepth > 0;
+    setAuditSyncMute(isSyncingFromCloud);
 };
 
 const endCloudSync = () => {
     cloudSyncDepth = Math.max(0, cloudSyncDepth - 1);
     isSyncingFromCloud = cloudSyncDepth > 0;
+    setAuditSyncMute(isSyncingFromCloud);
 };
 
 const buildPublicPortalPayload = (settings: PondokSettings) => ({

@@ -196,6 +196,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const triggerAutoSync = useCallback(() => {
         if (!sets.settings.cloudSyncConfig?.autoSync || sets.settings.cloudSyncConfig.provider === 'none') return;
+        if (sets.settings.cloudSyncConfig.provider === 'firebase') return;
         if (auth.currentUser?.role === 'admin' && sets.settings.multiUserMode) return;
 
         setSyncStatus('syncing');
@@ -223,6 +224,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
         }, 5000); 
     }, [sets.settings, auth.currentUser]);
+
+    // Global Dexie listener for reactive pendingChanges badge & Hub-and-Spoke Auto-Sync
+    useEffect(() => {
+        const watchedTables = [
+            'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 'transaksiKas',
+            'chartOfAccounts', 'payrollRecords', 'produkKoperasi', 'transaksiKoperasi', 'riwayatStok',
+            'keuanganKoperasi', 'suratTemplates', 'arsipSurat', 'pendaftar', 'raporRecords', 'absensi',
+            'jurnalMengajar', 'tahfizh', 'buku', 'sirkulasi', 'obat', 'kesehatanRecords', 'bkSessions',
+            'bukuTamu', 'inventaris', 'calendarEvents', 'jadwalPelajaran', 'arsipJadwal', 'jadwalUjian',
+            'piketSchedules', 'pendingOrders', 'diskon', 'suppliers', 'pembayaranHutang', 'warehouses',
+            'stockTransfers', 'digitalAssets'
+        ];
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const notifyLocalMutation = () => {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+                if (sets.settings.cloudSyncConfig?.provider && sets.settings.cloudSyncConfig.provider !== 'none') {
+                    try {
+                        const { getPendingChangesCount } = await loadSyncService();
+                        const count = await getPendingChangesCount(sets.settings.cloudSyncConfig);
+                        setPendingChanges(count);
+                    } catch {}
+                    triggerAutoSync();
+                }
+            }, 800);
+        };
+
+        const unsubs: Array<() => void> = [];
+        watchedTables.forEach((tName) => {
+            const tbl = (db as any)[tName];
+            if (!tbl?.hook) return;
+            const onCreating = () => { notifyLocalMutation(); };
+            const onUpdating = () => { notifyLocalMutation(); };
+            tbl.hook('creating', onCreating);
+            tbl.hook('updating', onUpdating);
+            unsubs.push(() => {
+                tbl.hook('creating').unsubscribe(onCreating);
+                tbl.hook('updating').unsubscribe(onUpdating);
+            });
+        });
+
+        return () => {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            unsubs.forEach(fn => fn());
+        };
+    }, [sets.settings.cloudSyncConfig, triggerAutoSync]);
 
     const triggerManualSync = async (action: 'up' | 'down' | 'admin_publish', silent: boolean = false) => {
         const config = sets.settings.cloudSyncConfig;

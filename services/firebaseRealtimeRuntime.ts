@@ -178,6 +178,35 @@ export const startFirebaseSync = (tenantId: string) => {
                         }
 
                         if (!localItem || cloudTime > localTime) {
+                            if (tableName === 'inventaris' && localItem) {
+                                const servisA = Array.isArray(localItem.riwayatServis) ? localItem.riwayatServis : [];
+                                const servisB = Array.isArray(normalizedDoc.riwayatServis) ? normalizedDoc.riwayatServis : [];
+                                if (servisA.length > 0 || servisB.length > 0) {
+                                    const sMap = new Map<string, any>();
+                                    servisA.forEach((s: any) => { if (s?.id) sMap.set(s.id, s); });
+                                    servisB.forEach((s: any) => { if (s?.id) sMap.set(s.id, s); });
+                                    normalizedDoc.riwayatServis = Array.from(sMap.values()).sort((a, b) =>
+                                        String(a.tanggal || '').localeCompare(String(b.tanggal || ''))
+                                    );
+                                }
+                                const pinjamA = Array.isArray(localItem.riwayatPeminjaman) ? localItem.riwayatPeminjaman : [];
+                                const pinjamB = Array.isArray(normalizedDoc.riwayatPeminjaman) ? normalizedDoc.riwayatPeminjaman : [];
+                                if (pinjamA.length > 0 || pinjamB.length > 0) {
+                                    const pMap = new Map<string, any>();
+                                    pinjamA.forEach((p: any) => { if (p?.id) pMap.set(p.id, p); });
+                                    pinjamB.forEach((p: any) => {
+                                        if (!p?.id) return;
+                                        const prev = pMap.get(p.id);
+                                        if (prev && prev.status === 'Dikembalikan' && p.status !== 'Dikembalikan') return;
+                                        pMap.set(p.id, p);
+                                    });
+                                    const mergedLoans = Array.from(pMap.values()).sort((a, b) =>
+                                        String(a.tanggalPinjam || '').localeCompare(String(b.tanggalPinjam || ''))
+                                    );
+                                    normalizedDoc.riwayatPeminjaman = mergedLoans;
+                                    normalizedDoc.statusPinjam = mergedLoans.some((l: any) => l.status === 'Dipinjam') ? 'Dipinjam' : 'Tersedia';
+                                }
+                            }
                             return normalizedDoc;
                         }
 

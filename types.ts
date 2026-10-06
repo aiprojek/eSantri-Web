@@ -1134,6 +1134,34 @@ export interface TahfizhRecord {
     lastModified?: number;
 }
 
+export interface SarprasMaintenanceLog {
+    id: string;
+    tanggal: string;
+    jenisTindakan: 'Perbaikan' | 'Perawatan Rutin' | 'Kalibrasi / Cek Fisik' | 'Renovasi';
+    deskripsi: string;
+    teknisiVendor?: string;
+    biaya: number;
+    kondisiSetelah: 'Baik' | 'Rusak Ringan' | 'Rusak Berat' | 'Afkir';
+    catatKeBukuKas?: boolean;
+    operator?: string;
+}
+
+export interface SarprasBorrowLog {
+    id: string;
+    peminjam: string;
+    tipePeminjam: 'Guru/Staf' | 'Santri' | 'Unit/Panitia' | 'Umum';
+    kontakPeminjam?: string;
+    jumlahPinjam: number;
+    keperluan: string;
+    tanggalPinjam: string;
+    estimasiKembali: string;
+    tanggalKembaliAktual?: string;
+    kondisiKembali?: 'Baik' | 'Rusak Ringan' | 'Rusak Berat';
+    status: 'Dipinjam' | 'Dikembalikan';
+    catatan?: string;
+    operator?: string;
+}
+
 export interface Inventaris {
     id: number;
     kode: string;
@@ -1150,6 +1178,13 @@ export interface Inventaris {
     hargaPerolehan: number;
     keterangan?: string;
     legalitas?: string; // SHM No..., Akta Wakaf No...
+    merkSpesifikasi?: string;
+    penanggungJawab?: string;
+    umurEkonomisTahun?: number;
+    nadzirWakaf?: string;
+    statusPinjam?: 'Tersedia' | 'Dipinjam';
+    riwayatServis?: SarprasMaintenanceLog[];
+    riwayatPeminjaman?: SarprasBorrowLog[];
     deleted?: boolean;
     lastModified?: number;
 }

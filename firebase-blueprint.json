@@ -672,6 +672,38 @@
         "lastModified": { "type": "number" }
       },
       "required": ["id", "tanggal", "produkId", "dariWarehouseId", "keWarehouseId", "qty", "lastModified"]
+    },
+    "Inventaris": {
+      "title": "Inventaris",
+      "description": "Data inventaris aset bergerak, tanah, bangunan, wakaf, pemeliharaan, dan peminjaman sarpras pesantren",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "kode": { "type": "string" },
+        "nama": { "type": "string" },
+        "jenis": { "type": "string", "enum": ["Bergerak", "Tidak Bergerak"] },
+        "kategori": { "type": "string" },
+        "kondisi": { "type": "string", "enum": ["Baik", "Rusak Ringan", "Rusak Berat", "Afkir"] },
+        "lokasi": { "type": "string" },
+        "jumlah": { "type": "number" },
+        "satuan": { "type": "string" },
+        "luas": { "type": "number" },
+        "tanggalPerolehan": { "type": "string" },
+        "sumber": { "type": "string", "enum": ["Beli Sendiri", "Wakaf", "Hibah/Hadiah", "Bantuan Pemerintah"] },
+        "hargaPerolehan": { "type": "number" },
+        "keterangan": { "type": "string" },
+        "legalitas": { "type": "string" },
+        "merkSpesifikasi": { "type": "string" },
+        "penanggungJawab": { "type": "string" },
+        "umurEkonomisTahun": { "type": "number" },
+        "nadzirWakaf": { "type": "string" },
+        "statusPinjam": { "type": "string", "enum": ["Tersedia", "Dipinjam"] },
+        "riwayatServis": { "type": "array" },
+        "riwayatPeminjaman": { "type": "array" },
+        "deleted": { "type": "boolean" },
+        "lastModified": { "type": "number" }
+      },
+      "required": ["id", "kode", "nama", "jenis", "kategori", "kondisi", "lokasi", "tanggalPerolehan", "sumber", "hargaPerolehan", "lastModified"]
     }
   },
   "firestore": {
@@ -798,6 +830,10 @@
     "tenants/{tenantId}/sirkulasi": {
       "schema": "Sirkulasi",
       "description": "Koleksi transaksi sirkulasi perpustakaan per tenant"
+    },
+    "tenants/{tenantId}/inventaris": {
+      "schema": "Inventaris",
+      "description": "Koleksi aset, tanah/bangunan, wakaf & sarpras per tenant"
     },
     "tenants/{tenantId}/settings": {
       "schema": "object",

@@ -20,6 +20,7 @@ const PANDUAN_ORDER: string[] = [
     'finance',
     'bukukas',
     'asrama',
+    'sarpras',
     'koperasi',
     'laporan_lanjutan',
     'portal',

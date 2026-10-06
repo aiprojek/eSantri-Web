@@ -4116,7 +4116,7 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Keuangan:</strong> Manajemen tagihan (SPP/Uang Pangkal), pembayaran, tabungan santri, dan penggajian guru.</li>
                         <li><strong>Buku Kas:</strong> Pencatatan arus kas masuk/keluar pondok multi-pos rekening, Bagan Akun (COA), dan cetak BKM/BKK.</li>
                         <li><strong>Koperasi &amp; Kantin:</strong> Sistem POS layar sentuh, Kasir Tabungan cepat, Multi-Gudang, Vendor/Supplier, Kasbon &amp; cicilan, Void/Retur, cetak struk Printer Thermal Bluetooth, dan Laba Rugi terintegrasi Buku Kas.</li>
-                        <li><strong>Sarana Prasarana:</strong> Inventaris barang, lokasi, dan kondisi aset pondok.</li>
+                        <li><strong>Sarana &amp; Prasarana (Inventaris):</strong> Valuasi aset &amp; penyusutan nilai buku (depresiasi garis lurus), input massal, peminjaman &amp; mutasi, riwayat servis berkala, cetak label barcode fisik, laporan ber-kop, serta integrasi otomatis ke Buku Kas.</li>
                     </ul>
                 )
             },
@@ -4145,6 +4145,266 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Portal Wali Santri:</strong> Akses informasi santri (Nilai, Absen, Keuangan) bagi orang tua secara online.</li>
                         <li><strong>Multi-Platform:</strong> Tersedia dalam versi Web, Desktop (Tauri), dan Android.</li>
                     </ul>
+                )
+            }
+        ]
+    },
+    {
+        id: 'sarpras',
+        badge: 'UPDATE',
+        badgeColor: 'teal',
+        title: 'Sarana & Prasarana (Inventaris, Valuasi & Mutasi Aset)',
+        steps: [
+            {
+                title: '1. SOP Kerja Multi-Admin Sarpras: Real-Time Sync vs Hub-and-Spoke',
+                color: 'teal',
+                content: (
+                    <div className="space-y-3 text-sm">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-shield-check text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Tata Kelola Multi-Admin &amp; Audit Fisik (Stock Opname) Serentak:</strong>
+                                Pengelolaan aset pesantren sering melibatkan beberapa staf yang berkeliling gedung asrama, kelas, dapur, dan kantor secara bersamaan menggunakan HP/Tablet, serta beririsan langsung dengan <strong>Bendahara Pondok (Buku Kas)</strong> saat pengadaan atau servis. Sistem mendukung 2 mode sinkronisasi yang dilengkapi teknologi <strong>Smart Union Merge</strong> agar riwayat servis dan peminjaman tidak pernah saling menimpa.
+                            </div>
+                        </div>
+
+                        {/* Model A: Realtime */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center text-[10px] font-black">1</span>
+                                    Model A: Cloud Real-Time Sync (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Live Multi-Device</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Direkomendasikan ketika staf Sarpras dan Bendahara terhubung ke WiFi pondok atau paket data seluler saat bertugas.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-diagram-3-fill text-teal-600 mr-1"></i> Partisi Audit Per Lokasi/Gedung
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat melakukan <em>stock opname</em> atau input massal serentak, bagi tugas staf berdasarkan <strong>Lokasi/Gedung</strong> (misal Admin A di Gedung Asrama Putra, Admin B di Gedung Madrasah) agar nomor urut kode inventaris (<code>INV-XXX</code>) tetap rapi dan berurutan.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-intersect text-teal-600 mr-1"></i> Smart Union Merge Sub-Log
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Jika Admin A mencatat <strong>Riwayat Servis</strong> sementara Admin B mencatat <strong>Peminjaman Aset</strong> pada barang yang sama di waktu berdekatan, sistem otomatis menggabungkan (<em>union merge</em>) kedua log tersebut berdasarkan ID unik tanpa ada riwayat yang hilang.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs">
+                                    <strong className="text-teal-950 block mb-1 font-semibold">
+                                        <i className="bi bi-cash-coin text-teal-600 mr-1"></i> Sinkronisasi Lintas Bendahara
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat staf Sarpras mencentang opsi <em>&quot;Catat ke Buku Kas&quot;</em> ketika membeli aset baru atau membayar biaya servis, jurnal pengeluaran otomatis tampil secara <em>real-time</em> di layar Bendahara lengkap dengan perhitungan saldo berjalan.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B: Hub and Spoke */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-[10px] font-black">2</span>
+                                    Model B: Hub-and-Spoke (Dropbox / Nextcloud / WebDAV / Offline Lapangan)
+                                </h5>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Offline-First</span>
+                            </div>
+                            <p className="text-xs text-gray-600">
+                                Sangat ideal saat staf Sarpras harus keliling memeriksa gudang, dapur umum, atau asrama yang berada di area minim sinyal internet (<em>blank spot</em>).
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950 block mb-1">A. Persiapan Sebelum Keliling (Auto-Pull Master Data):</strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Saat login di kantor yang ada WiFi, sistem otomatis menjalankan <em>Auto-Pull</em> (atau staf dapat mengeklik tombol <strong>&quot;Ambil Master Data&quot;</strong> di menu Sinkronisasi) untuk memastikan daftar aset dan referensi Akun Buku Kas di HP/Tablet sudah paling mutakhir.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950 block mb-1">B. Eksekusi Kerja Offline di Lapangan (Spoke):</strong>
+                                    <p className="text-[11px] text-gray-600">
+                                        Staf bebas menambah aset baru, menggunakan <strong>Input Massal</strong>, memperbarui kondisi barang (Baik/Rusak), mencatat peminjaman, maupun mencatat servis tanpa internet. Setiap perubahan otomatis menyalakan indikator <strong>Perubahan Belum Terkirim (Pending Changes)</strong> di header atas.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950 block mb-1">C. Setor Data &amp; Penggabungan di Komputer Pusat (Hub):</strong>
+                                    <ol className="list-decimal pl-4 mt-1 space-y-1 text-[11px] text-gray-600">
+                                        <li>Begitu kembali ke area WiFi, staf mengeklik <strong>&quot;Kirim Perubahan (Upload Staff Changes)&quot;</strong> (atau otomatis terkirim jika <em>Auto-Sync</em> aktif).</li>
+                                        <li>Admin Pusat (Hub) membuka <strong>Pusat Sinkronisasi</strong> dan mengeklik <strong>&quot;Gabungkan Perubahan Staff (Merge Changes)&quot;</strong>. Sistem otomatis menyatukan aset baru, memperbarui status kondisi terbaru, menggabungkan seluruh log servis &amp; peminjaman (<em>Smart Union Merge</em>), serta memasukkan jurnal pengeluaran kas Sarpras.</li>
+                                        <li>Admin Pusat mengeklik <strong>&quot;Terbitkan Master Data (Publish Master)&quot;</strong> agar seluruh staf menerima pembaruan inventaris terbaru.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Matriks Otoritas & Disiplin Sesi */}
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+                            <strong className="text-slate-900 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-person-check-fill text-teal-600"></i> Disiplin Akun Petugas &amp; Jejak Audit (Activity Log):
+                            </strong>
+                            <p className="text-[11px] text-gray-600 leading-relaxed">
+                                Setiap transaksi pengadaan aset, input massal, penghapusan (<em>soft-delete</em>), pencatatan servis, maupun serah-terima peminjaman otomatis terekam di <strong>Log Aktivitas Sistem</strong> beserta nama petugas yang mengeksekusi. Pastikan setiap staf Sarpras login menggunakan akun masing-masing dan tidak meminjamkan sesi login kepada pihak yang tidak berwenang.
+                            </p>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '2. Navigasi 4 Tab Utama, Valuasi Nilai Buku & Manajemen Wakaf',
+                color: 'blue',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Modul <strong>Sarana, Prasarana &amp; Wakaf</strong> terbagi ke dalam 4 tab terintegrasi untuk memisahkan manajemen aset operasional dan harta wakaf secara akuntabel:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-teal-50/60 p-3 rounded-xl border border-teal-200 space-y-1">
+                                <strong className="text-teal-900 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-speedometer2 text-teal-600"></i> 1. Tab Dashboard &amp; Valuasi
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Menampilkan <strong>Nilai Perolehan vs Estimasi Nilai Buku Saat Ini</strong> (otomatis menghitung penyusutan garis lurus / <em>straight-line depreciation</em> untuk Aset Bergerak berdasarkan usia dan kondisi fisik), distribusi aset per ruangan/gedung, peringatan aset yang memerlukan servis, serta pintasan cetak <strong>Kartu Inventaris Ruangan (KIR)</strong> per lokasi.
+                                </p>
+                            </div>
+                            <div className="bg-blue-50/60 p-3 rounded-xl border border-blue-200 space-y-1">
+                                <strong className="text-blue-900 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-box-seam text-blue-600"></i> 2. Tab Aset Bergerak
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Mengelola inventaris peralatan elektronik, perabot asrama/kelas, kendaraan operasional, alat dapur, dan inventaris bergerak lainnya lengkap dengan jumlah unit, satuan, merk/spesifikasi, Penanggung Jawab (PIC), serta status ketersediaan pinjam.
+                                </p>
+                            </div>
+                            <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200 space-y-1">
+                                <strong className="text-amber-900 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-building text-amber-600"></i> 3. Tab Tanah, Bangunan &amp; Wakaf
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Khusus mencatat <strong>Aset Tidak Bergerak (Tetap)</strong> seperti lahan pesantren, gedung asrama, masjid, dan ruang kelas. Dilengkapi kolom khusus <strong>Luas (m²)</strong>, <strong>Dokumen Legalitas</strong> (SHM, SHGB, Akta Ikrar Wakaf / AIW), serta pencatatan nama <strong>Wakif &amp; Nadzir Wakaf</strong>. Nilai buku aset tetap dipertahankan tanpa penyusutan otomatis.
+                                </p>
+                            </div>
+                            <div className="bg-purple-50/60 p-3 rounded-xl border border-purple-200 space-y-1">
+                                <strong className="text-purple-900 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-tools text-purple-600"></i> 4. Tab Servis &amp; Peminjaman
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Pusat kendali peminjaman aset yang sedang berlangsung (lengkap dengan deteksi keterlambatan / <em>OVERDUE</em>), daftar barang rusak yang membutuhkan perbaikan segera, serta log historis seluruh riwayat servis dan sirkulasi peminjaman.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '3. Input Aset Baru, Kode Otomatis, Input Massal & Integrasi Buku Kas',
+                color: 'green',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Tersedia dua metode pencatatan pengadaan barang yang dirancang cepat dan terhubung langsung dengan pembukuan keuangan:
+                        </p>
+                        <ul className="list-disc pl-5 space-y-2 text-xs text-gray-700">
+                            <li>
+                                <strong>Generator Kode Inventaris Otomatis:</strong> Saat menambah aset, sistem otomatis menerbitkan kode unik berstandar kategori dan tahun perolehan (atau dapat diketik manual sesuai penomoran yayasan).
+                            </li>
+                            <li>
+                                <strong>Atribut Lengkap &amp; Sumber Perolehan:</strong> Catat lokasi/ruangan penempatan (untuk pengelompokan KIR otomatis), Penanggung Jawab (PIC), Sumber Perolehan (<em>Pembelian Pondok, Wakaf, Hibah / Bantuan Pemerintah, Sumbangan</em>), merk/spesifikasi, serta nilai perolehan.
+                            </li>
+                            <li>
+                                <strong>Potong Saldo Buku Kas Otomatis:</strong> Saat menginput aset baru yang dibeli dari kas pondok, aktifkan centang <strong>&quot;Catat Pengeluaran Otomatis ke Buku Kas&quot;</strong> dan pilih Akun Kas yang digunakan. Sistem otomatis membuat transaksi pengeluaran di menu <strong>Buku Kas</strong> beserta perhitungan saldo berjalan.
+                            </li>
+                            <li>
+                                <strong>Input Massal Cepat (Spreadsheet Grid):</strong> Klik tombol <strong>&quot;Tambah Massal&quot;</strong> untuk membuka tabel input multi-baris. Sangat praktis saat mendata puluhan inventaris ruang kelas atau kamar asrama baru sekaligus dalam satu layar.
+                            </li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: '4. Sirkulasi Peminjaman Aset (Check-Out & Check-In) & Deteksi Jatuh Tempo',
+                color: 'indigo',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Setiap aset bergerak yang dipinjam oleh ustadz, pengurus, atau santri (seperti proyektor, kamera, sound system portable, atau kendaraan operasional) dapat dipantau secara tertib:
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-700 bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+                            <li>
+                                <strong>Mencatat Peminjaman (Check-Out):</strong> Klik tombol <strong>Pinjam</strong> (<i className="bi bi-box-arrow-up-right text-indigo-600"></i>) pada baris barang yang tersedia. Isi Nama Peminjam, Jabatan/Unit, Kontak WA, Jumlah Pinjam, Tanggal Pinjam, Estimasi Tanggal Kembali, dan Keperluan. Status barang otomatis berubah menjadi <strong>Dipinjam</strong>.
+                            </li>
+                            <li>
+                                <strong>Monitoring &amp; Peringatan Keterlambatan (Overdue):</strong> Buka tab <strong>Servis &amp; Peminjaman</strong> untuk melihat daftar barang yang sedang dipinjam. Jika melewati batas estimasi tanggal kembali, sistem otomatis memberikan peringatan merah <strong>Terlambat</strong>.
+                            </li>
+                            <li>
+                                <strong>Proses Pengembalian &amp; Cek Fisik (Check-In):</strong> Saat barang dikembalikan, klik tombol <strong>&quot;Kembalikan Aset&quot;</strong> (<i className="bi bi-box-arrow-in-down-left text-emerald-600"></i>). Petugas memeriksa dan memilih kondisi fisik barang saat diterima kembali (<em>Baik, Rusak Ringan, atau Rusak Berat</em>) sehingga kondisi aset utama otomatis diperbarui jika ada kerusakan.
+                            </li>
+                        </ol>
+                    </div>
+                )
+            },
+            {
+                title: '5. Riwayat Pemeliharaan, Servis Berkala & Integrasi Kas Perbaikan',
+                color: 'orange',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Rekam jejak perawatan setiap aset tersimpan secara kronologis dan dapat diakses melalui tombol <strong>Servis</strong> (<i className="bi bi-tools text-amber-600"></i>) maupun tab <strong>Servis &amp; Peminjaman</strong>:
+                        </p>
+                        <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-700">
+                            <li>
+                                <strong>Pencatatan Tindakan &amp; Teknisi:</strong> Catat tanggal pemeliharaan, deskripsi kerusakan/perawatan (misal servis rutin AC, ganti oli mobil pondok, perbaikan kursi kelas), nama teknisi/bengkel, dan nominal biaya servis.
+                            </li>
+                            <li>
+                                <strong>Pembaruan Kondisi Otomatis Pasca-Servis:</strong> Ubah pilihan <strong>&quot;Kondisi Aset Setelah Servis&quot;</strong> (misalnya dari <em>Rusak Ringan</em> kembali menjadi <em>Baik</em>) agar status barang langsung pulih di daftar inventaris utama.
+                            </li>
+                            <li>
+                                <strong>Integrasi Biaya Servis ke Buku Kas:</strong> Apabila terdapat pengeluaran biaya tukang/suku cadang, centang opsi <strong>&quot;Catat biaya servis ke Buku Kas&quot;</strong> dan pilih Akun Kas agar pengeluaran langsung tercatat resmi di pembukuan keuangan pondok.
+                            </li>
+                        </ul>
+                    </div>
+                )
+            },
+            {
+                title: '6. Cetak Stiker Label Barcode, Kartu Inventaris Ruangan (KIR) & Ekspor Multi-Format',
+                color: 'purple',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Untuk mendukung penertiban fisik di setiap ruangan dan pelaporan resmi yayasan, modul Sarpras menyediakan 3 fitur pencetakan unggulan:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                            <div className="p-3.5 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-bold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-upc-scan text-teal-600 text-base"></i> 1. Stiker Label Barcode Aset
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Klik tombol <strong>&quot;Cetak Label Aset&quot;</strong> untuk mencetak stiker penanda fisik siap tempel. Tersedia ukuran <strong>Standar (70x35 mm)</strong> dan <strong>Ringkas (50x25 mm)</strong> lengkap dengan Nama Pondok, Kode Aset, Visual Barcode/QR, Nama Barang, Lokasi, dan Sumber Wakaf/Perolehan.
+                                </p>
+                            </div>
+                            <div className="p-3.5 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-bold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-card-checklist text-indigo-600 text-base"></i> 2. Kartu Inventaris Ruangan (KIR)
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Pilih filter <strong>Lokasi / Ruangan</strong> atau klik kartu lokasi di Dashboard untuk mencetak lembar resmi <strong>Kartu Inventaris Ruangan (KIR)</strong> yang wajib ditempel di dinding setiap ruang kelas, kantor, atau kamar asrama.
+                                </p>
+                            </div>
+                            <div className="p-3.5 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1.5">
+                                <strong className="font-bold text-slate-900 flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-pdf-fill text-rose-600 text-base"></i> 3. Ekspor Laporan (PDF, Word, Excel)
+                                </strong>
+                                <p className="text-gray-600 text-[11px] leading-relaxed">
+                                    Gunakan menu <strong>Unduh / Cetak Laporan</strong> untuk menerbitkan laporan inventaris &amp; valuasi nilai buku ber-kop resmi pondok dalam format <strong>Cetak Langsung, PDF Visual, PDF Tabel, Microsoft Word (.doc), maupun Excel (.xlsx)</strong>.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 )
             }
         ]

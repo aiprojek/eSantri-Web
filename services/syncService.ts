@@ -126,6 +126,46 @@ const getRecordKey = (tableName: string, item: any) => {
     if (!item) return undefined;
     return tableName === 'saldoSantri' ? item.santriId : item.id;
 };
+
+const mergeInventarisSubLogs = (baseWinner: any, secondaryItem: any) => {
+    if (!baseWinner || !secondaryItem) return baseWinner;
+    const merged = { ...baseWinner };
+
+    // 1. Union merge riwayatServis by log.id
+    const servisA = Array.isArray(secondaryItem.riwayatServis) ? secondaryItem.riwayatServis : [];
+    const servisB = Array.isArray(baseWinner.riwayatServis) ? baseWinner.riwayatServis : [];
+    if (servisA.length > 0 || servisB.length > 0) {
+        const servisMap = new Map<string, any>();
+        servisA.forEach((s: any) => { if (s?.id) servisMap.set(s.id, s); });
+        servisB.forEach((s: any) => { if (s?.id) servisMap.set(s.id, s); });
+        merged.riwayatServis = Array.from(servisMap.values()).sort((a, b) =>
+            String(a.tanggal || '').localeCompare(String(b.tanggal || ''))
+        );
+    }
+
+    // 2. Union merge riwayatPeminjaman by log.id (prefer 'Dikembalikan' if returned on either device)
+    const pinjamA = Array.isArray(secondaryItem.riwayatPeminjaman) ? secondaryItem.riwayatPeminjaman : [];
+    const pinjamB = Array.isArray(baseWinner.riwayatPeminjaman) ? baseWinner.riwayatPeminjaman : [];
+    if (pinjamA.length > 0 || pinjamB.length > 0) {
+        const pinjamMap = new Map<string, any>();
+        pinjamA.forEach((p: any) => { if (p?.id) pinjamMap.set(p.id, p); });
+        pinjamB.forEach((p: any) => {
+            if (!p?.id) return;
+            const existing = pinjamMap.get(p.id);
+            if (existing && existing.status === 'Dikembalikan' && p.status !== 'Dikembalikan') {
+                return;
+            }
+            pinjamMap.set(p.id, p);
+        });
+        const mergedLoans = Array.from(pinjamMap.values()).sort((a, b) =>
+            String(a.tanggalPinjam || '').localeCompare(String(b.tanggalPinjam || ''))
+        );
+        merged.riwayatPeminjaman = mergedLoans;
+        merged.statusPinjam = mergedLoans.some((l: any) => l.status === 'Dipinjam') ? 'Dipinjam' : 'Tersedia';
+    }
+
+    return merged;
+};
 const getWebDAVClient = (config: CloudSyncConfig): WebDAVClient => {
     if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
         throw new Error("Konfigurasi WebDAV belum lengkap.");
@@ -438,7 +478,9 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
                     const lTime = lItem.lastModified || 0;
                     const mTime = mItem.lastModified || 0;
                     if (mTime >= lTime) {
-                        itemsToPut.push(mItem);
+                        itemsToPut.push(tableName === 'inventaris' ? mergeInventarisSubLogs(mItem, lItem) : mItem);
+                    } else if (tableName === 'inventaris') {
+                        itemsToPut.push(mergeInventarisSubLogs(lItem, mItem));
                     }
                 } else {
                     itemsToPut.push(mItem);
@@ -606,7 +648,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
 
                     if (isDiff) {
                         if (incTime > locTime) {
-                            itemsToPut.push(incItem);
+                            itemsToPut.push(tableName === 'inventaris' ? mergeInventarisSubLogs(incItem, locItem) : incItem);
                         } else {
                              const alreadyResolved = resolvedConflicts?.find(r => r.tableName === tableName && r.recordId === recKey);
                              if (!alreadyResolved) {
@@ -619,7 +661,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                                      resolved: false
                                  });
                              } else {
-                                 itemsToPut.push(incItem); 
+                                 itemsToPut.push(tableName === 'inventaris' ? mergeInventarisSubLogs(incItem, locItem) : incItem); 
                              }
                         }
                     }

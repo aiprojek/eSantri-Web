@@ -18,13 +18,26 @@ export const ConflictResolver: React.FC<ConflictResolverProps> = ({ isOpen, conf
     const [workingData, setWorkingData] = useState<any>(null);
 
     React.useEffect(() => {
-        if (conflicts.length > 0 && currentIndex < conflicts.length) {
+        if (!isOpen || conflicts.length === 0) {
+            setCurrentIndex(0);
+            setResolvedList([]);
+            setWorkingData(null);
+            return;
+        }
+        setCurrentIndex(0);
+        setResolvedList([]);
+        setWorkingData({ ...conflicts[0].localData });
+    }, [isOpen, conflicts]);
+
+    React.useEffect(() => {
+        if (!isOpen || conflicts.length === 0) return;
+        if (currentIndex < conflicts.length) {
             setWorkingData({ ...conflicts[currentIndex].localData });
-        } else if (currentIndex >= conflicts.length && conflicts.length > 0) {
+        } else if (currentIndex >= conflicts.length && resolvedList.length === conflicts.length) {
             // All resolved
             onResolve(resolvedList);
         }
-    }, [currentIndex, conflicts]);
+    }, [currentIndex]);
 
     if (!isOpen || conflicts.length === 0) return null;
     if (currentIndex >= conflicts.length) return null;

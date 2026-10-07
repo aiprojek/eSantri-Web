@@ -417,8 +417,23 @@ const AppContent: React.FC = () => {
             }
         };
 
+        const handleNavigatePage = (e: any) => {
+            if (e.detail?.page) {
+                setCurrentPage(e.detail.page);
+                if (e.detail.tab && e.detail.page === Page.Pengaturan) {
+                    setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('change-settings-tab', { detail: e.detail.tab }));
+                    }, 0);
+                }
+            }
+        };
+
         window.addEventListener('open-panduan', handleOpenPanduan);
-        return () => window.removeEventListener('open-panduan', handleOpenPanduan);
+        window.addEventListener('navigate-page', handleNavigatePage);
+        return () => {
+            window.removeEventListener('open-panduan', handleOpenPanduan);
+            window.removeEventListener('navigate-page', handleNavigatePage);
+        };
     }, []);
 
     useEffect(() => {
@@ -663,7 +678,7 @@ const AppContent: React.FC = () => {
                         case Page.WhatsApp:
                             return checkAccess('whatsapp') ? <WhatsAppCenter /> : <AccessDenied />;
                         case Page.SyncAdmin:
-                            return currentUser?.role === 'admin' ? <AdminSyncDashboard /> : <AccessDenied />;
+                            return canManageSync ? <AdminSyncDashboard /> : <AccessDenied />;
                         case Page.Tentang:
                             return <Tentang initialTab={tentangTab} initialSection={panduanSection} />;
                         default:

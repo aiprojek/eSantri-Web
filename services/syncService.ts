@@ -575,6 +575,110 @@ export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileR
     return [];
 };
 
+export interface InboxFileInspection {
+    sender: string;
+    timestamp: string;
+    isIncremental: boolean;
+    totalRecords: number;
+    tableBreakdown: { tableName: string; label: string; count: number }[];
+}
+
+const TABLE_LABELS: Record<string, string> = {
+    santri: 'Data Santri',
+    tagihan: 'Tagihan Keuangan',
+    pembayaran: 'Pembayaran SPP/Tagihan',
+    saldoSantri: 'Saldo Tabungan Santri',
+    transaksiSaldo: 'Mutasi Tabungan',
+    transaksiKas: 'Buku Kas Umum',
+    chartOfAccounts: 'Akun Keuangan (COA)',
+    payrollRecords: 'Slip Gaji / Bisyaroh',
+    produkKoperasi: 'Produk Koperasi',
+    transaksiKoperasi: 'Transaksi Koperasi',
+    riwayatStok: 'Riwayat Stok Koperasi',
+    keuanganKoperasi: 'Kas Koperasi',
+    suratTemplates: 'Template Surat',
+    arsipSurat: 'Arsip Surat Keluar',
+    pendaftar: 'Pendaftar PSB',
+    auditLogs: 'Log Audit Aktivitas',
+    users: 'Akun Pengguna',
+    raporRecords: 'Nilai Rapor',
+    absensi: 'Absensi Santri',
+    jurnalMengajar: 'Jurnal Mengajar Guru',
+    tahfizh: 'Setoran Tahfizh',
+    buku: 'Katalog Perpustakaan',
+    sirkulasi: 'Peminjaman Buku',
+    obat: 'Stok Obat UKS',
+    kesehatanRecords: 'Rekam Medis Santri',
+    bkSessions: 'Sesi Konseling BK',
+    bukuTamu: 'Buku Tamu & Paket',
+    inventaris: 'Inventaris Sarpras',
+    calendarEvents: 'Kalender Akademik',
+    jadwalPelajaran: 'Jadwal Pelajaran',
+    arsipJadwal: 'Arsip Jadwal',
+    jadwalUjian: 'Jadwal Ujian',
+    piketSchedules: 'Jadwal Piket',
+    pendingOrders: 'Antrean Kasir Koperasi',
+    diskon: 'Master Diskon',
+    suppliers: 'Data Supplier',
+    pembayaranHutang: 'Pembayaran Piutang',
+    warehouses: 'Gudang Koperasi',
+    stockTransfers: 'Transfer Stok Gudang',
+    digitalAssets: 'Aset Tanda Tangan & Stempel',
+    settings: 'Pengaturan Pondok'
+};
+
+export const inspectInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord): Promise<InboxFileInspection> => {
+    let fileContent;
+
+    if (config.provider === 'dropbox') {
+        const token = await getValidDropboxToken(config);
+        const response = await fetchWithRetry('https://content.dropboxapi.com/2/files/download', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Dropbox-API-Arg': JSON.stringify({ path: file.path_lower })
+            }
+        });
+        const buffer = await response.arrayBuffer();
+        fileContent = await decompressData(buffer);
+    } else if (config.provider === 'webdav') {
+        const client = getWebDAVClient(config);
+        const contents = await client.getFileContents(file.path_lower);
+        fileContent = await decompressData(contents as any);
+    } else {
+        throw new Error("Provider tidak valid");
+    }
+
+    if (!validateSyncData(fileContent)) {
+        throw new Error("File dari staff rusak atau format tidak dikenali.");
+    }
+
+    const data = fileContent.data || {};
+    const tableBreakdown: { tableName: string; label: string; count: number }[] = [];
+    let totalRecords = 0;
+
+    for (const [tableName, items] of Object.entries(data)) {
+        if (Array.isArray(items) && items.length > 0) {
+            tableBreakdown.push({
+                tableName,
+                label: TABLE_LABELS[tableName] || tableName,
+                count: items.length
+            });
+            totalRecords += items.length;
+        }
+    }
+
+    tableBreakdown.sort((a, b) => b.count - a.count);
+
+    return {
+        sender: fileContent.sender || 'Staff',
+        timestamp: fileContent.timestamp || file.client_modified,
+        isIncremental: Boolean(fileContent.isIncremental),
+        totalRecords,
+        tableBreakdown
+    };
+};
+
 // ... processInboxFile (updated for validation & decompression) ...
 export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRecord, resolvedConflicts?: ConflictItem[]) => {
     let fileContent;
@@ -635,7 +739,10 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
     let recordCount = 0;
 
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
-        const checkAndMerge = async (tableName: string, incomingItems: any[]) => {
+        const stagedPuts: { tableName: string; items: any[] }[] = [];
+        let stagedSettingsUpdate: { id?: number; data: any; isNew: boolean } | null = null;
+
+        const checkTableConflicts = async (tableName: string, incomingItems: any[]) => {
             if (!incomingItems || incomingItems.length === 0) return;
             const table = (db as any)[tableName];
             const localItems = await table.toArray();
@@ -680,25 +787,16 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                 }
             }
             
-            if (conflicts.length === 0 && itemsToPut.length > 0) {
-                 setAuditSyncMute(true);
-                 try {
-                     await table.bulkPut(itemsToPut);
-                     recordCount += itemsToPut.length;
-                 } finally {
-                     setTimeout(() => setAuditSyncMute(false), 120);
-                 }
+            if (itemsToPut.length > 0) {
+                stagedPuts.push({ tableName, items: itemsToPut });
             }
         };
         
         for (const tableName of tablesToMerge) {
-            if (conflicts.length > 0 && !resolvedConflicts) break; 
-            
             if (tableName === 'users' && data.users) {
                 const staffUpdates = data.users.filter((u: any) => !u.isDefaultAdmin);
-                await checkAndMerge('users', staffUpdates);
+                await checkTableConflicts('users', staffUpdates);
             } else if (tableName === 'settings' && data.settings) {
-                // Special handle for settings to avoid duplicating the single record
                 const incomingSettings = data.settings[0];
                 if (incomingSettings) {
                     const localSettings = await db.settings.toArray();
@@ -715,14 +813,35 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                             if (rest.portalConfig || local.portalConfig) {
                                 rest.portalConfig = mergePortalConfig(rest.portalConfig, local.portalConfig);
                             }
-                            await db.settings.update(local.id!, rest);
+                            stagedSettingsUpdate = { id: local.id!, data: rest, isNew: false };
                         }
                     } else {
-                        await db.settings.add(incomingSettings);
+                        stagedSettingsUpdate = { data: incomingSettings, isNew: true };
                     }
                 }
             } else {
-                await checkAndMerge(tableName, data[tableName]);
+                await checkTableConflicts(tableName, data[tableName]);
+            }
+        }
+
+        // Only write to DB if all tables have 0 unresolved conflicts
+        if (conflicts.length === 0) {
+            setAuditSyncMute(true);
+            try {
+                for (const batch of stagedPuts) {
+                    const table = (db as any)[batch.tableName];
+                    await table.bulkPut(batch.items);
+                    recordCount += batch.items.length;
+                }
+                if (stagedSettingsUpdate) {
+                    if (stagedSettingsUpdate.isNew) {
+                        await db.settings.add(stagedSettingsUpdate.data);
+                    } else if (stagedSettingsUpdate.id !== undefined) {
+                        await db.settings.update(stagedSettingsUpdate.id, stagedSettingsUpdate.data);
+                    }
+                }
+            } finally {
+                setTimeout(() => setAuditSyncMute(false), 120);
             }
         }
     });
@@ -731,7 +850,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
         return { success: false, conflicts, recordCount: 0 };
     }
 
-    return { success: true, recordCount };
+    return { success: true, recordCount, sender: fileContent.sender };
 };
 
 // ... publishMasterData, updateAccountFromCloud ...

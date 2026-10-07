@@ -4,6 +4,7 @@ import { db } from '../db';
 import { createClient, WebDAVClient } from 'webdav';
 import { migrateUserPermissions } from './permissionMigrationService';
 import { setAuditSyncMute } from './logService';
+import { mergePortalConfig } from './portalGasService';
 
 const MASTER_FILENAME = 'master_data.json';
 const MASTER_CONFIG_FILENAME = 'master_config.json';
@@ -514,6 +515,9 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
                                     ...lSettings.cloudSyncConfig
                                 };
                             }
+                            if (rest.portalConfig || lSettings.portalConfig) {
+                                rest.portalConfig = mergePortalConfig(rest.portalConfig, lSettings.portalConfig);
+                            }
                             await db.settings.update(lSettings.id!, rest);
                         }
                     } else {
@@ -707,6 +711,9 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
                                     ...(rest.cloudSyncConfig || {}),
                                     ...local.cloudSyncConfig
                                 };
+                            }
+                            if (rest.portalConfig || local.portalConfig) {
+                                rest.portalConfig = mergePortalConfig(rest.portalConfig, local.portalConfig);
                             }
                             await db.settings.update(local.id!, rest);
                         }
@@ -908,6 +915,9 @@ export const updateAccountFromCloud = async (config: CloudSyncConfig) => {
                         firebasePairedTenantId: localPaired,
                         provider: 'firebase'
                     };
+                }
+                if (rest.portalConfig || localSettings[0].portalConfig) {
+                    rest.portalConfig = mergePortalConfig(rest.portalConfig, localSettings[0].portalConfig);
                 }
                 await db.settings.update(localSettings[0].id!, rest);
             } else {

@@ -2,6 +2,7 @@ import { db } from '../db';
 import { PondokSettings } from '../types';
 import { migrateUserPermissions } from './permissionMigrationService';
 import { setAuditSyncMute } from './logService';
+import { encodePortalKey, mergePortalConfig } from './portalGasService';
 import { isFirebaseClientConfigReady } from '../firebaseApp';
 import {
   db as fdb,
@@ -108,16 +109,29 @@ const endCloudSync = () => {
     setAuditSyncMute(isSyncingFromCloud);
 };
 
-const buildPublicPortalPayload = (settings: PondokSettings) => ({
-    namaPonpes: settings.namaPonpes,
-    logoPonpesUrl: settings.logoPonpesUrl || '',
-    telepon: settings.telepon || '',
-    email: settings.email || '',
-    website: settings.website || '',
-    portalConfig: settings.portalConfig || {},
-    psbConfig: settings.psbConfig || {},
-    updatedAt: Date.now(),
-});
+const buildPublicPortalPayload = (settings: PondokSettings) => {
+    const rawPortal = settings.portalConfig;
+    const sanitizedPortal = rawPortal
+        ? {
+            ...rawPortal,
+            gasEndpoint: '', // Jangan ekspos URL GAS telanjang di dokumen publik Firestore
+            gasApiKey: '',   // Jangan ekspos Token API di dokumen publik Firestore
+            encryptedKey: rawPortal.gasEndpoint
+                ? encodePortalKey(rawPortal.gasEndpoint, rawPortal.portalId || 'default-portal', rawPortal.gasApiKey || '')
+                : '',
+        }
+        : {};
+    return {
+        namaPonpes: settings.namaPonpes,
+        logoPonpesUrl: settings.logoPonpesUrl || '',
+        telepon: settings.telepon || '',
+        email: settings.email || '',
+        website: settings.website || '',
+        portalConfig: sanitizedPortal,
+        psbConfig: settings.psbConfig || {},
+        updatedAt: Date.now(),
+    };
+};
 
 const syncPublicPortalConfig = async (tenantId: string, settings: PondokSettings) => {
     try {
@@ -241,6 +255,9 @@ export const startFirebaseSync = (tenantId: string) => {
                                             firebasePairedTenantId: localPairedTenant,
                                             provider: localProvider || 'firebase'
                                         };
+                                    }
+                                    if (rest.portalConfig || local[0].portalConfig) {
+                                        rest.portalConfig = mergePortalConfig(rest.portalConfig, local[0].portalConfig);
                                     }
                                     await db.settings.update(local[0].id!, rest);
                                 } else {
@@ -382,6 +399,9 @@ export const downloadAllFromFirebase = async (tenantId: string) => {
                             firebasePairedTenantId: localPairedTenant,
                             provider: localProvider || 'firebase'
                         };
+                    }
+                    if (incomingSettings.portalConfig || localSettings[0].portalConfig) {
+                        incomingSettings.portalConfig = mergePortalConfig(incomingSettings.portalConfig, localSettings[0].portalConfig);
                     }
                     await db.settings.update(localSettings[0].id!, incomingSettings);
                 } else {

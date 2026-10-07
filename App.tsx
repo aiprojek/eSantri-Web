@@ -121,13 +121,14 @@ const Toast: React.FC<ToastProps> = ({ id, message, type, onClose }) => {
     ? "opacity-0 translate-x-full" 
     : "opacity-100 translate-x-0";
 
-  const typeConfig = {
+  const typeConfig: Record<string, { icon: string; color: string }> = {
     success: { icon: 'bi-check-circle-fill', color: 'text-app-success bg-app-success/10 border border-app-success/20' },
     error: { icon: 'bi-x-circle-fill', color: 'text-app-danger bg-app-danger/10 border border-app-danger/20' },
+    warning: { icon: 'bi-exclamation-triangle-fill', color: 'text-amber-600 bg-amber-50 border border-amber-200' },
     info: { icon: 'bi-info-circle-fill', color: 'text-app-primary bg-app-primary/10 border border-app-primary/20' },
   };
 
-  const { icon, color } = typeConfig[type];
+  const { icon, color } = typeConfig[type] || typeConfig.info;
 
   return (
     <div className={`${baseClasses} ${animationClasses}`}>

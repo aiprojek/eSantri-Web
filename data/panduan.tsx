@@ -1219,171 +1219,312 @@ export const panduanData: PanduanSectionData[] = [
     },
     {
         id: 'portal',
-        badge: 'NEW',
-        badgeColor: 'blue',
-        title: 'Pengaturan Portal Wali Santri',
+        badge: 'UPDATE',
+        badgeColor: 'teal',
+        title: 'Portal Wali Santri (Enkripsi Vault, HTML Mandiri & SOP Multi-Admin)',
         steps: [
             {
-                title: 'Aktivasi & Jembatan Data (Google Sheets + GAS)',
+                title: '1. SOP Kerja Multi-Admin: Real-Time Sync (Firebase) vs Hub-and-Spoke',
+                color: 'teal',
                 content: (
-                    <div className="space-y-3">
-                        <p className="text-sm">Portal Wali Santri memungkinkan orang tua memantau perkembangan anak secara online. Jembatan data portal memakai <strong>Google Sheets + Google Apps Script (GAS)</strong>:</p>
-                        <div className="bg-blue-50 p-3 rounded border border-blue-200 text-xs text-blue-900">
-                            <ul className="list-disc pl-4 space-y-1">
-                                <li><strong>Data Utama:</strong> Tetap aman di laptop Anda atau Cloud Storage pribadi (Dropbox/WebDAV).</li>
-                                <li><strong>Data Portal:</strong> Hanya data ringkas (profil, absen, saldo, tagihan) yang dikirim ke Google Sheet melalui GAS.</li>
-                            </ul>
+                    <div className="space-y-3.5 text-sm text-gray-700">
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-start gap-2.5">
+                            <i className="bi bi-shield-lock-fill text-amber-600 shrink-0 text-base mt-0.5"></i>
+                            <div>
+                                <strong className="font-bold text-amber-900 block mb-0.5">Pentingnya Tata Kelola Multi-Admin Portal Wali Santri:</strong>
+                                Portal Wali menghimpun data lintas divisi dari 10 tabel utama (<strong>Data Santri, Tagihan, Pembayaran, Tabungan, Rapor, Absensi, Tahfizh, Poskestren, Perpustakaan,</strong> dan <strong>Pengumuman Pondok</strong>). Agar informasi yang dilihat ribuan wali santri selalu akurat dan pengumuman antar-divisi tidak saling menimpa, ikuti SOP standar di bawah ini sesuai arsitektur sinkronisasi pondok Anda.
+                            </div>
                         </div>
-                        <ol className="list-decimal pl-5 space-y-1 text-sm">
-                            <li>Buka menu <strong>Portal Wali</strong> di sidebar.</li>
-                            <li>Pastikan status portal <strong>Aktif</strong>.</li>
-                            <li>Isi <strong>Portal ID</strong>, <strong>URL Web App GAS</strong>, dan token opsional.</li>
-                            <li>Klik <strong>Sinkronkan Sekarang</strong> untuk mengirim data ringkas pertama kali.</li>
-                        </ol>
+
+                        {/* Model A: Realtime */}
+                        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-teal-200/70 pb-1.5">
+                                <h5 className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] font-black">A</span>
+                                    Model A: Cloud Real-Time (Firebase Firestore)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">Online Terpadu</span>
+                            </div>
+                            <p className="text-xs text-gray-600 leading-relaxed">
+                                Seluruh divisi (Bendahara, Akademik/Wali Kelas, Muhaffizh, Poskestren, Pustakawan, dan Humas) terhubung secara <em>real-time</em> ke database Cloud yang sama:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs space-y-1">
+                                    <strong className="text-teal-950 block font-semibold">
+                                        <i className="bi bi-bell-fill text-amber-500 mr-1"></i> Detektor Out-of-Sync Otomatis
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                                        Begitu ada kasir menerima bayaran SPP, ustadz menginput setoran tahfizh, atau wali kelas menerbitkan rapor di perangkat lain, halaman <strong>Portal Wali</strong> otomatis mendeteksi perubahan (<em>Out-of-Sync Detector</em>) dan menampilkan tombol cepat <strong>&quot;Sinkronkan ke Portal&quot;</strong>.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs space-y-1">
+                                    <strong className="text-teal-950 block font-semibold">
+                                        <i className="bi bi-intersect text-teal-600 mr-1"></i> Smart Union Merge Pengumuman
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                                        Mesin <code>mergePortalConfig</code> menggabungkan daftar pengumuman (<code>announcementPosts</code>) berdasarkan ID unik. Pengumuman yang ditulis Sekretaris tidak akan terhapus saat Bendahara menekan tombol sinkronisasi.
+                                    </p>
+                                </div>
+                                <div className="p-2.5 bg-white rounded-lg border border-teal-100 shadow-2xs space-y-1">
+                                    <strong className="text-teal-950 block font-semibold">
+                                        <i className="bi bi-shield-check text-emerald-600 mr-1"></i> Proteksi Dokumen Publik Cloud
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                                        Dokumen publik <code>publicPortals/{'{tenantId}'}</code> di Firestore otomatis menyembunyikan URL GAS &amp; Token API mentah dan hanya menyimpan kunci terenkripsi (<code>encryptedKey: ep2_...</code>).
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Model B: Hub and Spoke */}
+                        <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between border-b border-indigo-200/70 pb-1.5">
+                                <h5 className="font-bold text-indigo-900 flex items-center gap-1.5 text-xs">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">B</span>
+                                    Model B: Hub-and-Spoke (Dropbox / Nextcloud / WebDAV / Offline)
+                                </h5>
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold uppercase">Pusatkan Sync di HUB</span>
+                            </div>
+                            <p className="text-xs text-gray-600 leading-relaxed">
+                                Pada arsitektur Hub-and-Spoke, <strong>eksekusi tombol &quot;Sinkronkan Sekarang ke Portal&quot; WAJIB dilakukan dari Komputer Admin Pusat (HUB)</strong> setelah seluruh setoran data staf digabungkan:
+                            </p>
+                            <div className="space-y-2 pt-1 text-xs">
+                                <div className="p-2.5 bg-white rounded-lg border border-indigo-100">
+                                    <strong className="text-indigo-950 block mb-1">Urutan SOP Harian Sinkronisasi Portal Wali (Hub-and-Spoke):</strong>
+                                    <ol className="list-decimal pl-4 space-y-1 text-[11px] text-gray-600 leading-relaxed">
+                                        <li>
+                                            <strong>Staf / Divisi (Spoke):</strong> Kasir keuangan, ustadz tahfizh, wali kelas, dan petugas UKS menginput data harian di laptop masing-masing lalu mengeklik <strong>&quot;Kirim Perubahan (Upload Staff Changes)&quot;</strong>.
+                                        </li>
+                                        <li>
+                                            <strong>Admin Pusat (Hub) - Gabung Data:</strong> Buka menu <em>Pusat Sinkronisasi</em> &rarr; klik <strong>&quot;Gabungkan Perubahan Staff (Merge Changes)&quot;</strong> hingga seluruh file inbox staf selesai digabung, lalu klik <strong>&quot;Publikasikan Master&quot;</strong>.
+                                        </li>
+                                        <li>
+                                            <strong>Admin Pusat (Hub) - Push ke Portal Wali:</strong> Buka menu <strong>Portal Wali</strong> &rarr; klik tombol <strong>&quot;Sinkronkan Sekarang ke Portal&quot;</strong>. Dengan urutan ini, paket data yang dikirim ke Google Sheets mencakup data terlengkap dari seluruh staf pondok.
+                                        </li>
+                                    </ol>
+                                </div>
+                                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-950">
+                                    <strong>⚠️ Pantangan di Mode Hub-and-Spoke:</strong> Staf pada laptop cabang (<em>Spoke</em>) yang belum menarik <em>Master Data</em> terbaru <strong>dilarang menekan tombol &quot;Sinkronkan Sekarang ke Portal&quot;</strong> karena database lokal Spoke yang belum lengkap dapat menimpa ringkasan data di Google Sheets.
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Matriks Pembagian Peran */}
+                        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white text-xs shadow-2xs">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-gray-200 text-slate-700 font-bold text-[11px]">
+                                        <th className="p-2.5">Peran / Divisi</th>
+                                        <th className="p-2.5">Tanggung Jawab Data Portal</th>
+                                        <th className="p-2.5">Jadwal Ideal Sinkronisasi Portal</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 text-[11px] text-gray-600">
+                                    <tr>
+                                        <td className="p-2.5 font-semibold text-slate-800">Admin Utama / IT Pusat (HUB)</td>
+                                        <td className="p-2.5">Konfigurasi Script GAS v2.0, Token API, Hosting HTML Mandiri (Cloudflare Pages), &amp; Sinkronisasi Utama.</td>
+                                        <td className="p-2.5">Setiap sore (tutup kantor) setelah <em>Merge</em> data staf.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2.5 font-semibold text-slate-800">Bendahara &amp; Kasir Keuangan</td>
+                                        <td className="p-2.5">Akurasi tagihan SPP, pencatatan cicilan, kwitansi pembayaran, dan mutasi saldo tabungan/uang saku.</td>
+                                        <td className="p-2.5">Saat masa pembayaran SPP (tanggal 1–10) &amp; setelah tutup kas harian.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2.5 font-semibold text-slate-800">Sekretariat / Humas Pondok</td>
+                                        <td className="p-2.5">Menulis <strong>Pengumuman Pondok</strong> (jadwal libur, kunjungan wali, maklumat pimpinan) &amp; memperbarui kontak WA.</td>
+                                        <td className="p-2.5">Segera setelah menerbitkan pengumuman resmi baru.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2.5 font-semibold text-slate-800">Akademik, Tahfizh &amp; Pengasuhan</td>
+                                        <td className="p-2.5">Absensi harian, setoran Ziyadah/Murojaah, kamar asrama, catatan prestasi/pembinaan, &amp; rapor semester.</td>
+                                        <td className="p-2.5">Rutin harian/pekanan &amp; saat pembagian rapor semester.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )
             },
             {
-                title: 'Langkah Deploy Google Apps Script',
-                content: (
-                    <div className="space-y-3 text-sm">
-                        <p>Ikuti urutan ini dari awal sampai akhir agar Portal Wali bisa aktif tanpa error:</p>
-                        <ol className="list-decimal pl-5 space-y-1">
-                            <li>Buka <strong>Portal Wali</strong> di sidebar.</li>
-                            <li>Isi <strong>Portal ID</strong> (contoh: <code>ponpes-al-ikhlas</code>).</li>
-                            <li>Klik <strong>Lihat Kode Google Apps Script</strong>, lalu klik <strong>Salin Kode</strong>.</li>
-                            <li>Buat <strong>Google Sheet baru</strong> di akun Google Anda.</li>
-                            <li>Di Google Sheet: klik <strong>Extensions &gt; Apps Script</strong>.</li>
-                            <li>Hapus kode bawaan, paste kode dari eSantri, lalu klik <strong>Save</strong>.</li>
-                            <li>Klik <strong>Deploy &gt; New Deployment</strong>.</li>
-                            <li>Pilih type <strong>Web App</strong>.</li>
-                            <li>Set <strong>Execute as: Me</strong>.</li>
-                            <li>Set <strong>Who has access: Anyone</strong>.</li>
-                            <li>Klik <strong>Deploy</strong>, lalu <strong>Authorize</strong> jika diminta Google.</li>
-                            <li>Salin URL Web App yang berakhiran <code>/exec</code>.</li>
-                            <li>Kembali ke eSantri, tempel URL itu ke kolom <strong>URL Web App GAS</strong>.</li>
-                            <li>Jika ingin pakai token keamanan, isi <strong>API_TOKEN</strong> di script dan isi nilai yang sama di kolom <strong>Token API</strong> eSantri.</li>
-                            <li>Simpan pengaturan portal, lalu klik tombol <strong>Sinkronkan Sekarang</strong> di halaman Portal Wali.</li>
-                            <li>Buka URL Portal Wali yang muncul, lalu uji dari HP/laptop lain.</li>
-                        </ol>
-                        <div className="rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-                            Jika terjadi gagal akses, cek lagi 3 hal ini: URL harus <code>/exec</code>, akses Web App harus <strong>Anyone</strong>, dan Portal ID di aplikasi harus sama dengan yang dipakai di data portal.
-                        </div>
-                    </div>
-                )
-            },
-            {
-                title: 'Mendapatkan & Membagikan URL Portal',
+                title: '2. Keamanan Arsitektur Baru: Server-Side Login GAS v2.0 & Enkripsi Vault Key (ep2_)',
                 color: 'blue',
                 content: (
-                    <div className="space-y-2">
-                        <p className="text-sm">Setelah Portal ID dan URL GAS diisi, Anda akan melihat panel <strong>URL Portal Wali Santri</strong> di bagian atas halaman pengaturan portal.</p>
-                        <div className="bg-gray-50 p-3 rounded border text-xs">
-                            <p className="font-bold mb-1">Format URL:</p>
-                            <ul className="list-disc pl-4 space-y-1">
-                                <li><strong>Versi Online:</strong> <code>https://domain-anda.com/portal/ID_UNIK?gas=URL_GAS</code></li>
-                                <li><strong>Versi Desktop (Tauri) / Android:</strong> Anda harus memasukkan <em>Domain Kustom</em> di pengaturan portal agar link yang dihasilkan valid untuk wali santri.</li>
-                            </ul>
-                        </div>
-                        <p className="text-sm">Klik tombol <strong>Salin</strong> atau tunjukkan <strong>QR Code</strong> yang tersedia untuk dibagikan kepada wali santri.</p>
-                    </div>
-                )
-            },
-            {
-                title: 'Cara Wali Santri Login',
-                content: (
-                    <div className="space-y-2">
-                        <p className="text-sm">Wali santri tidak perlu membuat akun baru. Mereka cukup menggunakan data santri yang sudah ada:</p>
-                        <ul className="list-disc pl-5 space-y-1 text-sm">
-                            <li><strong>Username:</strong> NIS (Nomor Induk Santri).</li>
-                            <li><strong>Password:</strong> Secara default adalah tanggal lahir santri (format: <code>DDMMYYYY</code>) atau PIN yang ditentukan Admin.</li>
-                        </ul>
-                        <p className="text-xs italic text-gray-500">* Anda dapat mengatur instruksi login ini di bagian Pesan Selamat Datang.</p>
-                    </div>
-                )
-            },
-            {
-                title: 'Kustomisasi Tampilan (Tema)',
-                content: (
-                    <p className="text-sm">
-                        Anda dapat menyesuaikan warna portal agar sesuai dengan identitas pondok. Pilih salah satu dari 7 tema warna yang tersedia (Teal, Blue, Indigo, Slate, Rose, Emerald, Cyan). Perubahan tema akan langsung terlihat oleh wali santri saat mereka membuka portal.
-                    </p>
-                )
-            },
-            {
-                title: 'Kontrol Visibilitas Data',
-                content: (
-                    <div className="space-y-2">
-                        <p className="text-sm">Anda memiliki kendali penuh atas data apa saja yang boleh diakses oleh wali santri. Centang modul yang ingin ditampilkan:</p>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-cash-coin text-green-600"></i> Keuangan</div>
-                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-mortarboard text-blue-600"></i> Akademik</div>
-                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-calendar-check text-teal-600"></i> Absensi</div>
-                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-book text-green-700"></i> Tahfizh</div>
-                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-heart-pulse text-red-600"></i> Kesehatan</div>
-                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded border"><i className="bi bi-book-half text-teal-700"></i> Perpustakaan</div>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Portal Wali eSantri Web kini dilengkapi sistem pengamanan berlapis untuk mengatasi kelemahan tautan panjang dan menutup celah intip data massal (<em>Bulk Data Leak</em>):
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="bg-blue-50/70 p-3.5 rounded-xl border border-blue-200 space-y-1.5">
+                                <strong className="text-blue-950 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-shield-check text-blue-600 text-base"></i> 1. Server-Side Login di GAS v2.0
+                                </strong>
+                                <p className="text-gray-700 text-[11px] leading-relaxed">
+                                    Saat wali santri membuka halaman portal, server <strong>hanya mengirimkan profil umum pondok &amp; pengumuman</strong> (<code>action=getPortalPublicInfo</code>) tanpa menyertakan daftar santri. Data seorang santri baru dikirim dari Google Sheets secara spesifik (<code>action=loginSantri</code>) <strong>hanya setelah NIS dan Tanggal Lahir cocok di sisi server GAS</strong>. Orang yang membuka link GAS secara langsung di browser tidak akan bisa melihat data seluruh santri.
+                                </p>
+                            </div>
+                            <div className="bg-teal-50/70 p-3.5 rounded-xl border border-teal-200 space-y-1.5">
+                                <strong className="text-teal-950 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-key-fill text-teal-600 text-base"></i> 2. Enkripsi Kunci Koneksi (Vault Key ep2_)
+                                </strong>
+                                <p className="text-gray-700 text-[11px] leading-relaxed">
+                                    URL Google Apps Script dan Token API tidak lagi ditampilkan telanjang sebagai parameter <code>?gas=https://script.google.com/...</code> yang panjang dan rawan disalahgunakan, melainkan dienkripsi dengan algoritma <em>XOR Stream Cipher + Base64URL</em> menjadi kunci pendek <code>?k=ep2_...</code>.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 )
             },
             {
-                title: 'Informasi & Pengumuman',
+                title: '3. Langkah Deploy / Update Google Apps Script (GAS v2.0)',
+                color: 'green',
                 content: (
-                    <ul className="list-disc pl-5 space-y-2 text-sm">
-                        <li><strong>Pesan Selamat Datang:</strong> Kalimat sapaan yang muncul di dashboard utama portal.</li>
-                        <li><strong>Pengumuman:</strong> Informasi penting (misal: jadwal libur, info pendaftaran) yang akan muncul di bagian atas portal wali.</li>
-                    </ul>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Ikuti langkah berikut untuk memasang jembatan data baru atau memperbarui script lama Anda ke <strong>GAS v2.0</strong>:
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-700 bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+                            <li>Buka menu <strong>Portal Wali</strong> di sidebar aplikasi eSantri.</li>
+                            <li>Pastikan <strong>ID Portal Unik</strong> sudah terisi (contoh: <code>ponpes-al-ikhlas</code>).</li>
+                            <li>Pada bagian <em>Jembatan Data Google Sheets (GAS)</em>, klik tombol <strong>&quot;Lihat Kode Script GAS v2.0&quot;</strong> lalu klik <strong>&quot;Salin Kode Script v2.0&quot;</strong>.</li>
+                            <li>Buka <strong>Google Spreadsheet</strong> khusus Portal Wali di akun Google pondok Anda, lalu klik menu <strong>Ekstensi (Extensions) &gt; Apps Script</strong>.</li>
+                            <li>Hapus seluruh kode lama di editor <code>Code.gs</code>, tempelkan (<em>Paste</em>) kode Script GAS v2.0 yang baru disalin, lalu klik ikon <strong>Simpan (Save)</strong>.</li>
+                            <li>
+                                Klik tombol biru <strong>Deploy &gt; Deployment Baru (New Deployment)</strong> (atau <em>Kelola Deployment &gt; Edit &gt; Versi Baru</em>):
+                                <ul className="list-disc pl-5 mt-1 space-y-0.5 text-[11px] text-gray-600">
+                                    <li><strong>Jenis (Select type):</strong> Aplikasi Web (<em>Web App</em>).</li>
+                                    <li><strong>Jalankan sebagai (Execute as):</strong> Saya (<em>Me</em>).</li>
+                                    <li><strong>Siapa yang memiliki akses (Who has access):</strong> Wajib pilih <strong>Siapa Saja (Anyone)</strong>.</li>
+                                </ul>
+                            </li>
+                            <li>Salin <strong>URL Web App</strong> yang berakhiran <code>/exec</code>, lalu tempelkan ke kolom <strong>URL Web App GAS</strong> di eSantri.</li>
+                            <li>Klik tombol <strong>&quot;Simpan Pengaturan Portal&quot;</strong>, lalu klik tombol <strong>&quot;Sinkronkan Sekarang ke Portal&quot;</strong> di kartu atas.</li>
+                            <li>Klik tombol <strong>&quot;Uji Koneksi &amp; Cek Keamanan GAS&quot;</strong> untuk memastikan status menampilkan lencana hijau <strong>Terproteksi Server-Side Login (GAS v2.0)</strong>.</li>
+                        </ol>
+                    </div>
                 )
             },
             {
-                title: 'Kontak Penting & Link Kustom',
+                title: '4. Hosting Mandiri Gratis (Cloudflare Pages / Netlify) dengan File HTML Mandiri (Rekomendasi Utama)',
+                color: 'indigo',
                 content: (
-                    <div className="space-y-3">
-                        <div className="border-l-4 border-blue-500 pl-3 py-1 bg-blue-50">
-                            <h4 className="font-bold text-blue-800 text-sm">Kontak Penting</h4>
-                            <p className="text-xs">Tambahkan nomor WhatsApp Admin, Bendahara, atau Pengasuh. Wali santri bisa langsung mengklik ikon WhatsApp di portal untuk memulai chat.</p>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="bg-indigo-50 p-3.5 rounded-xl border border-indigo-200 text-xs text-indigo-950 space-y-1.5">
+                            <strong className="font-bold flex items-center gap-1.5 text-indigo-900 text-sm">
+                                <i className="bi bi-cloud-check-fill text-indigo-600"></i>
+                                Solusi Link Portal Pendek, Elegan &amp; 100% Gratis (Seperti Fitur PSB):
+                            </strong>
+                            <p className="leading-relaxed text-gray-700">
+                                Agar wali santri mendapatkan alamat portal yang pendek dan profesional (misalnya <code>https://wali-alikhlas.pages.dev</code> atau <code>https://wali.pondokanda.com</code>) <strong>tanpa parameter URL panjang sama sekali</strong>, gunakan fitur <strong>Generator File HTML Mandiri</strong>. Kunci koneksi GAS sudah ditanam secara terenkripsi di dalam file <code>index.html</code> tersebut!
+                            </p>
                         </div>
-                        <div className="border-l-4 border-indigo-500 pl-3 py-1 bg-indigo-50">
-                            <h4 className="font-bold text-indigo-800 text-sm">Link Kustom</h4>
-                            <p className="text-xs">Tambahkan link ke website pondok, brosur PDF di Google Drive, atau link pendaftaran santri baru (PSB).</p>
+
+                        <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2 text-xs">
+                            <h6 className="font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <i className="bi bi-rocket-takeoff-fill text-teal-600"></i> 3 Langkah Mudah Hosting di Cloudflare Pages / Netlify (Cukup 1 Kali Seumur Hidup):
+                            </h6>
+                            <ol className="list-decimal pl-5 space-y-1.5 text-gray-700 text-[11px] leading-relaxed">
+                                <li>
+                                    <strong>Unduh File HTML:</strong> Di halaman <strong>Portal Wali</strong>, klik tombol <strong>&quot;Download File index.html (Terenkripsi)&quot;</strong>.
+                                </li>
+                                <li>
+                                    <strong>Unggah ke Hosting Gratis:</strong>
+                                    <ul className="list-disc pl-4 mt-1 space-y-0.5 text-gray-600">
+                                        <li>Buka <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">Cloudflare Dashboard</a> &gt; menu <strong>Workers &amp; Pages &gt; Create &gt; Pages &gt; Upload Assets</strong> (atau gunakan <a href="https://app.netlify.com/drop" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">Netlify Drop</a>).</li>
+                                        <li>Beri nama proyek (misal: <code>wali-pesantren</code>), lalu tarik (<em>drag &amp; drop</em>) file <code>index.html</code> tadi (atau masukkan ke dalam 1 folder lalu upload) dan klik <strong>Deploy Site</strong>.</li>
+                                    </ul>
+                                </li>
+                                <li>
+                                    <strong>Pasang URL pendek di eSantri:</strong> Salin alamat domain pendek yang diberikan Cloudflare (misal: <code>https://wali-pesantren.pages.dev</code>), tempelkan ke kolom <strong>&quot;URL Hosting Mandiri&quot;</strong> di pengaturan Portal Wali eSantri, centang <em>&quot;Gunakan URL Hosting Mandiri sebagai Link Utama &amp; QR Code&quot;</em>, lalu klik <strong>Simpan</strong>.
+                                </li>
+                            </ol>
+                            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-950 font-medium">
+                                💡 <strong>Tidak Perlu Upload Ulang Saat Update Data:</strong> Anda cukup meng-upload file <code>index.html</code> ini <strong>SATU KALI SAJA</strong>. Untuk pembaruan data tagihan, absensi, nilai rapor, atau pengumuman harian selanjutnya, Anda cukup menekan tombol <strong>&quot;Sinkronkan Sekarang ke Portal&quot;</strong> dari dalam aplikasi eSantri.
+                            </div>
                         </div>
                     </div>
                 )
             },
             {
-                title: 'Update Data ke Portal',
+                title: '5. Enam Fitur Lengkap Dasbor Wali Santri & Konfirmasi WA 1-Klik',
+                color: 'purple',
+                content: (
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Wali santri masuk menggunakan <strong>NIS (Nomor Induk Santri)</strong> dan <strong>Tanggal Lahir Santri</strong> (dilengkapi fitur <em>Ingat NIS Saya</em> di HP wali). Setelah berhasil login, wali santri dapat mengakses 6 panel informasi terpadu:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-teal-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-cash-coin text-teal-600"></i> 1. Keuangan, Tagihan Cicilan &amp; Tabungan
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan total tunggakan akurat (memperhitungkan sisa tagihan yang sudah dicicil), rincian tagihan belum lunas per bulan, 5 riwayat pembayaran terakhir, 5 mutasi saldo tabungan/uang saku terakhir, serta tombol <strong>&quot;Konfirmasi Pembayaran via WA&quot;</strong> otomatis ke nomor Admin Keuangan.
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-blue-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-mortarboard-fill text-blue-600"></i> 2. Akademik, Kamar, Rapor &amp; Pembinaan
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan Jenjang, Kelas, Rombel, Wali Kelas, Gedung &amp; Kamar Asrama, Musyrif Pembina, <strong>Ringkasan Rapor Semester Terakhir</strong> (nilai rata-rata, daftar nilai mata pelajaran, catatan wali kelas), serta <strong>Catatan Prestasi &amp; Pembinaan</strong> santri.
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-emerald-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-calendar-check-fill text-emerald-600"></i> 3. Presensi Harian &amp; Rekap Bulanan
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan status kehadiran santri pada hari berjalan beserta total akumulasi kehadiran bulan ini (Hadir, Izin, Sakit, Alpha).
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-indigo-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-book-half text-indigo-600"></i> 4. Perkembangan Tahfizh Al-Qur&apos;an
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan lencana Target Juz &amp; Total Capaian Juz Hafalan santri, disertai tabel riwayat setoran Ziyadah, Muroja&apos;ah, dan Ujian Tasmi&apos; terakhir beserta predikat nilainya.
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-rose-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-heart-pulse-fill text-rose-600"></i> 5. Rekam Kesehatan &amp; Poskestren
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan riwayat pemeriksaan kesehatan di Poskestren meliputi tanggal periksa, keluhan/diagnosa, tindakan perawatan, dan status rawat.
+                                </p>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xs space-y-1">
+                                <strong className="text-amber-800 flex items-center gap-1.5 font-bold">
+                                    <i className="bi bi-journal-bookmark-fill text-amber-600"></i> 6. Sirkulasi Pinjaman Perpustakaan
+                                </strong>
+                                <p className="text-[11px] text-gray-600 leading-relaxed">
+                                    Menampilkan jumlah dan daftar judul buku/kitab perpustakaan pondok yang sedang dipinjam oleh santri beserta tanggal batas pengembaliannya.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                title: '6. Kustomisasi Tema, Visibilitas Modul, Pengumuman & Kontak Penting',
                 color: 'orange',
                 content: (
-                    <div className="bg-orange-50 p-3 rounded border border-orange-200 text-sm">
-                        <p>Setelah melakukan perubahan data (misal: input absensi baru atau mengubah pengaturan portal), klik tombol <strong>Sinkronkan Sekarang</strong> di halaman <em>Portal Wali</em> agar data di portal wali ikut terbarui.</p>
-                    </div>
-                )
-            },
-            {
-                title: 'Hosting & Deployment (Online)',
-                content: (
-                    <div className="space-y-3">
-                        <p className="text-sm">Agar portal wali bisa diakses dari mana saja, diperlukan sebuah alamat web (URL) yang aktif di internet.</p>
-                        
-                        <div className="bg-green-50 p-3 rounded border border-green-200 text-sm">
-                            <p className="font-bold text-green-900 mb-1"><i className="bi bi-check-circle-fill"></i> Untuk Pengguna Awam (Installer):</p>
-                            <p className="text-xs">Anda cukup menggunakan link portal yang muncul di menu <strong>Pengaturan &gt; Portal Wali</strong>. Agar link tersebut valid, pastikan Admin telah memasukkan <strong>URL Web Portal</strong> yang sudah dionlinekan di kolom yang tersedia.</p>
-                        </div>
-
-                        <div className="bg-blue-50 p-3 rounded border border-blue-200 text-sm">
-                            <p className="font-bold text-blue-900 mb-1"><i className="bi bi-info-circle-fill"></i> Mengapa Harus Hosting?</p>
-                            <p className="text-xs">Karena aplikasi Desktop (Tauri) berjalan di laptop pribadi, wali santri tidak bisa mengaksesnya langsung. Anda perlu menghosting versi web aplikasi ini (sekali saja) sebagai "pintu masuk" agar wali santri bisa melihat data melalui internet.</p>
-                        </div>
-
-                        <div className="bg-gray-50 p-3 rounded border border-gray-200 text-sm">
-                            <p className="font-bold text-gray-700 mb-1"><i className="bi bi-gear-fill"></i> Untuk Tim IT / Pengembang (Lanjutan):</p>
-                            <p className="text-[11px] mb-2">Jika pondok ingin menggunakan domain sendiri (misal: <code>portal.pondokanda.com</code>), Anda bisa menghosting sendiri versi web aplikasi ini:</p>
-                            <ul className="list-disc pl-4 text-[10px] space-y-1">
-                                <li><strong>Cloudflare Pages / Vercel / Netlify:</strong> Opsi praktis untuk hosting file statis.</li>
-                                <li><strong>GitHub Pages / Vercel:</strong> Gratis untuk hosting file statis (folder <code>dist</code>).</li>
-                            </ul>
-                            <p className="mt-2 text-[10px] text-gray-600">Script Google Apps Script tersedia langsung di menu <strong>Pengaturan &gt; Portal Wali</strong> melalui tombol <strong>Lihat Kode Google Apps Script</strong>.</p>
-                        </div>
+                    <div className="space-y-2.5 text-xs text-gray-700">
+                        <ul className="list-disc pl-5 space-y-1.5 leading-relaxed">
+                            <li>
+                                <strong>7 Pilihan Tema Warna Identitas Pondok:</strong> Pilih warna <em>Teal, Blue, Indigo, Slate, Rose, Emerald,</em> atau <em>Cyan</em>. Perubahan tema otomatis diterapkan di Portal Internal maupun di halaman HTML Mandiri tanpa perlu mengunggah ulang file HTML.
+                            </li>
+                            <li>
+                                <strong>Kontrol Visibilitas Modul:</strong> Admin dapat menyembunyikan atau menampilkan tab tertentu (misalnya menyembunyikan tab Perpustakaan atau Kesehatan jika belum digunakan di pondok).
+                            </li>
+                            <li>
+                                <strong>Manajemen Pengumuman Multi-Pos:</strong> Buat beberapa pengumuman sekaligus, atur status <em>Tayang / Arsip</em>, dan informasi akan langsung muncul di halaman depan login serta di dalam dasbor wali santri.
+                            </li>
+                            <li>
+                                <strong>Kontak Penting &amp; Tautan Eksternal:</strong> Tambahkan nomor WhatsApp Bendahara, Kantor Pengasuhan, atau link brosur/website resmi pondok agar wali santri dapat menghubungi pihak pondok dengan satu klik.
+                            </li>
+                        </ul>
                     </div>
                 )
             }
@@ -4144,7 +4285,7 @@ export const panduanData: PanduanSectionData[] = [
                         <li><strong>Offline-First:</strong> Aplikasi tetap berjalan lancar tanpa internet.</li>
                         <li><strong>Firebase Sync:</strong> Sinkronisasi data real-time antar perangkat (Multi-User) dengan database cloud yang aman.</li>
                         <li><strong>Cloud Sync (Dropbox/WebDAV):</strong> Backup data dan kolaborasi tim menggunakan penyimpanan awan pribadi.</li>
-                        <li><strong>Portal Wali Santri:</strong> Akses informasi santri (Nilai, Absen, Keuangan) bagi orang tua secara online.</li>
+                        <li><strong>Portal Wali Santri (Enkripsi Vault &amp; HTML Mandiri):</strong> Akses online terproteksi <em>Server-Side Login GAS v2.0</em> (anti bocor data massal), enkripsi kunci URL (<code>ep2_</code>), generator file <code>index.html</code> mandiri untuk hosting gratis di Cloudflare Pages/Netlify, serta dasbor 6 tab lengkap (Tagihan/Cicilan, Tabungan, Rapor, Kamar, Presensi, Tahfizh, Poskestren, &amp; Perpustakaan).</li>
                         <li><strong>Multi-Platform:</strong> Tersedia dalam versi Web, Desktop (Tauri), dan Android.</li>
                     </ul>
                 )

@@ -643,6 +643,9 @@ export interface PortalConfig {
     contacts: PortalContact[];
     customLinks: { label: string; url: string }[];
     baseUrl?: string;
+    useStandaloneUrl?: boolean;
+    lastSyncedAt?: string;
+    lastSyncedSantriCount?: number;
 }
 
 export interface WaTemplate {

@@ -676,12 +676,22 @@ export interface DigitalAsset {
     lastModified?: number;
 }
 
+export interface PondokCustomInfoField {
+    id: string;
+    label: string;
+    value: string;
+    showInKop: boolean;
+}
+
 export interface PondokSettings {
     id?: number;
     namaYayasan: string;
     namaPonpes: string;
     nspp: string;
     npsn: string;
+    showNsppInKop?: boolean;
+    showNpsnInKop?: boolean;
+    customInfoFields?: PondokCustomInfoField[];
     alamat: string;
     telepon: string;
     email: string;

@@ -244,8 +244,97 @@ export const runFullHealthCheck = async (): Promise<HealthCheckResult[]> => {
         });
     }
 
-    // 8. Indexing: lastModified check across all syncable tables
-    const tablesToCheck = ['santri', 'transaksiSaldo', 'transaksiKas', 'absensi', 'tahfizh', 'tagihan', 'pembayaran', 'piketSchedules', 'calendarEvents'] as const;
+    // 8. Akademik Rapor: Orphan Rapor Records
+    const allRapor = await db.raporRecords.filter(r => !r.deleted).toArray();
+    const orphanRapor = allRapor.filter(r => !allSantriIds.has(r.santriId));
+
+    if (orphanRapor.length > 0) {
+        results.push({
+            category: 'Akademik & Rapor',
+            status: 'warning',
+            message: `Ditemukan ${orphanRapor.length} Rapor Yatim`,
+            details: 'Beberapa catatan nilai rapor merujuk ke santri yang sudah tidak ada di database.',
+            actionLabel: 'Bersihkan Rapor Yatim',
+            action: async () => {
+                const now = Date.now();
+                await db.raporRecords.bulkPut(orphanRapor.map(r => ({ ...r, deleted: true, lastModified: now })));
+            }
+        });
+    } else {
+        results.push({
+            category: 'Akademik & Rapor',
+            status: 'ok',
+            message: `Data Rapor (${allRapor.length} dokumen) konsisten dan terhubung ke santri valid.`
+        });
+    }
+
+    // 10. Sarpras & Inventaris: Validasi Kuantitas & Lokasi
+    const allInventaris = await db.inventaris.filter(i => !i.deleted).toArray();
+    const invalidInventaris = allInventaris.filter(i => (typeof i.jumlah === 'number' && i.jumlah < 0) || !i.nama?.trim());
+
+    if (invalidInventaris.length > 0) {
+        results.push({
+            category: 'Sarpras & Inventaris',
+            status: 'warning',
+            message: `Ditemukan ${invalidInventaris.length} Aset Inventaris Tidak Valid`,
+            details: 'Terdapat data inventaris dengan jumlah negatif atau nama aset kosong.',
+            actionLabel: 'Normalisasi Inventaris',
+            action: async () => {
+                const now = Date.now();
+                await db.inventaris.bulkPut(invalidInventaris.map(item => ({
+                    ...item,
+                    nama: item.nama?.trim() || 'Aset Tanpa Nama',
+                    jumlah: Math.max(0, Number(item.jumlah) || 0),
+                    lastModified: now
+                })));
+            }
+        });
+    } else {
+        results.push({
+            category: 'Sarpras & Inventaris',
+            status: 'ok',
+            message: `Data Inventaris (${allInventaris.length} item aset) valid dan terstruktur.`
+        });
+    }
+
+    // 11. Sampah Database (Soft-Deleted Records)
+    const purgeableTables = ['santri', 'tagihan', 'pembayaran', 'transaksiSaldo', 'transaksiKas', 'absensi', 'tahfizh', 'raporRecords', 'inventaris', 'calendarEvents', 'piketSchedules', 'arsipSurat'] as const;
+    let totalSoftDeleted = 0;
+    for (const tbl of purgeableTables) {
+        if ((db as any)[tbl]) {
+            const count = await (db as any)[tbl].filter((r: any) => r.deleted === true).count();
+            totalSoftDeleted += count;
+        }
+    }
+
+    if (totalSoftDeleted > 0) {
+        results.push({
+            category: 'Optimasi & Sampah Database',
+            status: totalSoftDeleted > 100 ? 'warning' : 'ok',
+            message: `Terdapat ${totalSoftDeleted} Record Sampah (Soft-Deleted) di Database Lokal`,
+            details: 'Record yang dihapus disimpan sementara (tombstone) untuk keperluan sinkronisasi cloud. Jika sinkronisasi sudah selesai, Anda dapat menghapusnya secara permanen untuk menghemat memori.',
+            actionLabel: 'Bersihkan Sampah Permanen',
+            action: async () => {
+                for (const tbl of purgeableTables) {
+                    if ((db as any)[tbl]) {
+                        const deletedKeys = await (db as any)[tbl].filter((r: any) => r.deleted === true).primaryKeys();
+                        if (deletedKeys.length > 0) {
+                            await (db as any)[tbl].bulkDelete(deletedKeys);
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        results.push({
+            category: 'Optimasi & Sampah Database',
+            status: 'ok',
+            message: 'Database lokal bebas dari tumpukan sampah record terhapus.'
+        });
+    }
+
+    // 12. Indexing: lastModified check across all syncable tables
+    const tablesToCheck = ['santri', 'transaksiSaldo', 'transaksiKas', 'absensi', 'tahfizh', 'tagihan', 'pembayaran', 'piketSchedules', 'calendarEvents', 'inventaris'] as const;
     let tablesMissingIndex: typeof tablesToCheck[number][] = [];
     
     for (const table of tablesToCheck) {

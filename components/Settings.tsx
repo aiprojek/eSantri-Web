@@ -13,9 +13,8 @@ const TabCloud = React.lazy(() => import('./settings/tabs/TabCloud').then((modul
 const TabBackup = React.lazy(() => import('./settings/tabs/TabBackup').then((module) => ({ default: module.TabBackup })));
 const TabDiagnostik = React.lazy(() => import('./settings/tabs/TabDiagnostik').then((module) => ({ default: module.TabDiagnostik })));
 const TabDigitalAset = React.lazy(() => import('./settings/tabs/TabDigitalAset').then((module) => ({ default: module.TabDigitalAset })));
-const TabPanduan = React.lazy(() => import('./tentang/TabPanduan').then((module) => ({ default: module.TabPanduan })));
 
-type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'backup' | 'diagnostik' | 'digitalaset' | 'panduan';
+type SettingsTab = 'umum' | 'akun' | 'nis' | 'cloud' | 'backup' | 'diagnostik' | 'digitalaset';
 
 const SETTINGS_TABS: HeaderTabItem<SettingsTab>[] = [
     { value: 'umum', label: 'Umum', icon: 'bi-info-circle' },
@@ -25,7 +24,6 @@ const SETTINGS_TABS: HeaderTabItem<SettingsTab>[] = [
     { value: 'cloud', label: 'Sync Cloud', icon: 'bi-cloud-arrow-up' },
     { value: 'backup', label: 'Backup & Restore', icon: 'bi-hdd-fill' },
     { value: 'diagnostik', label: 'Diagnosa', icon: 'bi-heart-pulse-fill' },
-    { value: 'panduan', label: 'Panduan Sistem', icon: 'bi-book-half' },
 ];
 
 const Settings: React.FC = () => {
@@ -98,6 +96,32 @@ const Settings: React.FC = () => {
         localSettings.tenagaPengajar.filter(t => !t.riwayatJabatan.some(r => r.tanggalSelesai)),
         [localSettings.tenagaPengajar]
     );
+
+    const hasUnsavedChanges = useMemo(() => {
+        const normalizedCurrent = {
+            ...settings,
+            cloudSyncConfig: {
+                ...settings.cloudSyncConfig,
+                dropboxAppKey: localSettings.cloudSyncConfig?.dropboxAppKey || '',
+                dropboxAppSecret: localSettings.cloudSyncConfig?.dropboxAppSecret || '',
+                webdavPassword: localSettings.cloudSyncConfig?.webdavPassword || ''
+            }
+        };
+        return JSON.stringify(localSettings) !== JSON.stringify(normalizedCurrent);
+    }, [localSettings, settings]);
+
+    const handleResetChanges = () => {
+        setLocalSettings({
+            ...settings,
+            cloudSyncConfig: {
+                ...settings.cloudSyncConfig,
+                dropboxAppKey: '',
+                dropboxAppSecret: '',
+                webdavPassword: ''
+            }
+        });
+        showToast('Perubahan dibatalkan dan dikembalikan ke pengaturan tersimpan.', 'info');
+    };
 
     const handleInputChange = <K extends keyof PondokSettings>(key: K, value: PondokSettings[K]) => {
         setLocalSettings(prev => ({ ...prev, [key]: value }));
@@ -174,7 +198,18 @@ const Settings: React.FC = () => {
             <PageHeader
                 eyebrow="Sistem"
                 title="Pengaturan Sistem"
-                description="Kelola konfigurasi pondok, akun, generator NIS, portal, cloud sync, backup, dan diagnostik dari panel terpusat."
+                description="Kelola konfigurasi pondok, akun, generator NIS, aset digital, cloud sync, backup, dan diagnostik dari panel terpusat."
+                actions={
+                    <button
+                        type="button"
+                        onClick={() => window.dispatchEvent(new CustomEvent('open-panduan', { detail: 'pengaturan' }))}
+                        className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/80 px-3.5 py-2 text-xs font-bold text-teal-800 hover:bg-teal-100 transition-colors shadow-2xs"
+                        title="Buka Panduan Lengkap Pengaturan Sistem & SOP Multi-Admin"
+                    >
+                        <i className="bi bi-book-half text-teal-600"></i>
+                        <span>Panduan Pengaturan</span>
+                    </button>
+                }
                 tabs={<HeaderTabs tabs={SETTINGS_TABS} value={activeTab} onChange={setActiveTab} />}
             />
 
@@ -229,15 +264,69 @@ const Settings: React.FC = () => {
                     {activeTab === 'backup' && <TabBackup localSettings={localSettings} setLocalSettings={setLocalSettings} />}
                     {activeTab === 'diagnostik' && <TabDiagnostik />}
                     {activeTab === 'digitalaset' && <TabDigitalAset />}
-                    {activeTab === 'panduan' && <TabPanduan />}
                 </Suspense>
             </div>
             
-            {activeTab !== 'panduan' && (
-                <div className="sticky bottom-4 z-10 mt-6 flex justify-end">
-                    <button onClick={handleSaveSettingsHandler} disabled={isSaving} className="app-button-primary min-w-[190px] px-8 py-3 disabled:cursor-not-allowed disabled:opacity-60">
-                        {isSaving ? <><svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Menyimpan...</span></> : <><i className="bi bi-save-fill mr-2"></i> Simpan Perubahan</>}
-                    </button>
+            {(hasUnsavedChanges || ['umum', 'akun', 'nis', 'cloud'].includes(activeTab)) && (
+                <div className="sticky bottom-4 z-20 mt-6">
+                    <div className={`flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border p-3.5 shadow-lg backdrop-blur-md transition-all ${
+                        hasUnsavedChanges
+                            ? 'bg-amber-950/90 border-amber-500/40 text-white'
+                            : 'bg-white/90 border-slate-200 text-slate-700'
+                    }`}>
+                        <div className="flex items-center gap-3 text-xs sm:text-sm px-2">
+                            {hasUnsavedChanges ? (
+                                <>
+                                    <span className="flex h-2.5 w-2.5 relative">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
+                                    </span>
+                                    <span className="font-semibold text-amber-100">
+                                        Terdapat perubahan pengaturan yang belum disimpan.
+                                    </span>
+                                </>
+                            ) : (
+                                <>
+                                    <i className="bi bi-check2-circle text-teal-600 text-base"></i>
+                                    <span className="text-slate-500 font-medium">
+                                        Seluruh perubahan pengaturan pada tab ini sudah tersimpan.
+                                    </span>
+                                </>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                            {hasUnsavedChanges && (
+                                <button
+                                    type="button"
+                                    onClick={handleResetChanges}
+                                    disabled={isSaving}
+                                    className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-amber-100 border border-white/15 transition-colors"
+                                >
+                                    <i className="bi bi-arrow-counterclockwise mr-1.5"></i>
+                                    Reset Perubahan
+                                </button>
+                            )}
+                            <button
+                                onClick={handleSaveSettingsHandler}
+                                disabled={isSaving}
+                                className="app-button-primary min-w-[180px] px-6 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isSaving ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span>Menyimpan...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="bi bi-save-fill mr-2"></i> Simpan Perubahan
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

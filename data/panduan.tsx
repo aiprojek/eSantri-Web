@@ -9,6 +9,7 @@ import { financePanduan } from './panduan/finance';
 import { bukukasPanduan } from './panduan/bukukas';
 import { koperasiPanduan } from './panduan/koperasi';
 import { auditlogPanduan } from './panduan/auditlog';
+import { pengaturanPanduan } from './panduan/pengaturan';
 
 export interface PanduanStepData {
     title: string;
@@ -4118,6 +4119,7 @@ export const panduanData: PanduanSectionData[] = [
         ]
     },
     auditlogPanduan,
+    pengaturanPanduan,
     kalenderPanduan,
     perpustakaanPanduan,
     {

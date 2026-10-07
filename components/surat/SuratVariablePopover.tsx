@@ -1,11 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SURAT_VARIABLES, SuratVariableInfo } from '../../data/suratPresets';
+import { useAppContext } from '../../AppContext';
+import { formatCustomFieldTag } from '../common/PrintHeader';
 
 interface SuratVariablePopoverProps {
     onInsertVariable: (variableKey: string) => void;
 }
 
 export const SuratVariablePopover: React.FC<SuratVariablePopoverProps> = ({ onInsertVariable }) => {
+    const { settings } = useAppContext();
     const [isOpen, setIsOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState<string>('Santri');
     const [search, setSearch] = useState('');
@@ -13,7 +16,19 @@ export const SuratVariablePopover: React.FC<SuratVariablePopoverProps> = ({ onIn
 
     const categories = ['Santri', 'Akademik & Asrama', 'Orang Tua', 'Lembaga & Surat', 'Semua'];
 
-    const filteredVariables = SURAT_VARIABLES.filter(v => {
+    const allVariables = useMemo(() => {
+        const customVars: SuratVariableInfo[] = (settings.customInfoFields || [])
+            .filter(f => f && f.label && f.label.trim())
+            .map(f => ({
+                key: formatCustomFieldTag(f.label),
+                label: f.label.trim(),
+                category: 'Lembaga & Surat' as const,
+                example: f.value || '-'
+            }));
+        return [...SURAT_VARIABLES, ...customVars];
+    }, [settings.customInfoFields]);
+
+    const filteredVariables = allVariables.filter(v => {
         if (selectedCategory !== 'Semua' && v.category !== selectedCategory) return false;
         if (search) {
             const q = search.toLowerCase();

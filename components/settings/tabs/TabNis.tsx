@@ -410,6 +410,86 @@ export const TabNis: React.FC<TabNisProps> = ({ localSettings, setLocalSettings 
                         )}
                     </div>
                 )}
+
+                {/* Live Preview Simulasi Format NIS & Ringkasan Cakupan */}
+                <div className="mt-6 rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50/70 to-emerald-50/40 p-4 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-teal-200/70 pb-3">
+                        <div>
+                            <h4 className="text-sm font-bold text-teal-950 flex items-center gap-2">
+                                <i className="bi bi-eye-fill text-teal-600"></i>
+                                Simulasi Live Preview Format NIS
+                            </h4>
+                            <p className="text-xs text-teal-800 mt-0.5">
+                                Contoh hasil akhir NIS untuk santri simulasi (Tgl Masuk: <strong>15 Juli {new Date().getFullYear()}</strong>, Tgl Lahir: <strong>20 Mei 2012</strong>, Putra).
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="px-2.5 py-1 rounded-full bg-white border border-teal-200 text-teal-800 font-semibold">
+                                Memiliki NIS: {santriList.filter(s => s.nis && s.nis.trim() !== '').length}
+                            </span>
+                            <span className="px-2.5 py-1 rounded-full bg-amber-100 border border-amber-200 text-amber-900 font-semibold">
+                                Belum Ada NIS: {santriList.filter(s => !s.nis || s.nis.trim() === '').length}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {localSettings.jenjang.map(j => {
+                            const { nisSettings } = localSettings;
+                            const isIndependent = Boolean(nisSettings.useIndependentSettings);
+                            const jc = nisSettings.jenjangConfig.find(c => c.jenjangId === j.id);
+                            const method = isIndependent ? (jc?.method || 'global') : (nisSettings.generationMethod || 'global');
+                            const startNum = (isIndependent || method === 'custom')
+                                ? (jc?.startNumber ?? 1)
+                                : (nisSettings.globalStartNumber ?? 1);
+                            const padding = (isIndependent || method === 'custom')
+                                ? (jc?.padding ?? 3)
+                                : (method === 'dob' ? (nisSettings.dobPadding ?? 3) : (nisSettings.globalPadding ?? 4));
+                            const seqStr = String(startNum).padStart(Math.max(1, padding), '0');
+                            const curYearFull = nisSettings.masehiYearSource === 'manual'
+                                ? String(nisSettings.manualMasehiYear || new Date().getFullYear())
+                                : String(new Date().getFullYear());
+                            const estimatedHijriYear = Math.floor(((new Date().getFullYear() - 622) * 33) / 32);
+                            const hijriYearFull = nisSettings.hijriahYearSource === 'manual'
+                                ? String(nisSettings.manualHijriahYear || estimatedHijriYear)
+                                : String(estimatedHijriYear);
+
+                            let sampleNis = '';
+                            if (method === 'custom') {
+                                const fmt = String((isIndependent ? jc?.format : nisSettings.format) || '{TM}{KODE}{NO_URUT}');
+                                sampleNis = fmt
+                                    .replace(/\{TM\}/g, curYearFull.slice(-2))
+                                    .replace(/\{TM4\}/g, curYearFull)
+                                    .replace(/\{TH\}/g, hijriYearFull.slice(-2))
+                                    .replace(/\{TH4\}/g, hijriYearFull)
+                                    .replace(/\{KODE\}/g, j.kode || '01')
+                                    .replace(/\{NO_URUT\}/g, seqStr);
+                            } else if (method === 'dob') {
+                                const sep = nisSettings.dobSeparator || '';
+                                const dobPart = nisSettings.dobFormat === 'DDMMYY' ? '200512' : nisSettings.dobFormat === 'YYMMDD' ? '120520' : '20120520';
+                                const jenjangPart = nisSettings.dobUseJenjangCode ? (j.kode || '') : '';
+                                sampleNis = [dobPart, jenjangPart, seqStr].filter(Boolean).join(sep);
+                            } else {
+                                const prefix = isIndependent ? (jc?.prefix || '') : (nisSettings.globalPrefix || '');
+                                const useYear = isIndependent ? (jc?.useYearPrefix ?? true) : (nisSettings.globalUseYearPrefix ?? true);
+                                const useCode = isIndependent ? (jc?.useJenjangCode ?? true) : (nisSettings.globalUseJenjangCode ?? true);
+                                sampleNis = `${prefix}${useYear ? curYearFull : ''}${useCode ? (j.kode || '') : ''}${seqStr}`;
+                            }
+
+                            return (
+                                <div key={j.id} className="bg-white rounded-lg border border-teal-200/80 p-3 flex items-center justify-between shadow-2xs">
+                                    <div>
+                                        <div className="text-[11px] font-bold text-slate-500 uppercase">{j.nama} ({j.kode})</div>
+                                        <div className="font-mono text-sm font-black text-teal-800 tracking-wider mt-0.5">{sampleNis || '-'}</div>
+                                    </div>
+                                    <span className="text-[10px] px-2 py-0.5 rounded bg-teal-50 text-teal-700 font-semibold border border-teal-100 uppercase">
+                                        {method === 'custom' ? 'Kustom' : method === 'dob' ? 'Tgl Lahir' : 'Prefix'}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
             </div>
         </div>
     );

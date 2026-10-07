@@ -1,10 +1,10 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { AiConfig, PondokSettings, TenagaPengajar, Jenjang } from '../../../types';
+import { AiConfig, PondokSettings, PondokCustomInfoField, TenagaPengajar, Jenjang } from '../../../types';
 import { compressImage } from '../../../utils/imageOptimizer';
 import { SectionCard } from '../../common/SectionCard';
+import { formatCustomFieldTag, getKopIdentityLines } from '../../common/PrintHeader';
 import { useAppContext } from '../../../AppContext';
-import { formatTanggalDokumen, DateFormatMode } from '../../../utils/formatters';
 import { APP_VERSION } from '../../../version';
 
 interface TabUmumProps {
@@ -107,6 +107,11 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
     const [isLoadingOpenRouterModels, setIsLoadingOpenRouterModels] = useState(false);
     const [openRouterModelQuery, setOpenRouterModelQuery] = useState('');
     const [openRouterModels, setOpenRouterModels] = useState<Array<{ id: string; isFree: boolean }>>([]);
+    const [showApiKeys, setShowApiKeys] = useState<{ openai: boolean; gemini: boolean; openrouter: boolean }>({
+        openai: false,
+        gemini: false,
+        openrouter: false
+    });
     
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
@@ -526,12 +531,34 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                         </select>
                     </div>
                      <div>
-                        <label className="mb-1 block text-sm font-medium text-slate-700">NSPP</label>
-                        <input type="text" value={localSettings.nspp} onChange={(e) => handleInputChange('nspp', e.target.value)} className="app-input block w-full p-2.5 text-sm" />
+                        <div className="mb-1 flex items-center justify-between">
+                            <label className="block text-sm font-medium text-slate-700">NSPP</label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-600 hover:text-teal-700 select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={localSettings.showNsppInKop !== false}
+                                    onChange={(e) => handleInputChange('showNsppInKop', e.target.checked)}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span>Tampil di Kop</span>
+                            </label>
+                        </div>
+                        <input type="text" value={localSettings.nspp} onChange={(e) => handleInputChange('nspp', e.target.value)} className="app-input block w-full p-2.5 text-sm" placeholder="cth: 510033020001" />
                     </div>
                     <div>
-                        <label className="mb-1 block text-sm font-medium text-slate-700">NPSN</label>
-                        <input type="text" value={localSettings.npsn} onChange={(e) => handleInputChange('npsn', e.target.value)} className="app-input block w-full p-2.5 text-sm" />
+                        <div className="mb-1 flex items-center justify-between">
+                            <label className="block text-sm font-medium text-slate-700">NPSN</label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-600 hover:text-teal-700 select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={localSettings.showNpsnInKop !== false}
+                                    onChange={(e) => handleInputChange('showNpsnInKop', e.target.checked)}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                <span>Tampil di Kop</span>
+                            </label>
+                        </div>
+                        <input type="text" value={localSettings.npsn} onChange={(e) => handleInputChange('npsn', e.target.value)} className="app-input block w-full p-2.5 text-sm" placeholder="cth: 69900001" />
                     </div>
                     <div>
                         <label className="mb-1 block text-sm font-medium text-slate-700">Telepon</label>
@@ -548,6 +575,270 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                     <div className="md:col-span-2">
                         <label className="mb-1 block text-sm font-medium text-slate-700">Alamat</label>
                         <textarea value={localSettings.alamat} onChange={(e) => handleInputChange('alamat', e.target.value)} rows={2} className="app-input block w-full p-2.5 text-sm"></textarea>
+                    </div>
+
+                    {/* DATA & IDENTITAS TAMBAHAN FLEKSIBEL (NOMOR IJOB, SK, AKREDITASI, DLL) */}
+                    <div className="md:col-span-2 rounded-xl border border-teal-200 bg-teal-50/40 p-4 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <i className="bi bi-card-checklist text-teal-600"></i>
+                                    Data & Nomor Identitas Tambahan (Fleksibel)
+                                </h4>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                    Tambahkan data legalitas atau atribut lembaga sesuai kebutuhan (misal: <strong>Nomor IJOB</strong>, <strong>SK Kemenag</strong>, <strong>Akreditasi</strong>, <strong>NPWP</strong>) dan atur apakah ditampilkan di <strong>Kop Surat / Dokumen</strong>.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const current = localSettings.customInfoFields || [];
+                                    const nextField: PondokCustomInfoField = {
+                                        id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                                        label: '',
+                                        value: '',
+                                        showInKop: true
+                                    };
+                                    handleInputChange('customInfoFields', [...current, nextField]);
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-teal-700 transition-colors shrink-0"
+                            >
+                                <i className="bi bi-plus-lg"></i> Tambah Field Baru
+                            </button>
+                        </div>
+
+                        {/* Quick-Add Presets */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-slate-500 mr-1">Tambah Cepat:</span>
+                            {[
+                                { label: 'No. IJOB', placeholder: 'Kw.11.5/5/PP.00.7/1234/2023' },
+                                { label: 'SK Kemenag', placeholder: 'Nomor SK Izin Operasional Kemenag' },
+                                { label: 'SK Kemenkumham', placeholder: 'AHU-0012345.AH.01.04.Tahun 2022' },
+                                { label: 'Akreditasi', placeholder: 'Terakreditasi A' },
+                                { label: 'NSM / NSDT', placeholder: '311233020001' },
+                                { label: 'NPWP', placeholder: '01.234.567.8-901.000' },
+                            ].map((preset) => {
+                                const alreadyExists = (localSettings.customInfoFields || []).some(
+                                    (f) => f.label.trim().toLowerCase() === preset.label.toLowerCase()
+                                );
+                                return (
+                                    <button
+                                        key={preset.label}
+                                        type="button"
+                                        disabled={alreadyExists}
+                                        onClick={() => {
+                                            const current = localSettings.customInfoFields || [];
+                                            handleInputChange('customInfoFields', [
+                                                ...current,
+                                                {
+                                                    id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                                                    label: preset.label,
+                                                    value: '',
+                                                    showInKop: true
+                                                }
+                                            ]);
+                                        }}
+                                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                                            alreadyExists
+                                                ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                : 'border-teal-200 bg-white text-teal-800 hover:bg-teal-600 hover:text-white hover:border-teal-600 shadow-2xs'
+                                        }`}
+                                    >
+                                        <i className={`bi ${alreadyExists ? 'bi-check2' : 'bi-plus'}`}></i>
+                                        {preset.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* List of Custom Fields */}
+                        {(localSettings.customInfoFields || []).length > 0 ? (
+                            <div className="space-y-2.5">
+                                {(localSettings.customInfoFields || []).map((field, index) => {
+                                    const list = localSettings.customInfoFields || [];
+                                    const varTag = formatCustomFieldTag(field.label);
+                                    return (
+                                        <div
+                                            key={field.id || index}
+                                            className="flex flex-col md:flex-row items-stretch md:items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs"
+                                        >
+                                            <div className="w-full md:w-1/3">
+                                                <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                                                    Nama Field / Label
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={field.label}
+                                                    placeholder="cth: No. IJOB / SK Kemenag"
+                                                    onChange={(e) => {
+                                                        const updated = [...list];
+                                                        updated[index] = { ...updated[index], label: e.target.value };
+                                                        handleInputChange('customInfoFields', updated);
+                                                    }}
+                                                    className="app-input block w-full p-2 text-xs font-semibold"
+                                                />
+                                            </div>
+                                            <div className="w-full md:flex-1">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                                        Isi / Nomor Data
+                                                    </label>
+                                                    {field.label.trim() && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                navigator.clipboard?.writeText(varTag);
+                                                                showToast(`Tag variabel ${varTag} disalin! Bisa dipakai di Surat & Rapor.`, 'info');
+                                                            }}
+                                                            title="Klik untuk menyalin tag variabel (dapat dipakai di template Surat Menyurat & Rapor)"
+                                                            className="text-[10px] font-mono text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-1.5 py-0.2 rounded flex items-center gap-1"
+                                                        >
+                                                            <i className="bi bi-braces"></i> {varTag}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={field.value}
+                                                    placeholder="Masukkan nomor atau informasi..."
+                                                    onChange={(e) => {
+                                                        const updated = [...list];
+                                                        updated[index] = { ...updated[index], value: e.target.value };
+                                                        handleInputChange('customInfoFields', updated);
+                                                    }}
+                                                    className="app-input block w-full p-2 text-xs"
+                                                />
+                                            </div>
+                                            <div className="flex items-center justify-between md:justify-end gap-2 pt-1 md:pt-4 shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const updated = [...list];
+                                                        updated[index] = { ...updated[index], showInKop: !updated[index].showInKop };
+                                                        handleInputChange('customInfoFields', updated);
+                                                    }}
+                                                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
+                                                        field.showInKop
+                                                            ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                                                            : 'border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                                    }`}
+                                                    title={field.showInKop ? 'Field ini DITAMPILKAN pada Kop Surat & Dokumen Resmi' : 'Field ini DISEMBUNYIKAN dari Kop Surat (hanya disimpan sebagai data/variabel)'}
+                                                >
+                                                    <i className={`bi ${field.showInKop ? 'bi-eye-fill text-emerald-600' : 'bi-eye-slash text-slate-400'}`}></i>
+                                                    <span>{field.showInKop ? 'Tampil di Kop' : 'Disembunyikan'}</span>
+                                                </button>
+
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        type="button"
+                                                        disabled={index === 0}
+                                                        onClick={() => {
+                                                            if (index === 0) return;
+                                                            const updated = [...list];
+                                                            const temp = updated[index - 1];
+                                                            updated[index - 1] = updated[index];
+                                                            updated[index] = temp;
+                                                            handleInputChange('customInfoFields', updated);
+                                                        }}
+                                                        className="rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                                                        title="Geser ke Atas"
+                                                    >
+                                                        <i className="bi bi-arrow-up"></i>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={index === list.length - 1}
+                                                        onClick={() => {
+                                                            if (index === list.length - 1) return;
+                                                            const updated = [...list];
+                                                            const temp = updated[index + 1];
+                                                            updated[index + 1] = updated[index];
+                                                            updated[index] = temp;
+                                                            handleInputChange('customInfoFields', updated);
+                                                        }}
+                                                        className="rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                                                        title="Geser ke Bawah"
+                                                    >
+                                                        <i className="bi bi-arrow-down"></i>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const updated = list.filter((_, idx) => idx !== index);
+                                                            handleInputChange('customInfoFields', updated);
+                                                        }}
+                                                        className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-600 hover:bg-rose-100"
+                                                        title="Hapus Field"
+                                                    >
+                                                        <i className="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-dashed border-teal-300 bg-white/70 p-4 text-center text-xs text-slate-500">
+                                Belum ada field tambahan. Klik <strong>"+ Tambah Field Baru"</strong> atau pilih tombol tambah cepat di atas (misal: <strong>No. IJOB</strong>).
+                            </div>
+                        )}
+
+                        {/* Live Preview Kop Surat */}
+                        <div className="rounded-xl border border-slate-300 bg-white p-4 shadow-2xs">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1.5">
+                                    <i className="bi bi-printer"></i> Pratinjau Langsung Kop Surat Resmi
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                    Otomatis diterapkan ke Surat Menyurat, Rapor, Laporan & Kwitansi
+                                </span>
+                            </div>
+                            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                                <div className="flex items-center justify-between gap-3 text-black">
+                                    <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                                        {localSettings.logoYayasanUrl ? (
+                                            <img src={localSettings.logoYayasanUrl} alt="Logo Yayasan" className="max-h-full max-w-full object-contain" />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[9px] text-slate-400">Logo</div>
+                                        )}
+                                    </div>
+                                    <div className="text-center flex-1 px-2">
+                                        {localSettings.namaYayasan && (
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-700 leading-tight">
+                                                {localSettings.namaYayasan}
+                                            </p>
+                                        )}
+                                        <p className="text-sm font-extrabold uppercase text-slate-900 leading-tight">
+                                            {localSettings.namaPonpes || 'Nama Pondok Pesantren'}
+                                        </p>
+                                        {getKopIdentityLines(localSettings).length > 0 && (
+                                            <p className="text-[11px] font-semibold text-teal-800 mt-0.5">
+                                                {getKopIdentityLines(localSettings).join(' | ')}
+                                            </p>
+                                        )}
+                                        <p className="text-[10px] text-slate-600 mt-0.5 leading-snug">
+                                            {localSettings.alamat || 'Alamat Pondok Pesantren'}
+                                        </p>
+                                        <p className="text-[10px] text-slate-500 leading-snug">
+                                            {[
+                                                localSettings.telepon?.trim() ? `Telp: ${localSettings.telepon.trim()}` : '',
+                                                localSettings.email?.trim() ? `Email: ${localSettings.email.trim()}` : '',
+                                                localSettings.website?.trim() ? `Website: ${localSettings.website.trim()}` : '',
+                                            ].filter(Boolean).join(' | ')}
+                                        </p>
+                                    </div>
+                                    <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                                        {localSettings.logoPonpesUrl ? (
+                                            <img src={localSettings.logoPonpesUrl} alt="Logo Ponpes" className="max-h-full max-w-full object-contain" />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[9px] text-slate-400">Logo</div>
+                                        )}
+                                    </div>
+                                </div>
+                                <hr className="mt-2 border-t-2 border-slate-800" />
+                            </div>
+                        </div>
                     </div>
 
                     <div className="md:col-span-2 bg-yellow-50 p-4 rounded-lg border border-yellow-200">
@@ -623,146 +914,6 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
             </SectionCard>
 
             <SectionCard
-                title="Titimangsa Dokumen (Rapor & Syahadah)"
-                description="Atur tempat, tanggal, dan format default (Masehi / Hijriah) untuk penerbitan rapor dan syahadah agar berlaku universal ke seluruh santri."
-                contentClassName="space-y-6 p-6"
-            >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Default Titimangsa Rapor */}
-                    <div className="p-4 rounded-xl border border-teal-200 bg-teal-50/40 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-sm text-teal-900 flex items-center gap-2">
-                                <i className="bi bi-file-earmark-text text-teal-600"></i>
-                                Default Titimangsa Rapor
-                            </h4>
-                            <span className="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full uppercase">Universal</span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">Tempat / Kota</label>
-                                <input
-                                    type="text"
-                                    value={localSettings.tempatRaporDefault || ''}
-                                    onChange={(e) => handleInputChange('tempatRaporDefault', e.target.value)}
-                                    placeholder="Contoh: Banyumas"
-                                    className="app-input block w-full p-2 text-xs"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">Tanggal Diresmikan</label>
-                                <input
-                                    type="date"
-                                    value={localSettings.tanggalRaporDefault || ''}
-                                    onChange={(e) => handleInputChange('tanggalRaporDefault', e.target.value)}
-                                    className="app-input block w-full p-2 text-xs"
-                                />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">Format Tanggal Rapor</label>
-                                <select
-                                    value={localSettings.formatTanggalRaporDefault || 'masehi'}
-                                    onChange={(e) => handleInputChange('formatTanggalRaporDefault', e.target.value as DateFormatMode)}
-                                    className="app-select block w-full p-2 text-xs"
-                                >
-                                    <option value="masehi">📅 Masehi Saja (Contoh: 15 Maret 2026)</option>
-                                    <option value="hijriah_masehi">🌙 Masehi & Hijriah (Contoh: 15 Maret 2026 / 26 Ramadhan 1447 H)</option>
-                                    <option value="hijriah">🕌 Hijriah Saja (Contoh: 26 Ramadhan 1447 H)</option>
-                                </select>
-                            </div>
-                            {localSettings.formatTanggalRaporDefault !== 'masehi' && (
-                                <div className="sm:col-span-2">
-                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Teks Hijriah Manual (Opsional):</label>
-                                    <input
-                                        type="text"
-                                        value={localSettings.manualHijriRaporDefault || ''}
-                                        onChange={(e) => handleInputChange('manualHijriRaporDefault', e.target.value)}
-                                        placeholder="Kosongkan untuk otomatis konversi kalender Hijriah"
-                                        className="app-input block w-full p-2 text-xs placeholder:text-gray-400"
-                                    />
-                                </div>
-                            )}
-                        </div>
-                        <div className="text-xs bg-white p-2.5 rounded-lg border border-teal-200 text-gray-700 flex items-center justify-between flex-wrap gap-2">
-                            <span className="font-semibold text-gray-500">Hasil Render Titimangsa:</span>
-                            <span className="font-bold text-teal-800">
-                                {localSettings.tempatRaporDefault || 'Pondok'}, {formatTanggalDokumen(localSettings.tanggalRaporDefault || new Date().toISOString().split('T')[0], {
-                                    formatMode: localSettings.formatTanggalRaporDefault || 'masehi',
-                                    hijriAdjustment: localSettings.hijriAdjustment || 0,
-                                    manualHijri: localSettings.manualHijriRaporDefault
-                                })}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Default Titimangsa Syahadah */}
-                    <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-sm text-amber-950 flex items-center gap-2">
-                                <i className="bi bi-award text-amber-600"></i>
-                                Default Titimangsa Syahadah
-                            </h4>
-                            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full uppercase">Universal</span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">Tempat / Kota Penetapan</label>
-                                <input
-                                    type="text"
-                                    value={localSettings.tempatSyahadahDefault || ''}
-                                    onChange={(e) => handleInputChange('tempatSyahadahDefault', e.target.value)}
-                                    placeholder="Contoh: Banyumas"
-                                    className="app-input block w-full p-2 text-xs"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">Tanggal Diresmikan</label>
-                                <input
-                                    type="date"
-                                    value={localSettings.tanggalSyahadahDefault || ''}
-                                    onChange={(e) => handleInputChange('tanggalSyahadahDefault', e.target.value)}
-                                    className="app-input block w-full p-2 text-xs"
-                                />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <label className="block text-xs font-semibold text-gray-600 mb-1">Format Tanggal Syahadah</label>
-                                <select
-                                    value={localSettings.formatTanggalSyahadahDefault || 'masehi'}
-                                    onChange={(e) => handleInputChange('formatTanggalSyahadahDefault', e.target.value as DateFormatMode)}
-                                    className="app-select block w-full p-2 text-xs"
-                                >
-                                    <option value="masehi">📅 Masehi Saja (Contoh: 15 Maret 2026)</option>
-                                    <option value="hijriah_masehi">🌙 Masehi & Hijriah (Contoh: 15 Maret 2026 / 26 Ramadhan 1447 H)</option>
-                                    <option value="hijriah">🕌 Hijriah Saja (Contoh: 26 Ramadhan 1447 H)</option>
-                                </select>
-                            </div>
-                            {localSettings.formatTanggalSyahadahDefault !== 'masehi' && (
-                                <div className="sm:col-span-2">
-                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Teks Hijriah Manual (Opsional):</label>
-                                    <input
-                                        type="text"
-                                        value={localSettings.manualHijriSyahadahDefault || ''}
-                                        onChange={(e) => handleInputChange('manualHijriSyahadahDefault', e.target.value)}
-                                        placeholder="Kosongkan untuk otomatis konversi kalender Hijriah"
-                                        className="app-input block w-full p-2 text-xs placeholder:text-gray-400"
-                                    />
-                                </div>
-                            )}
-                        </div>
-                        <div className="text-xs bg-white p-2.5 rounded-lg border border-amber-200 text-gray-700 flex items-center justify-between flex-wrap gap-2">
-                            <span className="font-semibold text-gray-500">Hasil Render Titimangsa:</span>
-                            <span className="font-bold text-amber-900">
-                                {localSettings.tempatSyahadahDefault || 'Pesantren'}, {formatTanggalDokumen(localSettings.tanggalSyahadahDefault || new Date().toISOString().split('T')[0], {
-                                    formatMode: localSettings.formatTanggalSyahadahDefault || 'masehi',
-                                    hijriAdjustment: localSettings.hijriAdjustment || 0,
-                                    manualHijri: localSettings.manualHijriSyahadahDefault
-                                })}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </SectionCard>
-
-            <SectionCard
                 title="AI Assistant (BYOK)"
                 description="Pengaturan AI dibuat ringkas: pilih provider aktif, isi kredensial yang diperlukan, lalu uji koneksi."
                 contentClassName="space-y-4 p-6"
@@ -797,14 +948,42 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
 
                 {aiConfig.provider === 'openai' && (
                     <div className="rounded-xl border border-app-border bg-white p-4 space-y-3">
-                        <div className="text-sm font-semibold text-slate-800">OpenAI</div>
-                        <input
-                            type="password"
-                            value={aiConfig.openaiApiKey || ''}
-                            onChange={(e) => handleAiConfigChange({ openaiApiKey: e.target.value })}
-                            className="app-input block w-full p-2.5 text-sm"
-                            placeholder="OpenAI API key (sk-...)"
-                        />
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                                <span>OpenAI API Key</span>
+                                {aiConfig.openaiApiKey ? (
+                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Tersimpan</span>
+                                ) : (
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">Belum Diisi</span>
+                                )}
+                            </div>
+                            {aiConfig.openaiApiKey && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleAiConfigChange({ openaiApiKey: '' })}
+                                    className="text-xs text-red-600 hover:text-red-700 font-medium"
+                                >
+                                    Hapus Key
+                                </button>
+                            )}
+                        </div>
+                        <div className="relative">
+                            <input
+                                type={showApiKeys.openai ? 'text' : 'password'}
+                                value={aiConfig.openaiApiKey || ''}
+                                onChange={(e) => handleAiConfigChange({ openaiApiKey: e.target.value })}
+                                className="app-input block w-full p-2.5 pr-10 text-sm font-mono"
+                                placeholder="OpenAI API key (sk-...)"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowApiKeys(prev => ({ ...prev, openai: !prev.openai }))}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                title={showApiKeys.openai ? 'Sembunyikan API Key' : 'Tampilkan API Key'}
+                            >
+                                <i className={`bi ${showApiKeys.openai ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                            </button>
+                        </div>
                         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                             <input
                                 type="text"
@@ -829,14 +1008,42 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
 
                 {aiConfig.provider === 'gemini' && (
                     <div className="rounded-xl border border-app-border bg-white p-4 space-y-3">
-                        <div className="text-sm font-semibold text-slate-800">Gemini</div>
-                        <input
-                            type="password"
-                            value={aiConfig.geminiApiKey || ''}
-                            onChange={(e) => handleAiConfigChange({ geminiApiKey: e.target.value })}
-                            className="app-input block w-full p-2.5 text-sm"
-                            placeholder="Gemini API key (AIza...)"
-                        />
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                                <span>Gemini API Key</span>
+                                {aiConfig.geminiApiKey ? (
+                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Tersimpan</span>
+                                ) : (
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">Belum Diisi</span>
+                                )}
+                            </div>
+                            {aiConfig.geminiApiKey && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleAiConfigChange({ geminiApiKey: '' })}
+                                    className="text-xs text-red-600 hover:text-red-700 font-medium"
+                                >
+                                    Hapus Key
+                                </button>
+                            )}
+                        </div>
+                        <div className="relative">
+                            <input
+                                type={showApiKeys.gemini ? 'text' : 'password'}
+                                value={aiConfig.geminiApiKey || ''}
+                                onChange={(e) => handleAiConfigChange({ geminiApiKey: e.target.value })}
+                                className="app-input block w-full p-2.5 pr-10 text-sm font-mono"
+                                placeholder="Gemini API key (AIza...)"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowApiKeys(prev => ({ ...prev, gemini: !prev.gemini }))}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                title={showApiKeys.gemini ? 'Sembunyikan API Key' : 'Tampilkan API Key'}
+                            >
+                                <i className={`bi ${showApiKeys.gemini ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                            </button>
+                        </div>
                         <input
                             type="text"
                             value={aiConfig.geminiModel || 'gemini-2.5-flash'}
@@ -852,14 +1059,42 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
 
                 {aiConfig.provider === 'openrouter' && (
                     <div className="rounded-xl border border-app-border bg-white p-4 space-y-3">
-                        <div className="text-sm font-semibold text-slate-800">OpenRouter</div>
-                        <input
-                            type="password"
-                            value={aiConfig.openrouterApiKey || ''}
-                            onChange={(e) => handleAiConfigChange({ openrouterApiKey: e.target.value })}
-                            className="app-input block w-full p-2.5 text-sm"
-                            placeholder="OpenRouter API key (sk-or-v1-...)"
-                        />
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                                <span>OpenRouter API Key</span>
+                                {aiConfig.openrouterApiKey ? (
+                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Tersimpan</span>
+                                ) : (
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">Belum Diisi</span>
+                                )}
+                            </div>
+                            {aiConfig.openrouterApiKey && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleAiConfigChange({ openrouterApiKey: '' })}
+                                    className="text-xs text-red-600 hover:text-red-700 font-medium"
+                                >
+                                    Hapus Key
+                                </button>
+                            )}
+                        </div>
+                        <div className="relative">
+                            <input
+                                type={showApiKeys.openrouter ? 'text' : 'password'}
+                                value={aiConfig.openrouterApiKey || ''}
+                                onChange={(e) => handleAiConfigChange({ openrouterApiKey: e.target.value })}
+                                className="app-input block w-full p-2.5 pr-10 text-sm font-mono"
+                                placeholder="OpenRouter API key (sk-or-v1-...)"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowApiKeys(prev => ({ ...prev, openrouter: !prev.openrouter }))}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                title={showApiKeys.openrouter ? 'Sembunyikan API Key' : 'Tampilkan API Key'}
+                            >
+                                <i className={`bi ${showApiKeys.openrouter ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                            </button>
+                        </div>
                         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                             <input
                                 type="text"

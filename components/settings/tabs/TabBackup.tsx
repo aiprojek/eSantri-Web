@@ -358,27 +358,53 @@ export const TabBackup: React.FC<TabBackupProps> = ({ localSettings, setLocalSet
                 <HealthDashboard />
 
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <div>
-                        <h3 className="text-lg font-semibold text-slate-800">Cadangkan Data (Manual)</h3>
-                        <p className="mb-4 mt-1 text-sm text-slate-600">Simpan salinan semua data santri dan pengaturan ke dalam satu file JSON di komputer Anda.</p>
-                        <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-3">
-                            <h4 className="mb-2 text-sm font-semibold text-yellow-800">Pengingat Backup Otomatis</h4>
-                            <div className="flex flex-wrap gap-2">
-                                {[{ value: 'daily', label: 'Setiap Hari' }, { value: 'weekly', label: 'Setiap Minggu' }, { value: 'never', label: 'Matikan' }].map(opt => (
-                                    <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded border bg-white px-3 py-1.5 hover:bg-gray-50">
-                                        <input type="radio" name="backupFreq" value={opt.value} checked={localSettings.backupConfig?.frequency === opt.value} onChange={() => handleBackupConfigChange(opt.value as any)} className="text-teal-600 focus:ring-teal-500"/>
-                                        <span className="text-sm text-gray-700">{opt.label}</span>
-                                    </label>
-                                ))}
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 className="text-lg font-semibold text-slate-800">Cadangkan Data (Manual)</h3>
+                                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                                    localSettings.backupConfig?.lastBackup
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                    {localSettings.backupConfig?.lastBackup
+                                        ? `Terakhir: ${new Date(localSettings.backupConfig.lastBackup).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                                        : 'Belum Pernah Backup'}
+                                </span>
+                            </div>
+                            <p className="mb-4 mt-1 text-sm text-slate-600">Simpan salinan semua data santri, keuangan, akademik, sarpras, dan pengaturan ke dalam satu file JSON di komputer Anda.</p>
+                            <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-3">
+                                <h4 className="mb-2 text-sm font-semibold text-yellow-800">Pengingat Backup Otomatis</h4>
+                                <div className="flex flex-wrap gap-2">
+                                    {[{ value: 'daily', label: 'Setiap Hari' }, { value: 'weekly', label: 'Setiap Minggu' }, { value: 'never', label: 'Matikan' }].map(opt => (
+                                        <label key={opt.value} className="flex cursor-pointer items-center gap-2 rounded border bg-white px-3 py-1.5 hover:bg-gray-50">
+                                            <input type="radio" name="backupFreq" value={opt.value} checked={localSettings.backupConfig?.frequency === opt.value} onChange={() => handleBackupConfigChange(opt.value as any)} className="text-teal-600 focus:ring-teal-500"/>
+                                            <span className="text-sm text-gray-700">{opt.label}</span>
+                                        </label>
+                                    ))}
+                                </div>
                             </div>
                         </div>
-                        <button onClick={downloadBackup} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 sm:w-auto"><i className="bi bi-download"></i><span>Unduh Cadangan Data</span></button>
+                        <button onClick={downloadBackup} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 sm:w-auto"><i className="bi bi-download"></i><span>Unduh Cadangan Data (.JSON)</span></button>
                     </div>
-                    <div>
-                        <h3 className="text-lg font-semibold text-slate-800">Pulihkan Data (Manual)</h3>
-                        <p className="mb-4 mt-1 text-sm text-slate-600">Pulihkan data dari file cadangan JSON. Tindakan ini tidak dapat dibatalkan.</p>
-                        <input type="file" accept=".json" onChange={handleRestoreHandler} ref={restoreInputRef} id="restore-input" className="hidden" />
-                        <label htmlFor="restore-input" className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 sm:w-auto"><i className="bi bi-upload"></i><span>Pilih File Cadangan</span></label>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between">
+                        <div>
+                            <h3 className="text-lg font-semibold text-slate-800">Pulihkan Data (Restore JSON)</h3>
+                            <p className="mb-3 mt-1 text-sm text-slate-600">Pulihkan seluruh database dari file cadangan JSON. Sistem otomatis memvalidasi struktur tabel & melakukan migrasi hak akses user lama.</p>
+                            <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-xs text-blue-900 space-y-1">
+                                <div className="font-bold flex items-center gap-1.5">
+                                    <i className="bi bi-shield-lock-fill text-blue-600"></i>
+                                    Proteksi Pemulihan Aman:
+                                </div>
+                                <p className="text-blue-800 leading-relaxed">
+                                    Mendukung pemulihan 40+ tabel modul secara transaksional (Atomic Transaction). Pastikan Anda telah mengunduh cadangan terbaru sebelum melakukan pemulihan.
+                                </p>
+                            </div>
+                        </div>
+                        <div>
+                            <input type="file" accept=".json" onChange={handleRestoreHandler} ref={restoreInputRef} id="restore-input" className="hidden" />
+                            <label htmlFor="restore-input" className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 sm:w-auto"><i className="bi bi-upload"></i><span>Pilih File Cadangan (.JSON)</span></label>
+                        </div>
                     </div>
                 </div>
             </SectionCard>

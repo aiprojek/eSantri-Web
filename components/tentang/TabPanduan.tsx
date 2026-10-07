@@ -30,6 +30,7 @@ const PANDUAN_ORDER: string[] = [
     'admin',
     'surat',
     'auditlog',
+    'pengaturan',
     'offline',
     'maintenance',
     'fitur',

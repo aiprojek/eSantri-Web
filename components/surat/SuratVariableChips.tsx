@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { SURAT_VARIABLES, SuratVariableInfo } from '../../data/suratPresets';
+import { useAppContext } from '../../AppContext';
+import { formatCustomFieldTag } from '../common/PrintHeader';
 
 interface SuratVariableChipsProps {
     onInsertVariable: (variableKey: string) => void;
@@ -7,14 +9,27 @@ interface SuratVariableChipsProps {
 }
 
 export const SuratVariableChips: React.FC<SuratVariableChipsProps> = ({ onInsertVariable, className = '' }) => {
+    const { settings } = useAppContext();
     const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
     const categories = ['Semua', 'Santri', 'Akademik & Asrama', 'Orang Tua', 'Lembaga & Surat'];
 
+    const allVariables = useMemo(() => {
+        const customVars: SuratVariableInfo[] = (settings.customInfoFields || [])
+            .filter(f => f && f.label && f.label.trim())
+            .map(f => ({
+                key: formatCustomFieldTag(f.label),
+                label: f.label.trim(),
+                category: 'Lembaga & Surat' as const,
+                example: f.value || '-'
+            }));
+        return [...SURAT_VARIABLES, ...customVars];
+    }, [settings.customInfoFields]);
+
     const filteredVariables = selectedCategory === 'Semua' 
-        ? SURAT_VARIABLES 
-        : SURAT_VARIABLES.filter(v => v.category === selectedCategory);
+        ? allVariables 
+        : allVariables.filter(v => v.category === selectedCategory);
 
     const handleChipClick = (variable: SuratVariableInfo) => {
         onInsertVariable(variable.key);

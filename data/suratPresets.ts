@@ -40,6 +40,9 @@ export const SURAT_VARIABLES: SuratVariableInfo[] = [
     { key: '{NOMOR_SURAT}', label: 'Nomor Surat', category: 'Lembaga & Surat', example: '012/SKA/PST/IX/2026' },
     { key: '{TANGGAL}', label: 'Tanggal Surat', category: 'Lembaga & Surat', example: '9 September 2026' },
     { key: '{NAMA_PONDOK}', label: 'Nama Lembaga', category: 'Lembaga & Surat', example: 'Pondok Pesantren eSantri' },
+    { key: '{NAMA_YAYASAN}', label: 'Nama Yayasan', category: 'Lembaga & Surat', example: 'Yayasan Pondok Pesantren' },
+    { key: '{NSPP}', label: 'NSPP', category: 'Lembaga & Surat', example: '510033020001' },
+    { key: '{NPSN}', label: 'NPSN', category: 'Lembaga & Surat', example: '69900001' },
     { key: '{ALAMAT_PONDOK}', label: 'Alamat Lembaga', category: 'Lembaga & Surat', example: 'Jl. Raya Pondok Pesantren No. 99' },
     { key: '{PIMPINAN_PONDOK}', label: 'Pimpinan / Pengasuh', category: 'Lembaga & Surat', example: 'KH. Dr. Ahmad Shiddiq, M.Pd' },
 ];

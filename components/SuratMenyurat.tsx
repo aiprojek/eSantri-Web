@@ -1121,8 +1121,22 @@ const SuratGenerator: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
         content = content.replace(/{TANGGAL}/g, formattedTanggalSurat);
         content = content.replace(/{NOMOR_SURAT}/g, nomorSurat || '...../...../.....');
         content = content.replace(/{NAMA_PONDOK}/g, namaPondok);
+        content = content.replace(/{NAMA_YAYASAN}/g, settings.namaYayasan || '');
+        content = content.replace(/{NSPP}/g, settings.nspp || '-');
+        content = content.replace(/{NPSN}/g, settings.npsn || '-');
         content = content.replace(/{ALAMAT_PONDOK}/g, alamatPondok);
         content = content.replace(/{PIMPINAN_PONDOK}/g, pimpinanPondok);
+
+        if (Array.isArray(settings.customInfoFields)) {
+            settings.customInfoFields.forEach((field) => {
+                if (field && field.label) {
+                    const cleanKey = field.label.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                    if (cleanKey) {
+                        content = content.split(`{${cleanKey}}`).join(field.value || '-');
+                    }
+                }
+            });
+        }
 
         if (santri) {
             // Data Pribadi

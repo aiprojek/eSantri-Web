@@ -344,6 +344,19 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         res = res.replace(/\$TELEPON_PONPES/g, settings.telepon || '-');
         res = res.replace(/\$EMAIL_PONPES/g, settings.email || '-');
         res = res.replace(/\$WEBSITE_PONPES/g, settings.website || '-');
+
+        if (Array.isArray(settings.customInfoFields)) {
+            settings.customInfoFields.forEach((field) => {
+                if (field && field.label) {
+                    const cleanKey = field.label.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                    if (cleanKey) {
+                        const val = field.value || '-';
+                        res = res.split(`$${cleanKey}`).join(val);
+                        res = res.split(`{${cleanKey}}`).join(val);
+                    }
+                }
+            });
+        }
     }
 
     // Period / Record

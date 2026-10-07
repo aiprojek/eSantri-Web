@@ -10,7 +10,7 @@ import { LoadingFallback } from './common/LoadingFallback';
 import { PageHeader } from './common/PageHeader';
 import { SectionCard } from './common/SectionCard';
 
-const TabPortal = React.lazy(() => import('./settings/tabs/TabPortal').then((module) => ({ default: module.TabPortal })));
+const TabPortal = React.lazy(() => import('./portal/TabPortal').then((module) => ({ default: module.TabPortal })));
 
 const PortalManagement: React.FC = () => {
     const { settings, onSaveSettings, showToast, currentUser } = useAppContext();

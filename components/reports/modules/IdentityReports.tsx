@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Santri, PondokSettings } from '../../../types';
-import { PrintHeader } from '../../common/PrintHeader';
+import { PrintHeader, getKopIdentityLines } from '../../common/PrintHeader';
 import { formatDate, toHijri, ReportFooter, SmartAvatar, formatAlamat } from './Common';
 import QRCode from 'qrcode';
 
@@ -1541,6 +1541,11 @@ export const BukuIndukSantriTemplate: React.FC<{
                     <div className="text-center flex-1 px-2">
                         <div className="text-[9px] uppercase tracking-widest font-semibold text-gray-600">Dokumen Arsip Pokok Pendidikan Pesantren</div>
                         <h2 className="text-base font-extrabold uppercase tracking-wide">{settings.namaPonpes}</h2>
+                        {getKopIdentityLines(settings).length > 0 && (
+                            <div className="text-[8.5px] font-semibold text-gray-700">
+                                {getKopIdentityLines(settings).join(' | ')}
+                            </div>
+                        )}
                         <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">LEMBAR BUKU INDUK SANTRI</h3>
                         <p className="text-[9px] text-gray-600">
                             {settings.alamat} {settings.telepon ? `| Telp: ${settings.telepon}` : ''} {settings.email ? `| Email: ${settings.email}` : ''}

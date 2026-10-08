@@ -566,6 +566,16 @@ const AppContent: React.FC = () => {
             );
             return;
         }
+        const isHubSpoke = settings.cloudSyncConfig?.provider === 'dropbox' || settings.cloudSyncConfig?.provider === 'webdav';
+        if (isHubSpoke && pendingChanges > 0) {
+            showConfirmation(
+                'Masih Ada Data Belum Disetor!',
+                `Anda masih memiliki ${pendingChanges} perubahan data lokal yang BELUM dikirim ke Cloud Hub. Jika Anda keluar sekarang tanpa setor data, Admin Inti belum akan menerima pembaruan Anda. Yakin tetap ingin keluar?`,
+                () => { logout(); },
+                { confirmText: 'Tetap Keluar', confirmColor: 'red' }
+            );
+            return;
+        }
         showConfirmation('Logout', 'Anda yakin ingin keluar?', () => { logout(); }, { confirmText: 'Keluar', confirmColor: 'red' });
     };
 
@@ -949,6 +959,36 @@ const AppContent: React.FC = () => {
                             </button>
                         </div>
                         <div className="space-y-4 p-6">
+                            <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs">
+                                <div>
+                                    <span className="block font-semibold text-slate-500">Terakhir Setor (Push)</span>
+                                    <span className="mt-0.5 block font-bold text-slate-800">
+                                        {settings.cloudSyncConfig?.lastPushAt
+                                            ? new Date(settings.cloudSyncConfig.lastPushAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })
+                                            : settings.cloudSyncConfig?.lastSync
+                                                ? new Date(settings.cloudSyncConfig.lastSync).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })
+                                                : 'Belum pernah'}
+                                    </span>
+                                </div>
+                                <div className="border-l border-slate-200 pl-2.5">
+                                    <span className="block font-semibold text-slate-500">Master Diunduh (Pull)</span>
+                                    <span className="mt-0.5 block font-bold text-slate-800">
+                                        {settings.cloudSyncConfig?.lastPullAt
+                                            ? new Date(settings.cloudSyncConfig.lastPullAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })
+                                            : settings.cloudSyncConfig?.lastSync
+                                                ? new Date(settings.cloudSyncConfig.lastSync).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })
+                                                : 'Belum pernah'}
+                                    </span>
+                                </div>
+                            </div>
+                            {pendingChanges > 0 && (
+                                <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900">
+                                    <i className="bi bi-exclamation-circle-fill mt-0.5 text-sm text-amber-600"></i>
+                                    <div>
+                                        <span className="font-bold">{pendingChanges} perubahan lokal belum disetor.</span> Data lokal Anda tetap terlindungi dan tidak akan tertimpa saat mengunduh Master Data.
+                                    </div>
+                                </div>
+                            )}
                             {canManageSync ? (
                                 <>
                                     <p className="mb-2 text-sm app-text-secondary">

@@ -199,17 +199,6 @@ const Settings: React.FC = () => {
                 eyebrow="Sistem"
                 title="Pengaturan Sistem"
                 description="Kelola konfigurasi pondok, akun, generator NIS, aset digital, cloud sync, backup, dan diagnostik dari panel terpusat."
-                actions={
-                    <button
-                        type="button"
-                        onClick={() => window.dispatchEvent(new CustomEvent('open-panduan', { detail: 'pengaturan' }))}
-                        className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50/80 px-3.5 py-2 text-xs font-bold text-teal-800 hover:bg-teal-100 transition-colors shadow-2xs"
-                        title="Buka Panduan Lengkap Pengaturan Sistem & SOP Multi-Admin"
-                    >
-                        <i className="bi bi-book-half text-teal-600"></i>
-                        <span>Panduan Pengaturan</span>
-                    </button>
-                }
                 tabs={<HeaderTabs tabs={SETTINGS_TABS} value={activeTab} onChange={setActiveTab} />}
             />
 

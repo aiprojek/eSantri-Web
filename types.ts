@@ -433,6 +433,8 @@ export interface CloudSyncConfig {
     firebaseAppId?: string;
     firebaseDatabaseId?: string;
     lastSync?: string;
+    lastPushAt?: string;
+    lastPullAt?: string;
     autoSync?: boolean;
     portalEnabled?: boolean;
     adminNotifyName?: string;

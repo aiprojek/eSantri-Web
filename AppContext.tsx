@@ -209,11 +209,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const { uploadStaffChanges } = await loadSyncService();
                 const result = await uploadStaffChanges(sets.settings.cloudSyncConfig, username);
                 
-                const id = sets.settings.id;
-                await db.settings.update(id!, { 
-                    cloudSyncConfig: { ...sets.settings.cloudSyncConfig, lastSync: new Date().toISOString() } 
-                });
                 if (!(result as any).skipped) {
+                    const nowIso = new Date().toISOString();
+                    const id = sets.settings.id;
+                    await db.settings.update(id!, { 
+                        cloudSyncConfig: {
+                            ...sets.settings.cloudSyncConfig,
+                            lastSync: nowIso,
+                            lastPushAt: nowIso
+                        } 
+                    });
+                    setPendingChanges(0);
                     triggerAdminNotifyPrompt(result, auth.currentUser?.fullName || auth.currentUser?.username);
                 }
 
@@ -294,18 +300,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     return;
                 }
 
+                const nowIso = new Date().toISOString();
                 if (action === 'up' || action === 'admin_publish') {
                     await pushAllToFirebase(activeTenantId);
                     if (!silent) ui.showToast('Semua data berhasil diunggah ke Firebase Hub.', 'success');
+                    await db.settings.update(sets.settings.id!, {
+                        cloudSyncConfig: { ...config, lastSync: nowIso, lastPushAt: nowIso }
+                    });
                 } else {
                     await downloadAllFromFirebase(activeTenantId);
                     await syncPsbWithFirebaseHub(activeTenantId);
                     if (!silent) ui.showToast('Semua data berhasil disinkronkan dari Firebase Hub.', 'success');
+                    await db.settings.update(sets.settings.id!, {
+                        cloudSyncConfig: { ...config, lastSync: nowIso, lastPullAt: nowIso }
+                    });
                 }
-
-                await db.settings.update(sets.settings.id!, {
-                    cloudSyncConfig: { ...config, lastSync: new Date().toISOString() }
-                });
 
                 setSyncStatus('success');
                 setTimeout(() => setSyncStatus('idle'), 3000);
@@ -318,17 +327,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setSyncStatus('syncing');
         try {
-            const { publishMasterData, uploadStaffChanges, downloadAndMergeMaster } = await loadSyncService();
+            const { publishMasterData, uploadStaffChanges, downloadAndMergeMaster, getPendingChangesCount } = await loadSyncService();
             if (action === 'admin_publish') {
                 if (auth.currentUser?.role !== 'admin' && !auth.currentUser?.permissions?.syncAdmin) {
                     throw new Error("Anda tidak memiliki izin untuk mempublikasikan master data.");
                 }
                 const result = await publishMasterData(config);
+                const nowIso = result.timestamp || new Date().toISOString();
                 
-                // Update lastSync
                 await db.settings.update(sets.settings.id!, { 
-                    cloudSyncConfig: { ...config, lastSync: new Date().toISOString() } 
+                    cloudSyncConfig: {
+                        ...config,
+                        lastSync: nowIso,
+                        lastPushAt: nowIso,
+                        lastPullAt: nowIso
+                    } 
                 });
+                setPendingChanges(0);
                 
                 if (!silent) ui.showToast('Data Master berhasil dipublikasikan.', 'success');
             } else if (action === 'up') {
@@ -336,10 +351,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const result = await uploadStaffChanges(config, username);
                 
                 if (!(result as any).skipped) {
-                    // Update lastSync
+                    const nowIso = new Date().toISOString();
                     await db.settings.update(sets.settings.id!, { 
-                        cloudSyncConfig: { ...config, lastSync: new Date().toISOString() } 
+                        cloudSyncConfig: {
+                            ...config,
+                            lastSync: nowIso,
+                            lastPushAt: nowIso
+                        } 
                     });
+                    setPendingChanges(0);
                     if (!silent) ui.showToast('Perubahan lokal berhasil dikirim ke Cloud.', 'success');
                     triggerAdminNotifyPrompt(result, auth.currentUser?.fullName || auth.currentUser?.username);
                 } else {
@@ -348,14 +368,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else {
                 const result = await downloadAndMergeMaster(config);
                 if (result.status === 'merged') {
-                    // Update lastSync
+                    const effectiveWatermark = (result as any).effectiveWatermark || result.timestamp;
+                    const updatedConfig = {
+                        ...config,
+                        lastPullAt: result.timestamp,
+                        lastSync: effectiveWatermark
+                    };
                     await db.settings.update(sets.settings.id!, { 
-                        cloudSyncConfig: { ...config, lastSync: result.timestamp } 
+                        cloudSyncConfig: updatedConfig
                     });
+
+                    const remainingPending = await getPendingChangesCount(updatedConfig);
+                    setPendingChanges(remainingPending);
                     
                     if (!silent) {
-                        ui.showToast('Data terbaru dari Admin berhasil digabungkan.', 'success');
+                        const extraNote = remainingPending > 0
+                            ? ` (${remainingPending} data lokal Anda yang belum disetor tetap aman dan siap dikirim).`
+                            : '';
+                        ui.showToast(`Data terbaru dari Admin berhasil digabungkan.${extraNote}`, 'success');
                         setTimeout(() => window.location.reload(), 1500);
+                    } else if (remainingPending > 0) {
+                        ui.showToast(
+                            `Master Data terbaru telah diunduh. Anda masih memiliki ${remainingPending} perubahan data lokal yang belum disetor ke Cloud — silakan klik tombol Cloud Sync untuk mengirimnya.`,
+                            'info'
+                        );
                     }
                 } else if (result.status === 'no_master') {
                     if (!silent) ui.showToast('Belum ada Master Data dari Admin di Cloud.', 'info');

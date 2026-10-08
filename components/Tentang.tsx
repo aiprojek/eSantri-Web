@@ -37,33 +37,40 @@ const Tentang: React.FC<{
     return (
         <div className="space-y-6">
             <PageHeader
-                eyebrow="Informasi"
+                eyebrow="Informasi & Dokumentasi"
                 title="Tentang Aplikasi eSantri Web"
-                description="Pelajari fitur, panduan, layanan, lisensi, dan catatan rilis aplikasi dari satu pusat informasi yang lebih rapi."
+                description="Pelajari fitur, panduan lengkap per modul, FAQ, lisensi, dan catatan rilis aplikasi dari satu pusat informasi."
                 actions={
-                    <span className="app-chip">
-                        <i className="bi bi-rocket-takeoff"></i>
-                        Versi Terbaru: {latestVersion}
+                    <span className="text-xs font-medium text-slate-500">
+                        Versi {latestVersion}
                     </span>
                 }
                 tabs={<HeaderTabs tabs={TENTANG_TABS} value={activeTab} onChange={setActiveTab} />}
             />
 
-            <SectionCard
-                title="Pusat Informasi eSantri"
-                description="Pilih tab untuk membuka profil aplikasi, panduan pengguna, FAQ, layanan premium, lisensi, dan catatan rilis."
-                contentClassName="p-4 sm:p-5"
-            >
-                <div>
-                    {activeTab === 'tentang' && <TabTentang />}
-                    {activeTab === 'layanan' && <TabLayanan />}
-                    {activeTab === 'panduan' && <TabPanduan initialSection={initialSection} />}
-                    {activeTab === 'faq' && <TabFaq />}
-                    {activeTab === 'rilis' && <TabRilis />}
-                    {activeTab === 'lisensi' && <TabLisensi />}
-                    {activeTab === 'kontak' && <TabKontak />}
-                </div>
-            </SectionCard>
+            {activeTab === 'tentang' && <TabTentang />}
+            {activeTab === 'panduan' && <TabPanduan initialSection={initialSection} />}
+            {activeTab === 'faq' && (
+                <SectionCard contentClassName="p-5 sm:p-6">
+                    <TabFaq />
+                </SectionCard>
+            )}
+            {activeTab === 'rilis' && <TabRilis />}
+            {activeTab === 'lisensi' && (
+                <SectionCard contentClassName="p-5 sm:p-6">
+                    <TabLisensi />
+                </SectionCard>
+            )}
+            {activeTab === 'kontak' && (
+                <SectionCard contentClassName="p-5 sm:p-6">
+                    <TabKontak />
+                </SectionCard>
+            )}
+            {activeTab === 'layanan' && (
+                <SectionCard contentClassName="p-5 sm:p-6">
+                    <TabLayanan />
+                </SectionCard>
+            )}
         </div>
     );
 };

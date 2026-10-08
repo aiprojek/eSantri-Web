@@ -4,12 +4,14 @@ import { faqData, FaqItemData } from '../../data/faq';
 
 const FaqItem: React.FC<{ item: FaqItemData; isOpen: boolean; toggle: () => void; highlight?: string }> = ({ item, isOpen, toggle, highlight }) => {
     
-    // Helper untuk highlight teks pencarian
+    // Helper untuk highlight teks pencarian (aman dari karakter regex spesial)
     const getHighlightedText = (text: string, highlight: string) => {
-        if (!highlight.trim()) return text;
-        const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
+        const trimmed = highlight.trim();
+        if (!trimmed) return text;
+        const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
         return parts.map((part, index) => 
-            part.toLowerCase() === highlight.toLowerCase() ? <span key={index} className="bg-yellow-200 font-bold">{part}</span> : part
+            part.toLowerCase() === trimmed.toLowerCase() ? <span key={index} className="bg-yellow-200 font-bold">{part}</span> : part
         );
     };
 
@@ -125,7 +127,7 @@ export const TabFaq: React.FC = () => {
                 {/* Left: Category Navigation (Hidden on mobile and when searching) */}
                 {!searchTerm && (
                     <div className="hidden lg:block w-full lg:w-64 flex-shrink-0">
-                        <div className="lg:sticky lg:top-4 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                        <div className="lg:sticky lg:top-24 bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
                             <div className="p-3 bg-gray-50 border-b border-gray-200 font-bold text-gray-700 text-xs uppercase tracking-wide">
                                 Kategori Topik
                             </div>

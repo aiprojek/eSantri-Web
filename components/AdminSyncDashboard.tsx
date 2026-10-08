@@ -14,12 +14,11 @@ import { EmptyState } from './common/EmptyState';
 import { HeaderTabs, HeaderTabItem } from './common/HeaderTabs';
 import type { InboxFileInspection } from '../services/syncService';
 
-type SyncHubTab = 'inbox' | 'history' | 'panduan';
+type SyncHubTab = 'inbox' | 'history';
 
 const HUB_TABS: HeaderTabItem<SyncHubTab>[] = [
     { value: 'inbox', label: 'Inbox Kiriman Staff', icon: 'bi-inbox-fill' },
     { value: 'history', label: 'Riwayat Penggabungan', icon: 'bi-clock-history' },
-    { value: 'panduan', label: 'Panduan & Resolusi Konflik', icon: 'bi-book-half' },
 ];
 
 const parseSenderFromFilename = (filename: string): string => {
@@ -84,10 +83,6 @@ export const AdminSyncDashboard: React.FC = () => {
 
     const navigateToCloudSettings = () => {
         window.dispatchEvent(new CustomEvent('navigate-page', { detail: { page: Page.Pengaturan, tab: 'cloud' } }));
-    };
-
-    const openPanduanSync = (sectionId: string = 'cloud') => {
-        window.dispatchEvent(new CustomEvent('open-panduan', { detail: sectionId }));
     };
 
     const fetchFilesAndStats = async () => {
@@ -386,9 +381,6 @@ export const AdminSyncDashboard: React.FC = () => {
                         <button onClick={navigateToCloudSettings} className="app-button-primary px-5 py-2.5 text-sm">
                             <i className="bi bi-gear-fill"></i> Buka Pengaturan Sync Cloud
                         </button>
-                        <button onClick={() => openPanduanSync('cloud')} className="app-button-secondary px-5 py-2.5 text-sm">
-                            <i className="bi bi-book-half"></i> Pelajari Panduan Cloud Sync
-                        </button>
                     </div>
                 </div>
             </div>
@@ -409,12 +401,6 @@ export const AdminSyncDashboard: React.FC = () => {
                     description="Pantau kesehatan koneksi real-time antar perangkat, status Hub/Spoke, dan jalankan penyelarasan penuh bila diperlukan."
                     actions={
                         <div className="flex flex-wrap gap-2">
-                            <button
-                                onClick={() => openPanduanSync('firebase')}
-                                className="app-button-secondary px-4 py-2.5 text-sm"
-                            >
-                                <i className="bi bi-book-half"></i> Panduan Firebase
-                            </button>
                             <button
                                 onClick={navigateToCloudSettings}
                                 className="app-button-primary px-4 py-2.5 text-sm"
@@ -955,126 +941,6 @@ export const AdminSyncDashboard: React.FC = () => {
                         </table>
                     </div>
                 </SectionCard>
-            )}
-
-            {activeTab === 'panduan' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <SectionCard
-                        title="SOP Admin Pengepul (Metode Hub & Spoke)"
-                        description="Alur kerja standar agar data dari seluruh staff tetap selaras dan tidak saling menimpa."
-                        contentClassName="p-5 sm:p-6"
-                    >
-                        <div className="space-y-3">
-                            {[
-                                {
-                                    step: 1,
-                                    title: 'Segarkan Inbox',
-                                    desc: 'Klik tombol "Segarkan Inbox" di kanan atas untuk memeriksa apakah ada kiriman paket perubahan data baru dari ustadz/staff.',
-                                    icon: 'bi-arrow-repeat',
-                                    color: 'bg-blue-50 text-blue-600 border-blue-200'
-                                },
-                                {
-                                    step: 2,
-                                    title: 'Intip Rincian (Opsional)',
-                                    desc: 'Klik tombol "Rincian" pada baris file untuk memverifikasi siapa pengirimnya dan tabel modul apa saja yang diubah sebelum digabungkan.',
-                                    icon: 'bi-eye',
-                                    color: 'bg-teal-50 text-teal-600 border-teal-200'
-                                },
-                                {
-                                    step: 3,
-                                    title: 'Gabung Data (Satu per Satu atau Sekaligus)',
-                                    desc: 'Klik "Gabung" atau "Gabung Semua". Sistem otomatis menggabungkan dari file paling awal ke terbaru agar urutan waktu akurat.',
-                                    icon: 'bi-diagram-2-fill',
-                                    color: 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                                },
-                                {
-                                    step: 4,
-                                    title: 'Publikasikan Master ke Cloud',
-                                    desc: 'Setelah seluruh file berstatus "Sudah Digabung", wajib klik "Publikasikan Master" agar seluruh staff dapat mengunduh Master Data terbaru.',
-                                    icon: 'bi-cloud-arrow-up-fill',
-                                    color: 'bg-indigo-50 text-indigo-600 border-indigo-200'
-                                },
-                                {
-                                    step: 5,
-                                    title: 'Bersihkan Inbox Secara Berkala',
-                                    desc: 'Gunakan tombol "Bersihkan yang Sudah Digabung" agar kapasitas penyimpanan Dropbox / WebDAV tetap lega.',
-                                    icon: 'bi-trash3-fill',
-                                    color: 'bg-amber-50 text-amber-600 border-amber-200'
-                                },
-                            ].map((item) => (
-                                <div key={item.step} className="flex items-start gap-3.5 p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60">
-                                    <div className={`w-8 h-8 rounded-lg border flex items-center justify-center font-bold text-xs shrink-0 ${item.color}`}>
-                                        {item.step}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                                            <i className={`bi ${item.icon} text-xs opacity-75`}></i>
-                                            {item.title}
-                                        </h4>
-                                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">{item.desc}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </SectionCard>
-
-                    <SectionCard
-                        title="Panduan Resolusi Konflik Data"
-                        description="Apa yang harus dilakukan ketika Admin dan Staff mengedit data santri/rekaman yang sama?"
-                        contentClassName="p-5 sm:p-6 flex flex-col justify-between"
-                    >
-                        <div className="space-y-4">
-                            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed flex items-start gap-3">
-                                <i className="bi bi-exclamation-triangle-fill text-amber-600 text-base shrink-0 mt-0.5"></i>
-                                <div>
-                                    Jika data yang dikirim staff ternyata memiliki versi lokal yang lebih baru di komputer Admin, jendela <strong>Resolusi Konflik</strong> akan terbuka secara otomatis untuk seluruh tabel yang bentrok.
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/40">
-                                    <div className="font-bold text-blue-900 text-sm flex items-center gap-2">
-                                        <i className="bi bi-laptop text-blue-600"></i>
-                                        Gunakan Semua Data Lokal
-                                    </div>
-                                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                                        Mempertahankan seluruh kolom data yang ada di komputer Admin saat ini dan mengabaikan perubahan dari staff pada item tersebut.
-                                    </p>
-                                </div>
-
-                                <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40">
-                                    <div className="font-bold text-emerald-900 text-sm flex items-center gap-2">
-                                        <i className="bi bi-cloud-check text-emerald-600"></i>
-                                        Gunakan Semua Data Staff
-                                    </div>
-                                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                                        Menerima penuh pembaruan yang dikirim oleh staff dan menimpa versi lokal komputer Admin untuk item tersebut.
-                                    </p>
-                                </div>
-
-                                <div className="p-3.5 rounded-xl border border-purple-200 bg-purple-50/40">
-                                    <div className="font-bold text-purple-900 text-sm flex items-center gap-2">
-                                        <i className="bi bi-stars text-purple-600"></i>
-                                        Mix &amp; Match (Campuran per Kolom)
-                                    </div>
-                                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                                        Anda dapat mengklik kotak kolom tertentu di sisi kiri (Lokal) dan kolom lain di sisi kanan (Staff), lalu klik <strong>Simpan Hasil Campuran</strong>.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="pt-5 mt-5 border-t border-slate-200 flex items-center justify-between gap-3">
-                            <span className="text-xs text-slate-500">Butuh penjelasan alur multi-admin lebih lengkap?</span>
-                            <button
-                                onClick={() => openPanduanSync('admin')}
-                                className="app-button-secondary px-4 py-2 text-xs shrink-0"
-                            >
-                                <i className="bi bi-book-half"></i> Buka Dokumentasi Multi-Admin
-                            </button>
-                        </div>
-                    </SectionCard>
-                </div>
             )}
 
             {/* Inspect Payload Modal */}

@@ -280,7 +280,20 @@ export const faqData: FaqCategoryData[] = [
             },
             {
                 question: "Apa bedanya 'Kirim Perubahan' dan 'Ambil Master'?",
-                answer: "Kirim Perubahan (Upload) mengirim pekerjaan Anda ke Cloud. Ambil Master (Download) mengambil data terbaru yang sudah disahkan Admin Pusat. Staff wajib melakukan Ambil Master setiap pagi."
+                answer: "Kirim Perubahan (Upload) mengirim pekerjaan Anda ke Cloud. Ambil Master (Download) mengambil data terbaru yang sudah disahkan Admin Pusat. Sistem otomatis menarik Master saat Anda login."
+            },
+            {
+                question: "Bagaimana jika staf lupa 'Setor Data' kemarin, lalu hari ini login dan sistem otomatis mengunduh Master Data baru? Apakah data kemarin hilang?",
+                answer: (
+                    <div>
+                        <p className="mb-2"><strong>TIDAK HILANG dan DIJAMIN AMAN.</strong> Sistem memisahkan pencatatan waktu <strong>Terakhir Setor (Push)</strong> dan <strong>Terakhir Unduh Master (Pull)</strong>:</p>
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li>Saat Anda login dan sistem otomatis menarik Master Data terbaru dari Admin Pusat, setiap data lokal yang Anda ubah/input setelah waktu setor terakhir akan <strong>dilindungi otomatis</strong> agar tidak tertimpa oleh data lama di dalam Master.</li>
+                            <li>Data Anda yang belum disetor tetap tersimpan di daftar <strong>Perubahan Belum Disinkronkan</strong> dan sistem akan memunculkan notifikasi pengingat agar Anda segera menekan <em>Setor Data ke Cloud</em>.</li>
+                            <li>Selain itu, jika Anda hendak <strong>Logout</strong> saat masih ada perubahan yang belum disetor, sistem akan memberikan peringatan konfirmasi terlebih dahulu.</li>
+                        </ul>
+                    </div>
+                )
             },
             {
                 question: "Apakah bisa real-time collaboration?",

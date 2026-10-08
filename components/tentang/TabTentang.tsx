@@ -57,8 +57,7 @@ export const TabTentang: React.FC = () => {
             <SectionCard
                 title="Fitur Unggulan"
                 description="Cari dan telusuri kemampuan utama eSantri berdasarkan modul yang paling relevan dengan operasional pondok."
-                className="bg-transparent"
-                contentClassName="p-5"
+                contentClassName="p-5 sm:p-6"
                 actions={
                     <div className="relative w-full md:w-64">
                         <input
@@ -72,13 +71,6 @@ export const TabTentang: React.FC = () => {
                     </div>
                 }
             >
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                    <h3 className="flex items-center gap-3 text-xl font-semibold text-app-text">
-                        <i className="bi bi-stars text-teal-600"></i>
-                        <span>Fitur Unggulan</span>
-                    </h3>
-                </div>
-
                 <div className="space-y-6">
                     {filteredGroups.map(group => (
                         <div key={group.id} className="animate-fade-in">

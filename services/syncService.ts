@@ -340,9 +340,18 @@ const getIncrementalData = async (tableName: string, since?: number) => {
     return await table.where('lastModified').above(since).toArray();
 };
 
+export const getEffectivePushBaseline = (config?: CloudSyncConfig): number => {
+    if (!config) return 0;
+    const pushTs = config.lastPushAt ? new Date(config.lastPushAt).getTime() : 0;
+    const syncTs = config.lastSync ? new Date(config.lastSync).getTime() : 0;
+    const validPush = Number.isFinite(pushTs) ? pushTs : 0;
+    const validSync = Number.isFinite(syncTs) ? syncTs : 0;
+    return Math.max(validPush, validSync);
+};
+
 // ... uploadStaffChanges ...
 export const uploadStaffChanges = async (config: CloudSyncConfig, username: string, forceFull: boolean = false) => {
-    const lastSyncTime = !forceFull && config.lastSync ? new Date(config.lastSync).getTime() : 0;
+    const lastSyncTime = !forceFull ? getEffectivePushBaseline(config) : 0;
     
     const data: any = {};
     const tablesToSync = [
@@ -463,16 +472,23 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         'digitalAssets', 'settings', 'users', 'auditLogs'
     ];
 
+    const effectivePushBaseline = getEffectivePushBaseline(config);
+    const parsedMasterTs = masterData.timestamp ? new Date(masterData.timestamp).getTime() : Date.now();
+    const masterTimestampMs = Number.isFinite(parsedMasterTs) ? parsedMasterTs : Date.now();
+    const newWatermarkMs = Math.max(effectivePushBaseline, masterTimestampMs);
+    let preservedLocalChanges = 0;
+
     await (db as any).transaction('rw', tablesToMerge.map(t => (db as any)[t]), async () => {
         const mergeTable = async (tableName: string, masterItems: any[]) => {
-            if (!masterItems) return; 
             const table = (db as any)[tableName];
             const localItems = await table.toArray();
             const localMap = new Map(localItems.map((i: any) => [getRecordKey(tableName, i), i]));
+            const safeMasterItems = Array.isArray(masterItems) ? masterItems : [];
+            const masterMap = new Map(safeMasterItems.map((i: any) => [getRecordKey(tableName, i), i]));
             
             const itemsToPut: any[] = [];
             
-            for (const mItem of masterItems) {
+            for (const mItem of safeMasterItems) {
                 const key = getRecordKey(tableName, mItem);
                 if (key === undefined) continue;
                 const lItem = localMap.get(key) as any;
@@ -482,10 +498,41 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
                     if (mTime >= lTime) {
                         itemsToPut.push(tableName === 'inventaris' ? mergeInventarisSubLogs(mItem, lItem) : mItem);
                     } else if (tableName === 'inventaris') {
-                        itemsToPut.push(mergeInventarisSubLogs(lItem, mItem));
+                        const mergedInv = mergeInventarisSubLogs(lItem, mItem);
+                        if (effectivePushBaseline > 0 && lTime > effectivePushBaseline && lTime <= newWatermarkMs) {
+                            mergedInv.lastModified = newWatermarkMs + 1;
+                            preservedLocalChanges++;
+                        }
+                        itemsToPut.push(mergedInv);
                     }
                 } else {
                     itemsToPut.push(mItem);
+                }
+            }
+
+            // Preserve unpushed local records (created/edited after last push) so advancing watermark to Master timestamp
+            // never hides local changes that the staff forgot to push in a previous session.
+            if (effectivePushBaseline > 0) {
+                for (const lItem of localItems) {
+                    const key = getRecordKey(tableName, lItem);
+                    if (key === undefined) continue;
+                    const lTime = lItem.lastModified || 0;
+                    if (lTime <= effectivePushBaseline) continue;
+
+                    const mItem = masterMap.get(key) as any;
+                    const mTime = mItem?.lastModified || 0;
+                    const isLocalUnpushedWinner = !mItem || lTime > mTime;
+
+                    if (isLocalUnpushedWinner) {
+                        if (tableName !== 'inventaris' || !mItem) {
+                            if (tableName !== 'auditLogs' && tableName !== 'users' && tableName !== 'settings') {
+                                preservedLocalChanges++;
+                            }
+                            if (lTime <= newWatermarkMs) {
+                                itemsToPut.push({ ...lItem, lastModified: newWatermarkMs + 1 });
+                            }
+                        }
+                    }
                 }
             }
             
@@ -530,7 +577,12 @@ export const downloadAndMergeMaster = async (config: CloudSyncConfig) => {
         }
     });
 
-    return { status: 'merged', timestamp: masterData.timestamp };
+    return {
+        status: 'merged',
+        timestamp: masterData.timestamp,
+        effectiveWatermark: new Date(newWatermarkMs).toISOString(),
+        preservedLocalChanges
+    };
 };
 
 export const listInboxFiles = async (config: CloudSyncConfig): Promise<SyncFileRecord[]> => {
@@ -856,7 +908,7 @@ export const processInboxFile = async (config: CloudSyncConfig, file: SyncFileRe
 // ... publishMasterData, updateAccountFromCloud ...
 export const getPendingChangesCount = async (config: CloudSyncConfig) => {
     if (!config || config.provider === 'none') return 0;
-    const lastSyncTime = config.lastSync ? new Date(config.lastSync).getTime() : 0;
+    const lastSyncTime = getEffectivePushBaseline(config);
     
     const tablesToSync = [
         'santri', 'tagihan', 'pembayaran', 'saldoSantri', 'transaksiSaldo', 

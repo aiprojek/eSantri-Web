@@ -64,12 +64,12 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const method = settings.psbConfig.submissionMethod === 'portal' ? 'hybrid' : settings.psbConfig.submissionMethod;
     const scriptUrl = settings.psbConfig.googleScriptUrl;
 
-    // Auto-heal existing pendaftar records if standard fields (fisik, telepon, ortu) were stored in customData
+    // Auto-heal existing pendaftar records if standard fields (fisik, telepon, ortu) or custom_field IDs were stored in customData
     useEffect(() => {
         if (!pendaftarList || pendaftarList.length === 0) return;
         const recordsToUpdate: Pendaftar[] = [];
         for (const p of pendaftarList) {
-            const { healed, changed } = healPendaftarRecordWithDetails(p);
+            const { healed, changed } = healPendaftarRecordWithDetails(p, settings);
             if (changed) {
                 recordsToUpdate.push(healed);
             }
@@ -79,11 +79,11 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                 onUpdateList();
             }).catch((err) => console.warn('Auto-heal pendaftar warning:', err));
         }
-    }, [pendaftarList, onUpdateList]);
+    }, [pendaftarList, settings, onUpdateList]);
 
     const healedPendaftarList = useMemo(() => {
-        return pendaftarList.map(p => healPendaftarRecord(p));
-    }, [pendaftarList]);
+        return pendaftarList.map(p => healPendaftarRecord(p, settings));
+    }, [pendaftarList, settings]);
 
     const filteredData = useMemo(() => {
         return healedPendaftarList.filter(p => {
@@ -313,7 +313,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     lastModified: Date.now(),
                 };
 
-                const newPendaftar = healPendaftarRecord(rawPendaftar);
+                const newPendaftar = healPendaftarRecord(rawPendaftar, settings);
                 await db.pendaftar.add(newPendaftar);
                 addedCount++;
             }
@@ -373,12 +373,18 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     }
 
     const processPendaftarData = (data: any) => {
-        // Collect custom_ fields into customDataObj if not already present
+        const standardFields = [
+            ...PSB_ALL_STANDARD_FIELD_KEYS,
+            'id', 'tanggalDaftar', 'tanggalMasuk', 'Timestamp', 'sheetName', 'driveFolderId', 'folderId', 'docs', 'status', 'customData', 'lastModified', 'gelombang', 'jenjangId', 'kelasId', 'rombelId', 'nis', 'nomorRegistrasi', 'berkasFisik', 'nilaiUjian'
+        ];
+        // Collect custom_ fields and non-standard question label fields into customDataObj
         const customDataObj: Record<string, any> = data.customData ? (typeof data.customData === 'string' ? JSON.parse(data.customData) : data.customData) : {};
         Object.keys(data).forEach(key => {
             if (key.startsWith('custom_')) {
                 const cleanKey = key.replace('custom_', '');
                 customDataObj[cleanKey] = data[key];
+            } else if (!standardFields.includes(key) && data[key] !== undefined && data[key] !== '') {
+                customDataObj[key] = data[key];
             }
         });
 
@@ -410,7 +416,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             customData: Object.keys(customDataObj).length > 0 ? JSON.stringify(customDataObj) : (data.customData || '{}'),
             lastModified: Date.now(),
         };
-        const newPendaftar = healPendaftarRecord(rawPendaftar);
+        const newPendaftar = healPendaftarRecord(rawPendaftar, settings);
         db.pendaftar.add(newPendaftar).then(() => {
             onUpdateList();
         });

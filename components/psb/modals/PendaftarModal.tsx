@@ -3,7 +3,7 @@ import { Pendaftar, PondokSettings, PsbBerkasFisik, PsbNilaiUjian, PendaftarStat
 import { useAppContext } from '../../../AppContext';
 import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntimes';
 import { isFirebaseClientConfigReady } from '../../../firebaseStorage';
-import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal } from '../utils/psbUtils';
+import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal, resolveCustomFieldLabel, getAllConfiguredCustomFields } from '../utils/psbUtils';
 import { MarkdownEditor } from '../../common/MarkdownEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 
@@ -126,7 +126,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
     useEffect(() => {
         if (isOpen) {
             if (pendaftarData) {
-                const { healed, cleanedCustomObj } = healPendaftarRecordWithDetails(pendaftarData);
+                const { healed, cleanedCustomObj } = healPendaftarRecordWithDetails(pendaftarData, settings);
                 // Flatten address object for form state
                 const { alamat, ...rest } = healed;
                 setFormData({
@@ -1145,12 +1145,17 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                 <div className="mt-4">
                                     <h5 className="font-bold text-gray-600 mb-2 text-sm uppercase">Data Tambahan (dari Formulir Online)</h5>
                                     <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                        {Object.entries(parsedCustomData).map(([key, val]) => (
-                                            <div key={key}>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase">{key.replace(/_/g, ' ')}</label>
-                                                {renderCustomValue(key, val)}
-                                            </div>
-                                        ))}
+                                        {Object.entries(parsedCustomData).map(([key, val]) => {
+                                            const resolvedLabel = resolveCustomFieldLabel(key, settings, Number(formData.jenjangId), val);
+                                            return (
+                                                <div key={key}>
+                                                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                                                        {resolvedLabel}
+                                                    </label>
+                                                    {renderCustomValue(key, val)}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -1172,74 +1177,124 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                     )}
                                 </div>
                                 <p className="text-xs text-gray-500 mb-3">
-                                    Unggah file berkas calon santri (format JPG, PNG, atau PDF). File tetap tersimpan aman di database lokal aplikasi meskipun tanpa Firebase.
+                                    Unggah file berkas calon santri (format JPG, PNG, atau PDF). Termasuk berkas standar maupun pertanyaan berkas kustom dari formulir pendaftaran.
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {['Kartu Keluarga', 'Akte Kelahiran', 'KTP Orang Tua', 'Ijazah Terakhir', 'Pas Foto'].map(docName => {
-                                        const fileVal = parsedCustomData[docName];
-                                        return (
-                                            <div key={docName} className="p-3.5 bg-white border border-gray-200 rounded-xl shadow-xs">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <label className="block text-xs font-bold text-gray-700 uppercase">{docName}</label>
-                                                    {fileVal && (
-                                                        <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                                                            <i className="bi bi-check-circle-fill"></i> Terunggah
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <input 
-                                                        type="file" 
-                                                        id={`upload-${docName}`}
-                                                        className="hidden"
-                                                        accept="image/*,.pdf"
-                                                        onChange={(e) => {
-                                                            const file = e.target.files?.[0];
-                                                            if (file) handleFileUpload(docName, file);
-                                                        }}
-                                                    />
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => document.getElementById(`upload-${docName}`)?.click()}
-                                                        disabled={!!isUploading}
-                                                        className="flex-grow flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors border border-slate-300 disabled:opacity-50"
-                                                    >
-                                                        {isUploading === docName ? (
-                                                            <i className="bi bi-arrow-repeat animate-spin text-teal-600"></i>
-                                                        ) : (
-                                                            <i className="bi bi-upload text-teal-600"></i>
-                                                        )}
-                                                        {isUploading === docName ? 'Memproses...' : fileVal ? 'Ganti Berkas' : `Pilih File`}
-                                                    </button>
-                                                    {fileVal && (
-                                                        <>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    if (typeof fileVal === 'string') {
-                                                                        const w = window.open();
-                                                                        if (w) w.document.write(`<iframe src="${fileVal}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
-                                                                    }
-                                                                }}
-                                                                className="px-2.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-semibold"
-                                                                title="Lihat Berkas"
-                                                            >
-                                                                <i className="bi bi-eye"></i>
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleRemoveFile(docName)}
-                                                                className="px-2.5 py-2 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-lg text-xs font-semibold"
-                                                                title="Hapus Berkas"
-                                                            >
-                                                                <i className="bi bi-trash"></i>
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
+                                    {(() => {
+                                        const docSlots: Array<{ key: string; label: string }> = [];
+                                        const seenLabels = new Set<string>();
+                                        const addSlot = (key: string, label: string) => {
+                                            const norm = label.trim().toLowerCase();
+                                            if (!norm || seenLabels.has(norm)) return;
+                                            seenLabels.add(norm);
+                                            docSlots.push({ key, label: label.trim() });
+                                        };
+
+                                        // 1. Standard document slots
+                                        ['Kartu Keluarga', 'Akte Kelahiran', 'KTP Orang Tua', 'Ijazah Terakhir', 'Pas Foto'].forEach(stdDoc => {
+                                            addSlot(stdDoc, stdDoc);
+                                        });
+
+                                        // 2. Configured custom file fields from PSB form design
+                                        const customFileFields = getAllConfiguredCustomFields(settings, Number(formData.jenjangId)).filter(
+                                            f => f.type === 'file' && f.label
                                         );
-                                    })}
+                                        customFileFields.forEach(cf => {
+                                            const existingRawKey = Object.keys(parsedCustomData).find(
+                                                k => resolveCustomFieldLabel(k, settings, Number(formData.jenjangId), parsedCustomData[k]).toLowerCase() === cf.label.trim().toLowerCase()
+                                            );
+                                            addSlot(existingRawKey || cf.label.trim(), cf.label.trim());
+                                        });
+
+                                        // 3. Any uploaded file URLs/data URLs already in parsedCustomData
+                                        Object.entries(parsedCustomData).forEach(([k, v]) => {
+                                            if (typeof v === 'string' && (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:'))) {
+                                                const resolvedLbl = resolveCustomFieldLabel(k, settings, Number(formData.jenjangId), v);
+                                                addSlot(k, resolvedLbl);
+                                            }
+                                        });
+
+                                        return docSlots.map((slot, sIdx) => {
+                                            const docName = slot.key;
+                                            const displayLabel = slot.label;
+                                            const fileVal = parsedCustomData[docName] ?? parsedCustomData[displayLabel];
+                                            const activeKey = parsedCustomData[docName] !== undefined ? docName : displayLabel;
+                                            return (
+                                                <div key={`${docName}-${sIdx}`} className="p-3.5 bg-white border border-gray-200 rounded-xl shadow-xs">
+                                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                                        <label className="block text-xs font-bold text-gray-700">{displayLabel}</label>
+                                                        {fileVal && (
+                                                            <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shrink-0">
+                                                                <i className="bi bi-check-circle-fill"></i> Terunggah
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <input 
+                                                            type="file" 
+                                                            id={`upload-slot-${sIdx}`}
+                                                            className="hidden"
+                                                            accept="image/*,.pdf"
+                                                            onChange={(e) => {
+                                                                const file = e.target.files?.[0];
+                                                                if (file) handleFileUpload(activeKey, file);
+                                                            }}
+                                                        />
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => document.getElementById(`upload-slot-${sIdx}`)?.click()}
+                                                            disabled={!!isUploading}
+                                                            className="flex-grow flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors border border-slate-300 disabled:opacity-50"
+                                                        >
+                                                            {isUploading === activeKey ? (
+                                                                <i className="bi bi-arrow-repeat animate-spin text-teal-600"></i>
+                                                            ) : (
+                                                                <i className="bi bi-upload text-teal-600"></i>
+                                                            )}
+                                                            {isUploading === activeKey ? 'Memproses...' : fileVal ? 'Ganti Berkas' : `Pilih File`}
+                                                        </button>
+                                                        {fileVal && (
+                                                            <>
+                                                                {typeof fileVal === 'string' && fileVal.startsWith('http') ? (
+                                                                    <a
+                                                                        href={fileVal}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="px-2.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-semibold"
+                                                                        title="Buka Berkas di Tab Baru"
+                                                                    >
+                                                                        <i className="bi bi-box-arrow-up-right"></i>
+                                                                    </a>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            if (typeof fileVal === 'string') {
+                                                                                const w = window.open();
+                                                                                if (w) w.document.write(`<iframe src="${fileVal}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                                                                            }
+                                                                        }}
+                                                                        className="px-2.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-semibold"
+                                                                        title="Lihat Berkas"
+                                                                    >
+                                                                        <i className="bi bi-eye"></i>
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleRemoveFile(activeKey)}
+                                                                    className="px-2.5 py-2 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-lg text-xs font-semibold"
+                                                                    title="Hapus Berkas"
+                                                                >
+                                                                    <i className="bi bi-trash"></i>
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        });
+                                    })()}
                                 </div>
                             </div>
                         </div>

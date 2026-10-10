@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Pendaftar, PondokSettings } from '../../../types';
-import { getPsbRegistrationNumber, calculatePsbAverageScore, openWhatsappChat, healPendaftarRecord, getPendaftarPhone } from '../utils/psbUtils';
+import { getPsbRegistrationNumber, calculatePsbAverageScore, openWhatsappChat, healPendaftarRecord, getPendaftarPhone, resolveCustomFieldLabel } from '../utils/psbUtils';
 import { printToPdfNative } from '../../../utils/pdfGenerator';
 import { useAppContext } from '../../../AppContext';
 
@@ -28,7 +28,7 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
         : rawPendaftar
             ? [rawPendaftar]
             : []
-    ).map(p => healPendaftarRecord(p));
+    ).map(p => healPendaftarRecord(p, settings));
 
     if (!isOpen || items.length === 0) return null;
 
@@ -37,13 +37,9 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
     const firstJenjang = settings.jenjang.find(j => j.id === firstPendaftar.jenjangId)?.nama || '-';
     const firstNoReg = firstPendaftar.nomorRegistrasi || getPsbRegistrationNumber(firstPendaftar, firstJenjang);
 
-    // Helper to format field key into human-readable label
-    const formatFieldLabel = (key: string) => {
-        return key
-            .replace(/([A-Z])/g, ' $1')
-            .replace(/_/g, ' ')
-            .replace(/^./, str => str.toUpperCase())
-            .trim();
+    // Helper to resolve field key into human-readable question label
+    const formatFieldLabel = (key: string, jenjangId?: number, valHint?: any) => {
+        return resolveCustomFieldLabel(key, settings, jenjangId, valHint);
     };
 
     const handlePrint = () => {
@@ -166,17 +162,81 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
 
                             const pasFotoUrl = pendaftar.fotoUrl || customData['Pas Foto'] || customData['pas_foto'] || customData['foto'];
 
-                            const customTextEntries = Object.entries(customData).filter(([key, val]) => {
-                                if (!val || typeof val !== 'string') return false;
-                                if (key === 'Timestamp' || key === 'sheetName' || key === 'lastModified' || key === 'driveFolderId') return false;
-                                if (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:')) return false;
-                                return true;
+                            // Active custom fields for this applicant's jenjang (or active psbConfig)
+                            const matchingTemplate = (settings.psbConfig?.templates || []).find(
+                                t => t.targetJenjangId === pendaftar.jenjangId && Array.isArray(t.customFields) && t.customFields.length > 0
+                            );
+                            const activeCustomFields = (
+                                matchingTemplate?.customFields && matchingTemplate.customFields.length > 0
+                                    ? matchingTemplate.customFields
+                                    : (settings.psbConfig?.customFields || [])
+                            ).filter(f => f && f.type !== 'section' && f.type !== 'statement');
+
+                            const isFileValue = (val: any): boolean => {
+                                if (typeof val !== 'string') return false;
+                                return val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:');
+                            };
+
+                            // Build resolved custom entries (both text answers & custom file questions)
+                            const customDisplayEntries: Array<{ key: string; label: string; value: string; isFile: boolean; hasFile?: boolean }> = [];
+                            const seenLabels = new Set<string>();
+
+                            Object.entries(customData).forEach(([rawKey, rawVal]) => {
+                                if (rawVal === undefined || rawVal === null || rawVal === '') return;
+                                if (['Timestamp', 'sheetName', 'lastModified', 'driveFolderId', 'folderId'].includes(rawKey)) return;
+                                const strVal = Array.isArray(rawVal) ? rawVal.filter(Boolean).join(', ') : String(rawVal);
+                                if (!strVal.trim()) return;
+
+                                const resolvedLabel = formatFieldLabel(rawKey, pendaftar.jenjangId, strVal);
+                                const normLbl = resolvedLabel.toLowerCase();
+                                if (seenLabels.has(normLbl)) return;
+                                seenLabels.add(normLbl);
+
+                                if (isFileValue(strVal)) {
+                                    customDisplayEntries.push({
+                                        key: rawKey,
+                                        label: resolvedLabel,
+                                        value: strVal.startsWith('http') ? '[ ✓ ] Terlampir (Dokumen Digital Cloud)' : '[ ✓ ] Terlampir (Dokumen Digital)',
+                                        isFile: true,
+                                        hasFile: true
+                                    });
+                                } else {
+                                    customDisplayEntries.push({
+                                        key: rawKey,
+                                        label: resolvedLabel,
+                                        value: strVal,
+                                        isFile: false
+                                    });
+                                }
                             });
 
-                            const customFileEntries = Object.entries(customData).filter(([key, val]) => {
-                                if (!val || typeof val !== 'string') return false;
-                                return val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:');
+                            // Also ensure any configured custom fields (especially custom file questions) from the form design are listed
+                            activeCustomFields.forEach(cf => {
+                                const lbl = (cf.label || '').trim();
+                                if (!lbl) return;
+                                const normLbl = lbl.toLowerCase();
+                                if (seenLabels.has(normLbl)) return;
+                                seenLabels.add(normLbl);
+
+                                if (cf.type === 'file') {
+                                    customDisplayEntries.push({
+                                        key: cf.id,
+                                        label: lbl,
+                                        value: '[   ] Belum Dilampirkan / Bawa Fisik',
+                                        isFile: true,
+                                        hasFile: false
+                                    });
+                                } else {
+                                    customDisplayEntries.push({
+                                        key: cf.id,
+                                        label: lbl,
+                                        value: '-',
+                                        isFile: false
+                                    });
+                                }
                             });
+
+                            const customFileChecklistEntries = customDisplayEntries.filter(item => item.isFile);
 
                             const alamatDetail = pendaftar.alamatRumah || (pendaftar as any).alamat?.detail || '-';
                             const desaKelurahan = pendaftar.desaKelurahan || (pendaftar as any).alamat?.desaKelurahan || '-';
@@ -416,20 +476,20 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
                                     </div>
 
                                     {/* 5. BAGIAN IV: DATA TAMBAHAN & ISIAN KHUSUS FORMULIR (JIKA ADA) */}
-                                    {customTextEntries.length > 0 && (
+                                    {customDisplayEntries.length > 0 && (
                                         <div className="mb-4">
                                             <h3 className="text-xs font-bold uppercase tracking-wider bg-teal-900 text-white px-2.5 py-1 rounded-t mb-0">
-                                                IV. Informasi Khusus & Data Tambahan Formulir
+                                                IV. Informasi Khusus, Pertanyaan Tambahan & Lampiran Formulir
                                             </h3>
                                             <table className="w-full border border-gray-300 text-left">
                                                 <tbody className="divide-y divide-gray-200">
-                                                    {customTextEntries.map(([k, v], idx) => (
-                                                        <tr key={k} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/70'}>
-                                                            <td className="py-1.5 px-3 font-semibold text-gray-700 w-1/3 border-r border-gray-200">
-                                                                {formatFieldLabel(k)}
+                                                    {customDisplayEntries.map((entry, idx) => (
+                                                        <tr key={entry.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/70'}>
+                                                            <td className="py-1.5 px-3 font-semibold text-gray-700 w-2/5 border-r border-gray-200">
+                                                                {entry.label}
                                                             </td>
-                                                            <td className="py-1.5 px-3 text-gray-900 font-medium w-2/3">
-                                                                {String(v)}
+                                                            <td className={`py-1.5 px-3 font-medium w-3/5 ${entry.isFile ? (entry.hasFile ? 'text-teal-800 font-bold' : 'text-gray-500 italic') : 'text-gray-900'}`}>
+                                                                {entry.value}
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -441,13 +501,13 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
                                     {/* 6. BAGIAN V: VERIFIKASI BERKAS FISIK OLEH PANITIA LAPANGAN */}
                                     <div className="mb-4">
                                         <h3 className="text-xs font-bold uppercase tracking-wider bg-teal-900 text-white px-2.5 py-1 rounded-t mb-0">
-                                            {customTextEntries.length > 0 ? 'V' : 'IV'}. Checklist Verifikasi Berkas Fisik & Lampiran
+                                            {customDisplayEntries.length > 0 ? 'V' : 'IV'}. Checklist Verifikasi Berkas Fisik & Lampiran
                                         </h3>
                                         <table className="w-full border border-gray-300">
                                             <thead>
                                                 <tr className="bg-gray-100 text-gray-700 font-bold border-b border-gray-300">
                                                     <th className="py-1 px-3 text-center w-12">No</th>
-                                                    <th className="py-1 px-3">Jenis Berkas Fisik Persyaratan</th>
+                                                    <th className="py-1 px-3">Jenis Berkas Persyaratan / Pertanyaan Dokumen</th>
                                                     <th className="py-1 px-3 text-center w-40">Status Kelengkapan</th>
                                                     <th className="py-1 px-3">Paraf & Keterangan</th>
                                                 </tr>
@@ -478,17 +538,23 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
                                                         </tr>
                                                     );
                                                 })}
-                                                {customFileEntries.map(([fileKey, fileVal], fIdx) => (
-                                                    <tr key={fileKey} className="bg-teal-50/30">
+                                                {customFileChecklistEntries.map((fileItem, fIdx) => (
+                                                    <tr key={fileItem.key} className="bg-teal-50/30">
                                                         <td className="py-1 px-3 text-center text-teal-800 font-bold">{5 + fIdx + 1}</td>
                                                         <td className="py-1 px-3 font-medium text-teal-900">
-                                                            <span>Berkas Digital: {formatFieldLabel(fileKey)}</span>
+                                                            <span>Berkas: {fileItem.label}</span>
                                                         </td>
                                                         <td className="py-1 px-3 text-center font-semibold text-[11px] text-teal-800">
-                                                            <span className="bg-teal-100 text-teal-800 px-2 py-0.5 rounded">[ ✓ ] Terupload</span>
+                                                            {fileItem.hasFile ? (
+                                                                <span className="bg-teal-100 text-teal-800 px-2 py-0.5 rounded font-bold">[ ✓ ] Terupload</span>
+                                                            ) : (
+                                                                <span className="text-gray-400 font-medium">[   ] Belum</span>
+                                                            )}
                                                         </td>
                                                         <td className="py-1 px-3 text-teal-700 text-[10px] truncate max-w-[180px]">
-                                                            {typeof fileVal === 'string' && fileVal.startsWith('http') ? 'Google Drive Cloud' : 'Tersimpan Offline'}
+                                                            {fileItem.hasFile
+                                                                ? (fileItem.value.includes('Cloud') ? 'Google Drive Cloud' : 'Tersimpan Digital')
+                                                                : '-'}
                                                         </td>
                                                     </tr>
                                                 ))}

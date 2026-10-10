@@ -257,13 +257,13 @@ function doPost(e) {
     var newRow = [];
     var nextRow = sheet.getLastRow() + 1;
     
-    // ID Folder Drive dari Pengaturan Formulir atau isi langsung di bawah ini (bisa ID atau Link URL Folder Drive)
-    var folderId = "${cleanDriveFolderId || 'GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA'}";
+    // ID Folder Drive otomatis diambil dari input "ID atau Link Folder Google Drive" di Desain Formulir
+    var folderId = "${cleanDriveFolderId}";
     
     function extractCleanFolderId(rawInput) {
       if (!rawInput) return "";
       var trimmed = String(rawInput).trim();
-      if (!trimmed || trimmed === "GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA" || trimmed === "ISI_ID_FOLDER_DRIVE_DISINI") return "";
+      if (!trimmed) return "";
       var folderMatch = trimmed.match(/\\/folders\\/([a-zA-Z0-9_-]{10,})/);
       if (folderMatch && folderMatch[1]) return folderMatch[1];
       var idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
@@ -416,20 +416,26 @@ function doPost(e) {
                     // Plain WA method: Cannot send files easily
                     return `
                     <div class="mb-4 break-inside-avoid">
-                        <label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black">${label} ${reqStar}</label>
+                        <label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${label} ${reqStar}</label>
                         ${hintHtml}
-                        <div class="p-3 bg-blue-50 border border-blue-100 rounded text-xs text-blue-800">
+                        <div class="p-3 bg-blue-50 border border-blue-100 rounded text-xs text-blue-800 print:hidden">
                             <i class="bi bi-info-circle-fill"></i> Lampirkan file ini secara manual di chat WhatsApp setelah klik Kirim.
+                        </div>
+                        <div class="hidden print:block p-2 border border-dashed border-gray-400 rounded text-xs text-black mt-1">
+                            [ &nbsp;&nbsp; ] Lampirkan Berkas Fisik / Dokumen: <strong>${label}</strong>
                         </div>
                     </div>`;
                 } else {
                     // Google Sheet OR Hybrid mode: Use real file input for Drive upload
                     return `
                     <div class="mb-4 break-inside-avoid">
-                        <label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black">${label} ${reqStar}</label>
+                        <label class="block text-gray-600 text-sm font-bold mb-0.5 print:text-black ${style === 'classic' ? 'text-[#1B4D3E] font-serif' : ''}">${label} ${reqStar}</label>
                         ${hintHtml}
-                        <input type="file" name="${name}" accept="image/*,application/pdf" ${reqAttr} class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition" />
-                        <p class="text-[10px] text-gray-400 mt-1">Maks 5MB. PDF atau Foto.</p>
+                        <input type="file" name="${name}" accept="image/*,application/pdf" ${reqAttr} class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition print:hidden" />
+                        <p class="text-[10px] text-gray-400 mt-1 print:hidden">Maks 5MB. PDF atau Foto.</p>
+                        <div class="hidden print:block p-2 border border-dashed border-gray-400 rounded text-xs text-black mt-1">
+                            [ &nbsp;&nbsp; ] Lampirkan Berkas Fisik / Dokumen: <strong>${label}</strong>
+                        </div>
                     </div>`;
                 }
             }
@@ -696,6 +702,20 @@ function doPost(e) {
         }
         
         const adminPhone = localConfig.nomorHpAdmin.replace(/^0/, '62');
+        const fieldLabelMapObj: Record<string, string> = {
+            'docs[]': 'Checklist Berkas Persyaratan',
+            'docs': 'Checklist Berkas Persyaratan'
+        };
+        (localConfig.customFields || []).forEach(field => {
+            if (field.id && field.label) {
+                const cleanLbl = field.label.trim();
+                fieldLabelMapObj[`custom_${field.id}`] = cleanLbl;
+                fieldLabelMapObj[`custom_${field.id}[]`] = cleanLbl;
+                fieldLabelMapObj[field.id] = cleanLbl;
+                fieldLabelMapObj[`${field.id}[]`] = cleanLbl;
+            }
+        });
+        const fieldLabelMapJson = JSON.stringify(fieldLabelMapObj);
         let modalHtml = '';
         let submitScript = '';
 
@@ -762,6 +782,13 @@ function closeWaModal(){
     }
 }
 function proceedWaSubmit(){
+    const FIELD_LABEL_MAP=${fieldLabelMapJson};
+    function resolveCustomKey(rawKey){
+        if(FIELD_LABEL_MAP[rawKey]) return FIELD_LABEL_MAP[rawKey];
+        const noBracket=rawKey.replace(/\\[\\]$/,'');
+        if(FIELD_LABEL_MAP[noBracket]) return FIELD_LABEL_MAP[noBracket];
+        return rawKey.replace(/^custom_/,'').replace(/\\[\\]$/,'');
+    }
     const form=document.getElementById('psbForm');
     const btn=document.getElementById('waProceedBtn');
     const originalText=btn.innerHTML;
@@ -772,11 +799,17 @@ function proceedWaSubmit(){
     const data={tanggalDaftar:new Date().toISOString(),status:'Baru'};
     const customData={};
     formData.forEach((value,key)=>{
+        if(value instanceof File) return;
         if(key.startsWith('custom_')){
-            customData[key.replace('custom_','')]=value;
+            const labelKey=resolveCustomKey(key);
+            if(customData[labelKey]){
+                customData[labelKey]=customData[labelKey]+', '+value;
+            }else{
+                customData[labelKey]=value;
+            }
         }else if(key==='docs[]'){
-            if(!data.docs) data.docs=[];
-            data.docs.push(value);
+            const docLabel='Checklist Berkas Persyaratan';
+            customData[docLabel]=customData[docLabel]?(customData[docLabel]+', '+value):value;
         }else{
             data[key]=value;
         }
@@ -823,7 +856,15 @@ function proceedWaSubmit(){
                  </div>
              </div>`;
 
-             submitScript = `<script>
+              submitScript = `<script>
+const FIELD_LABEL_MAP=${fieldLabelMapJson};
+function resolveFieldKey(rawKey){
+    if(FIELD_LABEL_MAP[rawKey]) return FIELD_LABEL_MAP[rawKey];
+    const noBracket=rawKey.replace(/\\[\\]$/,'');
+    if(FIELD_LABEL_MAP[noBracket]) return FIELD_LABEL_MAP[noBracket];
+    if(rawKey.startsWith('custom_')) return rawKey.replace(/^custom_/,'').replace(/\\[\\]$/,'');
+    return rawKey;
+}
 function readFile(file, fieldLabel){
     return new Promise((resolve,reject)=>{
         const reader=new FileReader();
@@ -847,6 +888,7 @@ async function submitForm(){
         const data={};
         const filePromises=[];
         for(const [key,value] of formData.entries()){
+            const targetKey=resolveFieldKey(key);
             if(value instanceof File){
                 if(value.size>0){
                     if(value.size>5*1024*1024){
@@ -854,14 +896,14 @@ async function submitForm(){
                         throw new Error('File too large');
                     }
                     const inputEl=form.querySelector('[name="'+key+'"]');
-                    const fieldLabel=inputEl?.closest('div')?.querySelector('label')?.textContent?.trim()||key;
-                    filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[key]=fileObj;}));
+                    const fieldLabel=FIELD_LABEL_MAP[key]||inputEl?.closest('div')?.querySelector('label')?.textContent?.replace('*','')?.trim()||targetKey;
+                    filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[targetKey]=fileObj;}));
                 }
             }else{
-                if(data[key]){
-                    data[key]=data[key]+", "+value;
+                if(data[targetKey]){
+                    data[targetKey]=data[targetKey]+", "+value;
                 }else{
-                    data[key]=value;
+                    data[targetKey]=value;
                 }
             }
         }
@@ -963,7 +1005,15 @@ function closeGsSuccessModal(){
                  </div>
              </div>`;
 
-             submitScript = `<script>
+              submitScript = `<script>
+const FIELD_LABEL_MAP=${fieldLabelMapJson};
+function resolveFieldKey(rawKey){
+    if(FIELD_LABEL_MAP[rawKey]) return FIELD_LABEL_MAP[rawKey];
+    const noBracket=rawKey.replace(/\\[\\]$/,'');
+    if(FIELD_LABEL_MAP[noBracket]) return FIELD_LABEL_MAP[noBracket];
+    if(rawKey.startsWith('custom_')) return rawKey.replace(/^custom_/,'').replace(/\\[\\]$/,'');
+    return rawKey;
+}
 function readFile(file, fieldLabel){
     return new Promise((resolve,reject)=>{
         const reader=new FileReader();
@@ -1012,6 +1062,7 @@ async function proceedHybridSubmit(){
         const data={};
         const filePromises=[];
         for(const [key,value] of formData.entries()){
+            const targetKey=resolveFieldKey(key);
             if(value instanceof File){
                 if(value.size>0){
                     if(value.size>5*1024*1024){
@@ -1019,14 +1070,14 @@ async function proceedHybridSubmit(){
                         throw new Error('File too large');
                     }
                     const inputEl=form.querySelector('[name="'+key+'"]');
-                    const fieldLabel=inputEl?.closest('div')?.querySelector('label')?.textContent?.trim()||key;
-                    filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[key]=fileObj;}));
+                    const fieldLabel=FIELD_LABEL_MAP[key]||inputEl?.closest('div')?.querySelector('label')?.textContent?.replace('*','')?.trim()||targetKey;
+                    filePromises.push(readFile(value,fieldLabel).then(fileObj=>{data[targetKey]=fileObj;}));
                 }
             }else{
-                if(data[key]){
-                    data[key]=data[key]+", "+value;
+                if(data[targetKey]){
+                    data[targetKey]=data[targetKey]+", "+value;
                 }else{
-                    data[key]=value;
+                    data[targetKey]=value;
                 }
             }
         }
@@ -1402,7 +1453,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                                 <ol className="list-decimal pl-4 space-y-1 text-gray-700">
                                                     <li>Buka Google Spreadsheet baru panitia &gt; klik menu <strong>Ekstensi &gt; Apps Script</strong>.</li>
                                                     <li>Hapus kode default di file <code>Code.gs</code>, lalu tempelkan seluruh kode script di bawah ini.</li>
-                                                    <li><strong>Folder Drive (Otomatis/Manual):</strong> Isi kotak <em>"ID atau Link Folder Google Drive"</em> di atas sebelum menyalin kode, atau ganti <code>var folderId = "..."</code> di dalam script (mendukung ID langsung maupun Link URL folder Drive).</li>
+                                                    <li><strong>Folder Drive Otomatis:</strong> Cukup isi kotak <em>"ID atau Link Folder Google Drive Tujuan Berkas"</em> di atas. ID Folder otomatis tertanam ke dalam script <code>Code.gs</code> dan file HTML formulir tanpa perlu mengedit isi kodenya secara manual.</li>
                                                     <li><strong>PENTING Saat Update Script / Ganti Folder ID:</strong> Setiap kali Anda mengubah isi <code>Code.gs</code> di Apps Script, wajib klik <strong>Deploy &gt; Kelola Deployment &gt; Ikon Pensil (Edit) &gt; Versi: "Versi Baru" &gt; Deploy</strong> agar perubahan Folder ID aktif!</li>
                                                     <li><strong>Deploy Web App:</strong> Klik tombol biru <strong>Deploy &gt; Deployment Baru</strong> &gt; pilih jenis <strong>Aplikasi Web</strong> &gt; atur Akses: <strong>Siapa Saja (Anyone)</strong>.</li>
                                                     <li>Salin URL hasil deployment (berakhiran <code>/exec</code>) ke kotak input URL di atas.</li>

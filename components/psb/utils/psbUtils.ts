@@ -1,4 +1,116 @@
-import { Pendaftar, PondokSettings, PsbNilaiUjian } from '../../../types';
+import { Pendaftar, PondokSettings, PsbCustomField, PsbNilaiUjian } from '../../../types';
+
+/**
+ * Collects all configured PSB custom fields from active psbConfig and saved templates
+ * (prioritizing templates matching the applicant's jenjangId if provided).
+ */
+export const getAllConfiguredCustomFields = (
+    settings?: PondokSettings,
+    jenjangId?: number
+): PsbCustomField[] => {
+    if (!settings?.psbConfig) return [];
+    const result: PsbCustomField[] = [];
+    const seenIds = new Set<string>();
+
+    const addFields = (fields?: PsbCustomField[]) => {
+        if (!Array.isArray(fields)) return;
+        for (const f of fields) {
+            if (!f || !f.id) continue;
+            if (!seenIds.has(f.id)) {
+                seenIds.add(f.id);
+                result.push(f);
+            }
+        }
+    };
+
+    // 1. Prioritize templates matching jenjangId
+    if (jenjangId && Array.isArray(settings.psbConfig.templates)) {
+        for (const tpl of settings.psbConfig.templates) {
+            if (tpl.targetJenjangId === jenjangId) {
+                addFields(tpl.customFields);
+            }
+        }
+    }
+
+    // 2. Active customFields in psbConfig
+    addFields(settings.psbConfig.customFields);
+
+    // 3. Remaining templates as fallback lookup for older/other-jenjang submissions
+    if (Array.isArray(settings.psbConfig.templates)) {
+        for (const tpl of settings.psbConfig.templates) {
+            addFields(tpl.customFields);
+        }
+    }
+
+    return result;
+};
+
+/**
+ * Resolves any customData key (such as 'custom_field_1791259609262[]', 'field_1791259609262',
+ * 'custom field 1791259609262[]', 'docs[]', etc.) into its human-readable question label.
+ */
+export const resolveCustomFieldLabel = (
+    rawKey: string,
+    settings?: PondokSettings,
+    jenjangId?: number,
+    valHint?: any
+): string => {
+    if (!rawKey) return 'Data Tambahan';
+    const trimmed = String(rawKey).trim();
+
+    if (/^docs(\[\])?$/i.test(trimmed)) {
+        return 'Checklist Berkas Persyaratan';
+    }
+
+    const isStatusSuffix = /(_status|\s+status)$/i.test(trimmed);
+
+    // Normalize away 'custom_', 'custom ', trailing '[]', and trailing '_status'
+    const stripped = trimmed
+        .replace(/^custom[_\s]+/i, '')
+        .replace(/(\[\])+$/g, '')
+        .replace(/(_status|\s+status)$/i, '')
+        .trim();
+
+    // Extract numeric timestamp if key is like 'field_1791259609262' or 'field 1791259609262' or '1791259609262'
+    const timestampMatch = stripped.match(/^(?:field[_\s]*)?(\d{10,})$/i);
+    const numericId = timestampMatch ? timestampMatch[1] : null;
+    const normalizedFieldId = numericId ? `field_${numericId}` : stripped.replace(/\s+/g, '_');
+
+    const allFields = getAllConfiguredCustomFields(settings, jenjangId);
+    if (allFields.length > 0) {
+        const matched = allFields.find(f => {
+            if (!f.id) return false;
+            const fId = String(f.id).trim();
+            const fNum = fId.replace(/^field[_\s]*/i, '');
+            if (fId === stripped || fId === normalizedFieldId) return true;
+            if (numericId && (fNum === numericId || fId === numericId)) return true;
+            if (f.label && f.label.trim().toLowerCase() === stripped.toLowerCase()) return true;
+            return false;
+        });
+        if (matched && matched.label && matched.label.trim()) {
+            return isStatusSuffix ? `${matched.label.trim()} (Status Berkas)` : matched.label.trim();
+        }
+    }
+
+    // If it was an unresolved generated ID (e.g. field_1791259609262 whose template was deleted)
+    if (numericId) {
+        const isFileVal =
+            typeof valHint === 'string' &&
+            (valHint.startsWith('http://') || valHint.startsWith('https://') || valHint.startsWith('data:'));
+        const shortId = numericId.slice(-4);
+        return isFileVal
+            ? `Dokumen / Berkas Lampiran (#${shortId})`
+            : `Pertanyaan Tambahan (#${shortId})`;
+    }
+
+    // Otherwise format human-readable key cleanly without 'custom_' or '[]'
+    return stripped
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^./, str => str.toUpperCase())
+        .trim() || 'Data Tambahan';
+};
 
 /**
  * Extracts a clean Google Drive Folder ID from a raw ID or full Drive URL
@@ -134,7 +246,10 @@ export const getPendaftarWaliName = (p?: Pendaftar | null): string => {
  * inside `customData` ("Data Tambahan") and promoting them to top-level Pendaftar properties,
  * while normalizing phone numbers.
  */
-export const healPendaftarRecordWithDetails = (raw: any): {
+export const healPendaftarRecordWithDetails = (
+    raw: any,
+    settings?: PondokSettings
+): {
     healed: Pendaftar;
     cleanedCustomObj: Record<string, any>;
     changed: boolean;
@@ -263,47 +378,79 @@ export const healPendaftarRecordWithDetails = (raw: any): {
         return undefined;
     };
 
-    for (const key of Object.keys(customObj)) {
-        const val = customObj[key];
-        const isFileLink = typeof val === 'string' && (val.startsWith('data:') || val.startsWith('http'));
-        if (isFileLink) continue;
+    const allConfiguredFields = getAllConfiguredCustomFields(settings, healed.jenjangId);
 
-        const normKey = key.toLowerCase().replace(/^custom_/, '').replace(/[^a-z0-9]/g, '');
-        if (metadataKeysToDrop.has(normKey)) {
-            delete customObj[key];
+    for (const key of Object.keys(customObj)) {
+        let val = customObj[key];
+        if (Array.isArray(val)) {
+            val = val.filter(Boolean).join(', ');
+            customObj[key] = val;
             changed = true;
+        }
+        const isFileLink = typeof val === 'string' && (val.startsWith('data:') || val.startsWith('http'));
+
+        if (!isFileLink) {
+            const normKey = key.toLowerCase().replace(/^custom_/, '').replace(/[^a-z0-9]/g, '');
+            if (metadataKeysToDrop.has(normKey)) {
+                delete customObj[key];
+                changed = true;
+                continue;
+            }
+
+            const targetProp = aliasMap[normKey];
+            if (targetProp) {
+                if (targetProp === 'alamatRumah') {
+                    if (typeof healed.alamat === 'object' && healed.alamat !== null) {
+                        if (!healed.alamat.detail && val) {
+                            healed.alamat = { ...healed.alamat, detail: String(val).trim() };
+                        }
+                    } else if (!healed.alamat && val) {
+                        healed.alamat = { detail: String(val).trim() };
+                    }
+                } else if (['desaKelurahan', 'kecamatan', 'kabupatenKota', 'provinsi', 'kodePos'].includes(targetProp)) {
+                    const currentAddr = typeof healed.alamat === 'object' && healed.alamat !== null ? healed.alamat : { detail: typeof healed.alamat === 'string' ? healed.alamat : '' };
+                    if (!currentAddr[targetProp] && val) {
+                        healed.alamat = { ...currentAddr, [targetProp]: String(val).trim() };
+                    }
+                } else {
+                    const currentVal = healed[targetProp];
+                    const isEmptyCurrent = currentVal === undefined || currentVal === null || currentVal === '' || currentVal === 0;
+                    if (isEmptyCurrent && val !== undefined && val !== null && String(val).trim() !== '') {
+                        if (numericFields.has(targetProp)) {
+                            const num = parseNumeric(val);
+                            if (num !== undefined) healed[targetProp] = num;
+                        } else {
+                            healed[targetProp] = String(val).trim();
+                        }
+                    }
+                }
+                delete customObj[key];
+                changed = true;
+                continue;
+            }
+        }
+
+        // Normalize custom_field_xxx[] or docs[] keys if we can resolve them to a configured question label
+        if (/^docs(\[\])?$/i.test(key.trim())) {
+            const cleanLabel = 'Checklist Berkas Persyaratan';
+            if (key !== cleanLabel) {
+                customObj[cleanLabel] = val;
+                delete customObj[key];
+                changed = true;
+            }
             continue;
         }
 
-        const targetProp = aliasMap[normKey];
-        if (targetProp) {
-            if (targetProp === 'alamatRumah') {
-                if (typeof healed.alamat === 'object' && healed.alamat !== null) {
-                    if (!healed.alamat.detail && val) {
-                        healed.alamat = { ...healed.alamat, detail: String(val).trim() };
-                    }
-                } else if (!healed.alamat && val) {
-                    healed.alamat = { detail: String(val).trim() };
+        if (allConfiguredFields.length > 0) {
+            const resolvedLabel = resolveCustomFieldLabel(key, settings, healed.jenjangId, val);
+            // Only replace key if it matched a real configured label (not a generic fallback with (#xxxx))
+            if (resolvedLabel && resolvedLabel !== key && !/\(#\d{4}\)$/.test(resolvedLabel)) {
+                if (customObj[resolvedLabel] === undefined) {
+                    customObj[resolvedLabel] = val;
                 }
-            } else if (['desaKelurahan', 'kecamatan', 'kabupatenKota', 'provinsi', 'kodePos'].includes(targetProp)) {
-                const currentAddr = typeof healed.alamat === 'object' && healed.alamat !== null ? healed.alamat : { detail: typeof healed.alamat === 'string' ? healed.alamat : '' };
-                if (!currentAddr[targetProp] && val) {
-                    healed.alamat = { ...currentAddr, [targetProp]: String(val).trim() };
-                }
-            } else {
-                const currentVal = healed[targetProp];
-                const isEmptyCurrent = currentVal === undefined || currentVal === null || currentVal === '' || currentVal === 0;
-                if (isEmptyCurrent && val !== undefined && val !== null && String(val).trim() !== '') {
-                    if (numericFields.has(targetProp)) {
-                        const num = parseNumeric(val);
-                        if (num !== undefined) healed[targetProp] = num;
-                    } else {
-                        healed[targetProp] = String(val).trim();
-                    }
-                }
+                delete customObj[key];
+                changed = true;
             }
-            delete customObj[key];
-            changed = true;
         }
     }
 
@@ -363,8 +510,8 @@ export const healPendaftarRecordWithDetails = (raw: any): {
     };
 };
 
-export const healPendaftarRecord = (raw: any): Pendaftar => {
-    return healPendaftarRecordWithDetails(raw).healed;
+export const healPendaftarRecord = (raw: any, settings?: PondokSettings): Pendaftar => {
+    return healPendaftarRecordWithDetails(raw, settings).healed;
 };
 
 export const getPsbRegistrationNumber = (pendaftar: Pendaftar, jenjangName?: string): string => {

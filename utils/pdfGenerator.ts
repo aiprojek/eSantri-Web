@@ -597,6 +597,79 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 background: white !important;
             }
 
+            /* PSB Print Form (F-PSB) & Exam Card Print Styling (Single & Bulk) */
+            #psb-print-form {
+                display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                background: white !important;
+                overflow: visible !important;
+            }
+
+            .psb-print-form-sheet {
+                display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0.8cm 1cm !important;
+                box-shadow: none !important;
+                border: none !important;
+                border-radius: 0 !important;
+                background: white !important;
+                box-sizing: border-box !important;
+                overflow: visible !important;
+            }
+
+            .psb-print-form-sheet:not(:last-child) {
+                page-break-after: always !important;
+                break-after: page !important;
+            }
+
+            #psb-exam-card {
+                display: block !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                background: white !important;
+                overflow: visible !important;
+            }
+
+            .psb-exam-card-sheet {
+                display: block !important;
+                width: 100% !important;
+                max-width: 19cm !important;
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0.6cm auto !important;
+                padding: 0.7cm 0.8cm !important;
+                box-shadow: none !important;
+                border: 1.5px solid #1e293b !important;
+                border-radius: 10px !important;
+                background: white !important;
+                box-sizing: border-box !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                overflow: visible !important;
+            }
+
+            .psb-exam-card-sheet:not(:last-child) {
+                page-break-after: always !important;
+                break-after: page !important;
+            }
+
             /* Universal and complete shadow removal for clean print */
             *, *::before, *::after,
             .rounded-lg, .rounded-xl, .rounded-2xl,
@@ -624,21 +697,19 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
         <body>
             ${content}
             <script>
+                window.printCalled = false;
+                function triggerPrintOnce() {
+                    if (window.printCalled) return;
+                    window.printCalled = true;
+                    window.focus();
+                    window.print();
+                }
                 // Wait for resources (images/fonts) to load before printing
                 window.onload = () => {
-                    setTimeout(() => {
-                        window.focus();
-                        window.print();
-                    }, 1000);
+                    setTimeout(triggerPrintOnce, 600);
                 };
                 // Fallback if onload takes too long
-                setTimeout(() => {
-                    if (!window.printCalled) {
-                        window.focus();
-                        window.print();
-                        window.printCalled = true;
-                    }
-                }, 5000);
+                setTimeout(triggerPrintOnce, 3500);
             </script>
         </body>
         </html>

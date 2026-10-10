@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useMemo } from 'react';
+import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { Pendaftar, PondokSettings, Santri, RiwayatStatus, Tagihan, PendaftarStatus } from '../../types';
@@ -8,11 +8,21 @@ import { loadFirebaseRealtimeRuntime } from '../../utils/lazyFirebaseRuntimes';
 import { buildStandardExportFileName } from '../../utils/exportFileName';
 import { LoadingFallback } from '../common/LoadingFallback';
 import { PsbExamCardModal } from './modals/PsbExamCardModal';
-import { PsbAcceptanceModal } from './modals/PsbAcceptanceModal';
+import { PsbAcceptanceModal, PsbBillingOption, PsbPlacementOption } from './modals/PsbAcceptanceModal';
 import { PsbPrintFormModal } from './modals/PsbPrintFormModal';
 import { PsbGasConfigModal } from './modals/PsbGasConfigModal';
 import { PsbAnnouncementModal } from './modals/PsbAnnouncementModal';
-import { getPsbRegistrationNumber, calculatePsbAverageScore, openWhatsappChat } from './utils/psbUtils';
+import {
+    getPsbRegistrationNumber,
+    calculatePsbAverageScore,
+    openWhatsappChat,
+    healPendaftarRecord,
+    healPendaftarRecordWithDetails,
+    getPendaftarPhone,
+    getPendaftarWaliName,
+    normalizePhoneLocal,
+    PSB_ALL_STANDARD_FIELD_KEYS
+} from './utils/psbUtils';
 
 const PendaftarModal = React.lazy(() => import('./modals/PendaftarModal').then((module) => ({ default: module.PendaftarModal })));
 const BulkPendaftarEditor = React.lazy(() => import('./modals/BulkPendaftarEditor').then((module) => ({ default: module.BulkPendaftarEditor })));
@@ -41,6 +51,11 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const [examCardPendaftar, setExamCardPendaftar] = useState<Pendaftar | null>(null);
     const [acceptancePendaftar, setAcceptancePendaftar] = useState<Pendaftar | null>(null);
     const [printFormPendaftar, setPrintFormPendaftar] = useState<Pendaftar | null>(null);
+    const [bulkPrintFormList, setBulkPrintFormList] = useState<Pendaftar[] | null>(null);
+    const [bulkExamCardList, setBulkExamCardList] = useState<Pendaftar[] | null>(null);
+    const [bulkAcceptanceList, setBulkAcceptanceList] = useState<Pendaftar[] | null>(null);
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [bulkStatusTarget, setBulkStatusTarget] = useState<PendaftarStatus | ''>('');
     const [isBulkEditorOpen, setIsBulkEditorOpen] = useState(false);
     const [isArchiving, setIsArchiving] = useState(false);
     const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
@@ -49,18 +64,40 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const method = settings.psbConfig.submissionMethod === 'portal' ? 'hybrid' : settings.psbConfig.submissionMethod;
     const scriptUrl = settings.psbConfig.googleScriptUrl;
 
+    // Auto-heal existing pendaftar records if standard fields (fisik, telepon, ortu) were stored in customData
+    useEffect(() => {
+        if (!pendaftarList || pendaftarList.length === 0) return;
+        const recordsToUpdate: Pendaftar[] = [];
+        for (const p of pendaftarList) {
+            const { healed, changed } = healPendaftarRecordWithDetails(p);
+            if (changed) {
+                recordsToUpdate.push(healed);
+            }
+        }
+        if (recordsToUpdate.length > 0) {
+            db.pendaftar.bulkPut(recordsToUpdate).then(() => {
+                onUpdateList();
+            }).catch((err) => console.warn('Auto-heal pendaftar warning:', err));
+        }
+    }, [pendaftarList, onUpdateList]);
+
+    const healedPendaftarList = useMemo(() => {
+        return pendaftarList.map(p => healPendaftarRecord(p));
+    }, [pendaftarList]);
+
     const filteredData = useMemo(() => {
-        return pendaftarList.filter(p => {
+        return healedPendaftarList.filter(p => {
             const noReg = p.nomorRegistrasi || '';
+            const phone = getPendaftarPhone(p);
             const matchSearch = p.namaLengkap.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                (p.nisn && p.nisn.includes(searchTerm)) ||
-                               (p.nomorHpWali && p.nomorHpWali.includes(searchTerm)) ||
+                               (phone && phone.includes(searchTerm)) ||
                                noReg.toLowerCase().includes(searchTerm.toLowerCase());
             const matchJenjang = !filterJenjang || p.jenjangId === parseInt(filterJenjang);
             const matchStatus = !filterStatus || p.status === filterStatus;
             return matchSearch && matchJenjang && matchStatus;
         });
-    }, [pendaftarList, searchTerm, filterJenjang, filterStatus]);
+    }, [healedPendaftarList, searchTerm, filterJenjang, filterStatus]);
 
     const psbStats = useMemo(() => {
         return {
@@ -174,12 +211,8 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
             // Define fields that map directly to Pendaftar, others go to customData
             const standardFields = [
-                'namaLengkap', 'nisn', 'nik', 'jenisKelamin', 'tempatLahir', 'tanggalLahir', 
-                'alamat', 'desaKelurahan', 'kecamatan', 'kabupatenKota', 'provinsi', 'kodePos',
-                'namaAyah', 'nikAyah', 'statusAyah', 'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'teleponAyah',
-                'namaIbu', 'nikIbu', 'statusIbu', 'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'teleponIbu',
-                'namaWali', 'nomorHpWali', 'jenjangId', 'asalSekolah', 'tanggalDaftar', 'Timestamp',
-                'catatan', 'jalurPendaftaran'
+                ...PSB_ALL_STANDARD_FIELD_KEYS,
+                'tanggalDaftar', 'Timestamp', 'sheetName', 'driveFolderId', 'folderId', 'docs', 'status'
             ];
 
             for (const item of rawData) {
@@ -198,39 +231,60 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     }
                 });
 
-                const newPendaftar: Pendaftar = {
+                const rawPendaftar: Pendaftar = {
                     id: Date.now() + Math.random(), // Ensure unique ID locally
-                    namaLengkap: item.namaLengkap,
-                    nisn: item.nisn || '',
-                    nik: item.nik || '',
+                    namaLengkap: String(item.namaLengkap || '').trim(),
+                    namaHijrah: item.namaHijrah ? String(item.namaHijrah).trim() : '',
+                    nisn: item.nisn ? String(item.nisn).trim() : '',
+                    nik: item.nik ? String(item.nik).trim() : '',
                     nis: '',
-                    jenisSantri: 'Mondok - Baru',
+                    jenisSantri: item.jenisSantri || 'Mondok - Baru',
                     kelasId: 0,
                     rombelId: 0,
                     jenisKelamin: item.jenisKelamin === 'Perempuan' ? 'Perempuan' : 'Laki-laki',
                     tempatLahir: item.tempatLahir || '',
                     tanggalLahir: item.tanggalLahir || '',
+                    agama: item.agama || 'Islam',
+                    golonganDarah: item.golonganDarah || '',
+                    statusKeluarga: item.statusKeluarga || '',
+                    anakKe: item.anakKe !== undefined && item.anakKe !== '' ? Number(item.anakKe) : undefined,
+                    jumlahSaudara: item.jumlahSaudara !== undefined && item.jumlahSaudara !== '' ? Number(item.jumlahSaudara) : undefined,
+                    citaCita: item.citaCita || '',
+                    hobi: item.hobi || '',
+                    telepon: normalizePhoneLocal(item.telepon || item.noHp),
+                    jarakKePondok: item.jarakKePondok || '',
+                    tinggiBadan: item.tinggiBadan !== undefined && item.tinggiBadan !== '' ? Number(String(item.tinggiBadan).replace(/[^0-9.]/g, '')) : undefined,
+                    beratBadan: item.beratBadan !== undefined && item.beratBadan !== '' ? Number(String(item.beratBadan).replace(/[^0-9.]/g, '')) : undefined,
+                    riwayatPenyakit: item.riwayatPenyakit || '',
+                    berkebutuhanKhusus: item.berkebutuhanKhusus || '',
                     alamat: {
                         detail: item.alamat || '',
                         desaKelurahan: item.desaKelurahan || '',
                         kecamatan: item.kecamatan || '',
                         kabupatenKota: item.kabupatenKota || '',
                         provinsi: item.provinsi || '',
-                        kodePos: item.kodePos || '',
+                        kodePos: item.kodePos ? String(item.kodePos) : '',
                     },
                     
                     namaWali: item.namaWali || '',
-                    nomorHpWali: item.nomorHpWali || '',
+                    nikWali: item.nikWali ? String(item.nikWali) : '',
+                    nomorHpWali: normalizePhoneLocal(item.nomorHpWali || item.teleponAyah || item.teleponIbu || item.telepon),
+                    statusWali: item.statusWali || '',
+                    pekerjaanWali: item.pekerjaanWali || '',
+                    pendidikanWali: item.pendidikanWali || '',
+                    penghasilanWali: item.penghasilanWali || '',
                     jenjangId: parseInt(item.jenjangId) || settings.psbConfig.targetJenjangId || 0,
-                    asalSekolah: item.asalSekolah || '',
+                    asalSekolah: item.asalSekolah || item.sekolahAsal || '',
+                    alamatSekolahAsal: item.alamatSekolahAsal || '',
+                    nomorIjazahSebelumnya: item.nomorIjazahSebelumnya ? String(item.nomorIjazahSebelumnya) : '',
+                    tahunLulusSebelumnya: item.tahunLulusSebelumnya ? String(item.tahunLulusSebelumnya) : '',
+                    targetJuz: item.targetJuz !== undefined && item.targetJuz !== '' ? Number(String(item.targetJuz).replace(/[^0-9.]/g, '')) : undefined,
                     tanggalDaftar: item.tanggalDaftar || item.Timestamp || new Date().toISOString(),
-                    // Fix: Add missing tanggalMasuk required by Pendaftar type (from Santri)
                     tanggalMasuk: item.tanggalDaftar || item.Timestamp || new Date().toISOString(),
                     status: 'Baru',
-                    kewarganegaraan: 'WNI',
+                    kewarganegaraan: item.kewarganegaraan || 'WNI',
                     gelombang: settings.psbConfig.activeGelombang,
                     
-                    // Fix: Add missing fields required by Pendaftar type
                     catatan: item.catatan || '',
                     jalurPendaftaran: item.jalurPendaftaran || 'Reguler',
 
@@ -238,17 +292,28 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     customData: JSON.stringify(customDataObj),
                     
                     namaAyah: item.namaAyah || '',
-                    nikAyah: item.nikAyah || '',
+                    nikAyah: item.nikAyah ? String(item.nikAyah) : '',
+                    statusAyah: item.statusAyah || '',
+                    tempatLahirAyah: item.tempatLahirAyah || '',
+                    tanggalLahirAyah: item.tanggalLahirAyah || '',
+                    pendidikanAyah: item.pendidikanAyah || '',
                     pekerjaanAyah: item.pekerjaanAyah || '',
-                    teleponAyah: item.teleponAyah || '',
+                    penghasilanAyah: item.penghasilanAyah || '',
+                    teleponAyah: normalizePhoneLocal(item.teleponAyah),
                     
                     namaIbu: item.namaIbu || '',
-                    nikIbu: item.nikIbu || '',
+                    nikIbu: item.nikIbu ? String(item.nikIbu) : '',
+                    statusIbu: item.statusIbu || '',
+                    tempatLahirIbu: item.tempatLahirIbu || '',
+                    tanggalLahirIbu: item.tanggalLahirIbu || '',
+                    pendidikanIbu: item.pendidikanIbu || '',
                     pekerjaanIbu: item.pekerjaanIbu || '',
-                    teleponIbu: item.teleponIbu || '',
+                    penghasilanIbu: item.penghasilanIbu || '',
+                    teleponIbu: normalizePhoneLocal(item.teleponIbu),
                     lastModified: Date.now(),
                 };
 
+                const newPendaftar = healPendaftarRecord(rawPendaftar);
                 await db.pendaftar.add(newPendaftar);
                 addedCount++;
             }
@@ -332,7 +397,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             };
         }
 
-        const newPendaftar: Pendaftar = {
+        const rawPendaftar: Pendaftar = {
             id: Date.now(),
             ...data,
             alamat: alamatObj,
@@ -345,6 +410,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             customData: Object.keys(customDataObj).length > 0 ? JSON.stringify(customDataObj) : (data.customData || '{}'),
             lastModified: Date.now(),
         };
+        const newPendaftar = healPendaftarRecord(rawPendaftar);
         db.pendaftar.add(newPendaftar).then(() => {
             onUpdateList();
         });
@@ -359,34 +425,60 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
         }, { confirmColor: 'red' });
     }
 
+    const selectedPendaftarObjects = useMemo(() => {
+        if (selectedIds.length === 0) return [];
+        const idSet = new Set(selectedIds);
+        return healedPendaftarList.filter(p => idSet.has(p.id));
+    }, [healedPendaftarList, selectedIds]);
+
+    const isAllFilteredSelected = useMemo(() => {
+        return filteredData.length > 0 && filteredData.every(p => selectedIds.includes(p.id));
+    }, [filteredData, selectedIds]);
+
+    const toggleSelectAll = () => {
+        if (isAllFilteredSelected) {
+            const filteredIdSet = new Set(filteredData.map(p => p.id));
+            setSelectedIds(prev => prev.filter(id => !filteredIdSet.has(id)));
+        } else {
+            const combined = new Set([...selectedIds, ...filteredData.map(p => p.id)]);
+            setSelectedIds(Array.from(combined));
+        }
+    };
+
+    const toggleSelectOne = (id: number) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+    };
+
     const handleAccept = (pendaftar: Pendaftar) => {
         if (!canWrite) return;
         setAcceptancePendaftar(pendaftar);
     };
 
-    const handleAcceptConfirmed = async (
+    const buildSantriFromPendaftar = (
         pendaftar: Pendaftar,
-        billingOption?: {
-            createBilling: boolean;
-            biayaId: number;
-            nominal: number;
-            deskripsi: string;
-        }
-    ) => {
-        if (!canWrite) return;
+        santriId: number,
+        placementOption?: PsbPlacementOption
+    ): Santri => {
         const customData = pendaftar.customData ? (typeof pendaftar.customData === 'string' ? JSON.parse(pendaftar.customData) : pendaftar.customData) : {};
         const pendaftarAny = pendaftar as any;
 
+        const targetJenjangId = placementOption?.perPendaftar?.[pendaftar.id]?.jenjangId ?? placementOption?.jenjangId ?? pendaftar.jenjangId;
+        const targetKelasId = placementOption?.perPendaftar?.[pendaftar.id]?.kelasId ?? placementOption?.kelasId ?? 0;
+        const targetRombelId = placementOption?.perPendaftar?.[pendaftar.id]?.rombelId ?? placementOption?.rombelId ?? 0;
+        const targetJenisSantri = placementOption?.jenisSantri || pendaftarAny.jenisSantri || 'Mondok - Baru';
+
+        const kelasNama = settings.kelas.find(k => k.id === targetKelasId)?.nama;
+        const rombelNama = settings.rombel.find(r => r.id === targetRombelId)?.nama;
+
         const firstRiwayat: RiwayatStatus = {
-            id: Date.now(),
+            id: santriId,
             status: 'Masuk',
             tanggal: new Date().toISOString().split('T')[0],
-            keterangan: 'Diterima melalui Penerimaan Santri Baru (PSB)'
+            keterangan: `Diterima melalui Penerimaan Santri Baru (PSB)${kelasNama ? ` — Penempatan: ${kelasNama}${rombelNama ? ` (${rombelNama})` : ''}` : ''}`
         };
 
-        const newSantriId = Date.now();
-        const newSantri: Santri = {
-            id: newSantriId,
+        return {
+            id: santriId,
             namaLengkap: pendaftar.namaLengkap,
             namaHijrah: pendaftar.namaHijrah,
             nis: '', // Will be generated later
@@ -399,16 +491,16 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             agama: pendaftarAny.agama || customData.agama || 'Islam',
             golonganDarah: pendaftarAny.golonganDarah || customData.golonganDarah || undefined,
             fotoUrl: pendaftar.fotoUrl || 'https://placehold.co/150x200/e2e8f0/334155?text=Foto',
-            jenisSantri: pendaftarAny.jenisSantri || 'Mondok - Baru',
-            
+            jenisSantri: targetJenisSantri,
+
             // Address Mapping
-            alamat: { 
-                detail: pendaftar.alamat?.detail || (typeof pendaftar.alamat === 'string' ? pendaftar.alamat : '') || '', 
-                desaKelurahan: pendaftar.alamat?.desaKelurahan || pendaftarAny.desaKelurahan || '', 
-                kecamatan: pendaftar.alamat?.kecamatan || pendaftarAny.kecamatan || '', 
-                kabupatenKota: pendaftar.alamat?.kabupatenKota || pendaftarAny.kabupatenKota || '', 
-                provinsi: pendaftar.alamat?.provinsi || pendaftarAny.provinsi || '', 
-                kodePos: pendaftar.alamat?.kodePos || pendaftarAny.kodePos || '' 
+            alamat: {
+                detail: pendaftar.alamat?.detail || (typeof pendaftar.alamat === 'string' ? pendaftar.alamat : '') || '',
+                desaKelurahan: pendaftar.alamat?.desaKelurahan || pendaftarAny.desaKelurahan || '',
+                kecamatan: pendaftar.alamat?.kecamatan || pendaftarAny.kecamatan || '',
+                kabupatenKota: pendaftar.alamat?.kabupatenKota || pendaftarAny.kabupatenKota || '',
+                provinsi: pendaftar.alamat?.provinsi || pendaftarAny.provinsi || '',
+                kodePos: pendaftar.alamat?.kodePos || pendaftarAny.kodePos || ''
             },
 
             // Contact
@@ -454,10 +546,10 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             pendidikanWali: pendaftar.pendidikanWali || customData.pendidikanWali || undefined,
             penghasilanWali: pendaftar.penghasilanWali || customData.penghasilanWali || undefined,
 
-            // Academic & Status
-            jenjangId: pendaftar.jenjangId,
-            kelasId: 0,
-            rombelId: 0,
+            // Academic & Status (Direct Placement to Kelas & Rombel!)
+            jenjangId: targetJenjangId,
+            kelasId: targetKelasId,
+            rombelId: targetRombelId,
             status: 'Aktif',
             tanggalMasuk: new Date().toISOString().split('T')[0],
             sekolahAsal: pendaftar.asalSekolah,
@@ -466,7 +558,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             nomorIjazahSebelumnya: pendaftarAny.nomorIjazahSebelumnya || customData.nomorIjazahSebelumnya || undefined,
             tahunLulusSebelumnya: pendaftarAny.tahunLulusSebelumnya || customData.tahunLulusSebelumnya || undefined,
             targetJuz: pendaftarAny.targetJuz ? Number(pendaftarAny.targetJuz) : (customData.targetJuz ? Number(customData.targetJuz) : undefined),
-            
+
             statusKeluarga: pendaftar.statusKeluarga,
             anakKe: pendaftar.anakKe,
             jumlahSaudara: pendaftar.jumlahSaudara,
@@ -478,33 +570,77 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             riwayatStatus: [firstRiwayat],
             lastModified: Date.now()
         };
+    };
+
+    const handleAcceptConfirmed = async (
+        pendaftarOrList: Pendaftar | Pendaftar[],
+        billingOption?: PsbBillingOption,
+        placementOption?: PsbPlacementOption
+    ) => {
+        if (!canWrite) return;
+        const list = Array.isArray(pendaftarOrList) ? pendaftarOrList : [pendaftarOrList];
+        if (list.length === 0) return;
 
         try {
-            await db.santri.put(newSantri);
+            const baseTimestamp = Date.now();
+            const newSantriList: Santri[] = [];
+            const newTagihanList: Tagihan[] = [];
 
-            // Optional automated billing for registration fee
-            if (billingOption?.createBilling && billingOption.nominal > 0) {
-                const newTagihan: Tagihan = {
-                    id: Date.now() + 1,
-                    santriId: newSantriId,
-                    biayaId: billingOption.biayaId || 0,
-                    deskripsi: billingOption.deskripsi || `Daftar Ulang - ${pendaftar.namaLengkap}`,
-                    bulan: new Date().getMonth() + 1,
-                    tahun: new Date().getFullYear(),
-                    nominal: billingOption.nominal,
-                    status: 'Belum Lunas',
-                    lastModified: Date.now()
-                };
-                await db.tagihan.add(newTagihan);
-            }
+            list.forEach((pendaftar, idx) => {
+                const santriId = baseTimestamp + idx * 2;
+                const newSantri = buildSantriFromPendaftar(pendaftar, santriId, placementOption);
+                newSantriList.push(newSantri);
 
-            await db.pendaftar.update(pendaftar.id, {
-                status: 'Diterima',
-                lastModified: Date.now()
+                if (billingOption?.createBilling && billingOption.nominal > 0) {
+                    newTagihanList.push({
+                        id: santriId + 1,
+                        santriId,
+                        biayaId: billingOption.biayaId || 0,
+                        deskripsi: list.length > 1
+                            ? `${billingOption.deskripsi || 'Daftar Ulang Santri Baru'} - ${pendaftar.namaLengkap}`
+                            : (billingOption.deskripsi || `Daftar Ulang - ${pendaftar.namaLengkap}`),
+                        bulan: new Date().getMonth() + 1,
+                        tahun: new Date().getFullYear(),
+                        nominal: billingOption.nominal,
+                        status: 'Belum Lunas',
+                        lastModified: Date.now()
+                    });
+                }
             });
 
+            await db.santri.bulkPut(newSantriList);
+            if (newTagihanList.length > 0) {
+                await db.tagihan.bulkAdd(newTagihanList);
+            }
+
+            await Promise.all(
+                list.map(p =>
+                    db.pendaftar.update(p.id, {
+                        status: 'Diterima',
+                        jenjangId: placementOption?.perPendaftar?.[p.id]?.jenjangId ?? placementOption?.jenjangId ?? p.jenjangId,
+                        lastModified: Date.now()
+                    })
+                )
+            );
+
+            const kelasNama = settings.kelas.find(k => k.id === placementOption?.kelasId)?.nama;
+            const rombelNama = settings.rombel.find(r => r.id === placementOption?.rombelId)?.nama;
+            const infoPenempatan = kelasNama ? ` ke ${kelasNama}${rombelNama ? ` (${rombelNama})` : ''}` : '';
+
+            setSelectedIds(prev => prev.filter(id => !list.some(p => p.id === id)));
             onUpdateList();
-            showToast(`${pendaftar.namaLengkap} resmi diterima! Data santri tersimpan${billingOption?.createBilling ? ' beserta tagihan daftar ulang.' : '.'}`, 'success');
+
+            if (list.length === 1) {
+                showToast(
+                    `${list[0].namaLengkap} resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}`,
+                    'success'
+                );
+            } else {
+                showToast(
+                    `${list.length} santri resmi diterima & dimigrasikan${infoPenempatan}!${billingOption?.createBilling ? ' Tagihan daftar ulang telah dibuat.' : ''}`,
+                    'success'
+                );
+            }
         } catch (e: any) {
             console.error(e);
             showAlert('Gagal Menerima Santri', e.message || 'Terjadi kesalahan saat memproses penerimaan.');
@@ -527,6 +663,33 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             showToast(`Status ${pendaftar.namaLengkap} diubah menjadi "${newStatus}".`, 'success');
         } catch (e: any) {
             showAlert('Gagal Ubah Status', e.message);
+        }
+    };
+
+    const handleBulkStatusApply = async (targetStatus: PendaftarStatus) => {
+        if (!canWrite || selectedPendaftarObjects.length === 0) return;
+
+        if (targetStatus === 'Diterima') {
+            // Directly open Kelas & Rombel placement modal for all selected pendaftar!
+            setBulkAcceptanceList(selectedPendaftarObjects);
+            return;
+        }
+
+        try {
+            const now = Date.now();
+            await Promise.all(
+                selectedPendaftarObjects.map(p =>
+                    db.pendaftar.update(p.id, {
+                        status: targetStatus,
+                        lastModified: now
+                    })
+                )
+            );
+            onUpdateList();
+            showToast(`Status ${selectedPendaftarObjects.length} pendaftar berhasil diubah menjadi "${targetStatus}".`, 'success');
+            setBulkStatusTarget('');
+        } catch (e: any) {
+            showAlert('Gagal Ubah Status Massal', e.message || 'Terjadi kesalahan.');
         }
     };
 
@@ -812,10 +975,103 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     </select>
                 </div>
 
+                {/* Bulk Action Toolbar */}
+                {selectedIds.length > 0 && (
+                    <div className="mb-4 p-3 sm:p-3.5 rounded-xl bg-teal-900 text-white shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-3 animate-in fade-in duration-150">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="bg-teal-700 border border-teal-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5">
+                                <i className="bi bi-check2-square"></i>
+                                {selectedIds.length} Pendaftar Dipilih
+                            </span>
+                            <button
+                                type="button"
+                                onClick={toggleSelectAll}
+                                className="text-xs text-teal-200 hover:text-white underline px-1.5 py-0.5 cursor-pointer"
+                            >
+                                {isAllFilteredSelected ? 'Batal Pilih Filter Ini' : `Pilih Semua (${filteredData.length})`}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedIds([])}
+                                className="text-xs text-red-200 hover:text-white underline px-1.5 py-0.5 cursor-pointer"
+                            >
+                                Reset Pilihan
+                            </button>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* 1. Bulk Cetak Formulir */}
+                            <button
+                                type="button"
+                                onClick={() => setBulkPrintFormList(selectedPendaftarObjects)}
+                                className="px-3 py-1.5 rounded-lg bg-white text-teal-900 hover:bg-teal-50 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                                title="Cetak Lembar Formulir Pendaftaran (F-PSB) secara massal"
+                            >
+                                <i className="bi bi-file-earmark-text-fill text-teal-700"></i>
+                                Cetak Formulir ({selectedIds.length})
+                            </button>
+
+                            {/* 2. Bulk Cetak Kartu Ujian */}
+                            <button
+                                type="button"
+                                onClick={() => setBulkExamCardList(selectedPendaftarObjects)}
+                                className="px-3 py-1.5 rounded-lg bg-purple-100 text-purple-900 hover:bg-purple-200 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+                                title="Cetak Kartu Ujian Seleksi PSB secara massal"
+                            >
+                                <i className="bi bi-card-heading text-purple-700"></i>
+                                Cetak Kartu Ujian ({selectedIds.length})
+                            </button>
+
+                            {/* 3. Bulk Status Pendaftar & Migrasi Kelas Langsung */}
+                            {canWrite && (
+                                <div className="flex items-center gap-1.5 bg-teal-800/90 p-1 rounded-lg border border-teal-600">
+                                    <select
+                                        value={bulkStatusTarget}
+                                        onChange={e => {
+                                            const val = e.target.value as PendaftarStatus | '';
+                                            setBulkStatusTarget(val);
+                                            if (val) {
+                                                handleBulkStatusApply(val);
+                                            }
+                                        }}
+                                        className="bg-white text-gray-800 text-xs font-bold rounded-md px-2.5 py-1 focus:outline-none cursor-pointer"
+                                    >
+                                        <option value="">-- Ubah Status Massal --</option>
+                                        <option value="Baru">Set Status: Baru</option>
+                                        <option value="Verifikasi Berkas">Set Status: Verifikasi Berkas</option>
+                                        <option value="Ujian Masuk">Set Status: Ujian Masuk</option>
+                                        <option value="Cadangan">Set Status: Cadangan</option>
+                                        <option value="Diterima">Set Status: Diterima (Pilih Kelas & Rombel)</option>
+                                        <option value="Ditolak">Set Status: Ditolak</option>
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => setBulkAcceptanceList(selectedPendaftarObjects)}
+                                        className="px-2.5 py-1 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 whitespace-nowrap transition-colors"
+                                        title="Terima pendaftar terpilih & langsung tempatkan ke Kelas dan Rombel"
+                                    >
+                                        <i className="bi bi-check2-circle"></i>
+                                        Terima & Pilih Kelas
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 <div className="hidden md:block overflow-x-auto border rounded-lg">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 text-gray-600 font-semibold border-b">
                             <tr>
+                                <th className="p-3 w-10 text-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={isAllFilteredSelected}
+                                        onChange={toggleSelectAll}
+                                        className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                                        title="Pilih Semua Pendaftar"
+                                    />
+                                </th>
                                 <th className="p-3 w-10 text-center">No</th>
                                 <th className="p-3">Identitas Pendaftar</th>
                                 <th className="p-3">Jenjang</th>
@@ -846,8 +1102,18 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                     p.berkasFisik.pasFoto
                                 ].filter(Boolean).length : 0;
 
+                                const isSelected = selectedIds.includes(p.id);
+
                                 return (
-                                    <tr key={p.id} className="hover:bg-gray-50/80 transition-colors">
+                                    <tr key={p.id} className={`transition-colors ${isSelected ? 'bg-teal-50/70 hover:bg-teal-50' : 'hover:bg-gray-50/80'}`}>
+                                        <td className="p-3 text-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleSelectOne(p.id)}
+                                                className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                                            />
+                                        </td>
                                         <td className="p-3 text-center text-gray-400 font-medium">{idx + 1}</td>
                                         <td className="p-3">
                                             <div className="font-bold text-gray-900">{p.namaLengkap}</div>
@@ -863,17 +1129,19 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                             <div className="text-[11px] text-gray-500">{p.jalurPendaftaran || 'Reguler'}</div>
                                         </td>
                                         <td className="p-3">
-                                            <div className="font-medium text-gray-800">{p.namaWali || '-'}</div>
-                                            {p.nomorHpWali && (
+                                            <div className="font-medium text-gray-800">{getPendaftarWaliName(p)}</div>
+                                            {getPendaftarPhone(p) ? (
                                                 <button
                                                     type="button"
-                                                    onClick={() => openWhatsappChat(p.nomorHpWali, `Assalamu'alaikum Warahmatullahi Wabarakatuh, terkait pendaftaran PSB di ${settings.namaPonpes || 'Pondok Pesantren'} ananda ${p.namaLengkap}...`)}
-                                                    className="inline-flex items-center gap-1 text-xs text-green-700 hover:text-green-800 font-medium hover:underline"
+                                                    onClick={() => openWhatsappChat(getPendaftarPhone(p), `Assalamu'alaikum Warahmatullahi Wabarakatuh, terkait pendaftaran PSB di ${settings.namaPonpes || 'Pondok Pesantren'} ananda ${p.namaLengkap}...`)}
+                                                    className="inline-flex items-center gap-1 text-xs text-green-700 hover:text-green-800 font-medium hover:underline cursor-pointer"
                                                     title="Hubungi via WhatsApp"
                                                 >
                                                     <i className="bi bi-whatsapp text-green-600"></i>
-                                                    {p.nomorHpWali}
+                                                    {getPendaftarPhone(p)}
                                                 </button>
+                                            ) : (
+                                                <span className="text-xs text-gray-400 italic">No. HP belum diisi</span>
                                             )}
                                         </td>
                                         <td className="p-3 text-center">
@@ -992,7 +1260,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                             })}
                             {filteredData.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="p-12 text-center text-gray-500">
+                                    <td colSpan={9} className="p-12 text-center text-gray-500">
                                         <i className="bi bi-inbox text-3xl text-gray-300 block mb-2"></i>
                                         Tidak ada data pendaftar yang sesuai filter.
                                     </td>
@@ -1004,6 +1272,22 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
                 {/* Mobile Cards */}
                 <div className="space-y-3 md:hidden">
+                    {filteredData.length > 0 && (
+                        <div className="flex items-center justify-between px-3 py-2 bg-slate-100 rounded-xl border border-slate-200 text-xs">
+                            <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={isAllFilteredSelected}
+                                    onChange={toggleSelectAll}
+                                    className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                Pilih Semua ({filteredData.length} Pendaftar)
+                            </label>
+                            {selectedIds.length > 0 && (
+                                <span className="text-teal-800 font-bold">{selectedIds.length} terpilih</span>
+                            )}
+                        </div>
+                    )}
                     {filteredData.map((p) => {
                         const customData = p.customData ? JSON.parse(p.customData) : {};
                         const files = Object.keys(customData).filter((key) => {
@@ -1020,17 +1304,26 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                             p.berkasFisik.suratSehat,
                             p.berkasFisik.pasFoto
                         ].filter(Boolean).length : 0;
+                        const isSelected = selectedIds.includes(p.id);
 
                         return (
-                            <article key={p.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+                            <article key={p.id} className={`rounded-xl border p-4 shadow-sm transition-colors ${isSelected ? 'border-teal-500 bg-teal-50/40' : 'border-slate-200 bg-slate-50/70'}`}>
                                 <div className="mb-2 flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <h4 className="truncate text-sm font-bold text-slate-800">{p.namaLengkap}</h4>
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                            <span className="text-[10px] font-mono font-semibold bg-teal-50 text-teal-700 px-1.5 py-0.2 rounded border border-teal-200">
-                                                {regNumber}
-                                            </span>
-                                            <p className="text-xs text-slate-500">{new Date(p.tanggalDaftar).toLocaleDateString('id-ID')}</p>
+                                    <div className="flex items-start gap-2.5 min-w-0">
+                                        <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => toggleSelectOne(p.id)}
+                                            className="mt-1 w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 shrink-0"
+                                        />
+                                        <div className="min-w-0">
+                                            <h4 className="truncate text-sm font-bold text-slate-800">{p.namaLengkap}</h4>
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <span className="text-[10px] font-mono font-semibold bg-teal-50 text-teal-700 px-1.5 py-0.2 rounded border border-teal-200">
+                                                    {regNumber}
+                                                </span>
+                                                <p className="text-xs text-slate-500">{new Date(p.tanggalDaftar).toLocaleDateString('id-ID')}</p>
+                                            </div>
                                         </div>
                                     </div>
                                     {canWrite ? (
@@ -1055,7 +1348,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
 
                                 <div className="space-y-1 text-xs text-slate-600">
                                     <p><span className="font-semibold text-slate-700">Jenjang:</span> {settings.jenjang.find(j => j.id === p.jenjangId)?.nama || '-'} ({p.jalurPendaftaran || 'Reguler'})</p>
-                                    <p><span className="font-semibold text-slate-700">Wali:</span> {p.namaWali || '-'} {p.nomorHpWali ? `(${p.nomorHpWali})` : ''}</p>
+                                    <p><span className="font-semibold text-slate-700">Wali:</span> {getPendaftarWaliName(p)} {getPendaftarPhone(p) ? `(${getPendaftarPhone(p)})` : ''}</p>
                                 </div>
 
                                 <div className="mt-2 pt-2 border-t border-slate-200 flex flex-wrap gap-1.5 items-center justify-between text-xs">
@@ -1069,11 +1362,11 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                             </span>
                                         )}
                                     </div>
-                                    {p.nomorHpWali && (
+                                    {getPendaftarPhone(p) && (
                                         <button
                                             type="button"
-                                            onClick={() => openWhatsappChat(p.nomorHpWali, `Assalamu'alaikum Warahmatullahi Wabarakatuh, terkait pendaftaran PSB ananda ${p.namaLengkap}...`)}
-                                            className="text-green-700 text-xs font-semibold flex items-center gap-1"
+                                            onClick={() => openWhatsappChat(getPendaftarPhone(p), `Assalamu'alaikum Warahmatullahi Wabarakatuh, terkait pendaftaran PSB ananda ${p.namaLengkap}...`)}
+                                            className="text-green-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                                         >
                                             <i className="bi bi-whatsapp"></i> Chat WA
                                         </button>
@@ -1174,30 +1467,43 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             )}
 
             {/* Modals */}
-            {examCardPendaftar && (
+            {(examCardPendaftar || (bulkExamCardList && bulkExamCardList.length > 0)) && (
                 <PsbExamCardModal
-                    isOpen={!!examCardPendaftar}
-                    onClose={() => setExamCardPendaftar(null)}
+                    isOpen={!!examCardPendaftar || !!(bulkExamCardList && bulkExamCardList.length > 0)}
+                    onClose={() => {
+                        setExamCardPendaftar(null);
+                        setBulkExamCardList(null);
+                    }}
                     pendaftar={examCardPendaftar}
+                    pendaftarList={bulkExamCardList || undefined}
                     settings={settings}
                 />
             )}
 
-            {acceptancePendaftar && (
+            {(acceptancePendaftar || (bulkAcceptanceList && bulkAcceptanceList.length > 0)) && (
                 <PsbAcceptanceModal
-                    isOpen={!!acceptancePendaftar}
-                    onClose={() => setAcceptancePendaftar(null)}
+                    isOpen={!!acceptancePendaftar || !!(bulkAcceptanceList && bulkAcceptanceList.length > 0)}
+                    onClose={() => {
+                        setAcceptancePendaftar(null);
+                        setBulkAcceptanceList(null);
+                        setBulkStatusTarget('');
+                    }}
                     pendaftar={acceptancePendaftar}
+                    pendaftarList={bulkAcceptanceList || undefined}
                     settings={settings}
                     onConfirmed={handleAcceptConfirmed}
                 />
             )}
 
-            {printFormPendaftar && (
+            {(printFormPendaftar || (bulkPrintFormList && bulkPrintFormList.length > 0)) && (
                 <PsbPrintFormModal
-                    isOpen={!!printFormPendaftar}
-                    onClose={() => setPrintFormPendaftar(null)}
+                    isOpen={!!printFormPendaftar || !!(bulkPrintFormList && bulkPrintFormList.length > 0)}
+                    onClose={() => {
+                        setPrintFormPendaftar(null);
+                        setBulkPrintFormList(null);
+                    }}
                     pendaftar={printFormPendaftar}
+                    pendaftarList={bulkPrintFormList || undefined}
                     settings={settings}
                 />
             )}

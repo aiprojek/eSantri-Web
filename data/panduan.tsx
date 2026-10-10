@@ -3429,29 +3429,23 @@ export const panduanData: PanduanSectionData[] = [
 
                         <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5 space-y-2 text-xs">
                             <h6 className="font-bold text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
-                                <i className="bi bi-gear-wide-connected text-teal-700"></i> Cara Mengarahkan Berkas ke Folder Tertentu:
+                                <i className="bi bi-gear-wide-connected text-teal-700"></i> Cara Mengarahkan Berkas ke Folder Tertentu (Otomatis &amp; Manual):
                             </h6>
                             <ol className="list-decimal pl-4 space-y-2 text-gray-700 text-[11px]">
                                 <li>
-                                    Buka Google Drive (<a href="https://drive.google.com" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">drive.google.com</a>) dengan akun Google yang sama.
+                                    Buka Google Drive (<a href="https://drive.google.com" target="_blank" rel="noreferrer" className="text-teal-700 underline font-semibold">drive.google.com</a>) dengan akun Google yang sama, lalu buat folder khusus misalnya <strong>"Berkas PSB 2026"</strong>.
                                 </li>
                                 <li>
-                                    Klik <strong>Baru &gt; Folder Baru</strong>, beri nama misalnya <strong>"Berkas PSB 2026"</strong>.
-                                </li>
-                                <li>
-                                    Buka folder tersebut, lalu perhatikan address bar browser Anda. Salin serangkaian kode unik setelah <code>folders/</code>:
+                                    Buka folder tersebut, lalu salin alamat URL lengkapnya atau kode unik setelah <code>folders/</code>:
                                     <div className="mt-1 p-2 bg-white rounded-lg border border-gray-300 font-mono text-[11px] text-gray-800 break-all">
                                         drive.google.com/drive/folders/<span className="bg-amber-100 font-bold text-amber-950 px-1 rounded">1a2B3c4D5e_CONTOH_ID_FOLDER_6f7G</span>
                                     </div>
                                 </li>
                                 <li>
-                                    Kembali ke editor Google Apps Script (<code>Code.gs</code>), cari baris di bagian atas fungsi <code>doPost</code>:
-                                    <div className="mt-1 p-2 bg-slate-900 text-emerald-300 font-mono text-[11px] rounded-lg">
-                                        var folderId = <span className="text-amber-300">"1a2B3c4D5e_CONTOH_ID_FOLDER_6f7G"</span>;
-                                    </div>
+                                    <strong>Metode 1 (Otomatis dari Aplikasi - Disarankan):</strong> Tempelkan Link Folder atau ID Folder tersebut langsung pada kolom <em>"ID atau Link Folder Google Drive Tujuan Berkas"</em> di menu <strong>PSB &gt; Desain Formulir Online</strong>. Sistem otomatis menyematkan ID Folder ke dalam file formulir HTML dan ke dalam kode <code>Code.gs</code>.
                                 </li>
                                 <li>
-                                    Klik <strong>Simpan (ikon disket)</strong>, lalu klik <strong>Deploy &gt; Kelola Deployment &gt; Edit (ikon pensil) &gt; Versi: Baru &gt; Deploy</strong> agar perubahan folder aktif.
+                                    <strong>Metode 2 (Edit Langsung di Code.gs):</strong> Jika Anda mengganti baris <code>var folderId = "..."</code> langsung di dalam editor Google Apps Script (<code>Code.gs</code>), setelah menekan <strong>Simpan (Ctrl+S)</strong> Anda <strong>WAJIB</strong> membuat versi deployment baru: klik <strong>Deploy &gt; Kelola Deployment &gt; Edit (ikon pensil) &gt; Versi: "Versi Baru (New Version)" &gt; Deploy</strong>. Tanpa memilih <em>Versi Baru</em>, Google Apps Script akan tetap menjalankan kode lama sehingga file masuk ke Drive utama.
                                 </li>
                             </ol>
                         </div>

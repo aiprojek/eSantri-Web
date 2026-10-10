@@ -3,7 +3,7 @@ import { Pendaftar, PondokSettings, PsbBerkasFisik, PsbNilaiUjian, PendaftarStat
 import { useAppContext } from '../../../AppContext';
 import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntimes';
 import { isFirebaseClientConfigReady } from '../../../firebaseStorage';
-import { getPsbRegistrationNumber, calculatePsbAverageScore } from '../utils/psbUtils';
+import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal } from '../utils/psbUtils';
 import { MarkdownEditor } from '../../common/MarkdownEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 
@@ -126,42 +126,47 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
     useEffect(() => {
         if (isOpen) {
             if (pendaftarData) {
+                const { healed, cleanedCustomObj } = healPendaftarRecordWithDetails(pendaftarData);
                 // Flatten address object for form state
-                const { alamat, ...rest } = pendaftarData;
+                const { alamat, ...rest } = healed;
                 setFormData({
                     ...rest,
-                    nomorRegistrasi: pendaftarData.nomorRegistrasi || '',
-                    namaHijrah: pendaftarData.namaHijrah || '',
-                    agama: pendaftarData.agama || 'Islam',
-                    golonganDarah: pendaftarData.golonganDarah || '',
-                    citaCita: pendaftarData.citaCita || '',
-                    hobi: Array.isArray(pendaftarData.hobi) ? pendaftarData.hobi.join(', ') : (pendaftarData.hobi || ''),
-                    telepon: pendaftarData.telepon || (pendaftarData as any).noHp || '',
-                    jarakKePondok: pendaftarData.jarakKePondok || '',
-                    tinggiBadan: pendaftarData.tinggiBadan ?? '',
-                    beratBadan: pendaftarData.beratBadan ?? '',
-                    riwayatPenyakit: pendaftarData.riwayatPenyakit || '',
-                    berkebutuhanKhusus: pendaftarData.berkebutuhanKhusus || '',
-                    tempatLahirAyah: pendaftarData.tempatLahirAyah || '',
-                    tanggalLahirAyah: pendaftarData.tanggalLahirAyah ? pendaftarData.tanggalLahirAyah.split('T')[0] : '',
-                    tempatLahirIbu: pendaftarData.tempatLahirIbu || '',
-                    tanggalLahirIbu: pendaftarData.tanggalLahirIbu ? pendaftarData.tanggalLahirIbu.split('T')[0] : '',
-                    nikWali: pendaftarData.nikWali || '',
-                    pekerjaanWali: pendaftarData.pekerjaanWali || '',
-                    pendidikanWali: pendaftarData.pendidikanWali || '',
-                    penghasilanWali: pendaftarData.penghasilanWali || '',
-                    nomorIjazahSebelumnya: pendaftarData.nomorIjazahSebelumnya || '',
-                    tahunLulusSebelumnya: pendaftarData.tahunLulusSebelumnya || '',
-                    jenisSantri: pendaftarData.jenisSantri || 'Mondok - Baru',
-                    targetJuz: pendaftarData.targetJuz ?? '',
-                    catatan: pendaftarData.catatan || '',
+                    nomorRegistrasi: healed.nomorRegistrasi || '',
+                    namaHijrah: healed.namaHijrah || '',
+                    agama: healed.agama || 'Islam',
+                    golonganDarah: healed.golonganDarah || '',
+                    citaCita: healed.citaCita || '',
+                    hobi: Array.isArray(healed.hobi) ? healed.hobi.join(', ') : (healed.hobi || ''),
+                    telepon: normalizePhoneLocal(healed.telepon || (healed as any).noHp || ''),
+                    teleponAyah: normalizePhoneLocal(healed.teleponAyah || ''),
+                    teleponIbu: normalizePhoneLocal(healed.teleponIbu || ''),
+                    nomorHpWali: normalizePhoneLocal(healed.nomorHpWali || ''),
+                    jarakKePondok: healed.jarakKePondok || '',
+                    tinggiBadan: healed.tinggiBadan ?? '',
+                    beratBadan: healed.beratBadan ?? '',
+                    riwayatPenyakit: healed.riwayatPenyakit || '',
+                    berkebutuhanKhusus: healed.berkebutuhanKhusus || '',
+                    tempatLahirAyah: healed.tempatLahirAyah || '',
+                    tanggalLahirAyah: healed.tanggalLahirAyah ? String(healed.tanggalLahirAyah).split('T')[0] : '',
+                    tempatLahirIbu: healed.tempatLahirIbu || '',
+                    tanggalLahirIbu: healed.tanggalLahirIbu ? String(healed.tanggalLahirIbu).split('T')[0] : '',
+                    nikWali: healed.nikWali || '',
+                    pekerjaanWali: healed.pekerjaanWali || '',
+                    pendidikanWali: healed.pendidikanWali || '',
+                    penghasilanWali: healed.penghasilanWali || '',
+                    asalSekolah: healed.asalSekolah || healed.sekolahAsal || '',
+                    nomorIjazahSebelumnya: healed.nomorIjazahSebelumnya || '',
+                    tahunLulusSebelumnya: healed.tahunLulusSebelumnya || '',
+                    jenisSantri: healed.jenisSantri || 'Mondok - Baru',
+                    targetJuz: healed.targetJuz ?? '',
+                    catatan: healed.catatan || '',
                     alamat: alamat?.detail || '',
                     desaKelurahan: alamat?.desaKelurahan || '',
                     kecamatan: alamat?.kecamatan || '',
                     kabupatenKota: alamat?.kabupatenKota || '',
                     provinsi: alamat?.provinsi || '',
                     kodePos: alamat?.kodePos || '',
-                    berkasFisik: pendaftarData.berkasFisik || {
+                    berkasFisik: healed.berkasFisik || {
                         kk: false,
                         akta: false,
                         ijazahSkl: false,
@@ -169,18 +174,18 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                         pasFoto: false,
                         catatanBerkas: ''
                     },
-                    nilaiUjian: pendaftarData.nilaiUjian ? {
-                        ...pendaftarData.nilaiUjian,
-                        bacaQuran: pendaftarData.nilaiUjian.bacaQuran ?? '',
-                        tahfizh: pendaftarData.nilaiUjian.tahfizh ?? '',
-                        akademik: pendaftarData.nilaiUjian.akademik ?? '',
-                        wawancara: pendaftarData.nilaiUjian.wawancara ?? '',
-                        totalSkor: pendaftarData.nilaiUjian.totalSkor ?? '',
-                        rekomendasi: pendaftarData.nilaiUjian.rekomendasi || 'Direkomendasikan',
-                        penguji: pendaftarData.nilaiUjian.penguji || '',
-                        ruangUjian: pendaftarData.nilaiUjian.ruangUjian || 'Ruang Seleksi Posko 1',
-                        tanggalUjian: pendaftarData.nilaiUjian.tanggalUjian ? pendaftarData.nilaiUjian.tanggalUjian.split('T')[0] : '',
-                        catatanUjian: pendaftarData.nilaiUjian.catatanUjian || ''
+                    nilaiUjian: healed.nilaiUjian ? {
+                        ...healed.nilaiUjian,
+                        bacaQuran: healed.nilaiUjian.bacaQuran ?? '',
+                        tahfizh: healed.nilaiUjian.tahfizh ?? '',
+                        akademik: healed.nilaiUjian.akademik ?? '',
+                        wawancara: healed.nilaiUjian.wawancara ?? '',
+                        totalSkor: healed.nilaiUjian.totalSkor ?? '',
+                        rekomendasi: healed.nilaiUjian.rekomendasi || 'Direkomendasikan',
+                        penguji: healed.nilaiUjian.penguji || '',
+                        ruangUjian: healed.nilaiUjian.ruangUjian || 'Ruang Seleksi Posko 1',
+                        tanggalUjian: healed.nilaiUjian.tanggalUjian ? healed.nilaiUjian.tanggalUjian.split('T')[0] : '',
+                        catatanUjian: healed.nilaiUjian.catatanUjian || ''
                     } : {
                         bacaQuran: '',
                         tahfizh: '',
@@ -192,13 +197,10 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                         ruangUjian: 'Ruang Seleksi Posko 1',
                         tanggalUjian: '',
                         catatanUjian: ''
-                    }
+                    },
+                    customData: JSON.stringify(cleanedCustomObj)
                 });
-                try {
-                    setParsedCustomData(pendaftarData.customData ? JSON.parse(pendaftarData.customData) : {});
-                } catch (e) {
-                    setParsedCustomData({});
-                }
+                setParsedCustomData(cleanedCustomObj);
             } else {
                 setFormData({
                     nomorRegistrasi: '',
@@ -405,6 +407,10 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         const dataToSave = {
             ...formData,
             nomorRegistrasi,
+            telepon: normalizePhoneLocal(formData.telepon),
+            teleponAyah: normalizePhoneLocal(formData.teleponAyah),
+            teleponIbu: normalizePhoneLocal(formData.teleponIbu),
+            nomorHpWali: normalizePhoneLocal(formData.nomorHpWali),
             berkasFisik: parsedBerkas,
             nilaiUjian: parsedNilai,
             // Reconstruct nested Alamat object
@@ -419,6 +425,9 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
             jenjangId: Number(formData.jenjangId),
             anakKe: formData.anakKe ? Number(formData.anakKe) : undefined,
             jumlahSaudara: formData.jumlahSaudara ? Number(formData.jumlahSaudara) : undefined,
+            tinggiBadan: formData.tinggiBadan !== '' && formData.tinggiBadan !== undefined ? Number(formData.tinggiBadan) : undefined,
+            beratBadan: formData.beratBadan !== '' && formData.beratBadan !== undefined ? Number(formData.beratBadan) : undefined,
+            targetJuz: formData.targetJuz !== '' && formData.targetJuz !== undefined ? Number(formData.targetJuz) : undefined,
             // Ensure customData matches the current parsed state
             customData: JSON.stringify(parsedCustomData)
         } as Pendaftar;
@@ -589,7 +598,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">No. HP / WA Calon Santri</label>
-                                    <input type="text" value={formData.telepon || ''} onChange={e => handleChange('telepon', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="08xxxxxxxxxx" />
+                                    <input type="tel" inputMode="numeric" value={formData.telepon || ''} onChange={e => handleChange('telepon', normalizePhoneLocal(e.target.value))} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm font-mono" placeholder="081234567890 (Tanpa spasi)" />
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Kewarganegaraan</label>
@@ -734,7 +743,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Ayah</label>
-                                        <input type="text" value={formData.teleponAyah || ''} onChange={e => handleChange('teleponAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        <input type="tel" inputMode="numeric" value={formData.teleponAyah || ''} onChange={e => handleChange('teleponAyah', normalizePhoneLocal(e.target.value))} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm font-mono" placeholder="081234567890" />
                                     </div>
                                 </div>
 
@@ -788,7 +797,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Ibu</label>
-                                        <input type="text" value={formData.teleponIbu || ''} onChange={e => handleChange('teleponIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        <input type="tel" inputMode="numeric" value={formData.teleponIbu || ''} onChange={e => handleChange('teleponIbu', normalizePhoneLocal(e.target.value))} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm font-mono" placeholder="081234567890" />
                                     </div>
                                 </div>
                             </div>
@@ -805,7 +814,7 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">No. HP Wali</label>
-                                    <input type="text" value={formData.nomorHpWali || ''} onChange={e => handleChange('nomorHpWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    <input type="tel" inputMode="numeric" value={formData.nomorHpWali || ''} onChange={e => handleChange('nomorHpWali', normalizePhoneLocal(e.target.value))} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm font-mono" placeholder="081234567890" />
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Hubungan dengan Santri</label>

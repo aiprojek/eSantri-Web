@@ -3,7 +3,7 @@ import { useAppContext } from '../../AppContext';
 import { PsbConfig, PondokSettings, PsbDesignStyle, PsbFormTemplate, PsbSubmissionMethod } from '../../types';
 import { CustomFieldEditor } from './common/CustomFieldEditor';
 import { getStandaloneDocumentStyles, getStandaloneDocumentStylesSync } from '../../utils/standaloneStyles';
-import { PSB_STANDARD_FIELD_GROUPS, PSB_DEFAULT_FIELD_HINTS } from './utils/psbUtils';
+import { PSB_STANDARD_FIELD_GROUPS, PSB_DEFAULT_FIELD_HINTS, extractDriveFolderId, isPhoneFieldKey } from './utils/psbUtils';
 
 interface PsbFormBuilderProps {
     config: PsbConfig;
@@ -32,6 +32,8 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     // State for submission method
     const [submissionMethod, setSubmissionMethod] = useState<PsbSubmissionMethod>(normalizeSubmissionMethod(config.submissionMethod));
     const [googleScriptUrl, setGoogleScriptUrl] = useState(config.googleScriptUrl || '');
+    const [driveFolderId, setDriveFolderId] = useState(config.driveFolderId || '');
+    const cleanDriveFolderId = extractDriveFolderId(driveFolderId);
     const [showScriptHelper, setShowScriptHelper] = useState(false);
     const [copiedScript, setCopiedScript] = useState(false);
     const [manualZoom, setManualZoom] = useState(1);
@@ -99,7 +101,8 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         const configToSave = {
             ...localConfig,
             submissionMethod: normalizeSubmissionMethod(submissionMethod),
-            googleScriptUrl
+            googleScriptUrl: googleScriptUrl.trim(),
+            driveFolderId: cleanDriveFolderId
         };
         onSave(configToSave);
     }
@@ -125,7 +128,8 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             requiredDocuments: localConfig.requiredDocuments,
             customFields: localConfig.customFields || [],
             submissionMethod: normalizeSubmissionMethod(submissionMethod),
-            googleScriptUrl,
+            googleScriptUrl: googleScriptUrl.trim(),
+            driveFolderId: cleanDriveFolderId,
             fieldHints: localConfig.fieldHints ? { ...localConfig.fieldHints } : {}
         };
 
@@ -161,6 +165,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
                 // Update specific states for method
                 setSubmissionMethod(normalizeSubmissionMethod(tpl.submissionMethod));
                 setGoogleScriptUrl(tpl.googleScriptUrl || '');
+                setDriveFolderId(tpl.driveFolderId || localConfig.driveFolderId || '');
                 
                 setTemplateName(tpl.name);
                 setActiveTemplateId(tpl.id);
@@ -197,7 +202,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         setTimeout(() => setCopiedScript(false), 2500);
     };
 
-    const googleAppsScriptCode = `/* GOOGLE APPS SCRIPT FOR ESANTRI WEB - SMART VERSION */
+    const googleAppsScriptCode = `/* GOOGLE APPS SCRIPT FOR ESANTRI WEB - SMART VERSION v2.5 */
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheets = ss.getSheets();
@@ -210,7 +215,11 @@ function doGet(e) {
     for (var i = 1; i < rows.length; i++) {
       var row = rows[i];
       var record = {};
-      for (var j = 0; j < headers.length; j++) record[headers[j]] = row[j];
+      for (var j = 0; j < headers.length; j++) {
+        var val = row[j];
+        if (typeof val === 'string' && val.charAt(0) === "'") val = val.substring(1);
+        record[headers[j]] = val;
+      }
       combinedData.push(record);
     }
   }
@@ -238,7 +247,7 @@ function doPost(e) {
       sheet = ss.insertSheet(sheetName);
       var headers = ["Timestamp", "namaLengkap", "nisn", "nik", "jenisKelamin", "tempatLahir", "tanggalLahir", "alamat", "namaWali", "nomorHpWali", "jenjangId", "asalSekolah", "jalurPendaftaran", "catatan", "status"];
       for (var key in data) {
-         if (headers.indexOf(key) === -1 && key !== 'sheetName') headers.push(key);
+         if (headers.indexOf(key) === -1 && key !== 'sheetName' && key !== 'driveFolderId' && key !== 'folderId') headers.push(key);
       }
       sheet.appendRow(headers);
       sheet.setFrozenRows(1);
@@ -248,7 +257,30 @@ function doPost(e) {
     var newRow = [];
     var nextRow = sheet.getLastRow() + 1;
     
-    var folderId = "GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA"; // Optional
+    // ID Folder Drive dari Pengaturan Formulir atau isi langsung di bawah ini (bisa ID atau Link URL Folder Drive)
+    var folderId = "${cleanDriveFolderId || 'GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA'}";
+    
+    function extractCleanFolderId(rawInput) {
+      if (!rawInput) return "";
+      var trimmed = String(rawInput).trim();
+      if (!trimmed || trimmed === "GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA" || trimmed === "ISI_ID_FOLDER_DRIVE_DISINI") return "";
+      var folderMatch = trimmed.match(/\\/folders\\/([a-zA-Z0-9_-]{10,})/);
+      if (folderMatch && folderMatch[1]) return folderMatch[1];
+      var idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+      if (idParamMatch && idParamMatch[1]) return idParamMatch[1];
+      var clean = trimmed.split('?')[0].split('#')[0].replace(/\\/+$/, '');
+      if (/^[a-zA-Z0-9_-]{15,}$/.test(clean)) return clean;
+      return "";
+    }
+    
+    function sanitizePhone(rawPhone) {
+      if (!rawPhone) return "";
+      var digits = String(rawPhone).replace(/[^0-9]/g, "");
+      if (!digits) return "";
+      if (digits.indexOf("62") === 0) return "0" + digits.substring(2);
+      if (digits.indexOf("8") === 0) return "0" + digits;
+      return digits;
+    }
     
     function toSlug(value) {
       return String(value || '')
@@ -292,14 +324,32 @@ function doPost(e) {
       return prefix + '-' + safeName + '-' + stamp + ext;
     }
     
+    var targetFolderId = extractCleanFolderId(data.driveFolderId || data.folderId || folderId);
+    var targetFolder = null;
+    if (targetFolderId) {
+      try {
+        targetFolder = DriveApp.getFolderById(targetFolderId);
+      } catch (folderErr) {
+        targetFolder = null;
+      }
+    }
+    
+    var phoneKeys = ['telepon', 'noHp', 'teleponAyah', 'teleponIbu', 'nomorHpWali', 'teleponWali'];
+    for (var pk = 0; pk < phoneKeys.length; pk++) {
+      var pKey = phoneKeys[pk];
+      if (data[pKey]) {
+        data[pKey] = sanitizePhone(data[pKey]);
+      }
+    }
+    
     for (var key in data) {
         if (typeof data[key] === 'object' && data[key] !== null && data[key].isFile) {
             var fileData = data[key];
             var smartName = buildSmartFileName(key, fileData, data);
             var blob = Utilities.newBlob(Utilities.base64Decode(fileData.data.split(',')[1]), fileData.mime, smartName);
             var file;
-            if (folderId && folderId !== "GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA") {
-                 file = DriveApp.getFolderById(folderId).createFile(blob);
+            if (targetFolder) {
+                 file = targetFolder.createFile(blob);
             } else {
                  file = DriveApp.createFile(blob);
             }
@@ -309,21 +359,31 @@ function doPost(e) {
     }
     data.Timestamp = new Date();
 
+    function formatCellForSheet(colKey, rawVal) {
+        if (rawVal === undefined || rawVal === null) return "";
+        var strVal = String(rawVal);
+        // Prevent Google Sheets from stripping leading zero on phone numbers, NIK, NISN, kodePos
+        if (/^0[0-9]+$/.test(strVal) || phoneKeys.indexOf(colKey) !== -1) {
+            return "'" + strVal;
+        }
+        return rawVal;
+    }
+
     for (var i = 0; i < headers.length; i++) {
-        newRow.push(data[headers[i]] || "");
+        newRow.push(formatCellForSheet(headers[i], data[headers[i]]));
     }
     
     for (var key in data) {
-        if (headers.indexOf(key) === -1 && key !== 'sheetName') {
+        if (headers.indexOf(key) === -1 && key !== 'sheetName' && key !== 'driveFolderId' && key !== 'folderId') {
             var newCol = headers.length + 1;
             sheet.getRange(1, newCol).setValue(key);
-            newRow[newCol-1] = data[key]; 
+            newRow[newCol-1] = formatCellForSheet(key, data[key]); 
             headers.push(key); 
         }
     }
     
     sheet.getRange(nextRow, 1, 1, newRow.length).setValues([newRow]);
-    return ContentService.createTextOutput(JSON.stringify({result: "success", row: nextRow})).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({result: "success", row: nextRow, folderUsed: targetFolderId || "root"})).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({result: "error", error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
   } finally { lock.releaseLock(); }
@@ -343,6 +403,12 @@ function doPost(e) {
             const reqStar = required ? '<span class="text-red-500">*</span>' : '';
             const reqAttr = required ? 'required' : '';
             const hintHtml = hint ? `<p class="text-[11px] text-gray-500 mb-1.5 italic font-normal print:text-gray-600 print:text-[10px] leading-snug">${hint}</p>` : '';
+            const isPhone = isPhoneFieldKey(name) || type === 'tel';
+            const actualType = isPhone ? 'tel' : type;
+            const phoneAttrs = isPhone
+                ? `inputmode="numeric" pattern="^08[0-9]{7,13}$" title="Wajib angka saja diawali 08 tanpa spasi (Contoh: 081234567890)" oninput="this.value = window.sanitizePhoneInput ? window.sanitizePhoneInput(this.value) : this.value"`
+                : '';
+            const actualPlaceholder = placeholder || (isPhone ? 'Contoh: 081234567890 (Tanpa spasi/strip)' : '');
 
             // Handling file input logic
             if (type === 'file') {
@@ -374,35 +440,35 @@ function doPost(e) {
                 <div class="mb-5 break-inside-avoid">
                     <label class="block text-[#1B4D3E] text-sm font-bold mb-0.5 print:text-black font-serif">${label} ${reqStar}</label>
                     ${hintHtml}
-                    <input type="${type}" name="${name}" ${reqAttr} class="w-full border-b-2 border-gray-300 focus:border-[#1B4D3E] outline-none py-2 bg-transparent transition font-serif placeholder-gray-400 print:${commonPrint} print:border-black" placeholder="${placeholder}">
+                    <input type="${actualType}" name="${name}" ${reqAttr} ${phoneAttrs} class="w-full border-b-2 border-gray-300 focus:border-[#1B4D3E] outline-none py-2 bg-transparent transition font-serif placeholder-gray-400 print:${commonPrint} print:border-black" placeholder="${actualPlaceholder}">
                 </div>`;
             } else if (style === 'modern') {
                 return `
                 <div class="mb-4 break-inside-avoid">
                     <label class="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-0.5 print:text-black">${label} ${reqStar}</label>
                     ${hintHtml}
-                    <input type="${type}" name="${name}" ${reqAttr} class="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none placeholder-gray-400 print:${commonPrint} print:text-black" placeholder="${placeholder}">
+                    <input type="${actualType}" name="${name}" ${reqAttr} ${phoneAttrs} class="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none placeholder-gray-400 print:${commonPrint} print:text-black" placeholder="${actualPlaceholder}">
                 </div>`;
             } else if (style === 'bold') {
                 return `
                 <div class="mb-4 border-b border-gray-100 pb-2 break-inside-avoid">
                     <label class="font-bold text-gray-700 block mb-0.5 print:text-black">${label} ${reqStar}</label>
                     ${hintHtml}
-                    <input type="${type}" name="${name}" ${reqAttr} class="w-full bg-gray-50 border-0 border-b-2 border-gray-300 focus:border-red-600 focus:bg-white px-2 py-2 transition outline-none placeholder-gray-400 print:${commonPrint} print:text-black" placeholder="${placeholder}">
+                    <input type="${actualType}" name="${name}" ${reqAttr} ${phoneAttrs} class="w-full bg-gray-50 border-0 border-b-2 border-gray-300 focus:border-red-600 focus:bg-white px-2 py-2 transition outline-none placeholder-gray-400 print:${commonPrint} print:text-black" placeholder="${actualPlaceholder}">
                 </div>`;
             } else if (style === 'dark') {
                 return `
                 <div class="mb-6 group break-inside-avoid">
                     <label class="block text-xs text-amber-500 uppercase tracking-widest mb-0.5 group-focus-within:text-white transition print:text-black">${label} ${reqStar}</label>
                     ${hint ? `<p class="text-[11px] text-slate-400 mb-1.5 italic font-normal print:text-gray-600 print:text-[10px] leading-snug">${hint}</p>` : ''}
-                    <input type="${type}" name="${name}" ${reqAttr} class="w-full bg-slate-800 border-b border-slate-600 focus:border-amber-500 px-0 py-3 text-white outline-none transition placeholder-slate-600 print:bg-white print:text-black print:border-gray-400" placeholder="${placeholder}">
+                    <input type="${actualType}" name="${name}" ${reqAttr} ${phoneAttrs} class="w-full bg-slate-800 border-b border-slate-600 focus:border-amber-500 px-0 py-3 text-white outline-none transition placeholder-slate-600 print:bg-white print:text-black print:border-gray-400" placeholder="${actualPlaceholder}">
                 </div>`;
             } else { // ceria
                  return `
                  <div class="mb-4 break-inside-avoid">
                     <label class="block text-gray-500 text-xs font-bold uppercase mb-0.5 ml-1 print:text-black">${label} ${reqStar}</label>
                     ${hintHtml}
-                    <input type="${type}" name="${name}" ${reqAttr} class="w-full bg-orange-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-300 outline-none font-bold text-gray-700 placeholder-gray-400 print:bg-white print:border-b print:border-gray-400 print:rounded-none print:text-black" placeholder="${placeholder}">
+                    <input type="${actualType}" name="${name}" ${reqAttr} ${phoneAttrs} class="w-full bg-orange-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-300 outline-none font-bold text-gray-700 placeholder-gray-400 print:bg-white print:border-b print:border-gray-400 print:rounded-none print:text-black" placeholder="${actualPlaceholder}">
                  </div>`;
             }
         };
@@ -477,6 +543,8 @@ function doPost(e) {
 
                 const inputType = f.type === 'date' || f.key.toLowerCase().includes('tanggal') 
                     ? 'date' 
+                    : f.type === 'tel' || isPhoneFieldKey(f.key)
+                    ? 'tel'
                     : f.type === 'number' || ['anakKe', 'jumlahSaudara', 'tinggiBadan', 'beratBadan', 'tahunLulusSebelumnya', 'targetJuz'].includes(f.key)
                     ? 'number'
                     : 'text';
@@ -801,6 +869,7 @@ async function submitForm(){
         data.tanggalDaftar=new Date().toISOString();
         data.jenjangId="${localConfig.targetJenjangId||''}";
         data.sheetName="${targetSheetName}";
+        data.driveFolderId="${cleanDriveFolderId}";
         await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
         const modal=document.getElementById('gsSuccessModal');
         if(modal){
@@ -965,6 +1034,7 @@ async function proceedHybridSubmit(){
         data.tanggalDaftar=new Date().toISOString();
         data.jenjangId="${localConfig.targetJenjangId||''}";
         data.sheetName="${targetSheetName}";
+        data.driveFolderId="${cleanDriveFolderId}";
 
         const textOnlyData={...data};
         for(let key in textOnlyData){
@@ -1109,6 +1179,14 @@ function insertMd(elemId, before, after) {
     el.focus();
     el.setSelectionRange(start + before.length, start + before.length + sel.length);
 }
+window.sanitizePhoneInput = function(val) {
+    if (!val) return '';
+    var digits = String(val).replace(/[^0-9]/g, '');
+    if (!digits) return '';
+    if (digits.indexOf('62') === 0) return '0' + digits.substring(2);
+    if (digits.indexOf('8') === 0) return '0' + digits;
+    return digits;
+};
 </script>
 ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
     };
@@ -1119,17 +1197,22 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
         if (printWindow) {
             printWindow.document.write(html);
             printWindow.document.close();
-            printWindow.onload = () => {
-                setTimeout(() => {
-                    printWindow.print();
-                }, 800);
+            let printTriggered = false;
+            const triggerOnce = () => {
+                if (printTriggered) return;
+                printTriggered = true;
+                printWindow.focus();
+                printWindow.print();
             };
-            // Fallback just in case
+            printWindow.onload = () => {
+                setTimeout(triggerOnce, 800);
+            };
+            // Fallback just in case onload already fired
             setTimeout(() => {
                 if (printWindow.document.readyState === 'complete') {
-                    printWindow.print();
+                    triggerOnce();
                 }
-            }, 1500);
+            }, 1800);
         } else {
             showToast("Pop-up diblokir. Izinkan pop-up untuk mencetak.", "error");
         }
@@ -1167,7 +1250,7 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                 }
             };
         }
-    }, [localConfig, settings, templateName, submissionMethod, googleScriptUrl]);
+    }, [localConfig, settings, templateName, submissionMethod, googleScriptUrl, driveFolderId]);
 
 
     return (
@@ -1267,6 +1350,34 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                     )}
                                 </div>
 
+                                <div>
+                                    <label className="font-bold block text-gray-700 mb-1">
+                                        ID atau Link Folder Google Drive Tujuan Berkas (Opsional)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={driveFolderId}
+                                        onChange={e => setDriveFolderId(e.target.value)}
+                                        placeholder="Tempel Link Folder Drive atau ID Folder (cth: 1a2B3c4D5e...)"
+                                        className="w-full border border-gray-300 rounded-lg p-2 font-mono text-xs bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden"
+                                    />
+                                    {driveFolderId.trim() ? (
+                                        cleanDriveFolderId ? (
+                                            <p className="text-[10px] text-teal-700 mt-1 flex items-center gap-1 font-medium">
+                                                <i className="bi bi-check-circle-fill"></i> ID Folder Terdeteksi: <code className="bg-teal-100 px-1 rounded font-bold">{cleanDriveFolderId}</code> (Otomatis disematkan ke Formulir &amp; Kode Script di bawah)
+                                            </p>
+                                        ) : (
+                                            <p className="text-[10px] text-amber-700 mt-1">
+                                                ⚠️ Format ID Folder belum dikenali. Salin link folder dari browser (<code>drive.google.com/drive/folders/ID_FOLDER</code>).
+                                            </p>
+                                        )
+                                    ) : (
+                                        <p className="text-[10px] text-gray-500 mt-1">
+                                            Jika diisi, berkas pendaftar otomatis masuk ke folder ini (tidak tercecer di Drive utama).
+                                        </p>
+                                    )}
+                                </div>
+
                                 <div className="pt-1">
                                     <button
                                         type="button"
@@ -1291,7 +1402,8 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                                 <ol className="list-decimal pl-4 space-y-1 text-gray-700">
                                                     <li>Buka Google Spreadsheet baru panitia &gt; klik menu <strong>Ekstensi &gt; Apps Script</strong>.</li>
                                                     <li>Hapus kode default di file <code>Code.gs</code>, lalu tempelkan seluruh kode script di bawah ini.</li>
-                                                    <li><strong>Folder Drive (Disarankan):</strong> Buat folder khusus di Google Drive Anda (cth: "Berkas PSB 2026"), salin ID Foldernya dari URL browser, lalu ganti baris <code>var folderId = "..."</code>.</li>
+                                                    <li><strong>Folder Drive (Otomatis/Manual):</strong> Isi kotak <em>"ID atau Link Folder Google Drive"</em> di atas sebelum menyalin kode, atau ganti <code>var folderId = "..."</code> di dalam script (mendukung ID langsung maupun Link URL folder Drive).</li>
+                                                    <li><strong>PENTING Saat Update Script / Ganti Folder ID:</strong> Setiap kali Anda mengubah isi <code>Code.gs</code> di Apps Script, wajib klik <strong>Deploy &gt; Kelola Deployment &gt; Ikon Pensil (Edit) &gt; Versi: "Versi Baru" &gt; Deploy</strong> agar perubahan Folder ID aktif!</li>
                                                     <li><strong>Deploy Web App:</strong> Klik tombol biru <strong>Deploy &gt; Deployment Baru</strong> &gt; pilih jenis <strong>Aplikasi Web</strong> &gt; atur Akses: <strong>Siapa Saja (Anyone)</strong>.</li>
                                                     <li>Salin URL hasil deployment (berakhiran <code>/exec</code>) ke kotak input URL di atas.</li>
                                                 </ol>

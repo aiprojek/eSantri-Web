@@ -1,14 +1,370 @@
 import { Pendaftar, PondokSettings, PsbNilaiUjian } from '../../../types';
 
-export const cleanPhoneNumber = (phone?: string): string => {
-    if (!phone) return '';
-    let cleaned = phone.replace(/[^0-9]/g, '');
-    if (cleaned.startsWith('0')) {
-        cleaned = '62' + cleaned.slice(1);
-    } else if (cleaned.startsWith('8')) {
-        cleaned = '62' + cleaned;
+/**
+ * Extracts a clean Google Drive Folder ID from a raw ID or full Drive URL
+ * Supports:
+ * - https://drive.google.com/drive/folders/1a2B3c4D5e6F7g8H9i0J?usp=sharing
+ * - https://drive.google.com/drive/u/0/folders/1a2B3c4D5e6F7g8H9i0J
+ * - https://drive.google.com/open?id=1a2B3c4D5e6F7g8H9i0J
+ * - 1a2B3c4D5e6F7g8H9i0J
+ */
+export const extractDriveFolderId = (input?: string): string => {
+    if (!input) return '';
+    const trimmed = String(input).trim().replace(/^["']+|["']+$/g, '');
+    if (!trimmed || trimmed === 'GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA') return '';
+
+    const foldersMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]{15,})/);
+    if (foldersMatch && foldersMatch[1]) return foldersMatch[1];
+
+    const idParamMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+    if (idParamMatch && idParamMatch[1]) return idParamMatch[1];
+
+    const pureIdMatch = trimmed.match(/^([a-zA-Z0-9_-]{15,})$/);
+    if (pureIdMatch && pureIdMatch[1]) return pureIdMatch[1];
+
+    return trimmed.split(/[?#&/]/)[0].trim();
+};
+
+/**
+ * Formats phone number to clean local Indonesian format (08xxxxxxxxxx) without spaces or symbols.
+ * Automatically restores leading zero if stripped by Google Sheets (e.g. 81234567890 -> 081234567890)
+ * and converts +628... or 628... to 08...
+ */
+export const normalizePhoneLocal = (phone?: string | number | null): string => {
+    if (phone === undefined || phone === null) return '';
+    let cleaned = String(phone).replace(/[^0-9]/g, '');
+    if (!cleaned) return '';
+    if (cleaned.startsWith('0062')) {
+        cleaned = '0' + cleaned.slice(4);
+    } else if (cleaned.startsWith('62')) {
+        cleaned = '0' + cleaned.slice(2);
+    } else if (cleaned.startsWith('8') && cleaned.length >= 8 && cleaned.length <= 14) {
+        cleaned = '0' + cleaned;
     }
     return cleaned;
+};
+
+export const cleanPhoneNumber = (phone?: string | number | null): string => {
+    const local = normalizePhoneLocal(phone);
+    if (!local || local.length < 9) return '';
+    if (local.startsWith('0')) {
+        return '62' + local.slice(1);
+    }
+    if (local.startsWith('62')) {
+        return local;
+    }
+    return '62' + local;
+};
+
+export const isPhoneFieldKey = (key?: string): boolean => {
+    if (!key) return false;
+    const lower = key.toLowerCase();
+    return (
+        lower === 'telepon' ||
+        lower === 'nohp' ||
+        lower === 'teleponayah' ||
+        lower === 'teleponibu' ||
+        lower === 'nomorhpwali' ||
+        lower === 'teleponwali' ||
+        lower.includes('telepon') ||
+        lower.includes('nomorhp') ||
+        lower.includes('nohp') ||
+        lower.includes('whatsapp')
+    );
+};
+
+/**
+ * Resolves the best available WhatsApp/phone number from a Pendaftar record,
+ * checking nomorHpWali, teleponAyah, teleponIbu, telepon, and customData fallback keys.
+ */
+export const getPendaftarPhone = (p?: Pendaftar | null): string => {
+    if (!p) return '';
+    const direct =
+        normalizePhoneLocal(p.nomorHpWali) ||
+        normalizePhoneLocal(p.teleponAyah) ||
+        normalizePhoneLocal(p.teleponIbu) ||
+        normalizePhoneLocal(p.telepon);
+    if (direct && direct.length >= 9) return direct;
+
+    if (p.customData) {
+        try {
+            const custom = JSON.parse(p.customData);
+            const phoneKeys = [
+                'nomorHpWali', 'teleponAyah', 'teleponIbu', 'noHpWali', 'noHpAyah', 'noHpIbu',
+                'noHp', 'telepon', 'whatsapp', 'wa', 'No HP Wali', 'No. HP Wali', 'Telepon / WA',
+                'No. HP / WhatsApp', 'Nomor WhatsApp', 'Nomor HP'
+            ];
+            for (const key of Object.keys(custom)) {
+                const lowerKey = key.toLowerCase();
+                if (
+                    phoneKeys.some(pk => pk.toLowerCase() === lowerKey) ||
+                    lowerKey.includes('telepon') ||
+                    lowerKey.includes('whatsapp') ||
+                    lowerKey.includes('nohp') ||
+                    lowerKey.includes('nomorhp') ||
+                    lowerKey.includes('no hp') ||
+                    lowerKey.includes('no. hp')
+                ) {
+                    const candidate = normalizePhoneLocal(custom[key]);
+                    if (candidate && candidate.length >= 9) return candidate;
+                }
+            }
+        } catch {
+            // ignore JSON parse error
+        }
+    }
+    return '';
+};
+
+/**
+ * Resolves the best available Wali / Parent name from a Pendaftar record
+ */
+export const getPendaftarWaliName = (p?: Pendaftar | null): string => {
+    if (!p) return '-';
+    if (p.namaWali && p.namaWali.trim()) return p.namaWali.trim();
+    if (p.namaAyah && p.namaAyah.trim()) return p.namaAyah.trim();
+    if (p.namaIbu && p.namaIbu.trim()) return p.namaIbu.trim();
+    return '-';
+};
+
+/**
+ * Automatically heals a Pendaftar record by extracting any standard Pendaftar fields
+ * (such as physical data: tinggiBadan, beratBadan, golonganDarah, riwayatPenyakit,
+ * parent data: namaAyah, teleponAyah, namaIbu, teleponIbu, etc.) that were trapped
+ * inside `customData` ("Data Tambahan") and promoting them to top-level Pendaftar properties,
+ * while normalizing phone numbers.
+ */
+export const healPendaftarRecordWithDetails = (raw: any): {
+    healed: Pendaftar;
+    cleanedCustomObj: Record<string, any>;
+    changed: boolean;
+} => {
+    if (!raw) return { healed: raw, cleanedCustomObj: {}, changed: false };
+    const healed: any = { ...raw };
+    let changed = false;
+
+    let customObj: Record<string, any> = {};
+    if (typeof healed.customData === 'string' && healed.customData.trim()) {
+        try {
+            const parsed = JSON.parse(healed.customData);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                customObj = { ...parsed };
+            }
+        } catch {
+            customObj = {};
+        }
+    } else if (healed.customData && typeof healed.customData === 'object') {
+        customObj = { ...healed.customData };
+    }
+
+    const aliasMap: Record<string, string> = {
+        namalengkap: 'namaLengkap',
+        namapanggilan: 'namaHijrah',
+        namahijrah: 'namaHijrah',
+        nisn: 'nisn',
+        nik: 'nik',
+        tempatlahir: 'tempatLahir',
+        tanggallahir: 'tanggalLahir',
+        jeniskelamin: 'jenisKelamin',
+        agama: 'agama',
+        kewarganegaraan: 'kewarganegaraan',
+        anakke: 'anakKe',
+        jumlahsaudara: 'jumlahSaudara',
+        statuskeluarga: 'statusKeluarga',
+        bahasaseharihari: 'bahasaSehariHari',
+        tinggibadan: 'tinggiBadan',
+        tinggibadancm: 'tinggiBadan',
+        beratbadan: 'beratBadan',
+        beratbadankg: 'beratBadan',
+        golongandarah: 'golonganDarah',
+        riwayatpenyakit: 'riwayatPenyakit',
+        kelainanjasmani: 'berkebutuhanKhusus',
+        kebutuhankhusus: 'berkebutuhanKhusus',
+        berkebutuhankhusus: 'berkebutuhanKhusus',
+        citacita: 'citaCita',
+        hobi: 'hobi',
+        prestasi: 'prestasi',
+        telepon: 'telepon',
+        nohp: 'telepon',
+        nohpsantri: 'telepon',
+        jarakkepondok: 'jarakKePondok',
+        alamatlengkap: 'alamatRumah',
+        alamatrumah: 'alamatRumah',
+        alamat: 'alamatRumah',
+        desakelurahan: 'desaKelurahan',
+        kecamatan: 'kecamatan',
+        kabupatenkota: 'kabupatenKota',
+        provinsi: 'provinsi',
+        kodepos: 'kodePos',
+        sekolahasal: 'asalSekolah',
+        asalsekolah: 'asalSekolah',
+        npsnsekolahasal: 'npsnSekolahAsal',
+        alamatsekolahasal: 'alamatSekolahAsal',
+        tahunlulus: 'tahunLulusSebelumnya',
+        tahunlulussebelumnya: 'tahunLulusSebelumnya',
+        noijazah: 'nomorIjazahSebelumnya',
+        nomorijazahsebelumnya: 'nomorIjazahSebelumnya',
+        noskhun: 'noSkhun',
+        namaayah: 'namaAyah',
+        nikayah: 'nikAyah',
+        statusayah: 'statusAyah',
+        tempatlahirayah: 'tempatLahirAyah',
+        tanggallahirayah: 'tanggalLahirAyah',
+        pendidikanayah: 'pendidikanAyah',
+        pekerjaanayah: 'pekerjaanAyah',
+        penghasilanayah: 'penghasilanAyah',
+        teleponayah: 'teleponAyah',
+        nohpayah: 'teleponAyah',
+        waayah: 'teleponAyah',
+        namaibu: 'namaIbu',
+        nikibu: 'nikIbu',
+        statusibu: 'statusIbu',
+        tempatlahiribu: 'tempatLahirIbu',
+        tanggallahiribu: 'tanggalLahirIbu',
+        pendidikanibu: 'pendidikanIbu',
+        pekerjaanibu: 'pekerjaanIbu',
+        penghasilanibu: 'penghasilanIbu',
+        teleponibu: 'teleponIbu',
+        nohpibu: 'teleponIbu',
+        waibu: 'teleponIbu',
+        namawali: 'namaWali',
+        nikwali: 'nikWali',
+        hubunganwali: 'statusWali',
+        statuswali: 'statusWali',
+        nomorhpwali: 'nomorHpWali',
+        nohpwali: 'nomorHpWali',
+        teleponwali: 'nomorHpWali',
+        teleponwa: 'nomorHpWali',
+        nohpwhatsapp: 'nomorHpWali',
+        nomorwhatsapp: 'nomorHpWali',
+        alamatwali: 'alamatWali',
+        pekerjaanwali: 'pekerjaanWali',
+        pendidikanwali: 'pendidikanWali',
+        penghasilanwali: 'penghasilanWali',
+        jenissantri: 'jenisSantri',
+        targetjuz: 'targetJuz',
+        programpilihan: 'programPilihan',
+        jalurpendaftaran: 'jalurPendaftaran',
+        gelombang: 'gelombang',
+        catatan: 'catatan'
+    };
+
+    const numericFields = new Set(['tinggiBadan', 'beratBadan', 'anakKe', 'jumlahSaudara', 'gelombang', 'targetJuz']);
+    const metadataKeysToDrop = new Set(['sheetname', 'jenjangid', 'status', 'tanggaldaftar', 'drivefolderid', 'folderid', 'id', 'nomorregistrasi', 'timestamp']);
+
+    const parseNumeric = (val: any): number | undefined => {
+        if (val === undefined || val === null || val === '') return undefined;
+        if (typeof val === 'number' && !isNaN(val)) return val;
+        const match = String(val).match(/\d+(\.\d+)?/);
+        if (match) {
+            const num = Number(match[0]);
+            return !isNaN(num) ? num : undefined;
+        }
+        return undefined;
+    };
+
+    for (const key of Object.keys(customObj)) {
+        const val = customObj[key];
+        const isFileLink = typeof val === 'string' && (val.startsWith('data:') || val.startsWith('http'));
+        if (isFileLink) continue;
+
+        const normKey = key.toLowerCase().replace(/^custom_/, '').replace(/[^a-z0-9]/g, '');
+        if (metadataKeysToDrop.has(normKey)) {
+            delete customObj[key];
+            changed = true;
+            continue;
+        }
+
+        const targetProp = aliasMap[normKey];
+        if (targetProp) {
+            if (targetProp === 'alamatRumah') {
+                if (typeof healed.alamat === 'object' && healed.alamat !== null) {
+                    if (!healed.alamat.detail && val) {
+                        healed.alamat = { ...healed.alamat, detail: String(val).trim() };
+                    }
+                } else if (!healed.alamat && val) {
+                    healed.alamat = { detail: String(val).trim() };
+                }
+            } else if (['desaKelurahan', 'kecamatan', 'kabupatenKota', 'provinsi', 'kodePos'].includes(targetProp)) {
+                const currentAddr = typeof healed.alamat === 'object' && healed.alamat !== null ? healed.alamat : { detail: typeof healed.alamat === 'string' ? healed.alamat : '' };
+                if (!currentAddr[targetProp] && val) {
+                    healed.alamat = { ...currentAddr, [targetProp]: String(val).trim() };
+                }
+            } else {
+                const currentVal = healed[targetProp];
+                const isEmptyCurrent = currentVal === undefined || currentVal === null || currentVal === '' || currentVal === 0;
+                if (isEmptyCurrent && val !== undefined && val !== null && String(val).trim() !== '') {
+                    if (numericFields.has(targetProp)) {
+                        const num = parseNumeric(val);
+                        if (num !== undefined) healed[targetProp] = num;
+                    } else {
+                        healed[targetProp] = String(val).trim();
+                    }
+                }
+            }
+            delete customObj[key];
+            changed = true;
+        }
+    }
+
+    for (const nf of numericFields) {
+        if (healed[nf] !== undefined && healed[nf] !== null && healed[nf] !== '') {
+            const num = parseNumeric(healed[nf]);
+            if (num !== undefined) {
+                if (healed[nf] !== num) changed = true;
+                healed[nf] = num;
+            } else {
+                delete healed[nf];
+                changed = true;
+            }
+        }
+    }
+
+    if (healed.sekolahAsal && !healed.asalSekolah) {
+        healed.asalSekolah = healed.sekolahAsal;
+        changed = true;
+    }
+
+    const phoneProps = ['telepon', 'teleponAyah', 'teleponIbu', 'nomorHpWali'];
+    for (const pp of phoneProps) {
+        if (healed[pp]) {
+            const norm = normalizePhoneLocal(healed[pp]);
+            if (norm !== healed[pp]) {
+                healed[pp] = norm;
+                changed = true;
+            }
+        }
+    }
+
+    if (!healed.nomorHpWali) {
+        const fallbackPhone = healed.teleponAyah || healed.teleponIbu || healed.telepon || '';
+        if (fallbackPhone) {
+            healed.nomorHpWali = fallbackPhone;
+            changed = true;
+        }
+    }
+    if (!healed.namaWali || !String(healed.namaWali).trim()) {
+        const fallbackWali = healed.namaAyah || healed.namaIbu || '';
+        if (fallbackWali) {
+            healed.namaWali = fallbackWali;
+            changed = true;
+        }
+    }
+
+    const nextCustomStr = Object.keys(customObj).length > 0 ? JSON.stringify(customObj) : '{}';
+    if ((healed.customData || '{}') !== nextCustomStr) {
+        healed.customData = nextCustomStr;
+    }
+
+    return {
+        healed: healed as Pendaftar,
+        cleanedCustomObj: customObj,
+        changed
+    };
+};
+
+export const healPendaftarRecord = (raw: any): Pendaftar => {
+    return healPendaftarRecordWithDetails(raw).healed;
 };
 
 export const getPsbRegistrationNumber = (pendaftar: Pendaftar, jenjangName?: string): string => {
@@ -37,14 +393,25 @@ export const calculatePsbAverageScore = (nilai?: PsbNilaiUjian): number => {
     return Math.round((sum / scores.length) * 10) / 10;
 };
 
-export const openWhatsappChat = (phone?: string, text?: string): boolean => {
+export const openWhatsappChat = (phone?: string | null, text?: string): boolean => {
     const formattedPhone = cleanPhoneNumber(phone);
     if (!formattedPhone) {
         return false;
     }
     const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(text || '')}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    return true;
+    try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return true;
+    } catch {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return true;
+    }
 };
 
 export const generatePsbExamScheduleMessage = (
@@ -322,3 +689,6 @@ export const PSB_DEFAULT_FIELD_HINTS: Record<string, string> = {
     targetJuz: 'Target capaian hafalan Al-Qur\'an yang ingin diselesaikan selama belajar di pondok',
     catatan: 'Catatan pesan, harapan orang tua, atau informasi penting lainnya (mendukung format Markdown seperti tebal, miring, poin, dan kutipan)',
 };
+
+export const PSB_ALL_STANDARD_FIELD_KEYS: string[] = PSB_STANDARD_FIELD_GROUPS.flatMap(g => g.fields.map(f => f.key));
+

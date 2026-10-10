@@ -82,6 +82,18 @@ const PortalManagement: React.FC = () => {
         try {
             const res = await syncPortalBridgeToGas(localSettings);
             const updatedConfig = {
+                enabled: true,
+                theme: 'teal' as const,
+                showFinance: true,
+                showAcademic: true,
+                showAttendance: true,
+                showTahfizh: true,
+                showHealth: true,
+                showLibrary: true,
+                welcomeMessage: '',
+                announcement: '',
+                contacts: [],
+                customLinks: [],
                 ...localSettings.portalConfig,
                 lastSyncedAt: res.syncedAt,
                 lastSyncedCount: res.santriCount,
@@ -115,10 +127,10 @@ const PortalManagement: React.FC = () => {
                     action: 'SYNC_PORTAL_WALI',
                     santriCount: res.santriCount,
                     payloadSizeKb: Math.round(res.payloadSize / 1024),
-                    syncedAt: res.syncedAt
+                    syncedAt: res.syncedAt,
+                    summary: `Sinkronisasi data Portal Wali Santri ke GAS (${res.santriCount} santri, ${(res.payloadSize / 1024).toFixed(1)} KB)`
                 },
-                currentUser?.fullName || currentUser?.username || 'Admin',
-                `Sinkronisasi data Portal Wali Santri ke GAS (${res.santriCount} santri, ${(res.payloadSize / 1024).toFixed(1)} KB)`
+                currentUser?.fullName || currentUser?.username || 'Admin'
             );
 
             showToast(`Berhasil menyinkronkan ${res.santriCount} data santri ke Portal Wali!`, 'success');

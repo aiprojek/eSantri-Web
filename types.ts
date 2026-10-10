@@ -508,6 +508,7 @@ export interface PsbFormTemplate {
     customFields?: PsbCustomField[];
     submissionMethod?: PsbSubmissionMethod;
     googleScriptUrl?: string;
+    driveFolderId?: string;
     fieldHints?: Record<string, string>;
 }
 
@@ -542,6 +543,7 @@ export interface PsbConfig {
     posterTemplates?: PsbPosterTemplate[];
     submissionMethod?: PsbSubmissionMethod;
     googleScriptUrl?: string;
+    driveFolderId?: string;
     registrationDeadline?: string;
     fieldHints?: Record<string, string>;
 }
@@ -645,9 +647,12 @@ export interface PortalConfig {
     contacts: PortalContact[];
     customLinks: { label: string; url: string }[];
     baseUrl?: string;
+    standalonePublicUrl?: string;
     useStandaloneUrl?: boolean;
     lastSyncedAt?: string;
     lastSyncedSantriCount?: number;
+    lastSyncedCount?: number;
+    lastPayloadSize?: number;
 }
 
 export interface WaTemplate {
@@ -1064,6 +1069,7 @@ export interface RaporRecord {
 
     tanggalRapor: string;
     customData?: string; // JSON string for flexible fields from dynamic templates
+    deleted?: boolean;
     lastModified?: number;
 }
 
@@ -1171,7 +1177,7 @@ export interface SarprasBorrowLog {
     tanggalPinjam: string;
     estimasiKembali: string;
     tanggalKembaliAktual?: string;
-    kondisiKembali?: 'Baik' | 'Rusak Ringan' | 'Rusak Berat';
+    kondisiKembali?: 'Baik' | 'Rusak Ringan' | 'Rusak Berat' | 'Afkir';
     status: 'Dipinjam' | 'Dikembalikan';
     catatan?: string;
     operator?: string;
@@ -1193,6 +1199,7 @@ export interface Inventaris {
     hargaPerolehan: number;
     keterangan?: string;
     legalitas?: string; // SHM No..., Akta Wakaf No...
+    noSertifikat?: string;
     merkSpesifikasi?: string;
     penanggungJawab?: string;
     umurEkonomisTahun?: number;

@@ -373,18 +373,33 @@
     display: none !important;
   }
 
-  /* When an isolated modal print target is active, hide main application shell */
+  /* When an isolated modal print target is active, hide non-modal siblings and shell chrome */
   body:has(.print-modal-target) .app-shell > header,
   body:has(.print-modal-target) .app-shell > aside,
-  body:has(.print-modal-target) .app-shell > main,
-  body:has(.print-modal-target) #root > .app-shell > main,
   body.modal-print-open .app-shell > header,
-  body.modal-print-open .app-shell > aside,
-  body.modal-print-open .app-shell > main {
+  body.modal-print-open .app-shell > aside {
     display: none !important;
   }
 
-  /* Modal container resets in print */
+  /* If .print-modal-target is rendered at body/root level outside main, hide main */
+  body:has(> .print-modal-target) .app-shell > main,
+  body:has(#root > .print-modal-target) .app-shell > main {
+    display: none !important;
+  }
+
+  /* If .print-modal-target is rendered inside main, reset main overflow and hide non-modal siblings */
+  body:has(.print-modal-target) .app-shell,
+  body:has(.print-modal-target) .app-shell > main {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  /* Modal container resets in print - static positioning prevents multi-page fixed duplication */
   .print-modal-target {
     position: static !important;
     background: transparent !important;
@@ -392,7 +407,10 @@
     margin: 0 !important;
     width: 100% !important;
     height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
     box-shadow: none !important;
+    display: block !important;
   }
 
   .print-modal-card {
@@ -401,9 +419,12 @@
     border-radius: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+    height: auto !important;
     max-height: none !important;
+    overflow: visible !important;
     margin: 0 !important;
     padding: 0 !important;
+    display: block !important;
   }
 }
 

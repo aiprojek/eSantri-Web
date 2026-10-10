@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PondokSettings } from '../../../types';
 import { useAppContext } from '../../../AppContext';
+import { extractDriveFolderId } from '../utils/psbUtils';
 
 interface PsbGasConfigModalProps {
     isOpen: boolean;
@@ -17,7 +18,10 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
 }) => {
     const { onUpdateSettings, showToast } = useAppContext();
     const currentUrl = settings.psbConfig?.googleScriptUrl || '';
+    const currentFolderId = settings.psbConfig?.driveFolderId || '';
     const [scriptUrl, setScriptUrl] = useState(currentUrl);
+    const [driveFolderId, setDriveFolderId] = useState(currentFolderId);
+    const cleanDriveFolderId = extractDriveFolderId(driveFolderId);
     const [isTesting, setIsTesting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -89,12 +93,13 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                 psbConfig: {
                     ...settings.psbConfig,
                     googleScriptUrl: trimmed,
+                    driveFolderId: cleanDriveFolderId,
                     submissionMethod: newMethod as any
                 }
             };
 
             await onUpdateSettings(updatedSettings);
-            showToast('Pengaturan Google Apps Script berhasil disimpan!', 'success');
+            showToast('Pengaturan Google Apps Script & Folder Drive berhasil disimpan!', 'success');
             onClose();
         } catch (e: any) {
             showToast('Gagal menyimpan pengaturan: ' + e.message, 'error');
@@ -183,6 +188,35 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                             <i className="bi bi-info-circle text-teal-700"></i>
                             Tautan deployment Web App Google Sheets yang berakhiran <code>/exec</code>.
                         </p>
+                    </div>
+
+                    {/* Drive Folder ID Field */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                            ID atau Link Folder Google Drive Tujuan Berkas (Opsional)
+                        </label>
+                        <input
+                            type="text"
+                            value={driveFolderId}
+                            onChange={(e) => setDriveFolderId(e.target.value)}
+                            placeholder="Tempel Link Folder Drive atau ID Folder (cth: 1a2B3c4D5e...)"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-hidden bg-white"
+                        />
+                        {driveFolderId.trim() ? (
+                            cleanDriveFolderId ? (
+                                <p className="text-[11px] text-teal-700 mt-1 flex items-center gap-1 font-medium">
+                                    <i className="bi bi-check-circle-fill"></i> ID Folder Terdeteksi: <code className="bg-teal-100 px-1 rounded font-bold">{cleanDriveFolderId}</code>
+                                </p>
+                            ) : (
+                                <p className="text-[11px] text-amber-700 mt-1">
+                                    ⚠️ Format ID Folder belum dikenali. Salin link folder dari browser (<code>drive.google.com/drive/folders/ID_FOLDER</code>).
+                                </p>
+                            )
+                        ) : (
+                            <p className="text-[11px] text-gray-500 mt-1">
+                                Agar file berkas masuk ke folder pilihan (bukan folder utama Drive), isi ID/Link Folder ini dan pastikan Anda membuat <strong>Versi Baru (New Version)</strong> saat Deploy di Apps Script.
+                            </p>
+                        )}
                     </div>
 
                     {/* Test Connection Button & Result */}

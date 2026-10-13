@@ -207,122 +207,218 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             if (!Array.isArray(rawData)) throw new Error('Format data dari Google Sheet tidak valid.');
 
             let addedCount = 0;
-            const existingNames = new Set(pendaftarList.map(p => p.namaLengkap.toLowerCase().trim()));
+            let updatedCount = 0;
+            const existingByNameMap = new Map<string, Pendaftar>();
+            pendaftarList.forEach(p => {
+                if (p.namaLengkap) {
+                    existingByNameMap.set(p.namaLengkap.toLowerCase().trim(), p);
+                }
+            });
 
             // Define fields that map directly to Pendaftar, others go to customData
             const standardFields = [
                 ...PSB_ALL_STANDARD_FIELD_KEYS,
-                'tanggalDaftar', 'Timestamp', 'sheetName', 'driveFolderId', 'folderId', 'docs', 'status'
+                'tanggalDaftar', 'Timestamp', 'sheetName', 'driveFolderId', 'folderId', 'docs', 'status', 'customData',
+                'pekerjaan', 'Pekerjaan', 'pendidikan', 'Pendidikan', 'penghasilan', 'Penghasilan',
+                'pekerjaanAyah', 'Pekerjaan Ayah', 'pendidikanAyah', 'Pendidikan Ayah', 'Pendidikan Terakhir Ayah', 'penghasilanAyah', 'Penghasilan Ayah', 'Penghasilan Rata-rata Ayah / Bulan',
+                'pekerjaanIbu', 'Pekerjaan Ibu', 'pendidikanIbu', 'Pendidikan Ibu', 'Pendidikan Terakhir Ibu', 'penghasilanIbu', 'Penghasilan Ibu', 'Penghasilan Rata-rata Ibu / Bulan',
+                'pekerjaanWali', 'Pekerjaan Wali', 'pendidikanWali', 'Pendidikan Wali', 'Pendidikan Terakhir Wali', 'penghasilanWali', 'Penghasilan Wali', 'Penghasilan Wali / Bulan',
+                'namaAyah', 'Nama Ayah', 'namaIbu', 'Nama Ibu', 'namaWali', 'Nama Wali', 'nomorHpWali', 'No HP Wali', 'teleponAyah', 'teleponIbu'
             ];
 
             for (const item of rawData) {
-                // Validation: Must have name
-                if (!item.namaLengkap) continue;
-                
-                // Duplicate Check (Simple by Name)
-                if (existingNames.has(item.namaLengkap.toString().toLowerCase().trim())) continue;
+                // Flexible value getter supporting case-insensitivity, spaces, and aliases
+                const getVal = (...keys: string[]): any => {
+                    for (const k of keys) {
+                        if (item[k] !== undefined && item[k] !== null && String(item[k]).trim() !== '') {
+                            return item[k];
+                        }
+                    }
+                    const itemKeyMap = new Map<string, string>();
+                    for (const ik of Object.keys(item)) {
+                        itemKeyMap.set(ik.toLowerCase().replace(/[^a-z0-9]/g, ''), ik);
+                    }
+                    for (const k of keys) {
+                        const norm = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const matched = itemKeyMap.get(norm);
+                        if (matched && item[matched] !== undefined && item[matched] !== null && String(item[matched]).trim() !== '') {
+                            return item[matched];
+                        }
+                    }
+                    return '';
+                };
 
-                // Separate Custom Fields / Files
-                const customDataObj: any = {};
+                const resolvedNama = String(getVal('namaLengkap', 'Nama Lengkap', 'namaSantri', 'nama') || '').trim();
+                // Validation: Must have name
+                if (!resolvedNama) continue;
+
+                // Separate Custom Fields / Files, unpacking item.customData if present
+                let customDataObj: Record<string, any> = {};
+                if (item.customData) {
+                    if (typeof item.customData === 'string' && item.customData.trim()) {
+                        try {
+                            const parsed = JSON.parse(item.customData);
+                            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                                customDataObj = { ...parsed };
+                            }
+                        } catch {
+                            // ignore parse error
+                        }
+                    } else if (typeof item.customData === 'object' && !Array.isArray(item.customData)) {
+                        customDataObj = { ...item.customData };
+                    }
+                }
                 Object.keys(item).forEach(key => {
+                    const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const isKnownCol = standardFields.some(sf => sf.toLowerCase().replace(/[^a-z0-9]/g, '') === normKey);
                     // If key is NOT a standard field, treat it as custom data (this handles File Links too)
-                    if (!standardFields.includes(key)) {
+                    if (!isKnownCol && item[key] !== undefined && item[key] !== '') {
                         customDataObj[key] = item[key];
                     }
                 });
 
+                // Resolve pekerjaan, pendidikan, penghasilan with fallback
+                const genericPekerjaan = getVal('pekerjaan', 'Pekerjaan', 'profesi', 'Profesi');
+                const genericPendidikan = getVal('pendidikan', 'Pendidikan', 'pendidikanTerakhir', 'Pendidikan Terakhir');
+                const genericPenghasilan = getVal('penghasilan', 'Penghasilan', 'penghasilanBulanan', 'gaji', 'Gaji');
+
+                const resolvedPekerjaanAyah = getVal('pekerjaanAyah', 'Pekerjaan Ayah', 'pekerjaan_ayah', 'pekerjaanBapak', 'pekerjaanAbi', 'pekerjaanOrtu', 'pekerjaanOrangTua', 'profesiAyah') || '';
+                const resolvedPendidikanAyah = getVal('pendidikanAyah', 'Pendidikan Ayah', 'pendidikan_ayah', 'pendidikanTerakhirAyah', 'Pendidikan Terakhir Ayah', 'pendidikanBapak', 'pendidikanAbi', 'pendidikanOrtu', 'pendidikanOrangTua') || '';
+                const resolvedPenghasilanAyah = getVal('penghasilanAyah', 'Penghasilan Ayah', 'penghasilan_ayah', 'penghasilanAyahBulan', 'Penghasilan Rata-rata Ayah / Bulan', 'penghasilanBapak', 'penghasilanOrtu', 'gajiAyah') || '';
+
+                const resolvedPekerjaanIbu = getVal('pekerjaanIbu', 'Pekerjaan Ibu', 'pekerjaan_ibu', 'pekerjaanUmmi', 'profesiIbu') || '';
+                const resolvedPendidikanIbu = getVal('pendidikanIbu', 'Pendidikan Ibu', 'pendidikan_ibu', 'pendidikanTerakhirIbu', 'Pendidikan Terakhir Ibu', 'pendidikanUmmi') || '';
+                const resolvedPenghasilanIbu = getVal('penghasilanIbu', 'Penghasilan Ibu', 'penghasilan_ibu', 'penghasilanIbuBulan', 'Penghasilan Rata-rata Ibu / Bulan', 'penghasilanUmmi', 'gajiIbu') || '';
+
+                const resolvedPekerjaanWali = getVal('pekerjaanWali', 'Pekerjaan Wali', 'pekerjaan_wali', 'pekerjaanWalimurid', 'profesiWali') || genericPekerjaan || resolvedPekerjaanAyah || '';
+                const resolvedPendidikanWali = getVal('pendidikanWali', 'Pendidikan Wali', 'pendidikan_wali', 'pendidikanTerakhirWali', 'Pendidikan Terakhir Wali', 'pendidikanWalimurid') || genericPendidikan || resolvedPendidikanAyah || '';
+                const resolvedPenghasilanWali = getVal('penghasilanWali', 'Penghasilan Wali', 'penghasilan_wali', 'penghasilanWaliBulan', 'Penghasilan Wali / Bulan', 'penghasilanWalimurid', 'gajiWali') || genericPenghasilan || resolvedPenghasilanAyah || '';
+
                 const rawPendaftar: Pendaftar = {
                     id: Date.now() + Math.random(), // Ensure unique ID locally
-                    namaLengkap: String(item.namaLengkap || '').trim(),
-                    namaHijrah: item.namaHijrah ? String(item.namaHijrah).trim() : '',
-                    nisn: item.nisn ? String(item.nisn).trim() : '',
-                    nik: item.nik ? String(item.nik).trim() : '',
+                    namaLengkap: resolvedNama,
+                    namaHijrah: String(getVal('namaHijrah', 'namaPanggilan', 'nama_hijrah') || '').trim(),
+                    nisn: String(getVal('nisn', 'NISN') || '').trim(),
+                    nik: String(getVal('nik', 'NIK') || '').trim(),
                     nis: '',
-                    jenisSantri: item.jenisSantri || 'Mondok - Baru',
+                    jenisSantri: getVal('jenisSantri', 'jenis_santri', 'statusSantri') || 'Mondok - Baru',
                     kelasId: 0,
                     rombelId: 0,
-                    jenisKelamin: item.jenisKelamin === 'Perempuan' ? 'Perempuan' : 'Laki-laki',
-                    tempatLahir: item.tempatLahir || '',
-                    tanggalLahir: item.tanggalLahir || '',
-                    agama: item.agama || 'Islam',
-                    golonganDarah: item.golonganDarah || '',
-                    statusKeluarga: item.statusKeluarga || '',
-                    anakKe: item.anakKe !== undefined && item.anakKe !== '' ? Number(item.anakKe) : undefined,
-                    jumlahSaudara: item.jumlahSaudara !== undefined && item.jumlahSaudara !== '' ? Number(item.jumlahSaudara) : undefined,
-                    citaCita: item.citaCita || '',
-                    hobi: item.hobi || '',
-                    telepon: normalizePhoneLocal(item.telepon || item.noHp),
-                    jarakKePondok: item.jarakKePondok || '',
-                    tinggiBadan: item.tinggiBadan !== undefined && item.tinggiBadan !== '' ? Number(String(item.tinggiBadan).replace(/[^0-9.]/g, '')) : undefined,
-                    beratBadan: item.beratBadan !== undefined && item.beratBadan !== '' ? Number(String(item.beratBadan).replace(/[^0-9.]/g, '')) : undefined,
-                    riwayatPenyakit: item.riwayatPenyakit || '',
-                    berkebutuhanKhusus: item.berkebutuhanKhusus || '',
+                    jenisKelamin: String(getVal('jenisKelamin', 'Jenis Kelamin', 'gender', 'jk') || '').toLowerCase().includes('p') ? 'Perempuan' : 'Laki-laki',
+                    tempatLahir: getVal('tempatLahir', 'Tempat Lahir', 'tempat_lahir') || '',
+                    tanggalLahir: getVal('tanggalLahir', 'Tanggal Lahir', 'tanggal_lahir', 'tglLahir') || '',
+                    agama: getVal('agama', 'Agama') || 'Islam',
+                    golonganDarah: getVal('golonganDarah', 'Golongan Darah', 'golDarah') || '',
+                    statusKeluarga: getVal('statusKeluarga', 'Status Keluarga') || '',
+                    anakKe: getVal('anakKe', 'Anak Ke', 'anak_ke') !== '' ? Number(getVal('anakKe', 'Anak Ke', 'anak_ke')) : undefined,
+                    jumlahSaudara: getVal('jumlahSaudara', 'Jumlah Saudara', 'jmlSaudara') !== '' ? Number(getVal('jumlahSaudara', 'Jumlah Saudara', 'jmlSaudara')) : undefined,
+                    citaCita: getVal('citaCita', 'Cita-cita', 'cita_cita') || '',
+                    hobi: getVal('hobi', 'Hobi') || '',
+                    telepon: normalizePhoneLocal(getVal('telepon', 'No HP', 'teleponSantri', 'noHp')),
+                    jarakKePondok: getVal('jarakKePondok', 'Jarak ke Pondok') || '',
+                    tinggiBadan: getVal('tinggiBadan', 'Tinggi Badan', 'tb') !== '' ? Number(String(getVal('tinggiBadan', 'Tinggi Badan', 'tb')).replace(/[^0-9.]/g, '')) : undefined,
+                    beratBadan: getVal('beratBadan', 'Berat Badan', 'bb') !== '' ? Number(String(getVal('beratBadan', 'Berat Badan', 'bb')).replace(/[^0-9.]/g, '')) : undefined,
+                    riwayatPenyakit: getVal('riwayatPenyakit', 'Riwayat Penyakit') || '',
+                    berkebutuhanKhusus: getVal('berkebutuhanKhusus', 'Berkebutuhan Khusus') || '',
                     alamat: {
-                        detail: item.alamat || '',
-                        desaKelurahan: item.desaKelurahan || '',
-                        kecamatan: item.kecamatan || '',
-                        kabupatenKota: item.kabupatenKota || '',
-                        provinsi: item.provinsi || '',
-                        kodePos: item.kodePos ? String(item.kodePos) : '',
+                        detail: getVal('alamat', 'Alamat', 'alamatRumah', 'alamatLengkap') || '',
+                        desaKelurahan: getVal('desaKelurahan', 'Desa/Kelurahan', 'desa') || '',
+                        kecamatan: getVal('kecamatan', 'Kecamatan') || '',
+                        kabupatenKota: getVal('kabupatenKota', 'Kabupaten/Kota', 'kota') || '',
+                        provinsi: getVal('provinsi', 'Provinsi') || '',
+                        kodePos: getVal('kodePos', 'Kode Pos') ? String(getVal('kodePos', 'Kode Pos')) : '',
                     },
                     
-                    namaWali: item.namaWali || '',
-                    nikWali: item.nikWali ? String(item.nikWali) : '',
-                    nomorHpWali: normalizePhoneLocal(item.nomorHpWali || item.teleponAyah || item.teleponIbu || item.telepon),
-                    statusWali: item.statusWali || '',
-                    pekerjaanWali: item.pekerjaanWali || '',
-                    pendidikanWali: item.pendidikanWali || '',
-                    penghasilanWali: item.penghasilanWali || '',
-                    jenjangId: parseInt(item.jenjangId) || settings.psbConfig.targetJenjangId || 0,
-                    asalSekolah: item.asalSekolah || item.sekolahAsal || '',
-                    alamatSekolahAsal: item.alamatSekolahAsal || '',
-                    nomorIjazahSebelumnya: item.nomorIjazahSebelumnya ? String(item.nomorIjazahSebelumnya) : '',
-                    tahunLulusSebelumnya: item.tahunLulusSebelumnya ? String(item.tahunLulusSebelumnya) : '',
-                    targetJuz: item.targetJuz !== undefined && item.targetJuz !== '' ? Number(String(item.targetJuz).replace(/[^0-9.]/g, '')) : undefined,
-                    tanggalDaftar: item.tanggalDaftar || item.Timestamp || new Date().toISOString(),
-                    tanggalMasuk: item.tanggalDaftar || item.Timestamp || new Date().toISOString(),
+                    namaWali: getVal('namaWali', 'Nama Wali', 'nama_wali') || '',
+                    nikWali: getVal('nikWali', 'NIK Wali') ? String(getVal('nikWali', 'NIK Wali')) : '',
+                    nomorHpWali: normalizePhoneLocal(getVal('nomorHpWali', 'No HP Wali', 'nomor_hp_wali', 'teleponWali', 'noHpWali') || getVal('teleponAyah', 'teleponIbu', 'telepon')),
+                    statusWali: getVal('statusWali', 'Status Wali', 'hubunganWali', 'Hubungan dengan Santri') || '',
+                    pekerjaanWali: resolvedPekerjaanWali,
+                    pendidikanWali: resolvedPendidikanWali,
+                    penghasilanWali: resolvedPenghasilanWali,
+                    jenjangId: parseInt(getVal('jenjangId', 'Jenjang')) || settings.psbConfig.targetJenjangId || 0,
+                    asalSekolah: getVal('asalSekolah', 'Asal Sekolah', 'sekolahAsal', 'Nama Sekolah Sebelumnya') || '',
+                    alamatSekolahAsal: getVal('alamatSekolahAsal', 'Alamat Sekolah Asal') || '',
+                    nomorIjazahSebelumnya: getVal('nomorIjazahSebelumnya', 'Nomor Ijazah') ? String(getVal('nomorIjazahSebelumnya', 'Nomor Ijazah')) : '',
+                    tahunLulusSebelumnya: getVal('tahunLulusSebelumnya', 'Tahun Kelulusan', 'tahunLulus') ? String(getVal('tahunLulusSebelumnya', 'Tahun Kelulusan', 'tahunLulus')) : '',
+                    targetJuz: getVal('targetJuz', 'Target Hafalan') !== '' ? Number(String(getVal('targetJuz', 'Target Hafalan')).replace(/[^0-9.]/g, '')) : undefined,
+                    tanggalDaftar: getVal('tanggalDaftar', 'Timestamp') || new Date().toISOString(),
+                    tanggalMasuk: getVal('tanggalDaftar', 'Timestamp') || new Date().toISOString(),
                     status: 'Baru',
-                    kewarganegaraan: item.kewarganegaraan || 'WNI',
-                    gelombang: settings.psbConfig.activeGelombang,
+                    kewarganegaraan: getVal('kewarganegaraan') || 'WNI',
+                    gelombang: getVal('gelombang') || settings.psbConfig.activeGelombang,
                     
-                    catatan: item.catatan || '',
-                    jalurPendaftaran: item.jalurPendaftaran || 'Reguler',
+                    catatan: getVal('catatan', 'Catatan') || '',
+                    jalurPendaftaran: getVal('jalurPendaftaran', 'Jalur Pendaftaran') || 'Reguler',
 
                     // Store extra fields (including Google Drive Links) here
                     customData: JSON.stringify(customDataObj),
                     
-                    namaAyah: item.namaAyah || '',
-                    nikAyah: item.nikAyah ? String(item.nikAyah) : '',
-                    statusAyah: item.statusAyah || '',
-                    tempatLahirAyah: item.tempatLahirAyah || '',
-                    tanggalLahirAyah: item.tanggalLahirAyah || '',
-                    pendidikanAyah: item.pendidikanAyah || '',
-                    pekerjaanAyah: item.pekerjaanAyah || '',
-                    penghasilanAyah: item.penghasilanAyah || '',
-                    teleponAyah: normalizePhoneLocal(item.teleponAyah),
+                    namaAyah: getVal('namaAyah', 'Nama Lengkap Ayah', 'Nama Ayah', 'nama_ayah', 'namaBapak') || '',
+                    nikAyah: getVal('nikAyah', 'NIK Ayah') ? String(getVal('nikAyah', 'NIK Ayah')) : '',
+                    statusAyah: getVal('statusAyah', 'Status Ayah') || '',
+                    tempatLahirAyah: getVal('tempatLahirAyah', 'Tempat Lahir Ayah') || '',
+                    tanggalLahirAyah: getVal('tanggalLahirAyah', 'Tanggal Lahir Ayah') || '',
+                    pendidikanAyah: resolvedPendidikanAyah || (genericPendidikan ? resolvedPendidikanWali : ''),
+                    pekerjaanAyah: resolvedPekerjaanAyah || (genericPekerjaan ? resolvedPekerjaanWali : ''),
+                    penghasilanAyah: resolvedPenghasilanAyah || (genericPenghasilan ? resolvedPenghasilanWali : ''),
+                    teleponAyah: normalizePhoneLocal(getVal('teleponAyah', 'No HP Ayah', 'telepon_ayah', 'noHpAyah')),
                     
-                    namaIbu: item.namaIbu || '',
-                    nikIbu: item.nikIbu ? String(item.nikIbu) : '',
-                    statusIbu: item.statusIbu || '',
-                    tempatLahirIbu: item.tempatLahirIbu || '',
-                    tanggalLahirIbu: item.tanggalLahirIbu || '',
-                    pendidikanIbu: item.pendidikanIbu || '',
-                    pekerjaanIbu: item.pekerjaanIbu || '',
-                    penghasilanIbu: item.penghasilanIbu || '',
-                    teleponIbu: normalizePhoneLocal(item.teleponIbu),
+                    namaIbu: getVal('namaIbu', 'Nama Lengkap Ibu', 'Nama Ibu', 'nama_ibu', 'namaUmmi') || '',
+                    nikIbu: getVal('nikIbu', 'NIK Ibu') ? String(getVal('nikIbu', 'NIK Ibu')) : '',
+                    statusIbu: getVal('statusIbu', 'Status Ibu') || '',
+                    tempatLahirIbu: getVal('tempatLahirIbu', 'Tempat Lahir Ibu') || '',
+                    tanggalLahirIbu: getVal('tanggalLahirIbu', 'Tanggal Lahir Ibu') || '',
+                    pendidikanIbu: resolvedPendidikanIbu,
+                    pekerjaanIbu: resolvedPekerjaanIbu,
+                    penghasilanIbu: resolvedPenghasilanIbu,
+                    teleponIbu: normalizePhoneLocal(getVal('teleponIbu', 'No HP Ibu', 'telepon_ibu', 'noHpIbu')),
                     lastModified: Date.now(),
                 };
 
-                const newPendaftar = healPendaftarRecord(rawPendaftar, settings);
+                const newPendaftar = healPendaftarRecordWithDetails({ ...item, ...rawPendaftar }, settings).healed;
+                const nameKey = newPendaftar.namaLengkap.toLowerCase().trim();
+                const existingPendaftar = existingByNameMap.get(nameKey);
+
+                if (existingPendaftar) {
+                    // Check if existing record is missing fields that are present in newPendaftar
+                    const enrichableKeys: (keyof Pendaftar)[] = [
+                        'pekerjaanAyah', 'pendidikanAyah', 'penghasilanAyah', 'statusAyah', 'nikAyah', 'teleponAyah', 'tempatLahirAyah', 'tanggalLahirAyah',
+                        'pekerjaanIbu', 'pendidikanIbu', 'penghasilanIbu', 'statusIbu', 'nikIbu', 'teleponIbu', 'tempatLahirIbu', 'tanggalLahirIbu',
+                        'namaWali', 'nikWali', 'statusWali', 'nomorHpWali', 'pekerjaanWali', 'pendidikanWali', 'penghasilanWali',
+                        'tinggiBadan', 'beratBadan', 'golonganDarah', 'riwayatPenyakit', 'berkebutuhanKhusus'
+                    ];
+                    let hasEnrichment = false;
+                    const mergedExisting: any = { ...existingPendaftar };
+                    for (const k of enrichableKeys) {
+                        const cur = mergedExisting[k];
+                        const incoming = (newPendaftar as any)[k];
+                        if ((cur === undefined || cur === null || cur === '') && incoming !== undefined && incoming !== null && incoming !== '') {
+                            mergedExisting[k] = incoming;
+                            hasEnrichment = true;
+                        }
+                    }
+                    const { healed: healedExisting, changed: healedChanged } = healPendaftarRecordWithDetails(mergedExisting, settings);
+                    if (hasEnrichment || healedChanged) {
+                        await db.pendaftar.put({ ...healedExisting, id: existingPendaftar.id, lastModified: Date.now() });
+                        updatedCount++;
+                    }
+                    continue;
+                }
+
                 await db.pendaftar.add(newPendaftar);
+                existingByNameMap.set(nameKey, newPendaftar);
                 addedCount++;
             }
 
-            if (addedCount > 0) {
+            if (addedCount > 0 || updatedCount > 0) {
                 onUpdateList();
-                showToast(`Berhasil menarik ${addedCount} data pendaftar baru dari Google Sheet.`, 'success');
+                const msgParts = [];
+                if (addedCount > 0) msgParts.push(`${addedCount} pendaftar baru ditarik`);
+                if (updatedCount > 0) msgParts.push(`${updatedCount} data pendaftar dilengkapi`);
+                showToast(`Berhasil: ${msgParts.join(' & ')} dari Google Sheet.`, 'success');
             } else {
-                showToast('Tidak ada data baru. Semua data di Sheet sudah ada di aplikasi.', 'info');
+                showToast('Tidak ada data baru. Semua data di Sheet sudah sinkron dengan aplikasi.', 'info');
             }
 
         } catch (e: any) {

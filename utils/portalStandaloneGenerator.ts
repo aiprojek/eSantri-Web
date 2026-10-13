@@ -94,9 +94,9 @@ export const generateStandalonePortalHtml = (settings: PondokSettings, portalCon
       width: 72px; height: 72px; border-radius: 50%; margin: 0 auto 12px;
       display: flex; align-items: center; justify-content: center;
       background: var(--p-color); color: #fff; font-size: 28px; font-weight: 800;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.08); border: 2px solid #f1f5f9; overflow: hidden;
+      overflow: hidden; border: none;
     }
-    .logo-wrap img { width: 100%; height: 100%; object-fit: contain; background: #fff; padding: 4px; }
+    .logo-wrap img { width: 100%; height: 100%; object-fit: contain; background: #fff; padding: 4px; border: none; outline: none; }
     .eyebrow { color: #d97706; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin: 4px 0 6px; }
     .title { font-size: 22px; font-weight: 800; color: #0f172a; line-height: 1.25; }
     .subtitle { font-size: 13px; color: #64748b; line-height: 1.5; }

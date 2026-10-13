@@ -1535,7 +1535,7 @@ export const BukuIndukSantriTemplate: React.FC<{
                         ) : settings.logoPonpesUrl ? (
                             <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
                         ) : (
-                            <div className="w-14 h-14 rounded border border-black flex items-center justify-center text-sm font-bold">PP</div>
+                            <div className="w-14 h-14 rounded bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-800">PP</div>
                         )}
                     </div>
                     <div className="text-center flex-1 px-2">

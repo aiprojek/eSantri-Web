@@ -339,7 +339,7 @@ export const PublicPortal: React.FC = () => {
                 {!loggedInSantri && (
                     <div className="flex flex-col items-center mb-5">
                         {tenantSettings.logoPonpesUrl ? (
-                            <img src={tenantSettings.logoPonpesUrl} alt="Logo" className="w-18 h-18 rounded-2xl mb-3 shadow-md border border-slate-100 object-contain bg-white p-1.5" referrerPolicy="no-referrer" />
+                            <img src={tenantSettings.logoPonpesUrl} alt="Logo" className="w-18 h-18 rounded-2xl mb-3 object-contain bg-white p-1.5" referrerPolicy="no-referrer" />
                         ) : (
                             <div className={`w-16 h-16 rounded-2xl ${theme.btnPrimary} flex items-center justify-center text-white text-2xl font-bold mb-3 shadow-md`}>
                                 {(tenantSettings.namaPonpes || 'E').charAt(0)}
@@ -1036,7 +1036,7 @@ const PsbPublicForm: React.FC<{
                     <div className="flex items-center gap-3">
                         <img
                             src={settings.logoPonpesUrl || `https://picsum.photos/seed/${settings.namaPonpes}/100/100`}
-                            className="w-10 h-10 rounded-full bg-white object-contain p-1 border border-teal-700"
+                            className="w-10 h-10 rounded-full bg-white object-contain p-1"
                             alt="Logo"
                             referrerPolicy="no-referrer"
                         />

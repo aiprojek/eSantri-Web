@@ -976,8 +976,8 @@ export const TabDesainRapor: React.FC = () => {
                     );
                 }
                 if (val === '$STEMPEL_PONPES') return <span className="text-rose-600 font-bold text-[10px] bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-patch-check-fill"></i> Stempel Ponpes</span>;
-                if (val === '$LOGO_PONPES') return <span className="text-teal-600 font-bold text-[10px] bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image"></i> Logo Ponpes</span>;
-                if (val === '$LOGO_YAYASAN') return <span className="text-indigo-600 font-bold text-[10px] bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image-fill"></i> Logo Yayasan</span>;
+                if (val === '$LOGO_PONPES') return <span className="text-teal-700 font-bold text-[10px] bg-teal-50 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image"></i> Logo Ponpes</span>;
+                if (val === '$LOGO_YAYASAN') return <span className="text-indigo-700 font-bold text-[10px] bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image-fill"></i> Logo Yayasan</span>;
                 if (val.includes('TTD')) return <span className="text-purple-600 font-bold text-[10px] bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-pen-fill"></i> {val.replace('$', '')}</span>;
                 return <span className="text-rose-500 italic text-[10px] font-mono bg-rose-50 px-1 rounded border border-rose-100">[{val}]</span>;
             }

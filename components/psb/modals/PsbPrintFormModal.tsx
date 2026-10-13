@@ -238,13 +238,13 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
 
                             const customFileChecklistEntries = customDisplayEntries.filter(item => item.isFile);
 
-                            const alamatDetail = pendaftar.alamatRumah || (pendaftar as any).alamat?.detail || '-';
-                            const desaKelurahan = pendaftar.desaKelurahan || (pendaftar as any).alamat?.desaKelurahan || '-';
-                            const kecamatan = pendaftar.kecamatan || (pendaftar as any).alamat?.kecamatan || '-';
-                            const kabupatenKota = pendaftar.kabupatenKota || (pendaftar as any).alamat?.kabupatenKota || '-';
-                            const provinsi = pendaftar.provinsi || (pendaftar as any).alamat?.provinsi || '-';
-                            const kodePos = pendaftar.kodePos || (pendaftar as any).alamat?.kodePos || '';
-                            const asalSekolah = pendaftar.sekolahAsal || (pendaftar as any).asalSekolah || '-';
+                            const alamatDetail = (pendaftar as any).alamatRumah || (pendaftar as any).alamat?.detail || '-';
+                            const desaKelurahan = (pendaftar as any).desaKelurahan || (pendaftar as any).alamat?.desaKelurahan || '-';
+                            const kecamatan = (pendaftar as any).kecamatan || (pendaftar as any).alamat?.kecamatan || '-';
+                            const kabupatenKota = (pendaftar as any).kabupatenKota || (pendaftar as any).alamat?.kabupatenKota || '-';
+                            const provinsi = (pendaftar as any).provinsi || (pendaftar as any).alamat?.provinsi || '-';
+                            const kodePos = (pendaftar as any).kodePos || (pendaftar as any).alamat?.kodePos || '';
+                            const asalSekolah = (pendaftar as any).sekolahAsal || (pendaftar as any).asalSekolah || '-';
 
                             return (
                                 <div
@@ -257,7 +257,7 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
                                             <img
                                                 src={settings.logoPonpesUrl || settings.logoYayasanUrl}
                                                 alt="Logo"
-                                                className="w-20 h-20 object-contain rounded-full border border-gray-200 p-0.5"
+                                                className="w-20 h-20 object-contain shrink-0"
                                             />
                                         ) : (
                                             <div className="w-20 h-20 rounded-full bg-teal-800 text-white flex items-center justify-center text-3xl font-black shrink-0">
@@ -294,7 +294,7 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
                                             FORMULIR PENDAFTARAN SANTRI BARU (F-PSB)
                                         </h2>
                                         <p className="text-[11px] text-gray-600 mt-1 font-medium">
-                                            Tahun Ajaran / Gelombang: {settings.psbConfig.activeGelombang || '1'}
+                                            Tahun Ajaran {settings.psbConfig?.tahunAjaranAktif || new Date().getFullYear()} • Gelombang {pendaftar.gelombang || settings.psbConfig?.activeGelombang || '1'}
                                         </p>
                                     </div>
 
@@ -470,7 +470,12 @@ export const PsbPrintFormModal: React.FC<PsbPrintFormModalProps> = ({
                                         {pendaftar.namaWali && (
                                             <div className="mt-2 p-2 bg-gray-50 border border-gray-300 rounded text-[11px]">
                                                 <span className="font-bold text-gray-800">Wali Santri: </span>
-                                                {pendaftar.namaWali} ({pendaftar.statusWali || 'Wali'}) • Telp: {pendaftar.nomorHpWali || '-'} • Pekerjaan: {pendaftar.pekerjaanWali || '-'}
+                                                {pendaftar.namaWali} ({pendaftar.statusWali || 'Wali'})
+                                                {pendaftar.nikWali ? ` • NIK: ${pendaftar.nikWali}` : ''}
+                                                {' • '}Telp: {pendaftar.nomorHpWali || '-'}
+                                                {' • '}Pendidikan: {pendaftar.pendidikanWali || '-'}
+                                                {' • '}Pekerjaan: {pendaftar.pekerjaanWali || '-'}
+                                                {' • '}Penghasilan: {pendaftar.penghasilanWali || '-'}
                                             </div>
                                         )}
                                     </div>

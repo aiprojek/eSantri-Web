@@ -500,6 +500,7 @@ export interface PsbCustomField {
 export interface PsbFormTemplate {
     id: string;
     name: string;
+    tahunAjaranAktif?: string;
     targetJenjangId?: number;
     designStyle?: PsbDesignStyle;
     activeFields: string[];

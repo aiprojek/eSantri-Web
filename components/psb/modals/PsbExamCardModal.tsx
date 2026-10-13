@@ -217,7 +217,7 @@ export const PsbExamCardModal: React.FC<PsbExamCardModalProps> = ({
                                             <img
                                                 src={settings.logoPonpesUrl || settings.logoYayasanUrl}
                                                 alt="Logo"
-                                                className="w-16 h-16 object-contain rounded-full border border-gray-200 p-0.5"
+                                                className="w-16 h-16 object-contain shrink-0"
                                             />
                                         ) : (
                                             <div className="w-16 h-16 rounded-full bg-teal-800 text-white flex items-center justify-center text-2xl font-black shrink-0">

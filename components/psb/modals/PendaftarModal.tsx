@@ -3,7 +3,7 @@ import { Pendaftar, PondokSettings, PsbBerkasFisik, PsbNilaiUjian, PendaftarStat
 import { useAppContext } from '../../../AppContext';
 import { loadFirebasePsbUploadRuntime } from '../../../utils/lazyFirebaseRuntimes';
 import { isFirebaseClientConfigReady } from '../../../firebaseStorage';
-import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal, resolveCustomFieldLabel, getAllConfiguredCustomFields } from '../utils/psbUtils';
+import { getPsbRegistrationNumber, calculatePsbAverageScore, healPendaftarRecordWithDetails, normalizePhoneLocal, resolveCustomFieldLabel, getAllConfiguredCustomFields, PSB_PENDIDIKAN_OPTIONS, PSB_PENGHASILAN_OPTIONS, PSB_PEKERJAAN_OPTIONS, withCurrentOption } from '../utils/psbUtils';
 import { MarkdownEditor } from '../../common/MarkdownEditor';
 import { MarkdownViewer } from '../../common/MarkdownViewer';
 
@@ -515,9 +515,11 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
         }
     };
 
-    const pendidikanOptions = ['Tidak/Belum Sekolah', 'SD/Sederajat', 'SLTP/Sederajat', 'SLTA/Sederajat', 'Diploma', 'Sarjana', 'Pascasarjana'];
-    const pekerjaanOptions = ['PNS', 'TNI/Polri', 'Wiraswasta', 'Petani', 'Nelayan', 'Karyawan Swasta', 'Buruh', 'Lainnya'];
-    const penghasilanOptions = ['< 1 Juta', '1 - 2 Juta', '2 - 5 Juta', '> 5 Juta', 'Tidak Berpenghasilan'];
+    const pendidikanOptions = PSB_PENDIDIKAN_OPTIONS;
+    const pekerjaanOptions = PSB_PEKERJAAN_OPTIONS;
+    const penghasilanOptions = PSB_PENGHASILAN_OPTIONS;
+    const statusOrtuOptions = ['Hidup', 'Meninggal', 'Cerai'];
+    const hubunganWaliOptions = ['Ayah Kandung', 'Ibu Kandung', 'Kakek/Nenek', 'Paman/Bibi', 'Kakak Kandung', 'Orang Tua Asuh', 'Orang Tua Angkat', 'Lainnya'];
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[70] flex justify-center items-center p-4">
@@ -718,27 +720,28 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Status Ayah</label>
                                         <select value={formData.statusAyah || ''} onChange={e => handleChange('statusAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
                                             <option value="">- Pilih -</option>
-                                            <option value="Hidup">Hidup</option>
-                                            <option value="Meninggal">Meninggal</option>
-                                            <option value="Bercerai">Bercerai</option>
+                                            {withCurrentOption(statusOrtuOptions, formData.statusAyah).map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Terakhir</label>
                                         <select value={formData.pendidikanAyah || ''} onChange={e => handleChange('pendidikanAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
                                             <option value="">- Pilih Pendidikan -</option>
-                                            {pendidikanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                            {withCurrentOption(pendidikanOptions, formData.pendidikanAyah).map(p => <option key={p} value={p}>{p}</option>)}
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan</label>
-                                        <input type="text" value={formData.pekerjaanAyah || ''} onChange={e => handleChange('pekerjaanAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        <select value={formData.pekerjaanAyah || ''} onChange={e => handleChange('pekerjaanAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                            <option value="">- Pilih Pekerjaan -</option>
+                                            {withCurrentOption(pekerjaanOptions, formData.pekerjaanAyah).map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Bulanan</label>
                                         <select value={formData.penghasilanAyah || ''} onChange={e => handleChange('penghasilanAyah', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
                                             <option value="">- Pilih Penghasilan -</option>
-                                            {penghasilanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                            {withCurrentOption(penghasilanOptions, formData.penghasilanAyah).map(p => <option key={p} value={p}>{p}</option>)}
                                         </select>
                                     </div>
                                     <div>
@@ -772,27 +775,28 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Status Ibu</label>
                                         <select value={formData.statusIbu || ''} onChange={e => handleChange('statusIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
                                             <option value="">- Pilih -</option>
-                                            <option value="Hidup">Hidup</option>
-                                            <option value="Meninggal">Meninggal</option>
-                                            <option value="Bercerai">Bercerai</option>
+                                            {withCurrentOption(statusOrtuOptions, formData.statusIbu).map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Terakhir</label>
                                         <select value={formData.pendidikanIbu || ''} onChange={e => handleChange('pendidikanIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
                                             <option value="">- Pilih Pendidikan -</option>
-                                            {pendidikanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                            {withCurrentOption(pendidikanOptions, formData.pendidikanIbu).map(p => <option key={p} value={p}>{p}</option>)}
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan</label>
-                                        <input type="text" value={formData.pekerjaanIbu || ''} onChange={e => handleChange('pekerjaanIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                        <select value={formData.pekerjaanIbu || ''} onChange={e => handleChange('pekerjaanIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                            <option value="">- Pilih Pekerjaan -</option>
+                                            {withCurrentOption(pekerjaanOptions, formData.pekerjaanIbu).map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Bulanan</label>
                                         <select value={formData.penghasilanIbu || ''} onChange={e => handleChange('penghasilanIbu', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
                                             <option value="">- Pilih Penghasilan -</option>
-                                            {penghasilanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                            {withCurrentOption(penghasilanOptions, formData.penghasilanIbu).map(p => <option key={p} value={p}>{p}</option>)}
                                         </select>
                                     </div>
                                     <div>
@@ -818,17 +822,30 @@ export const PendaftarModal: React.FC<PendaftarModalProps> = ({ isOpen, onClose,
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Hubungan dengan Santri</label>
-                                    <input type="text" value={formData.statusWali || ''} onChange={e => handleChange('statusWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" placeholder="Paman, Kakek, dll" />
+                                    <select value={formData.statusWali || ''} onChange={e => handleChange('statusWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                        <option value="">- Pilih Hubungan -</option>
+                                        {withCurrentOption(hubunganWaliOptions, formData.statusWali).map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Terakhir Wali</label>
+                                    <select value={formData.pendidikanWali || ''} onChange={e => handleChange('pendidikanWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                        <option value="">- Pilih Pendidikan -</option>
+                                        {withCurrentOption(pendidikanOptions, formData.pendidikanWali).map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan Wali</label>
-                                    <input type="text" value={formData.pekerjaanWali || ''} onChange={e => handleChange('pekerjaanWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm" />
+                                    <select value={formData.pekerjaanWali || ''} onChange={e => handleChange('pekerjaanWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
+                                        <option value="">- Pilih Pekerjaan -</option>
+                                        {withCurrentOption(pekerjaanOptions, formData.pekerjaanWali).map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Wali</label>
                                     <select value={formData.penghasilanWali || ''} onChange={e => handleChange('penghasilanWali', e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2.5 text-sm">
                                         <option value="">- Pilih Penghasilan -</option>
-                                        {penghasilanOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                        {withCurrentOption(penghasilanOptions, formData.penghasilanWali).map(p => <option key={p} value={p}>{p}</option>)}
                                     </select>
                                 </div>
                             </div>

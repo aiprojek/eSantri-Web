@@ -173,13 +173,14 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                                 renderedContent = resolveRaporText(cell.value, resolveContext);
                                             }
 
-                                            // Apply borders
+                                            // Apply borders (Logo yayasan & pondok borderless as requested)
+                                            const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
                                             const b = cell.borders || { top: true, right: true, bottom: true, left: true };
                                             const borderStyle: React.CSSProperties = {
-                                                borderTop: b.top ? '1px solid black' : undefined,
-                                                borderRight: b.right ? '1px solid black' : undefined,
-                                                borderBottom: b.bottom ? '1px solid black' : undefined,
-                                                borderLeft: b.left ? '1px solid black' : undefined,
+                                                borderTop: (!isLogoMedia && b.top) ? '1px solid black' : undefined,
+                                                borderRight: (!isLogoMedia && b.right) ? '1px solid black' : undefined,
+                                                borderBottom: (!isLogoMedia && b.bottom) ? '1px solid black' : undefined,
+                                                borderLeft: (!isLogoMedia && b.left) ? '1px solid black' : undefined,
                                                 textAlign: cell.align || 'center',
                                                 width: cell.width ? `${cell.width}px` : undefined,
                                                 height: cell.height ? `${cell.height}px` : undefined,

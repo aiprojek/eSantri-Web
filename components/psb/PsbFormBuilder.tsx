@@ -3,7 +3,7 @@ import { useAppContext } from '../../AppContext';
 import { PsbConfig, PondokSettings, PsbDesignStyle, PsbFormTemplate, PsbSubmissionMethod } from '../../types';
 import { CustomFieldEditor } from './common/CustomFieldEditor';
 import { getStandaloneDocumentStyles, getStandaloneDocumentStylesSync } from '../../utils/standaloneStyles';
-import { PSB_STANDARD_FIELD_GROUPS, PSB_DEFAULT_FIELD_HINTS, extractDriveFolderId, isPhoneFieldKey } from './utils/psbUtils';
+import { PSB_STANDARD_FIELD_GROUPS, PSB_DEFAULT_FIELD_HINTS, extractDriveFolderId, isPhoneFieldKey, getPsbAcademicYearOptions } from './utils/psbUtils';
 
 interface PsbFormBuilderProps {
     config: PsbConfig;
@@ -24,6 +24,14 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         requiredStandardFields: config.requiredStandardFields || config.activeFields,
         registrationDeadline: config.registrationDeadline || ''
     });
+
+    useEffect(() => {
+        if (config.tahunAjaranAktif && config.tahunAjaranAktif !== localConfig.tahunAjaranAktif) {
+            setLocalConfig(prev => ({ ...prev, tahunAjaranAktif: config.tahunAjaranAktif }));
+        }
+    }, [config.tahunAjaranAktif]);
+
+    const { activeYear: pondokActiveYear, nextYear: pondokNextYear, options: psbYearOptions } = getPsbAcademicYearOptions(settings);
     
     const [templateName, setTemplateName] = useState('');
     const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
@@ -121,6 +129,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         const newTemplate: PsbFormTemplate = {
             id: activeTemplateId || 'tpl_' + Date.now(),
             name: templateName.trim(),
+            tahunAjaranAktif: localConfig.tahunAjaranAktif,
             targetJenjangId: localConfig.targetJenjangId,
             designStyle: localConfig.designStyle,
             activeFields: localConfig.activeFields,
@@ -153,6 +162,7 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
             showConfirmation('Muat Formulir?', `Konfigurasi saat ini akan ditimpa dengan data dari "${tpl.name}".`, () => {
                 setLocalConfig(prev => ({
                     ...prev,
+                    tahunAjaranAktif: tpl.tahunAjaranAktif || prev.tahunAjaranAktif,
                     targetJenjangId: tpl.targetJenjangId,
                     designStyle: tpl.designStyle || prev.designStyle,
                     activeFields: [...tpl.activeFields],
@@ -245,7 +255,13 @@ function doPost(e) {
     
     if (!sheet) {
       sheet = ss.insertSheet(sheetName);
-      var headers = ["Timestamp", "namaLengkap", "nisn", "nik", "jenisKelamin", "tempatLahir", "tanggalLahir", "alamat", "namaWali", "nomorHpWali", "jenjangId", "asalSekolah", "jalurPendaftaran", "catatan", "status"];
+      var headers = [
+        "Timestamp", "namaLengkap", "nisn", "nik", "jenisKelamin", "tempatLahir", "tanggalLahir", "alamat",
+        "namaAyah", "nikAyah", "statusAyah", "pekerjaanAyah", "pendidikanAyah", "penghasilanAyah", "teleponAyah",
+        "namaIbu", "nikIbu", "statusIbu", "pekerjaanIbu", "pendidikanIbu", "penghasilanIbu", "teleponIbu",
+        "namaWali", "nikWali", "statusWali", "hubunganWali", "pekerjaanWali", "pendidikanWali", "penghasilanWali", "nomorHpWali",
+        "jenjangId", "asalSekolah", "jalurPendaftaran", "catatan", "status"
+      ];
       for (var key in data) {
          if (headers.indexOf(key) === -1 && key !== 'sheetName' && key !== 'driveFolderId' && key !== 'folderId') headers.push(key);
       }
@@ -549,7 +565,7 @@ function doPost(e) {
 
                 const inputType = f.type === 'date' || f.key.toLowerCase().includes('tanggal') 
                     ? 'date' 
-                    : f.type === 'tel' || isPhoneFieldKey(f.key)
+                    : (f.type as any) === 'tel' || isPhoneFieldKey(f.key)
                     ? 'tel'
                     : f.type === 'number' || ['anakKe', 'jumlahSaudara', 'tinggiBadan', 'beratBadan', 'tahunLulusSebelumnya', 'targetJuz'].includes(f.key)
                     ? 'number'
@@ -624,13 +640,14 @@ function doPost(e) {
              </label>`
         ).join('');
 
+        const psbYearDisplay = localConfig.tahunAjaranAktif || settings.psbConfig?.tahunAjaranAktif || new Date().getFullYear();
         let bodyClass = isForPreview 
             ? "bg-white min-h-screen p-6 sm:p-10 font-sans text-gray-800 m-0"
             : "bg-gray-100 min-h-screen py-10 font-sans text-gray-800 print:bg-white print:py-0";
         let wrapperClass = isForPreview 
             ? "w-full max-w-2xl mx-auto"
             : "bg-white shadow-xl mx-auto max-w-2xl p-8 rounded-lg print:shadow-none print:max-w-none print:p-0";
-        let headerHtml = `<div class="text-center mb-8"><h1 class="text-2xl font-bold">${settings.namaPonpes}</h1><p>Formulir Pendaftaran</p></div>`;
+        let headerHtml = `<div class="text-center mb-8"><h1 class="text-2xl font-bold">${settings.namaPonpes}</h1><p>Formulir Pendaftaran Santri Baru • Tahun Ajaran ${psbYearDisplay}</p></div>`;
 
         if (style === 'classic') {
             bodyClass = isForPreview 
@@ -644,7 +661,7 @@ function doPost(e) {
                     <div class="absolute top-0 left-1/2 transform -translate-x-1/2 w-24 h-1 bg-[#D4AF37] rounded-full"></div>
                     <h1 class="text-3xl font-bold text-[#1B4D3E] mt-6 mb-2 uppercase tracking-wide leading-tight">${settings.namaPonpes}</h1>
                     <div class="text-[#D4AF37] font-semibold italic text-lg border-b border-gray-200 pb-4 inline-block px-10">Penerimaan Santri Baru</div>
-                    <p class="text-xs text-gray-500 mt-2 font-sans tracking-widest uppercase">Tahun Ajaran ${localConfig.tahunAjaranAktif || new Date().getFullYear()}</p>
+                    <p class="text-xs text-gray-500 mt-2 font-sans tracking-widest uppercase">Tahun Ajaran ${psbYearDisplay}</p>
                 </div>
             `;
         } else if (style === 'modern') {
@@ -654,7 +671,7 @@ function doPost(e) {
              wrapperClass = isForPreview 
                 ? "w-full max-w-[210mm] mx-auto overflow-hidden"
                 : "bg-white shadow-xl mx-auto max-w-[210mm] border border-gray-200 rounded-xl overflow-hidden print:shadow-none print:border-none print:rounded-none print:max-w-none";
-             headerHtml = `<div class="bg-blue-600 p-8 text-white flex justify-between items-center print:bg-white print:text-black print:border-b-2 print:border-blue-600 print:mb-6"><div><h1 class="text-3xl font-bold tracking-tight">Registration</h1><p class="text-blue-100 print:text-gray-600">${settings.namaPonpes}</p></div><div class="text-5xl opacity-30 print:hidden"><i class="bi bi-pencil-square"></i></div></div><div class="p-8 print:p-0">`;
+             headerHtml = `<div class="bg-blue-600 p-8 text-white flex justify-between items-center print:bg-white print:text-black print:border-b-2 print:border-blue-600 print:mb-6"><div><h1 class="text-3xl font-bold tracking-tight">Penerimaan Santri Baru</h1><p class="text-blue-100 print:text-gray-600">${settings.namaPonpes} • Tahun Ajaran ${psbYearDisplay}</p></div><div class="text-5xl opacity-30 print:hidden"><i class="bi bi-pencil-square"></i></div></div><div class="p-8 print:p-0">`;
         } 
         else if (style === 'bold') {
             bodyClass = isForPreview 
@@ -663,7 +680,7 @@ function doPost(e) {
             wrapperClass = isForPreview 
                 ? "w-full max-w-2xl mx-auto p-6 sm:p-8 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
                 : "bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mx-auto max-w-2xl p-8 border-2 border-black print:shadow-none print:border-none";
-            headerHtml = `<div class="mb-10 border-b-4 border-black pb-4"><h1 class="text-4xl font-black uppercase tracking-tighter">${settings.namaPonpes}</h1><p class="text-lg font-bold bg-black text-white inline-block px-2 transform -skew-x-12">PENERIMAAN SANTRI BARU</p></div>`;
+            headerHtml = `<div class="mb-10 border-b-4 border-black pb-4"><h1 class="text-4xl font-black uppercase tracking-tighter">${settings.namaPonpes}</h1><p class="text-lg font-bold bg-black text-white inline-block px-2 transform -skew-x-12">PENERIMAAN SANTRI BARU • TA ${psbYearDisplay}</p></div>`;
         } else if (style === 'dark') {
             bodyClass = isForPreview 
                 ? "bg-slate-900 min-h-screen p-6 sm:p-10 font-sans text-slate-200 m-0"
@@ -671,7 +688,7 @@ function doPost(e) {
             wrapperClass = isForPreview 
                 ? "w-full max-w-2xl mx-auto"
                 : "bg-slate-800 shadow-2xl mx-auto max-w-2xl p-10 rounded-2xl border border-slate-700 text-slate-200 print:bg-white print:text-black print:shadow-none";
-            headerHtml = `<div class="text-center mb-12"><div class="inline-block p-4 rounded-full bg-slate-700/50 mb-4 print:hidden"><i class="bi bi-buildings-fill text-4xl text-amber-500"></i></div><h1 class="text-3xl font-serif text-white print:text-black">${settings.namaPonpes}</h1><div class="h-1 w-20 bg-amber-500 mx-auto mt-4 rounded-full print:bg-black"></div></div>`;
+            headerHtml = `<div class="text-center mb-12"><div class="inline-block p-4 rounded-full bg-slate-700/50 mb-4 print:hidden"><i class="bi bi-buildings-fill text-4xl text-amber-500"></i></div><h1 class="text-3xl font-serif text-white print:text-black">${settings.namaPonpes}</h1><p class="text-xs text-amber-400 print:text-gray-600 mt-2 uppercase tracking-widest font-bold">Penerimaan Santri Baru • Tahun Ajaran ${psbYearDisplay}</p><div class="h-1 w-20 bg-amber-500 mx-auto mt-4 rounded-full print:bg-black"></div></div>`;
         } else { // ceria
             bodyClass = isForPreview 
                 ? "bg-yellow-50/50 min-h-screen p-6 sm:p-8 font-comic m-0"
@@ -679,7 +696,7 @@ function doPost(e) {
             wrapperClass = isForPreview 
                 ? "w-full max-w-2xl mx-auto p-6 sm:p-8 rounded-[2rem] border-4 border-orange-200 bg-white"
                 : "bg-white shadow-xl mx-auto max-w-2xl p-8 rounded-[2rem] border-4 border-orange-200 print:border-none print:shadow-none";
-            headerHtml = `<div class="text-center mb-8 bg-orange-100 p-6 rounded-[2rem] print:bg-transparent print:p-0"><h1 class="text-3xl font-bold text-orange-600 print:text-black">${settings.namaPonpes}</h1><p class="text-orange-800 print:text-gray-600">Formulir Pendaftaran Santri</p></div>`;
+            headerHtml = `<div class="text-center mb-8 bg-orange-100 p-6 rounded-[2rem] print:bg-transparent print:p-0"><h1 class="text-3xl font-bold text-orange-600 print:text-black">${settings.namaPonpes}</h1><p class="text-orange-800 print:text-gray-600 font-bold">Formulir Pendaftaran Santri Baru • TA ${psbYearDisplay}</p></div>`;
         }
         
         const closeDiv = style === 'modern' ? '</div>' : '';
@@ -718,6 +735,19 @@ function doPost(e) {
         const fieldLabelMapJson = JSON.stringify(fieldLabelMapObj);
         let modalHtml = '';
         let submitScript = '';
+
+        const obfuscateParam = (val: string) => {
+            if (!val) return '""';
+            try {
+                const b64 = btoa(encodeURIComponent(val.trim()));
+                const reversed = b64.split('').reverse().join('');
+                return JSON.stringify(reversed);
+            } catch {
+                return JSON.stringify(val || '');
+            }
+        };
+        const obfuscatedEp = obfuscateParam(googleScriptUrl);
+        const obfuscatedDf = obfuscateParam(cleanDriveFolderId);
 
         if (submissionMethod === 'whatsapp') {
              modalHtml = `
@@ -858,6 +888,30 @@ function proceedWaSubmit(){
 
               submitScript = `<script>
 const FIELD_LABEL_MAP=${fieldLabelMapJson};
+function _dParam(str){
+    if(!str) return '';
+    try{
+        return decodeURIComponent(atob(str.split('').reverse().join('')));
+    }catch(e){
+        return str;
+    }
+}
+const _SEC_TARGET_EP = _dParam(${obfuscatedEp});
+const _SEC_DRIVE_ID = _dParam(${obfuscatedDf});
+
+// Proteksi inspeksi kasual di file HTML standalone
+try{
+    document.addEventListener('contextmenu', function(e){
+        if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+        e.preventDefault();
+    });
+    document.addEventListener('keydown', function(e){
+        if(e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))){
+            e.preventDefault();
+        }
+    });
+}catch(e){}
+
 function resolveFieldKey(rawKey){
     if(FIELD_LABEL_MAP[rawKey]) return FIELD_LABEL_MAP[rawKey];
     const noBracket=rawKey.replace(/\\[\\]$/,'');
@@ -911,8 +965,8 @@ async function submitForm(){
         data.tanggalDaftar=new Date().toISOString();
         data.jenjangId="${localConfig.targetJenjangId||''}";
         data.sheetName="${targetSheetName}";
-        data.driveFolderId="${cleanDriveFolderId}";
-        await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
+        if(_SEC_DRIVE_ID) data.driveFolderId=_SEC_DRIVE_ID;
+        await fetch(_SEC_TARGET_EP,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
         const modal=document.getElementById('gsSuccessModal');
         if(modal){
             modal.classList.remove('hidden');
@@ -1007,6 +1061,30 @@ function closeGsSuccessModal(){
 
               submitScript = `<script>
 const FIELD_LABEL_MAP=${fieldLabelMapJson};
+function _dParam(str){
+    if(!str) return '';
+    try{
+        return decodeURIComponent(atob(str.split('').reverse().join('')));
+    }catch(e){
+        return str;
+    }
+}
+const _SEC_TARGET_EP = _dParam(${obfuscatedEp});
+const _SEC_DRIVE_ID = _dParam(${obfuscatedDf});
+
+// Proteksi inspeksi kasual di file HTML standalone
+try{
+    document.addEventListener('contextmenu', function(e){
+        if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+        e.preventDefault();
+    });
+    document.addEventListener('keydown', function(e){
+        if(e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) || (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83))){
+            e.preventDefault();
+        }
+    });
+}catch(e){}
+
 function resolveFieldKey(rawKey){
     if(FIELD_LABEL_MAP[rawKey]) return FIELD_LABEL_MAP[rawKey];
     const noBracket=rawKey.replace(/\\[\\]$/,'');
@@ -1085,7 +1163,7 @@ async function proceedHybridSubmit(){
         data.tanggalDaftar=new Date().toISOString();
         data.jenjangId="${localConfig.targetJenjangId||''}";
         data.sheetName="${targetSheetName}";
-        data.driveFolderId="${cleanDriveFolderId}";
+        if(_SEC_DRIVE_ID) data.driveFolderId=_SEC_DRIVE_ID;
 
         const textOnlyData={...data};
         for(let key in textOnlyData){
@@ -1098,7 +1176,7 @@ async function proceedHybridSubmit(){
         const encodedBackup=btoa(unescape(encodeURIComponent(jsonString)));
         let cloudSuccess=false;
         try{
-            await fetch("${googleScriptUrl}",{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
+            await fetch(_SEC_TARGET_EP,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(data)});
             cloudSuccess=true;
         }catch(err){
             console.error("Cloud Upload Failed",err);
@@ -1344,6 +1422,54 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                         <div>
                             <label className="block text-xs font-bold text-gray-500 mb-1">Judul Formulir</label>
                             <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Contoh: Pendaftaran Gelombang 1" className="w-full border rounded p-2 text-sm" />
+                        </div>
+                        <div className="bg-teal-50/60 border border-teal-200 rounded-lg p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <label className="block text-xs font-bold text-teal-900">Tahun Ajaran PSB</label>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLocalConfig({ ...localConfig, tahunAjaranAktif: pondokActiveYear })}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                                            localConfig.tahunAjaranAktif === pondokActiveYear
+                                                ? 'bg-teal-700 text-white border-teal-700'
+                                                : 'bg-white text-teal-700 border-teal-300 hover:bg-teal-100'
+                                        }`}
+                                        title={`Gunakan Tahun Ajaran Aktif (${pondokActiveYear})`}
+                                    >
+                                        TA Aktif ({pondokActiveYear})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setLocalConfig({ ...localConfig, tahunAjaranAktif: pondokNextYear })}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                                            localConfig.tahunAjaranAktif === pondokNextYear
+                                                ? 'bg-teal-700 text-white border-teal-700'
+                                                : 'bg-white text-teal-700 border-teal-300 hover:bg-teal-100'
+                                        }`}
+                                        title={`Gunakan Tahun Ajaran Depan (${pondokNextYear})`}
+                                    >
+                                        TA Depan ({pondokNextYear})
+                                    </button>
+                                </div>
+                            </div>
+                            <input
+                                type="text"
+                                list="psb-academic-years"
+                                value={localConfig.tahunAjaranAktif || ''}
+                                onChange={e => setLocalConfig({ ...localConfig, tahunAjaranAktif: e.target.value })}
+                                placeholder="Contoh: 2026/2027"
+                                className="w-full bg-white border border-teal-300 rounded p-2 text-sm font-bold text-teal-950"
+                            />
+                            <datalist id="psb-academic-years">
+                                {psbYearOptions.map(yr => (
+                                    <option key={yr} value={yr} />
+                                ))}
+                            </datalist>
+                            <p className="text-[11px] text-teal-700 leading-tight">
+                                <i className="bi bi-info-circle mr-1"></i>
+                                Seringkali PSB dibuka lebih awal untuk tahun ajaran berikutnya. Anda bebas mengatur Tahun Ajaran PSB di sini tanpa mengubah Tahun Ajaran Aktif pondok.
+                            </p>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-500 mb-1">Target Jenjang</label>

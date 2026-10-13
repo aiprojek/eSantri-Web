@@ -82,7 +82,7 @@ const DataMaster: React.FC = () => {
                         ...localSettings,
                         psbConfig: {
                             ...localSettings.psbConfig,
-                            tahunAjaranAktif: activeAcademicYear,
+                            tahunAjaranAktif: localSettings.psbConfig?.tahunAjaranAktif || activeAcademicYear,
                         },
                     };
                     await onSaveSettings(payload);

@@ -47,7 +47,7 @@ const LogoUploader: React.FC<{
                 <img 
                     src={logoUrl || 'https://placehold.co/100x100/e2e8f0/334155?text=Logo'} 
                     alt={label} 
-                    className={`h-20 w-20 rounded-md border border-app-border bg-slate-100 object-contain p-1 ${isProcessing ? 'opacity-50' : ''}`}
+                    className={`h-20 w-20 rounded-md bg-slate-100 object-contain p-1 ${isProcessing ? 'opacity-50' : ''}`}
                 />
                 <div className="flex-grow space-y-2">
                     <div>
@@ -800,7 +800,7 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                                         {localSettings.logoYayasanUrl ? (
                                             <img src={localSettings.logoYayasanUrl} alt="Logo Yayasan" className="max-h-full max-w-full object-contain" />
                                         ) : (
-                                            <div className="w-10 h-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[9px] text-slate-400">Logo</div>
+                                            <div className="w-10 h-10 rounded bg-slate-100 flex items-center justify-center text-[9px] text-slate-500 font-bold">Logo</div>
                                         )}
                                     </div>
                                     <div className="text-center flex-1 px-2">
@@ -832,7 +832,7 @@ export const TabUmum: React.FC<TabUmumProps> = ({ localSettings, handleInputChan
                                         {localSettings.logoPonpesUrl ? (
                                             <img src={localSettings.logoPonpesUrl} alt="Logo Ponpes" className="max-h-full max-w-full object-contain" />
                                         ) : (
-                                            <div className="w-10 h-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[9px] text-slate-400">Logo</div>
+                                            <div className="w-10 h-10 rounded bg-slate-100 flex items-center justify-center text-[9px] text-slate-500 font-bold">Logo</div>
                                         )}
                                     </div>
                                 </div>

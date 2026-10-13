@@ -8,6 +8,7 @@ import { initialSettings } from '../data/mock';
 import { LoadingFallback } from './common/LoadingFallback';
 import { PageHeader } from './common/PageHeader';
 import { HeaderTabs } from './common/HeaderTabs';
+import { getPsbAcademicYearOptions } from './psb/utils/psbUtils';
 
 const PsbDashboard = React.lazy(() => import('./psb/PsbDashboard').then((module) => ({ default: module.PsbDashboard })));
 const PsbRekap = React.lazy(() => import('./psb/PsbRekap').then((module) => ({ default: module.PsbRekap })));
@@ -27,6 +28,8 @@ const PSB: React.FC = () => {
 
     // Fallback Config (Safe access)
     const psbConfig = settings.psbConfig || initialSettings.psbConfig;
+    const { activeYear } = getPsbAcademicYearOptions(settings);
+    const currentPsbYear = psbConfig.tahunAjaranAktif || activeYear;
 
     const fetchPendaftar = () => {
         // useLiveQuery handles reactive updates automatically
@@ -71,8 +74,15 @@ const PSB: React.FC = () => {
         <div className="space-y-6">
             <PageHeader
                 eyebrow="PSB"
-                title="Penerimaan Santri Baru"
+                title="Penerimaan Santri Baru (PSB)"
                 description="Kelola dashboard pendaftar, formulir online, rekap penerimaan, dan materi promosi PSB dalam satu ruang kerja yang konsisten."
+                actions={
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-semibold">
+                        <i className="bi bi-calendar-check text-teal-600"></i>
+                        <span>TA PSB Aktif: <strong className="font-bold text-teal-950">{currentPsbYear}</strong></span>
+                        <span className="text-[10px] text-teal-600/80 font-normal ml-1">(Diatur di Desain Formulir)</span>
+                    </div>
+                }
                 tabs={
                     <HeaderTabs
                         value={activeTab}

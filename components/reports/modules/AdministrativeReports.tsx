@@ -1096,7 +1096,7 @@ export const SuratKeteranganAktifTemplate: React.FC<{ santri: Santri; settings: 
                         ) : settings.logoPonpesUrl ? (
                             <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
                         ) : (
-                            <div className="w-16 h-16 rounded-full border-2 border-black flex items-center justify-center text-xl font-bold font-sans">PP</div>
+                            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-xl font-bold font-sans text-slate-800">PP</div>
                         )}
                     </div>
                     <div className="text-center flex-1 px-4">
@@ -1270,7 +1270,7 @@ export const SuratBerkelakuanBaikTemplate: React.FC<{ santri: Santri; settings: 
                         ) : settings.logoPonpesUrl ? (
                             <img src={settings.logoPonpesUrl} alt="Logo" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
                         ) : (
-                            <div className="w-16 h-16 rounded-full border-2 border-black flex items-center justify-center text-xl font-bold font-sans">PP</div>
+                            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-xl font-bold font-sans text-slate-800">PP</div>
                         )}
                     </div>
                     <div className="text-center flex-1 px-4">

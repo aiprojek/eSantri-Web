@@ -5,6 +5,7 @@ import { Santri } from '../../../types';
 import { FormSection } from './FormSection';
 import { FormError } from './FormError';
 import { AlamatFields } from './AlamatFields';
+import { PSB_PENDIDIKAN_OPTIONS, PSB_PEKERJAAN_OPTIONS, PSB_PENGHASILAN_OPTIONS, withCurrentOption } from '../../psb/utils/psbUtils';
 
 // Helper component to avoid repetition
 const DateInput: React.FC<{
@@ -50,19 +51,12 @@ interface TabDataOrangTuaProps {
 }
 
 export const TabDataOrangTua: React.FC<TabDataOrangTuaProps> = ({ formMethods }) => {
-    const { register, formState: { errors } } = formMethods;
+    const { register, watch, formState: { errors } } = formMethods;
 
-    const pendidikanOptions = ['Tidak/Belum Sekolah', 'Belum Tamat SD/Sederajat', 'Tamat SD/Sederajat', 'SLTP/Sederajat', 'SLTA/Sederajat', 'Diploma I/II', 'Akademi/Diploma III/S. Muda', 'Diploma IV/Strata I', 'Strata II', 'Strata III'];
-    const pekerjaanOptions = ['Belum/Tidak Bekerja', 'Mengurus Rumah Tangga', 'Pelajar/Mahasiswa', 'Pensiunan', 'Pegawai Negeri Sipil', 'TNI', 'POLRI', 'Wiraswasta', 'Guru', 'Dokter', 'Bidan', 'Perawat', 'Petani/Pekebun', 'Nelayan', 'Karyawan Swasta', 'Karyawan BUMN', 'Buruh Harian Lepas', 'Lainnya'];
-    const penghasilanOptions = [
-        '-- Pilih Penghasilan --',
-        'Kurang dari Rp. 1.000.000',
-        'Rp. 1.000.000 - Rp. 2.000.000',
-        'Lebih dari Rp. 2.000.000',
-        'Lebih dari Rp. 5.000.000',
-        'Tidak Berpenghasilan',
-        'Lainnya',
-    ];
+    const pendidikanOptions = PSB_PENDIDIKAN_OPTIONS;
+    const pekerjaanOptions = PSB_PEKERJAAN_OPTIONS;
+    const penghasilanOptions = PSB_PENGHASILAN_OPTIONS;
+    const hubunganWaliOptions = ['Ayah Kandung', 'Ibu Kandung', 'Kakek/Nenek', 'Paman/Bibi', 'Kakak Kandung', 'Orang Tua Asuh', 'Orang Tua Angkat', 'Kakek', 'Paman (Saudara Ayah)', 'Saudara Laki-laki Seayah', 'Saudara Laki-laki Kandung', 'Orang Tua Tiri', 'Kerabat Mahram Lainnya', 'Lainnya'];
     const statusHidupOptions = [
         { value: 'Hidup', label: 'Hidup' },
         { value: 'Meninggal', label: 'Meninggal' },
@@ -96,9 +90,9 @@ export const TabDataOrangTua: React.FC<TabDataOrangTuaProps> = ({ formMethods })
           <div className="lg:col-span-2">
             <DateInput fieldName="tanggalLahirAyah" label="Tanggal Lahir Ayah" formMethods={formMethods} />
           </div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Ayah</label><select {...register('pendidikanAyah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{pendidikanOptions.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan Ayah</label><select {...register('pekerjaanAyah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{pekerjaanOptions.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Ayah</label><select {...register('penghasilanAyah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">{penghasilanOptions.map(o=><option key={o} value={o === penghasilanOptions[0] ? '' : o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Ayah</label><select {...register('pendidikanAyah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{withCurrentOption(pendidikanOptions, watch('pendidikanAyah')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan Ayah</label><select {...register('pekerjaanAyah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{withCurrentOption(pekerjaanOptions, watch('pekerjaanAyah')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Ayah</label><select {...register('penghasilanAyah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih Penghasilan --</option>{withCurrentOption(penghasilanOptions, watch('penghasilanAyah')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
           <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Telepon Ayah</label><input type="tel" {...register('teleponAyah')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
           <div className="lg:col-span-4 mt-4 pt-4 border-t font-semibold text-gray-600">Alamat Ayah</div>
           <AlamatFields fieldName="alamatAyah" formMethods={formMethods} />
@@ -125,16 +119,16 @@ export const TabDataOrangTua: React.FC<TabDataOrangTuaProps> = ({ formMethods })
           <div className="lg:col-span-2">
             <DateInput fieldName="tanggalLahirIbu" label="Tanggal Lahir Ibu" formMethods={formMethods} />
           </div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Ibu</label><select {...register('pendidikanIbu')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{pendidikanOptions.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan Ibu</label><select {...register('pekerjaanIbu')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{pekerjaanOptions.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Ibu</label><select {...register('penghasilanIbu')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">{penghasilanOptions.map(o=><option key={o} value={o === penghasilanOptions[0] ? '' : o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Ibu</label><select {...register('pendidikanIbu')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{withCurrentOption(pendidikanOptions, watch('pendidikanIbu')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan Ibu</label><select {...register('pekerjaanIbu')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{withCurrentOption(pekerjaanOptions, watch('pekerjaanIbu')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Ibu</label><select {...register('penghasilanIbu')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih Penghasilan --</option>{withCurrentOption(penghasilanOptions, watch('penghasilanIbu')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
           <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Telepon Ibu</label><input type="tel" {...register('teleponIbu')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
           <div className="lg:col-span-4 mt-4 pt-4 border-t font-semibold text-gray-600">Alamat Ibu</div>
           <AlamatFields fieldName="alamatIbu" formMethods={formMethods} />
       </FormSection>
       <FormSection title="Data Wali (Isi jika berbeda dari Orang Tua)">
           <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Nama Lengkap Wali</label><input type="text" {...register('namaWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Hubungan dengan Santri</label><select {...register('statusWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{['Kakek', 'Paman (Saudara Ayah)', 'Saudara Laki-laki Seayah', 'Saudara Laki-laki Kandung', 'Orang Tua Angkat', 'Orang Tua Asuh', 'Orang Tua Tiri', 'Kerabat Mahram Lainnya', 'Lainnya'].map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Hubungan dengan Santri</label><select {...register('statusWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{withCurrentOption(hubunganWaliOptions, watch('statusWali')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
           <div className="lg:col-span-2">
               <label className="block mb-1 text-sm font-medium text-gray-700">Status Wali</label>
               <select {...register('statusHidupWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">
@@ -145,9 +139,9 @@ export const TabDataOrangTua: React.FC<TabDataOrangTuaProps> = ({ formMethods })
           <div className="lg:col-span-4">
             <DateInput fieldName="tanggalLahirWali" label="Tanggal Lahir Wali" formMethods={formMethods} />
           </div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Wali</label><select {...register('pendidikanWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{pendidikanOptions.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan Wali</label><select {...register('pekerjaanWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{pekerjaanOptions.map(o=><option key={o} value={o}>{o}</option>)}</select></div>
-          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Wali</label><select {...register('penghasilanWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5">{penghasilanOptions.map(o=><option key={o} value={o === penghasilanOptions[0] ? '' : o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pendidikan Wali</label><select {...register('pendidikanWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{withCurrentOption(pendidikanOptions, watch('pendidikanWali')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Pekerjaan Wali</label><select {...register('pekerjaanWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih --</option>{withCurrentOption(pekerjaanOptions, watch('pekerjaanWali')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+          <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Penghasilan Wali</label><select {...register('penghasilanWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5"><option value="">-- Pilih Penghasilan --</option>{withCurrentOption(penghasilanOptions, watch('penghasilanWali')).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
           <div className="lg:col-span-2"><label className="block mb-1 text-sm font-medium text-gray-700">Telepon Wali</label><input type="tel" {...register('teleponWali')} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-2.5" /></div>
           <div className="lg:col-span-4 mt-4 pt-4 border-t font-semibold text-gray-600">Alamat Wali</div>
           <AlamatFields fieldName="alamatWali" formMethods={formMethods} />

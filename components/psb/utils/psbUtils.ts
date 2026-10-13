@@ -123,7 +123,7 @@ export const resolveCustomFieldLabel = (
 export const extractDriveFolderId = (input?: string): string => {
     if (!input) return '';
     const trimmed = String(input).trim().replace(/^["']+|["']+$/g, '');
-    if (!trimmed || trimmed === 'GANTI_DENGAN_ID_FOLDER_DRIVE_ANDA') return '';
+    if (!trimmed) return '';
 
     const foldersMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]{15,})/);
     if (foldersMatch && foldersMatch[1]) return foldersMatch[1];
@@ -239,6 +239,161 @@ export const getPendaftarWaliName = (p?: Pendaftar | null): string => {
     return '-';
 };
 
+export const PSB_PENDIDIKAN_OPTIONS: string[] = [
+    'Tidak Sekolah',
+    'SD/Sederajat',
+    'SMP/Sederajat',
+    'SMA/Sederajat',
+    'D1-D3',
+    'S1/D4',
+    'S2',
+    'S3',
+    'Pesantren'
+];
+
+export const PSB_PENGHASILAN_OPTIONS: string[] = [
+    'Tidak Berpenghasilan',
+    '< Rp 1.000.000',
+    'Rp 1.000.000 - Rp 2.500.000',
+    'Rp 2.500.000 - Rp 5.000.000',
+    'Rp 5.000.000 - Rp 10.000.000',
+    '> Rp 10.000.000'
+];
+
+export const PSB_PEKERJAAN_OPTIONS: string[] = [
+    'Tidak Bekerja / IRT',
+    'PNS/TNI/Polri',
+    'Guru/Dosen',
+    'Pegawai Swasta',
+    'Wiraswasta/Pedagang',
+    'Petani/Peternak',
+    'Nelayan',
+    'Buruh (Tani/Pabrik/Bangunan)',
+    'Dokter/Bidan/Perawat',
+    'Sopir/Masinis/Kondektur',
+    'Pensiunan',
+    'Pengacara/Hakim/Jaksa/Notaris',
+    'Seniman/Pelukis/Artis',
+    'Pilot/Pramugari',
+    'Politikus',
+    'Lainnya'
+];
+
+export const withCurrentOption = (options: string[], currentVal?: string | null): string[] => {
+    const trimmed = currentVal ? String(currentVal).trim() : '';
+    if (!trimmed) return options;
+    if (options.includes(trimmed)) return options;
+    return [trimmed, ...options];
+};
+
+export const normalizePendidikanValue = (val?: any): string => {
+    if (val === undefined || val === null) return '';
+    const s = String(val).trim();
+    if (!s) return '';
+    if (PSB_PENDIDIKAN_OPTIONS.includes(s)) return s;
+    const lower = s.toLowerCase().replace(/\s+/g, ' ');
+    if (['tidak sekolah', 'tidak/belum sekolah', 'belum sekolah', '-'].includes(lower)) return 'Tidak Sekolah';
+    if (['sd', 'mi', 'sd/mi', 'sd / mi', 'sd/sederajat', 'paket a'].includes(lower)) return 'SD/Sederajat';
+    if (['smp', 'mts', 'smp/mts', 'smp / mts', 'sltp', 'sltp/sederajat', 'smp/sederajat', 'paket b'].includes(lower)) return 'SMP/Sederajat';
+    if (['sma', 'smk', 'ma', 'sma/smk', 'sma/ma', 'sma/ma/smk', 'slta', 'slta/sederajat', 'sma/sederajat', 'paket c', 'aliyah'].includes(lower)) return 'SMA/Sederajat';
+    if (['d1', 'd2', 'd3', 'd1-d3', 'd1/d2/d3', 'diploma', 'akademi'].includes(lower)) return 'D1-D3';
+    if (['s1', 'd4', 's1/d4', 'd4/s1', 'sarjana', 'strata 1'].includes(lower)) return 'S1/D4';
+    if (['s2', 'magister', 'strata 2', 'pascasarjana'].includes(lower)) return 'S2';
+    if (['s3', 'doktor', 'strata 3'].includes(lower)) return 'S3';
+    if (['pesantren', 'pondok pesantren', 'salafiyah', 'nyantri'].includes(lower)) return 'Pesantren';
+    return s;
+};
+
+export const normalizePenghasilanValue = (val?: any): string => {
+    if (val === undefined || val === null) return '';
+    const s = String(val).trim();
+    if (!s) return '';
+    if (PSB_PENGHASILAN_OPTIONS.includes(s)) return s;
+    const lower = s.toLowerCase().replace(/\s+/g, ' ');
+    if (
+        lower.includes('tidak berpenghasilan') ||
+        lower === 'tidak ada' ||
+        lower === 'irt' ||
+        lower === '0' ||
+        lower === 'rp 0' ||
+        lower === 'rp. 0' ||
+        lower === '-'
+    ) {
+        return 'Tidak Berpenghasilan';
+    }
+    if (lower === '< rp 500.000' || lower === 'rp 500.000 - rp 999.999' || lower.includes('< rp 1.000.000') || lower.includes('< 1 juta') || lower.includes('dibawah 1 juta')) {
+        return '< Rp 1.000.000';
+    }
+    if (lower === '1 - 2 juta' || lower === 'rp 1.000.000 - rp 1.999.999' || lower.includes('1.000.000 - rp 2.500.000') || lower.includes('1.000.000 - 2.500.000')) {
+        return 'Rp 1.000.000 - Rp 2.500.000';
+    }
+    if (lower === '2 - 5 juta' || lower === 'rp 2.000.000 - rp 4.999.999' || lower.includes('2.500.000 - rp 5.000.000') || lower.includes('2.500.000 - 5.000.000')) {
+        return 'Rp 2.500.000 - Rp 5.000.000';
+    }
+    if (lower === '> 5 juta' || lower === '> rp 5.000.000' || lower === 'rp 5.000.000 - rp 20.000.000' || lower.includes('5.000.000 - rp 10.000.000') || lower.includes('5.000.000 - 10.000.000')) {
+        return 'Rp 5.000.000 - Rp 10.000.000';
+    }
+    if (lower === '> rp 20.000.000' || lower.includes('> rp 10.000.000') || lower.includes('> 10.000.000') || lower.includes('diatas 10 juta')) {
+        return '> Rp 10.000.000';
+    }
+    // Check if pure number (e.g. "3000000" or "Rp 3.000.000")
+    const digitsOnly = s.replace(/[^0-9]/g, '');
+    if (digitsOnly && !s.includes('-') && !s.includes('<') && !s.includes('>')) {
+        const num = Number(digitsOnly);
+        if (!isNaN(num)) {
+            if (num === 0) return 'Tidak Berpenghasilan';
+            if (num > 0 && num < 1000000) return '< Rp 1.000.000';
+            if (num >= 1000000 && num <= 2500000) return 'Rp 1.000.000 - Rp 2.500.000';
+            if (num > 2500000 && num <= 5000000) return 'Rp 2.500.000 - Rp 5.000.000';
+            if (num > 5000000 && num <= 10000000) return 'Rp 5.000.000 - Rp 10.000.000';
+            if (num > 10000000) return '> Rp 10.000.000';
+        }
+    }
+    return s;
+};
+
+export const normalizePekerjaanValue = (val?: any): string => {
+    if (val === undefined || val === null) return '';
+    const s = String(val).trim();
+    if (!s) return '';
+    if (PSB_PEKERJAAN_OPTIONS.includes(s)) return s;
+    const lower = s.toLowerCase().replace(/\s+/g, ' ');
+    if (['tidak bekerja', 'irt', 'ibu rumah tangga', 'mengurus rumah tangga', 'tidak bekerja / irt', 'belum bekerja', '-'].includes(lower)) {
+        return 'Tidak Bekerja / IRT';
+    }
+    if (['pns', 'asn', 'tni', 'polri', 'pns/tni/polri', 'pns / tni / polri', 'pegawai negeri', 'pegawai negeri sipil'].includes(lower)) {
+        return 'PNS/TNI/Polri';
+    }
+    if (['guru', 'dosen', 'guru/dosen', 'guru / dosen', 'pengajar', 'ustadz', 'ustadzah'].includes(lower)) {
+        return 'Guru/Dosen';
+    }
+    if (['pegawai swasta', 'karyawan swasta', 'karyawan', 'swasta', 'pegawai'].includes(lower)) {
+        return 'Pegawai Swasta';
+    }
+    if (['wiraswasta', 'pedagang', 'wirausaha', 'usaha sendiri', 'dagang', 'pengusaha', 'wiraswasta/pedagang', 'wiraswasta / pedagang'].includes(lower)) {
+        return 'Wiraswasta/Pedagang';
+    }
+    if (['petani', 'peternak', 'pekebun', 'tani', 'petani/peternak', 'petani / peternak'].includes(lower)) {
+        return 'Petani/Peternak';
+    }
+    if (['nelayan'].includes(lower)) {
+        return 'Nelayan';
+    }
+    if (['buruh', 'buruh harian', 'buruh harian lepas', 'buruh tani', 'buruh pabrik', 'buruh bangunan', 'kuli', 'buruh (tani/pabrik/bangunan)'].includes(lower)) {
+        return 'Buruh (Tani/Pabrik/Bangunan)';
+    }
+    if (['dokter', 'bidan', 'perawat', 'nakes', 'tenaga medis', 'dokter/bidan/perawat'].includes(lower)) {
+        return 'Dokter/Bidan/Perawat';
+    }
+    if (['sopir', 'supir', 'driver', 'masinis', 'kondektur', 'ojek', 'kurir', 'sopir/masinis/kondektur'].includes(lower)) {
+        return 'Sopir/Masinis/Kondektur';
+    }
+    if (['pensiunan', 'pensiun'].includes(lower)) {
+        return 'Pensiunan';
+    }
+    return s;
+};
+
 /**
  * Automatically heals a Pendaftar record by extracting any standard Pendaftar fields
  * (such as physical data: tinggiBadan, beratBadan, golonganDarah, riwayatPenyakit,
@@ -270,6 +425,22 @@ export const healPendaftarRecordWithDetails = (
         }
     } else if (healed.customData && typeof healed.customData === 'object') {
         customObj = { ...healed.customData };
+    }
+
+    // Unwrap nested customObj.customData if it was double-wrapped during Google Sheet sync
+    if (customObj.customData !== undefined) {
+        try {
+            const inner = typeof customObj.customData === 'string'
+                ? JSON.parse(customObj.customData)
+                : customObj.customData;
+            if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
+                customObj = { ...inner, ...customObj };
+            }
+        } catch {
+            // ignore invalid inner JSON
+        }
+        delete customObj.customData;
+        changed = true;
     }
 
     const aliasMap: Record<string, string> = {
@@ -321,30 +492,65 @@ export const healPendaftarRecordWithDetails = (
         nomorijazahsebelumnya: 'nomorIjazahSebelumnya',
         noskhun: 'noSkhun',
         namaayah: 'namaAyah',
+        namalengkapayah: 'namaAyah',
         nikayah: 'nikAyah',
         statusayah: 'statusAyah',
         tempatlahirayah: 'tempatLahirAyah',
         tanggallahirayah: 'tanggalLahirAyah',
         pendidikanayah: 'pendidikanAyah',
+        pendidikanterakhirayah: 'pendidikanAyah',
+        pendidikanbapak: 'pendidikanAyah',
+        pendidikanabi: 'pendidikanAyah',
+        pendidikanortu: 'pendidikanAyah',
+        pendidikanorangtua: 'pendidikanAyah',
         pekerjaanayah: 'pekerjaanAyah',
+        pekerjaanbapak: 'pekerjaanAyah',
+        pekerjaanabi: 'pekerjaanAyah',
+        pekerjaanortu: 'pekerjaanAyah',
+        pekerjaanorangtua: 'pekerjaanAyah',
+        profesiayah: 'pekerjaanAyah',
+        profesiorangtua: 'pekerjaanAyah',
         penghasilanayah: 'penghasilanAyah',
+        penghasilanratarataayahbulan: 'penghasilanAyah',
+        penghasilanayahbulan: 'penghasilanAyah',
+        penghasilanperbulanayah: 'penghasilanAyah',
+        penghasilanbapak: 'penghasilanAyah',
+        penghasilanabi: 'penghasilanAyah',
+        penghasilanortu: 'penghasilanAyah',
+        penghasilanorangtua: 'penghasilanAyah',
+        gajiayah: 'penghasilanAyah',
+        gajibapak: 'penghasilanAyah',
+        pendapatanayah: 'penghasilanAyah',
         teleponayah: 'teleponAyah',
         nohpayah: 'teleponAyah',
         waayah: 'teleponAyah',
         namaibu: 'namaIbu',
+        namalengkapibu: 'namaIbu',
         nikibu: 'nikIbu',
         statusibu: 'statusIbu',
         tempatlahiribu: 'tempatLahirIbu',
         tanggallahiribu: 'tanggalLahirIbu',
         pendidikanibu: 'pendidikanIbu',
+        pendidikanterakhiribu: 'pendidikanIbu',
+        pendidikanummi: 'pendidikanIbu',
         pekerjaanibu: 'pekerjaanIbu',
+        pekerjaanummi: 'pekerjaanIbu',
+        profesiibu: 'pekerjaanIbu',
         penghasilanibu: 'penghasilanIbu',
+        penghasilanratarataibubulan: 'penghasilanIbu',
+        penghasilanibubulan: 'penghasilanIbu',
+        penghasilanperbulanibu: 'penghasilanIbu',
+        penghasilanummi: 'penghasilanIbu',
+        gajiibu: 'penghasilanIbu',
+        pendapatanibu: 'penghasilanIbu',
         teleponibu: 'teleponIbu',
         nohpibu: 'teleponIbu',
         waibu: 'teleponIbu',
         namawali: 'namaWali',
+        namalengkapwali: 'namaWali',
         nikwali: 'nikWali',
         hubunganwali: 'statusWali',
+        hubungandengansantri: 'statusWali',
         statuswali: 'statusWali',
         nomorhpwali: 'nomorHpWali',
         nohpwali: 'nomorHpWali',
@@ -353,9 +559,26 @@ export const healPendaftarRecordWithDetails = (
         nohpwhatsapp: 'nomorHpWali',
         nomorwhatsapp: 'nomorHpWali',
         alamatwali: 'alamatWali',
+        pekerjaan: 'pekerjaanWali',
+        profesi: 'pekerjaanWali',
         pekerjaanwali: 'pekerjaanWali',
+        pekerjaanwalimurid: 'pekerjaanWali',
+        profesiwali: 'pekerjaanWali',
+        pendidikan: 'pendidikanWali',
+        pendidikanterakhir: 'pendidikanWali',
         pendidikanwali: 'pendidikanWali',
+        pendidikanterakhirwali: 'pendidikanWali',
+        pendidikanwalimurid: 'pendidikanWali',
+        penghasilan: 'penghasilanWali',
         penghasilanwali: 'penghasilanWali',
+        penghasilanwalibulan: 'penghasilanWali',
+        penghasilanperbulanwali: 'penghasilanWali',
+        penghasilanrataratawalibulan: 'penghasilanWali',
+        penghasilanwalimurid: 'penghasilanWali',
+        gaji: 'penghasilanWali',
+        gajiwali: 'penghasilanWali',
+        pendapatan: 'penghasilanWali',
+        pendapatanwali: 'penghasilanWali',
         jenissantri: 'jenisSantri',
         targetjuz: 'targetJuz',
         programpilihan: 'programPilihan',
@@ -377,6 +600,28 @@ export const healPendaftarRecordWithDetails = (
         }
         return undefined;
     };
+
+    // Promote any top-level alias keys (e.g. hubunganWali, Pekerjaan Ayah, etc.) onto canonical Pendaftar props
+    for (const topKey of Object.keys(healed)) {
+        if (topKey === 'customData' || topKey === 'alamat') continue;
+        const topVal = healed[topKey];
+        if (topVal === undefined || topVal === null || topVal === '') continue;
+        const normTop = topKey.toLowerCase().replace(/^custom_/, '').replace(/[^a-z0-9]/g, '');
+        const targetProp = aliasMap[normTop];
+        if (targetProp && targetProp !== topKey && targetProp !== 'alamatRumah') {
+            const currentVal = healed[targetProp];
+            const isEmptyCurrent = currentVal === undefined || currentVal === null || currentVal === '' || currentVal === 0;
+            if (isEmptyCurrent) {
+                if (numericFields.has(targetProp)) {
+                    const num = parseNumeric(topVal);
+                    if (num !== undefined) healed[targetProp] = num;
+                } else {
+                    healed[targetProp] = String(topVal).trim();
+                }
+                changed = true;
+            }
+        }
+    }
 
     const allConfiguredFields = getAllConfiguredCustomFields(settings, healed.jenjangId);
 
@@ -467,6 +712,35 @@ export const healPendaftarRecordWithDetails = (
         }
     }
 
+    // Normalize pendidikan, penghasilan, and pekerjaan for Ayah, Ibu, and Wali
+    for (const pendKey of ['pendidikanAyah', 'pendidikanIbu', 'pendidikanWali'] as const) {
+        if (healed[pendKey]) {
+            const norm = normalizePendidikanValue(healed[pendKey]);
+            if (norm !== healed[pendKey]) {
+                healed[pendKey] = norm;
+                changed = true;
+            }
+        }
+    }
+    for (const pengKey of ['penghasilanAyah', 'penghasilanIbu', 'penghasilanWali'] as const) {
+        if (healed[pengKey]) {
+            const norm = normalizePenghasilanValue(healed[pengKey]);
+            if (norm !== healed[pengKey]) {
+                healed[pengKey] = norm;
+                changed = true;
+            }
+        }
+    }
+    for (const pekKey of ['pekerjaanAyah', 'pekerjaanIbu', 'pekerjaanWali'] as const) {
+        if (healed[pekKey]) {
+            const norm = normalizePekerjaanValue(healed[pekKey]);
+            if (norm !== healed[pekKey]) {
+                healed[pekKey] = norm;
+                changed = true;
+            }
+        }
+    }
+
     if (healed.sekolahAsal && !healed.asalSekolah) {
         healed.asalSekolah = healed.sekolahAsal;
         changed = true;
@@ -494,8 +768,50 @@ export const healPendaftarRecordWithDetails = (
         const fallbackWali = healed.namaAyah || healed.namaIbu || '';
         if (fallbackWali) {
             healed.namaWali = fallbackWali;
+            if (!healed.statusWali) {
+                healed.statusWali = healed.namaAyah ? 'Ayah Kandung' : 'Ibu Kandung';
+            }
             changed = true;
         }
+    }
+
+    // If Wali is Ayah or Ibu (or defaulted from Ayah/Ibu), fill missing Wali pekerjaan/pendidikan/penghasilan
+    const waliNameClean = String(healed.namaWali || '').trim().toLowerCase();
+    const ayahNameClean = String(healed.namaAyah || '').trim().toLowerCase();
+    const ibuNameClean = String(healed.namaIbu || '').trim().toLowerCase();
+    const isWaliAyah =
+        healed.statusWali === 'Ayah Kandung' ||
+        (waliNameClean && ayahNameClean && waliNameClean === ayahNameClean);
+    const isWaliIbu =
+        !isWaliAyah &&
+        (healed.statusWali === 'Ibu Kandung' ||
+            (waliNameClean && ibuNameClean && waliNameClean === ibuNameClean));
+
+    if (isWaliAyah) {
+        if (!healed.statusWali) { healed.statusWali = 'Ayah Kandung'; changed = true; }
+        if (!healed.nikWali && healed.nikAyah) { healed.nikWali = healed.nikAyah; changed = true; }
+        if (!healed.nikAyah && healed.nikWali) { healed.nikAyah = healed.nikWali; changed = true; }
+        if (!healed.pekerjaanWali && healed.pekerjaanAyah) { healed.pekerjaanWali = healed.pekerjaanAyah; changed = true; }
+        if (!healed.pekerjaanAyah && healed.pekerjaanWali) { healed.pekerjaanAyah = healed.pekerjaanWali; changed = true; }
+        if (!healed.pendidikanWali && healed.pendidikanAyah) { healed.pendidikanWali = healed.pendidikanAyah; changed = true; }
+        if (!healed.pendidikanAyah && healed.pendidikanWali) { healed.pendidikanAyah = healed.pendidikanWali; changed = true; }
+        if (!healed.penghasilanWali && healed.penghasilanAyah) { healed.penghasilanWali = healed.penghasilanAyah; changed = true; }
+        if (!healed.penghasilanAyah && healed.penghasilanWali) { healed.penghasilanAyah = healed.penghasilanWali; changed = true; }
+    } else if (isWaliIbu) {
+        if (!healed.statusWali) { healed.statusWali = 'Ibu Kandung'; changed = true; }
+        if (!healed.nikWali && healed.nikIbu) { healed.nikWali = healed.nikIbu; changed = true; }
+        if (!healed.nikIbu && healed.nikWali) { healed.nikIbu = healed.nikWali; changed = true; }
+        if (!healed.pekerjaanWali && healed.pekerjaanIbu) { healed.pekerjaanWali = healed.pekerjaanIbu; changed = true; }
+        if (!healed.pekerjaanIbu && healed.pekerjaanWali) { healed.pekerjaanIbu = healed.pekerjaanWali; changed = true; }
+        if (!healed.pendidikanWali && healed.pendidikanIbu) { healed.pendidikanWali = healed.pendidikanIbu; changed = true; }
+        if (!healed.pendidikanIbu && healed.pendidikanWali) { healed.pendidikanIbu = healed.pendidikanWali; changed = true; }
+        if (!healed.penghasilanWali && healed.penghasilanIbu) { healed.penghasilanWali = healed.penghasilanIbu; changed = true; }
+        if (!healed.penghasilanIbu && healed.penghasilanWali) { healed.penghasilanIbu = healed.penghasilanWali; changed = true; }
+    } else {
+        // Generic fallback if only Wali or only Ayah was filled in simple forms
+        if (!healed.pekerjaanWali && healed.pekerjaanAyah) { healed.pekerjaanWali = healed.pekerjaanAyah; changed = true; }
+        if (!healed.pendidikanWali && healed.pendidikanAyah) { healed.pendidikanWali = healed.pendidikanAyah; changed = true; }
+        if (!healed.penghasilanWali && healed.penghasilanAyah) { healed.penghasilanWali = healed.penghasilanAyah; changed = true; }
     }
 
     const nextCustomStr = Object.keys(customObj).length > 0 ? JSON.stringify(customObj) : '{}';
@@ -507,6 +823,45 @@ export const healPendaftarRecordWithDetails = (
         healed: healed as Pendaftar,
         cleanedCustomObj: customObj,
         changed
+    };
+};
+
+export const getPsbAcademicYearOptions = (settings?: PondokSettings): {
+    activeYear: string;
+    nextYear: string;
+    options: string[];
+} => {
+    const currentYear = new Date().getFullYear();
+    const customList = (settings as any)?.tahunAjaranList;
+    const activeFromList = Array.isArray(customList) ? customList.find((t: any) => t?.isActive)?.nama : undefined;
+    const activeYear = (activeFromList || settings?.tahunAjaranAktif || settings?.psbConfig?.tahunAjaranAktif || `${currentYear}/${currentYear + 1}`).trim();
+
+    let startY = currentYear;
+    const match = activeYear.match(/^(\d{4})\s*\/\s*(\d{4})/);
+    if (match) {
+        startY = parseInt(match[1], 10);
+    }
+    const nextYear = `${startY + 1}/${startY + 2}`;
+    const yearAfterNext = `${startY + 2}/${startY + 3}`;
+    const prevYear = `${startY - 1}/${startY}`;
+
+    const set = new Set<string>();
+    if (settings?.psbConfig?.tahunAjaranAktif) set.add(settings.psbConfig.tahunAjaranAktif.trim());
+    if (settings?.tahunAjaranAktif) set.add(settings.tahunAjaranAktif.trim());
+    set.add(activeYear);
+    set.add(nextYear);
+    set.add(yearAfterNext);
+    set.add(prevYear);
+    if (Array.isArray(customList)) {
+        customList.forEach((t: any) => {
+            if (t?.nama?.trim()) set.add(t.nama.trim());
+        });
+    }
+
+    return {
+        activeYear,
+        nextYear,
+        options: Array.from(set).filter(Boolean)
     };
 };
 
@@ -725,9 +1080,9 @@ export const PSB_STANDARD_FIELD_GROUPS: PsbFieldGroupDef[] = [
             { key: 'namaAyah', label: 'Nama Lengkap Ayah' },
             { key: 'nikAyah', label: 'NIK Ayah (16 Digit)' },
             { key: 'statusAyah', label: 'Status Ayah (Hidup / Meninggal / Cerai)', type: 'select', options: ['Hidup', 'Meninggal', 'Cerai'] },
-            { key: 'pekerjaanAyah', label: 'Pekerjaan Ayah' },
-            { key: 'pendidikanAyah', label: 'Pendidikan Terakhir Ayah', type: 'select', options: ['SD/MI', 'SMP/MTs', 'SMA/MA/SMK', 'Diploma', 'S1', 'S2', 'S3', 'Pondok Pesantren', 'Tidak/Belum Sekolah'] },
-            { key: 'penghasilanAyah', label: 'Penghasilan Rata-rata Ayah / Bulan', type: 'select', options: ['< Rp 1.000.000', 'Rp 1.000.000 - Rp 2.500.000', 'Rp 2.500.000 - Rp 5.000.000', '> Rp 5.000.000', 'Tidak Berpenghasilan'] },
+            { key: 'pekerjaanAyah', label: 'Pekerjaan Ayah', type: 'select', options: PSB_PEKERJAAN_OPTIONS },
+            { key: 'pendidikanAyah', label: 'Pendidikan Terakhir Ayah', type: 'select', options: PSB_PENDIDIKAN_OPTIONS },
+            { key: 'penghasilanAyah', label: 'Penghasilan Rata-rata Ayah / Bulan', type: 'select', options: PSB_PENGHASILAN_OPTIONS },
             { key: 'teleponAyah', label: 'No. HP / WhatsApp Aktif Ayah' },
             { key: 'tempatLahirAyah', label: 'Tempat Lahir Ayah' },
             { key: 'tanggalLahirAyah', label: 'Tanggal Lahir Ayah', type: 'date' },
@@ -739,9 +1094,9 @@ export const PSB_STANDARD_FIELD_GROUPS: PsbFieldGroupDef[] = [
             { key: 'namaIbu', label: 'Nama Lengkap Ibu' },
             { key: 'nikIbu', label: 'NIK Ibu (16 Digit)' },
             { key: 'statusIbu', label: 'Status Ibu (Hidup / Meninggal / Cerai)', type: 'select', options: ['Hidup', 'Meninggal', 'Cerai'] },
-            { key: 'pekerjaanIbu', label: 'Pekerjaan Ibu' },
-            { key: 'pendidikanIbu', label: 'Pendidikan Terakhir Ibu', type: 'select', options: ['SD/MI', 'SMP/MTs', 'SMA/MA/SMK', 'Diploma', 'S1', 'S2', 'S3', 'Pondok Pesantren', 'Tidak/Belum Sekolah'] },
-            { key: 'penghasilanIbu', label: 'Penghasilan Rata-rata Ibu / Bulan', type: 'select', options: ['< Rp 1.000.000', 'Rp 1.000.000 - Rp 2.500.000', 'Rp 2.500.000 - Rp 5.000.000', '> Rp 5.000.000', 'Tidak Berpenghasilan (IRT)'] },
+            { key: 'pekerjaanIbu', label: 'Pekerjaan Ibu', type: 'select', options: PSB_PEKERJAAN_OPTIONS },
+            { key: 'pendidikanIbu', label: 'Pendidikan Terakhir Ibu', type: 'select', options: PSB_PENDIDIKAN_OPTIONS },
+            { key: 'penghasilanIbu', label: 'Penghasilan Rata-rata Ibu / Bulan', type: 'select', options: PSB_PENGHASILAN_OPTIONS },
             { key: 'teleponIbu', label: 'No. HP / WhatsApp Aktif Ibu' },
             { key: 'tempatLahirIbu', label: 'Tempat Lahir Ibu' },
             { key: 'tanggalLahirIbu', label: 'Tanggal Lahir Ibu', type: 'date' },
@@ -753,10 +1108,10 @@ export const PSB_STANDARD_FIELD_GROUPS: PsbFieldGroupDef[] = [
             { key: 'namaWali', label: 'Nama Lengkap Wali' },
             { key: 'nikWali', label: 'NIK Wali (16 Digit)' },
             { key: 'nomorHpWali', label: 'No. HP / WhatsApp Wali' },
-            { key: 'hubunganWali', label: 'Hubungan dengan Santri', type: 'select', options: ['Kakek/Nenek', 'Paman/Bibi', 'Kakak Kandung', 'Orang Tua Asuh', 'Orang Tua Angkat', 'Lainnya'] },
-            { key: 'pekerjaanWali', label: 'Pekerjaan Wali' },
-            { key: 'pendidikanWali', label: 'Pendidikan Terakhir Wali' },
-            { key: 'penghasilanWali', label: 'Penghasilan Wali / Bulan' },
+            { key: 'hubunganWali', label: 'Hubungan dengan Santri', type: 'select', options: ['Ayah Kandung', 'Ibu Kandung', 'Kakek/Nenek', 'Paman/Bibi', 'Kakak Kandung', 'Orang Tua Asuh', 'Orang Tua Angkat', 'Lainnya'] },
+            { key: 'pekerjaanWali', label: 'Pekerjaan Wali', type: 'select', options: PSB_PEKERJAAN_OPTIONS },
+            { key: 'pendidikanWali', label: 'Pendidikan Terakhir Wali', type: 'select', options: PSB_PENDIDIKAN_OPTIONS },
+            { key: 'penghasilanWali', label: 'Penghasilan Wali / Bulan', type: 'select', options: PSB_PENGHASILAN_OPTIONS },
         ]
     },
     {

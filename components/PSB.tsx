@@ -97,8 +97,8 @@ const PSB: React.FC = () => {
                 }
             />
             <Suspense fallback={<LoadingFallback />}>
-                {activeTab === 'dashboard' && <PsbDashboard pendaftarList={pendaftarList} config={psbConfig} settings={settings} />}
-                {activeTab === 'rekap' && <PsbRekap pendaftarList={pendaftarList} settings={settings} onImportFromWA={handleImportFromWA} onUpdateList={fetchPendaftar} canWrite={canWrite} />}
+                {activeTab === 'dashboard' && <PsbDashboard pendaftarList={pendaftarList} config={psbConfig} settings={settings} onSaveConfig={handleSaveConfig} />}
+                {activeTab === 'rekap' && <PsbRekap pendaftarList={pendaftarList} settings={settings} onImportFromWA={handleImportFromWA} onUpdateList={fetchPendaftar} canWrite={canWrite} onSaveConfig={handleSaveConfig} />}
                 {activeTab === 'form' && canWrite && <PsbFormBuilder config={psbConfig} settings={settings} onSave={handleSaveConfig} />}
                 {activeTab === 'poster' && <PsbPosterMaker config={psbConfig} onSave={handleSaveConfig} settings={settings} />}
             </Suspense>

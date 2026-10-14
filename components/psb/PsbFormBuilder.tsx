@@ -26,10 +26,16 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
     });
 
     useEffect(() => {
-        if (config.tahunAjaranAktif && config.tahunAjaranAktif !== localConfig.tahunAjaranAktif) {
-            setLocalConfig(prev => ({ ...prev, tahunAjaranAktif: config.tahunAjaranAktif }));
-        }
-    }, [config.tahunAjaranAktif]);
+        setLocalConfig(prev => ({
+            ...prev,
+            tahunAjaranAktif: config.tahunAjaranAktif || prev.tahunAjaranAktif,
+            namaAdminPsb: config.namaAdminPsb ?? prev.namaAdminPsb,
+            jabatanAdminPsb: config.jabatanAdminPsb ?? prev.jabatanAdminPsb,
+            namaPimpinanPsb: config.namaPimpinanPsb ?? prev.namaPimpinanPsb,
+            jabatanPimpinanPsb: config.jabatanPimpinanPsb ?? prev.jabatanPimpinanPsb,
+            kotaSuratPsb: config.kotaSuratPsb ?? prev.kotaSuratPsb,
+        }));
+    }, [config]);
 
     const { activeYear: pondokActiveYear, nextYear: pondokNextYear, options: psbYearOptions } = getPsbAcademicYearOptions(settings);
     
@@ -1495,6 +1501,57 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                                 className="w-full border border-red-300 rounded p-2 text-sm bg-white" 
                             />
                             <p className="text-[10px] text-red-600 mt-1">Kosongkan jika berlaku selamanya. Jika diisi, formulir akan otomatis tertutup setelah tanggal ini.</p>
+                        </div>
+
+                        {/* PENGESAHAN & TANDA TANGAN DOKUMEN PSB */}
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
+                            <div className="flex items-center gap-1.5 border-b border-slate-200 pb-1.5">
+                                <i className="bi bi-pen-fill text-teal-600 text-xs"></i>
+                                <label className="text-xs font-bold text-slate-800">Tanda Tangan Dokumen &amp; Laporan PSB</label>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-tight">
+                                Nama dan jabatan ini akan otomatis dicetak pada lembar Laporan Rekapitulasi Statistik dan Surat Pengumuman Kelulusan PSB.
+                            </p>
+                            <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Nama Admin / Ketua Panitia PSB</label>
+                                <input
+                                    type="text"
+                                    value={localConfig.namaAdminPsb || ''}
+                                    onChange={e => setLocalConfig({ ...localConfig, namaAdminPsb: e.target.value })}
+                                    placeholder="Contoh: Ust. H. Ahmad Fauzi, M.Pd"
+                                    className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-slate-800 focus:border-teal-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Jabatan Admin / Panitia</label>
+                                <input
+                                    type="text"
+                                    value={localConfig.jabatanAdminPsb || ''}
+                                    onChange={e => setLocalConfig({ ...localConfig, jabatanAdminPsb: e.target.value })}
+                                    placeholder="Koordinator Administrator PSB / Ketua Panitia PSB"
+                                    className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-slate-800 focus:border-teal-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Nama Pimpinan / Mudir 'Aam</label>
+                                <input
+                                    type="text"
+                                    value={localConfig.namaPimpinanPsb || ''}
+                                    onChange={e => setLocalConfig({ ...localConfig, namaPimpinanPsb: e.target.value })}
+                                    placeholder="Contoh: KH. Abdullah Faqih, Lc"
+                                    className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-slate-800 focus:border-teal-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Kota / Lokasi Dokumen</label>
+                                <input
+                                    type="text"
+                                    value={localConfig.kotaSuratPsb || ''}
+                                    onChange={e => setLocalConfig({ ...localConfig, kotaSuratPsb: e.target.value })}
+                                    placeholder="Contoh: Jombang, Jawa Timur"
+                                    className="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs text-slate-800 focus:border-teal-500 outline-none"
+                                />
+                            </div>
                         </div>
 
                         <div>

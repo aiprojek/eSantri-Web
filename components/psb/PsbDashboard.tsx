@@ -5,15 +5,15 @@ import { PrintHeader } from '../common/PrintHeader';
 import { SectionCard } from '../common/SectionCard';
 import { EmptyState } from '../common/EmptyState';
 import { PsbDashboardReportModal } from './modals/PsbDashboardReportModal';
-import { PsbAnnouncementModal } from './modals/PsbAnnouncementModal';
 
 interface PsbDashboardProps {
     pendaftarList: Pendaftar[];
     config: PsbConfig;
     settings: PondokSettings;
+    onSaveConfig?: (newConfig: PsbConfig) => void;
 }
 
-export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, config, settings }) => {
+export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, config, settings, onSaveConfig }) => {
     const totalPendaftar = pendaftarList.length;
     
     const statsByJenjang = useMemo(() => {
@@ -70,7 +70,6 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
     const pendaftarHariIni = pendaftarList.filter(p => p.tanggalDaftar.startsWith(todayStr)).length;
 
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-    const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
 
     return (
         <div className="space-y-6">
@@ -81,20 +80,12 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
                 </div>
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     <button
-                        onClick={() => setIsAnnouncementModalOpen(true)}
-                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 transition-colors shadow-2xs"
-                        title="Ekspor daftar pengumuman santri diterima & tidak diterima dalam format PDF siap cetak"
-                    >
-                        <i className="bi bi-megaphone-fill text-teal-600"></i>
-                        <span>Pengumuman Hasil (PDF)</span>
-                    </button>
-                    <button
                         onClick={() => setIsReportModalOpen(true)}
-                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white hover:bg-slate-700 transition-colors shadow-2xs"
+                        className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 text-white hover:bg-slate-700 transition-colors shadow-2xs"
                         title="Cetak tabel laporan rekapitulasi data dashboard dalam format PDF rapi"
                     >
                         <i className="bi bi-file-earmark-bar-graph-fill text-teal-300"></i>
-                        <span>Cetak Laporan Tabel (PDF)</span>
+                        <span>Cetak Statistik Dashboard (PDF)</span>
                     </button>
                 </div>
             </div>
@@ -167,15 +158,6 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
                 </SectionCard>
             </div>
 
-            {/* Modal Pengumuman Hasil Seleksi (PDF) */}
-            <PsbAnnouncementModal
-                isOpen={isAnnouncementModalOpen}
-                onClose={() => setIsAnnouncementModalOpen(false)}
-                pendaftarList={pendaftarList}
-                settings={settings}
-                config={config}
-            />
-
             {/* Modal Laporan Tabel Dashboard (PDF) */}
             <PsbDashboardReportModal
                 isOpen={isReportModalOpen}
@@ -183,6 +165,7 @@ export const PsbDashboard: React.FC<PsbDashboardProps> = ({ pendaftarList, confi
                 pendaftarList={pendaftarList}
                 settings={settings}
                 config={config}
+                onSaveConfig={onSaveConfig}
             />
         </div>
     );

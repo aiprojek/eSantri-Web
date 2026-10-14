@@ -547,6 +547,11 @@ export interface PsbConfig {
     driveFolderId?: string;
     registrationDeadline?: string;
     fieldHints?: Record<string, string>;
+    namaAdminPsb?: string;
+    jabatanAdminPsb?: string;
+    namaPimpinanPsb?: string;
+    jabatanPimpinanPsb?: string;
+    kotaSuratPsb?: string;
 }
 
 export type AcademicYearCalendarType = 'Masehi' | 'Hijriah';

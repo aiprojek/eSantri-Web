@@ -1,7 +1,7 @@
 import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
-import { Pendaftar, PondokSettings, Santri, RiwayatStatus, Tagihan, PendaftarStatus } from '../../types';
+import { Pendaftar, PondokSettings, Santri, RiwayatStatus, Tagihan, PendaftarStatus, PsbConfig } from '../../types';
 import { db } from '../../db';
 import { loadJsZip, loadSyncService } from '../../utils/lazyCloudServices';
 import { loadFirebaseRealtimeRuntime } from '../../utils/lazyFirebaseRuntimes';
@@ -12,6 +12,7 @@ import { PsbAcceptanceModal, PsbBillingOption, PsbPlacementOption } from './moda
 import { PsbPrintFormModal } from './modals/PsbPrintFormModal';
 import { PsbGasConfigModal } from './modals/PsbGasConfigModal';
 import { PsbAnnouncementModal } from './modals/PsbAnnouncementModal';
+import { PsbDashboardReportModal } from './modals/PsbDashboardReportModal';
 import {
     getPsbRegistrationNumber,
     calculatePsbAverageScore,
@@ -33,9 +34,10 @@ interface PsbRekapProps {
     onImportFromWA: (text: string) => void;
     onUpdateList: () => void;
     canWrite: boolean;
+    onSaveConfig?: (newConfig: PsbConfig) => void;
 }
 
-export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList, canWrite }) => {
+export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onImportFromWA, onUpdateList, canWrite, onSaveConfig }) => {
     const { showToast, showConfirmation, showAlert } = useAppContext();
     const { onBulkAddSantri } = useSantriContext();
     const [searchTerm, setSearchTerm] = useState('');
@@ -59,6 +61,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const [isBulkEditorOpen, setIsBulkEditorOpen] = useState(false);
     const [isArchiving, setIsArchiving] = useState(false);
     const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
     // Submission method from settings
     const method = settings.psbConfig.submissionMethod === 'portal' ? 'hybrid' : settings.psbConfig.submissionMethod;
@@ -945,7 +948,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                     </button>
                                 </div>
 
-                                {/* Row 1, Col 3: Tombol Pengumuman Hasil Kelulusan (PDF) */}
+                                {/* Tombol Pengumuman Hasil Kelulusan (PDF) */}
                                 <button
                                     onClick={() => setIsAnnouncementModalOpen(true)}
                                     className="bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 px-2 sm:px-3 py-1 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 shadow-2xs whitespace-nowrap h-8 sm:h-9 transition-colors min-w-0"
@@ -954,6 +957,17 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                     <i className="bi bi-file-earmark-pdf-fill text-teal-600 text-xs sm:text-sm shrink-0"></i>
                                     <span className="hidden xs:inline truncate">Pengumuman (PDF)</span>
                                     <span className="xs:hidden truncate">Pengumuman</span>
+                                </button>
+
+                                {/* Tombol Laporan Rekapitulasi Statistik (PDF) */}
+                                <button
+                                    onClick={() => setIsReportModalOpen(true)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 px-2 sm:px-3 py-1 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 shadow-2xs whitespace-nowrap h-8 sm:h-9 transition-colors min-w-0"
+                                    title="Cetak dokumen laporan rekapitulasi data pendaftar & metrik statistik (PDF)"
+                                >
+                                    <i className="bi bi-file-earmark-bar-graph-fill text-slate-700 text-xs sm:text-sm shrink-0"></i>
+                                    <span className="hidden xs:inline truncate">Laporan Rekap (PDF)</span>
+                                    <span className="xs:hidden truncate">Laporan</span>
                                 </button>
 
                                 {/* Row 2, Col 1: Tombol Impor WA */}
@@ -1648,6 +1662,19 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     pendaftarList={pendaftarList}
                     settings={settings}
                     config={settings.psbConfig}
+                    onSaveConfig={onSaveConfig}
+                />
+            )}
+
+            {/* Modal Laporan Rekapitulasi Data & Statistik PSB (PDF) */}
+            {isReportModalOpen && (
+                <PsbDashboardReportModal
+                    isOpen={isReportModalOpen}
+                    onClose={() => setIsReportModalOpen(false)}
+                    pendaftarList={pendaftarList}
+                    settings={settings}
+                    config={settings.psbConfig}
+                    onSaveConfig={onSaveConfig}
                 />
             )}
         </div>

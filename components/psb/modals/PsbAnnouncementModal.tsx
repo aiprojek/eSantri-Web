@@ -1,6 +1,8 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Pendaftar, PondokSettings, PsbConfig } from '../../../types';
 import { calculatePsbAverageScore, getPsbRegistrationNumber } from '../utils/psbUtils';
+import { printToPdfNative } from '../../../utils/pdfGenerator';
 
 interface PsbAnnouncementModalProps {
     isOpen: boolean;
@@ -8,6 +10,7 @@ interface PsbAnnouncementModalProps {
     pendaftarList: Pendaftar[];
     settings: PondokSettings;
     config: PsbConfig;
+    onSaveConfig?: (newConfig: PsbConfig) => void;
 }
 
 type FilterViewMode = 'semua' | 'diterima' | 'ditolak' | 'cadangan';
@@ -19,6 +22,7 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
     pendaftarList,
     settings,
     config,
+    onSaveConfig,
 }) => {
     const printAreaRef = useRef<HTMLDivElement>(null);
     const [viewMode, setViewMode] = useState<FilterViewMode>('semua');
@@ -30,6 +34,69 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
         const code = (settings.namaPonpes || 'PST').replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase();
         return `088/PAN-PSB/${code}/${year}`;
     });
+
+    // Isolate print styles on document body when modal is mounted
+    useEffect(() => {
+        if (isOpen) {
+            document.body.classList.add('modal-print-open');
+            return () => {
+                document.body.classList.remove('modal-print-open');
+            };
+        }
+    }, [isOpen]);
+
+    // Admin & Pimpinan Signature State
+    const [adminName, setAdminName] = useState(() => {
+        return config.namaAdminPsb || localStorage.getItem('psb_signature_admin_name') || '';
+    });
+    const [adminJabatan, setAdminJabatan] = useState(() => {
+        return config.jabatanAdminPsb || localStorage.getItem('psb_signature_admin_jabatan') || 'Ketua Panitia PSB';
+    });
+    const [pimpinanName, setPimpinanName] = useState(() => {
+        return config.namaPimpinanPsb || settings.tenagaPengajar?.find(t => t.id === settings.mudirAamId)?.nama || '';
+    });
+    const [pimpinanJabatan, setPimpinanJabatan] = useState(() => {
+        return config.jabatanPimpinanPsb || 'Pimpinan Pondok Pesantren';
+    });
+    const [tempatCetak, setTempatCetak] = useState(() => {
+        return config.kotaSuratPsb || settings.alamat?.split(',')[0] || 'Posko PSB Pesantren';
+    });
+
+    const [showSignatureSettings, setShowSignatureSettings] = useState(false);
+    const [zoomLevel, setZoomLevel] = useState<'fit' | '100' | '90' | '80'>('100');
+    const [isSavedMessage, setIsSavedMessage] = useState(false);
+
+    // Sync if config changes
+    useEffect(() => {
+        if (config.namaAdminPsb) setAdminName(config.namaAdminPsb);
+        if (config.jabatanAdminPsb) setAdminJabatan(config.jabatanAdminPsb);
+        if (config.namaPimpinanPsb) setPimpinanName(config.namaPimpinanPsb);
+        if (config.jabatanPimpinanPsb) setPimpinanJabatan(config.jabatanPimpinanPsb);
+        if (config.kotaSuratPsb) setTempatCetak(config.kotaSuratPsb);
+    }, [config]);
+
+    // Save as default handler
+    const handleSaveAsDefault = () => {
+        localStorage.setItem('psb_signature_admin_name', adminName);
+        localStorage.setItem('psb_signature_admin_jabatan', adminJabatan);
+        localStorage.setItem('psb_signature_pimpinan_name', pimpinanName);
+        localStorage.setItem('psb_signature_pimpinan_jabatan', pimpinanJabatan);
+        localStorage.setItem('psb_signature_tempat_cetak', tempatCetak);
+
+        if (onSaveConfig) {
+            onSaveConfig({
+                ...config,
+                namaAdminPsb: adminName,
+                jabatanAdminPsb: adminJabatan,
+                namaPimpinanPsb: pimpinanName,
+                jabatanPimpinanPsb: pimpinanJabatan,
+                kotaSuratPsb: tempatCetak,
+            });
+        }
+
+        setIsSavedMessage(true);
+        setTimeout(() => setIsSavedMessage(false), 3000);
+    };
 
     // Editable Notes States
     const DEFAULT_NOTES_DITERIMA = useMemo(() => [
@@ -104,7 +171,16 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
     if (!isOpen) return null;
 
     const handlePrint = () => {
-        window.print();
+        const cleanDocNum = (suratNumber || 'Pengumuman').replace(/[\/\\:*?"<>|]/g, '-');
+        const cleanTa = yearLabel.replace(/[\/\\:*?"<>|]/g, '-');
+        printToPdfNative(
+            'psb-announcement-sheet',
+            `Pengumuman_Hasil_PSB_${cleanDocNum}_TA_${cleanTa}`,
+            {
+                paperSize: 'A4',
+                orientation: 'portrait'
+            }
+        );
     };
 
     const getJenjangName = (id: number) => {
@@ -118,14 +194,23 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
         year: 'numeric'
     });
 
-    return (
-        <div className="fixed inset-0 bg-black/70 z-[90] flex justify-center items-start sm:items-center p-2 sm:p-4 overflow-y-auto print-modal-target">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[96vh] h-[95vh] sm:h-auto overflow-hidden my-auto border border-gray-200 print-modal-card">
+    const zoomStyle = useMemo(() => {
+        switch (zoomLevel) {
+            case '80': return { transform: 'scale(0.8)', transformOrigin: 'top center' };
+            case '90': return { transform: 'scale(0.9)', transformOrigin: 'top center' };
+            case 'fit': return { transform: 'scale(0.85)', transformOrigin: 'top center' };
+            default: return {};
+        }
+    }, [zoomLevel]);
+
+    return createPortal(
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[90] flex justify-center items-start p-1 sm:p-4 overflow-y-auto print-modal-target">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[96vh] overflow-hidden border border-gray-200 print-modal-card">
                 
                 {/* Modal Header (Screen Only) */}
                 <div className="p-3 sm:p-4 border-b flex justify-between items-center bg-teal-800 text-white shrink-0 no-print">
                     <div className="flex items-center gap-2.5 sm:gap-3">
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-teal-700/80 border border-teal-500/40 flex items-center justify-center text-teal-200 shrink-0">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-teal-700/80 border border-teal-500/40 flex items-center justify-center text-teal-200 shrink-0 shadow-inner">
                             <i className="bi bi-file-earmark-pdf-fill text-lg sm:text-2xl"></i>
                         </div>
                         <div>
@@ -169,7 +254,7 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                                 type="button"
                                 onClick={() => setViewMode('ditolak')}
                                 className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap text-[11px] sm:text-xs ${
-                                    viewMode === 'ditolak' ? 'bg-red-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                                    viewMode === 'ditolak' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
                                 Ditolak ({rejectedList.length})
@@ -185,11 +270,31 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                             </button>
                         </div>
 
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2 ml-auto">
+                        {/* Action Buttons & Zoom */}
+                        <div className="flex items-center gap-2 ml-auto flex-wrap">
+                            {/* Zoom selector */}
+                            <div className="hidden sm:inline-flex items-center gap-1 bg-white border border-slate-300 rounded-xl px-2 py-1 text-slate-700">
+                                <i className="bi bi-zoom-in text-slate-400 text-xs"></i>
+                                <span className="text-[11px] text-slate-500 font-medium">Zoom:</span>
+                                <select
+                                    value={zoomLevel}
+                                    onChange={(e) => setZoomLevel(e.target.value as any)}
+                                    className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer"
+                                >
+                                    <option value="100">100%</option>
+                                    <option value="90">90%</option>
+                                    <option value="80">80%</option>
+                                    <option value="fit">Muat Layar</option>
+                                </select>
+                            </div>
+
+                            {/* Button Edit Catatan */}
                             <button
                                 type="button"
-                                onClick={() => setShowEditNotesPanel(!showEditNotesPanel)}
+                                onClick={() => {
+                                    setShowEditNotesPanel(!showEditNotesPanel);
+                                    if (showSignatureSettings) setShowSignatureSettings(false);
+                                }}
                                 className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all text-[11px] sm:text-xs border shadow-xs ${
                                     showEditNotesPanel
                                         ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-400'
@@ -198,15 +303,35 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                                 title="Kustomisasi catatan di bawah tabel"
                             >
                                 <i className="bi bi-pencil-square text-amber-600"></i>
-                                <span>{showEditNotesPanel ? 'Tutup Edit Catatan' : 'Edit Catatan Tabel'}</span>
+                                <span>{showEditNotesPanel ? 'Tutup Catatan' : 'Edit Catatan'}</span>
                             </button>
+
+                            {/* Button Pengaturan TTD */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowSignatureSettings(!showSignatureSettings);
+                                    if (showEditNotesPanel) setShowEditNotesPanel(false);
+                                }}
+                                className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all text-[11px] sm:text-xs border shadow-xs ${
+                                    showSignatureSettings
+                                        ? 'bg-blue-100 text-blue-900 border-blue-300 ring-1 ring-blue-400'
+                                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                                }`}
+                                title="Atur Nama Admin & Pimpinan pada Tanda Tangan"
+                            >
+                                <i className="bi bi-pen-fill text-blue-600"></i>
+                                <span>{showSignatureSettings ? 'Tutup TTD' : 'Pengaturan TTD'}</span>
+                            </button>
+
+                            {/* Button Cetak / PDF */}
                             <button
                                 onClick={handlePrint}
                                 className="px-3 sm:px-4 py-1.5 sm:py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-bold flex items-center gap-1.5 sm:gap-2 transition-all shadow-xs active:scale-95 text-[11px] sm:text-xs"
-                                title="Cetak langsung ke A4 atau Simpan sebagai PDF"
+                                title="Cetak lembar dokumen resmi tanpa UI aplikasi"
                             >
                                 <i className="bi bi-printer-fill text-sm"></i>
-                                <span>Cetak / PDF</span>
+                                <span>Cetak / Simpan PDF</span>
                             </button>
                         </div>
                     </div>
@@ -264,7 +389,123 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                     </div>
                 </div>
 
-                {/* Expandable Notes Editor Panel (Dedicated section, smoothly scrollable without nested overflow traps) */}
+                {/* SIGNATURE CONFIGURATION PANEL (Admin & Pimpinan) */}
+                {showSignatureSettings && (
+                    <div className="bg-blue-50/95 border-b-2 border-blue-300 p-3 sm:p-4 text-xs shrink-0 max-h-[50vh] overflow-y-auto custom-scrollbar shadow-inner no-print">
+                        <div className="flex items-center justify-between border-b border-blue-200 pb-2 mb-3">
+                            <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs shrink-0 shadow-xs">
+                                    <i className="bi bi-pen-fill"></i>
+                                </span>
+                                <div>
+                                    <h4 className="font-bold text-xs sm:text-sm text-blue-950">Pengaturan Tanda Tangan Dokumen Pengumuman</h4>
+                                    <p className="text-[10px] sm:text-[11px] text-blue-800">Ketik nama dan jabatan Ketua Panitia / Admin PSB serta Pimpinan yang tercetak di dokumen</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {isSavedMessage && (
+                                    <span className="text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded text-[11px] flex items-center gap-1 animate-pulse">
+                                        <i className="bi bi-check-circle-fill"></i> Tersimpan sebagai default!
+                                    </span>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={handleSaveAsDefault}
+                                    className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 shadow-xs transition-colors"
+                                    title="Simpan pengaturan nama dan jabatan ini agar otomatis terisi di masa mendatang"
+                                >
+                                    <i className="bi bi-bookmark-check-fill"></i> Simpan Default
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSignatureSettings(false)}
+                                    className="text-blue-700 hover:bg-blue-200/60 p-1.5 rounded-lg transition-colors"
+                                    title="Tutup Panel"
+                                >
+                                    <i className="bi bi-x-lg text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {/* Admin / Ketua Panitia */}
+                            <div className="bg-white p-3 rounded-xl border border-blue-200 shadow-2xs space-y-2">
+                                <span className="font-bold text-blue-950 text-xs flex items-center gap-1">
+                                    <i className="bi bi-person-badge-fill text-blue-600"></i> Sisi Kiri: Ketua Panitia / Admin PSB
+                                </span>
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Nama Lengkap & Gelar</label>
+                                    <input
+                                        type="text"
+                                        value={adminName}
+                                        onChange={(e) => setAdminName(e.target.value)}
+                                        placeholder="Contoh: Ust. H. Ahmad Fauzi, M.Pd"
+                                        className="w-full bg-slate-50 border border-gray-300 rounded-lg p-1.5 text-xs text-gray-800 focus:bg-white focus:border-blue-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Jabatan Penandatangan</label>
+                                    <input
+                                        type="text"
+                                        value={adminJabatan}
+                                        onChange={(e) => setAdminJabatan(e.target.value)}
+                                        placeholder="Ketua Panitia PSB / Admin PSB"
+                                        className="w-full bg-slate-50 border border-gray-300 rounded-lg p-1.5 text-xs text-gray-800 focus:bg-white focus:border-blue-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Pimpinan / Mudir */}
+                            <div className="bg-white p-3 rounded-xl border border-blue-200 shadow-2xs space-y-2">
+                                <span className="font-bold text-blue-950 text-xs flex items-center gap-1">
+                                    <i className="bi bi-person-check-fill text-blue-600"></i> Sisi Kanan: Pimpinan / Mudir 'Aam
+                                </span>
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Nama Pimpinan & Gelar</label>
+                                    <input
+                                        type="text"
+                                        value={pimpinanName}
+                                        onChange={(e) => setPimpinanName(e.target.value)}
+                                        placeholder="Contoh: KH. Abdullah Faqih, Lc"
+                                        className="w-full bg-slate-50 border border-gray-300 rounded-lg p-1.5 text-xs text-gray-800 focus:bg-white focus:border-blue-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Jabatan Pimpinan</label>
+                                    <input
+                                        type="text"
+                                        value={pimpinanJabatan}
+                                        onChange={(e) => setPimpinanJabatan(e.target.value)}
+                                        placeholder="Pimpinan Pondok Pesantren"
+                                        className="w-full bg-slate-50 border border-gray-300 rounded-lg p-1.5 text-xs text-gray-800 focus:bg-white focus:border-blue-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Lokasi & Kota */}
+                            <div className="bg-white p-3 rounded-xl border border-blue-200 shadow-2xs space-y-2 sm:col-span-2 lg:col-span-1">
+                                <span className="font-bold text-blue-950 text-xs flex items-center gap-1">
+                                    <i className="bi bi-geo-alt-fill text-blue-600"></i> Lokasi Penetapan Dokumen
+                                </span>
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">Kota / Lokasi Dokumen</label>
+                                    <input
+                                        type="text"
+                                        value={tempatCetak}
+                                        onChange={(e) => setTempatCetak(e.target.value)}
+                                        placeholder="Contoh: Jombang, Jawa Timur"
+                                        className="w-full bg-slate-50 border border-gray-300 rounded-lg p-1.5 text-xs text-gray-800 focus:bg-white focus:border-blue-500 outline-none"
+                                    />
+                                </div>
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                    Tanggal penetapan otomatis mengikuti hari ini: <strong>{todayFormatted}</strong>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Expandable Notes Editor Panel */}
                 {showEditNotesPanel && (
                     <div className="bg-amber-50/95 border-b-2 border-amber-300 p-3 sm:p-4 text-xs shrink-0 max-h-[52vh] sm:max-h-[58vh] overflow-y-auto custom-scrollbar shadow-inner no-print">
                         <div className="flex items-center justify-between border-b border-amber-200 pb-2 mb-3">
@@ -307,61 +548,61 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                                     <button
                                         type="button"
                                         onClick={handleAddDiterimaPoint}
-                                        className="text-[11px] bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 rounded-lg font-bold shadow-2xs transition-colors"
+                                        className="text-[11px] bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-300 px-2 py-0.5 rounded-lg flex items-center gap-1"
                                     >
-                                        + Tambah Poin
+                                        <i className="bi bi-plus-lg"></i> Tambah Poin
                                     </button>
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar pr-1">
                                     {notesDiterima.map((pt, idx) => (
-                                        <div key={idx} className="flex items-start gap-2 bg-white p-2 rounded-lg border border-teal-300 shadow-2xs">
-                                            <span className="text-teal-800 font-bold mt-1 text-xs shrink-0 w-5">{idx + 1}.</span>
+                                        <div key={idx} className="flex items-start gap-1.5">
+                                            <span className="text-[11px] font-bold text-teal-800 mt-1">{idx + 1}.</span>
                                             <textarea
                                                 rows={2}
                                                 value={pt}
                                                 onChange={(e) => handleUpdateDiterimaPoint(idx, e.target.value)}
-                                                className="w-full text-xs border border-slate-200 rounded-lg p-2 focus:border-teal-500 focus:ring-2 focus:ring-teal-200 resize-y outline-none text-slate-800 bg-white"
-                                                placeholder="Tulis petunjuk santri diterima..."
+                                                className="w-full text-xs p-1.5 bg-white border border-teal-200 rounded-lg focus:border-teal-500 focus:ring-1 focus:ring-teal-200 outline-none text-slate-800"
                                             />
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveDiterimaPoint(idx)}
-                                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg shrink-0 transition-colors"
-                                                title="Hapus poin ini"
-                                            >
-                                                <i className="bi bi-trash text-sm"></i>
-                                            </button>
+                                            {notesDiterima.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveDiterimaPoint(idx)}
+                                                    className="text-red-500 hover:text-red-700 p-1 rounded mt-0.5"
+                                                    title="Hapus baris ini"
+                                                >
+                                                    <i className="bi bi-trash"></i>
+                                                </button>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Catatan Cadangan & Ditolak */}
-                            <div className="space-y-3 bg-white/80 p-3 rounded-xl border border-amber-200 shadow-2xs">
-                                <div>
+                            {/* Catatan Santri Cadangan & Ditolak */}
+                            <div className="space-y-3">
+                                <div className="bg-white/80 p-3 rounded-xl border border-amber-200 shadow-2xs">
                                     <label className="text-xs font-bold text-amber-900 block mb-1 flex items-center gap-1.5">
                                         <i className="bi bi-clock-history text-amber-600"></i>
-                                        Catatan Calon Santri Cadangan
+                                        Keterangan Status Cadangan
                                     </label>
                                     <textarea
-                                        rows={3}
+                                        rows={2}
                                         value={notesCadangan}
                                         onChange={(e) => setNotesCadangan(e.target.value)}
-                                        className="w-full text-xs p-2.5 bg-white border border-amber-300 rounded-lg focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none text-slate-800"
-                                        placeholder="Catatan untuk santri cadangan..."
+                                        className="w-full text-xs p-2 bg-white border border-amber-200 rounded-lg focus:border-amber-500 focus:ring-1 focus:ring-amber-200 outline-none text-slate-800"
+                                        placeholder="Catatan untuk santri status cadangan..."
                                     />
                                 </div>
-
-                                <div>
-                                    <label className="text-xs font-bold text-slate-800 block mb-1 flex items-center gap-1.5">
-                                        <i className="bi bi-x-circle-fill text-red-500"></i>
-                                        Catatan Calon Santri Tidak Diterima
+                                <div className="bg-white/80 p-3 rounded-xl border border-rose-200 shadow-2xs">
+                                    <label className="text-xs font-bold text-rose-900 block mb-1 flex items-center gap-1.5">
+                                        <i className="bi bi-x-circle text-rose-600"></i>
+                                        Pemberitahuan Status Belum Diterima
                                     </label>
                                     <textarea
-                                        rows={3}
+                                        rows={2}
                                         value={notesDitolak}
                                         onChange={(e) => setNotesDitolak(e.target.value)}
-                                        className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg focus:border-slate-500 focus:ring-2 focus:ring-slate-200 outline-none text-slate-800"
+                                        className="w-full text-xs p-2 bg-white border border-rose-200 rounded-lg focus:border-rose-500 focus:ring-1 focus:ring-rose-200 outline-none text-slate-800"
                                         placeholder="Catatan untuk santri tidak diterima..."
                                     />
                                 </div>
@@ -378,7 +619,7 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                                 rows={2}
                                 value={customAdditionalNotes}
                                 onChange={(e) => setCustomAdditionalNotes(e.target.value)}
-                                className="w-full text-xs p-2.5 bg-white border border-slate-300 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none text-slate-800"
+                                className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg focus:border-teal-500 focus:ring-1 focus:ring-teal-200 outline-none text-slate-800"
                                 placeholder="Contoh: Jadwal kedatangan santri ke asrama: 10 Juli 2026. Narahubung Panitia: Ustadz Ahmad (0812-xxxx-xxxx)."
                             />
                         </div>
@@ -390,7 +631,7 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setShowEditNotesPanel(false)}
-                                className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-bold flex items-center gap-1.5 text-xs shadow-xs transition-colors ml-auto"
+                                className="px-4 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-bold flex items-center gap-1.5 text-xs shadow-xs transition-colors ml-auto"
                             >
                                 <i className="bi bi-check2 text-sm"></i>
                                 <span>Selesai &amp; Tutup Editor</span>
@@ -400,11 +641,12 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                 )}
 
                 {/* Printable Document Area */}
-                <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-8 bg-slate-100 flex justify-center custom-scrollbar">
+                <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-6 bg-slate-100 flex justify-center custom-scrollbar print-modal-scroll-wrapper">
                     <div
+                        id="psb-announcement-sheet"
                         ref={printAreaRef}
-                        className="bg-white p-6 sm:p-10 shadow-lg border border-gray-200 w-full max-w-[210mm] text-gray-900 text-xs sm:text-sm print:border-none print:shadow-none print:p-0 print:m-0"
-                        style={{ minHeight: '297mm' }}
+                        style={zoomStyle}
+                        className="bg-white p-6 sm:p-10 shadow-lg border border-gray-200 w-full max-w-[210mm] text-gray-900 text-xs sm:text-sm print:border-none print:shadow-none print:p-0 print:m-0 shrink-0 transition-transform origin-top"
                     >
                         {/* KOP SURAT RESMI */}
                         <div className="border-b-2 border-double border-gray-900 pb-3 mb-4 text-center relative">
@@ -436,255 +678,86 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                             <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight underline">
                                 SURAT KEPUTUSAN PANITIA PSB
                             </h4>
-                            <p className="font-mono text-xs font-semibold text-gray-700 mt-0.5">
-                                Nomor: {suratNumber}
+                            <p className="text-xs font-mono font-medium text-gray-700 mt-0.5">
+                                Nomor: {suratNumber || '...........................................'}
                             </p>
-                            <p className="font-bold text-xs sm:text-sm text-gray-900 uppercase mt-1">
-                                TENTANG PENETAPAN HASIL SELEKSI PENERIMAAN SANTRI BARU
-                                <br />
-                                TAHUN AJARAN {yearLabel}
+                            <p className="text-xs sm:text-sm font-semibold text-gray-800 mt-1">
+                                TENTANG HASIL SELEKSI PENERIMAAN SANTRI BARU TAHUN AJARAN {yearLabel}
                             </p>
                         </div>
 
-                        {/* PEMBUKA SURAT */}
-                        <div className="text-justify text-[11px] sm:text-xs text-gray-700 leading-relaxed mb-4">
+                        {/* KALIMAT PENGANTAR RESMI */}
+                        <div className="text-xs text-justify leading-relaxed text-gray-800 mb-4 space-y-2">
                             <p>
-                                <em>Bismillaahirrahmaanirrahiim.</em> Berdasarkan rapat pleno panitia seleksi Penerimaan Santri Baru (PSB) {settings.namaPonpes || 'Pondok Pesantren'} yang meliputi verifikasi kelengkapan berkas administrasi, ujian potensi akademik, tes membaca Al-Qur'an, dan wawancara komprehensif, dengan ini Pimpinan Pondok Pesantren dan Panitia PSB memutuskan nama-nama calon santri di bawah ini:
+                                <em>Bismillaahirrohmaanirrohiim,</em>
+                            </p>
+                            <p>
+                                Berdasarkan hasil rekapitulasi verifikasi berkas, tes seleksi masuk, observasi baca Al-Qur'an, dan rapat pleno Panitia Penerimaan Santri Baru (PSB) Pondok Pesantren <strong>{settings.namaPonpes || 'Pesantren'}</strong> Tahun Ajaran <strong>{yearLabel}</strong>, dengan ini panitia menetapkan hasil seleksi calon santri baru sebagaimana tercantum pada daftar berikut:
                             </p>
                         </div>
 
-                        {/* SECTION: SANTRI DITERIMA */}
-                        {(viewMode === 'semua' || viewMode === 'diterima') && (
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between bg-teal-800 text-white px-3 py-1.5 rounded-t-md font-bold text-xs">
-                                    <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                                        <i className="bi bi-check-circle-fill"></i>
-                                        I. Daftar Calon Santri Dinyatakan Diterima (Lulus Seleksi)
-                                    </span>
-                                    <span className="text-[11px] bg-teal-900/80 px-2 py-0.5 rounded font-mono">
-                                        Total: {acceptedList.length} Santri
-                                    </span>
-                                </div>
+                        {/* TABEL DAFTAR HASIL SELEKSI */}
+                        <div className="overflow-x-auto mb-6">
+                            <table className="w-full border-collapse border border-gray-400 text-xs">
+                                <thead>
+                                    <tr className="bg-gray-100 font-bold text-gray-900 text-center">
+                                        <th className="border border-gray-400 p-1.5 w-8">No</th>
+                                        <th className="border border-gray-400 p-1.5 w-24">No. Registrasi</th>
+                                        <th className="border border-gray-400 p-1.5">Nama Calon Santri</th>
+                                        <th className="border border-gray-400 p-1.5 w-16">L/P</th>
+                                        <th className="border border-gray-400 p-1.5 w-28">Jenjang / Jurusan</th>
+                                        <th className="border border-gray-400 p-1.5 w-16">Nilai</th>
+                                        <th className="border border-gray-400 p-1.5 w-28">Hasil Seleksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {processedList.map((santri, index) => {
+                                        const avgScore = calculatePsbAverageScore(santri.nilaiUjian);
+                                        const scoreDisplay = avgScore !== null ? avgScore.toFixed(1) : '-';
+                                        
+                                        let statusColor = 'text-gray-900';
+                                        let bgRow = '';
+                                        if (santri.status === 'Diterima') {
+                                            statusColor = 'font-bold text-emerald-800';
+                                            bgRow = 'hover:bg-emerald-50/50';
+                                        } else if (santri.status === 'Cadangan') {
+                                            statusColor = 'font-bold text-amber-700';
+                                            bgRow = 'hover:bg-amber-50/50';
+                                        } else if (santri.status === 'Ditolak') {
+                                            statusColor = 'font-bold text-rose-700';
+                                            bgRow = 'hover:bg-rose-50/50';
+                                        }
 
-                                {acceptedList.length > 0 ? (
-                                    <div className="border border-teal-800 border-t-0 rounded-b-md overflow-x-auto">
-                                        <table className="w-full text-left border-collapse text-[11px] sm:text-xs">
-                                            <thead>
-                                                <tr className="bg-teal-50 border-b border-teal-200 text-teal-950 font-bold">
-                                                    <th className="p-1.5 text-center w-8 border-r border-teal-200">No</th>
-                                                    <th className="p-1.5 w-24 border-r border-teal-200">No. Reg</th>
-                                                    <th className="p-1.5 border-r border-teal-200">Nama Lengkap Santri</th>
-                                                    <th className="p-1.5 text-center w-10 border-r border-teal-200">L/P</th>
-                                                    <th className="p-1.5 border-r border-teal-200">Jenjang</th>
-                                                    <th className="p-1.5 border-r border-teal-200">Asal Sekolah</th>
-                                                    <th className="p-1.5 text-center w-14 border-r border-teal-200">Nilai</th>
-                                                    <th className="p-1.5 text-center w-24">Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {acceptedList.map((p, idx) => {
-                                                    const regNumber = p.nomorRegistrasi || getPsbRegistrationNumber(p, getJenjangName(p.jenjangId));
-                                                    const score = calculatePsbAverageScore(p.nilaiUjian) || '-';
-                                                    return (
-                                                        <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-teal-50/30'}>
-                                                            <td className="p-1.5 text-center border-t border-r border-gray-200 font-semibold">{idx + 1}</td>
-                                                            <td className="p-1.5 border-t border-r border-gray-200 font-mono font-bold text-teal-900">{regNumber}</td>
-                                                            <td className="p-1.5 border-t border-r border-gray-200 font-bold uppercase">{p.namaLengkap}</td>
-                                                            <td className="p-1.5 text-center border-t border-r border-gray-200">{p.jenisKelamin === 'Perempuan' ? 'P' : 'L'}</td>
-                                                            <td className="p-1.5 border-t border-r border-gray-200">{getJenjangName(p.jenjangId)}</td>
-                                                            <td className="p-1.5 border-t border-r border-gray-200 text-gray-700">{p.asalSekolah || '-'}</td>
-                                                            <td className="p-1.5 text-center border-t border-r border-gray-200 font-bold text-teal-900">{score}</td>
-                                                            <td className="p-1.5 text-center border-t border-gray-200">
-                                                                <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded text-[10px]">
-                                                                    DITERIMA
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="p-4 border border-teal-800 border-t-0 rounded-b-md text-center text-gray-500 italic">
-                                        Belum ada data calon santri yang berstatus Diterima pada filter saat ini.
-                                    </div>
-                                )}
-
-                                {/* Petunjuk Daftar Ulang */}
-                                {notesDiterima.length > 0 && (
-                                    <div className="mt-2.5 p-2.5 bg-teal-50/70 border border-teal-200 rounded text-[11px] text-gray-700 leading-relaxed group relative">
-                                        <div className="flex items-center justify-between mb-0.5">
-                                            <strong className="text-teal-900 block font-bold">Petunjuk Penting Bagi Santri Diterima:</strong>
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowEditNotesPanel(true)}
-                                                className="no-print opacity-0 group-hover:opacity-100 text-[10px] text-teal-700 bg-white px-1.5 py-0.5 rounded border border-teal-300 hover:bg-teal-50 transition"
-                                                title="Edit catatan santri diterima"
-                                            >
-                                                <i className="bi bi-pencil mr-1"></i>Edit Catatan
-                                            </button>
-                                        </div>
-                                        <ol className="list-decimal pl-4 space-y-0.5">
-                                            {notesDiterima.map((pt, i) => (
-                                                <li key={i}>{pt}</li>
-                                            ))}
-                                        </ol>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* SECTION: SANTRI CADANGAN */}
-                        {(viewMode === 'semua' || viewMode === 'cadangan') && waitingList.length > 0 && (
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between bg-amber-700 text-white px-3 py-1.5 rounded-t-md font-bold text-xs">
-                                    <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                                        <i className="bi bi-clock-history"></i>
-                                        II. Daftar Calon Santri Cadangan
-                                    </span>
-                                    <span className="text-[11px] bg-amber-900/80 px-2 py-0.5 rounded font-mono">
-                                        Total: {waitingList.length} Santri
-                                    </span>
-                                </div>
-                                <div className="border border-amber-700 border-t-0 rounded-b-md overflow-x-auto">
-                                    <table className="w-full text-left border-collapse text-[11px] sm:text-xs">
-                                        <thead>
-                                            <tr className="bg-amber-50 border-b border-amber-200 text-amber-950 font-bold">
-                                                <th className="p-1.5 text-center w-8 border-r border-amber-200">No</th>
-                                                <th className="p-1.5 w-24 border-r border-amber-200">No. Reg</th>
-                                                <th className="p-1.5 border-r border-amber-200">Nama Lengkap Santri</th>
-                                                <th className="p-1.5 text-center w-10 border-r border-amber-200">L/P</th>
-                                                <th className="p-1.5 border-r border-amber-200">Jenjang</th>
-                                                <th className="p-1.5 border-r border-amber-200">Asal Sekolah</th>
-                                                <th className="p-1.5 text-center w-14 border-r border-amber-200">Nilai</th>
-                                                <th className="p-1.5 text-center w-24">Status</th>
+                                        return (
+                                            <tr key={santri.id || index} className={`border-t border-gray-300 ${bgRow}`}>
+                                                <td className="border border-gray-400 p-1.5 text-center font-mono">{index + 1}</td>
+                                                <td className="border border-gray-400 p-1.5 font-mono text-center">{getPsbRegistrationNumber(santri)}</td>
+                                                <td className="border border-gray-400 p-1.5 font-medium">{santri.namaLengkap}</td>
+                                                <td className="border border-gray-400 p-1.5 text-center">{santri.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}</td>
+                                                <td className="border border-gray-400 p-1.5 text-center">{getJenjangName(santri.jenjangId)}</td>
+                                                <td className="border border-gray-400 p-1.5 text-center font-mono">{scoreDisplay}</td>
+                                                <td className={`border border-gray-400 p-1.5 text-center uppercase tracking-wide text-[11px] ${statusColor}`}>
+                                                    {santri.status}
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            {waitingList.map((p, idx) => {
-                                                const regNumber = p.nomorRegistrasi || getPsbRegistrationNumber(p, getJenjangName(p.jenjangId));
-                                                const score = calculatePsbAverageScore(p.nilaiUjian) || '-';
-                                                return (
-                                                    <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-amber-50/30'}>
-                                                        <td className="p-1.5 text-center border-t border-r border-gray-200 font-semibold">{idx + 1}</td>
-                                                        <td className="p-1.5 border-t border-r border-gray-200 font-mono font-bold text-amber-900">{regNumber}</td>
-                                                        <td className="p-1.5 border-t border-r border-gray-200 font-bold uppercase">{p.namaLengkap}</td>
-                                                        <td className="p-1.5 text-center border-t border-r border-gray-200">{p.jenisKelamin === 'Perempuan' ? 'P' : 'L'}</td>
-                                                        <td className="p-1.5 border-t border-r border-gray-200">{getJenjangName(p.jenjangId)}</td>
-                                                        <td className="p-1.5 border-t border-r border-gray-200 text-gray-700">{p.asalSekolah || '-'}</td>
-                                                        <td className="p-1.5 text-center border-t border-r border-gray-200 font-bold text-amber-900">{score}</td>
-                                                        <td className="p-1.5 text-center border-t border-gray-200">
-                                                            <span className="font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded text-[10px]">
-                                                                CADANGAN
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                {notesCadangan && (
-                                    <div className="mt-2 p-2 bg-amber-50/70 border border-amber-200 rounded text-[11px] text-amber-900 italic leading-relaxed group relative flex items-center justify-between">
-                                        <span>{notesCadangan}</span>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowEditNotesPanel(true)}
-                                            className="no-print opacity-0 group-hover:opacity-100 text-[10px] text-amber-800 bg-white px-1.5 py-0.5 rounded border border-amber-300 hover:bg-amber-50 transition shrink-0 ml-2"
-                                            title="Edit catatan santri cadangan"
-                                        >
-                                            <i className="bi bi-pencil mr-1"></i>Edit Catatan
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                        );
+                                    })}
+                                    {processedList.length === 0 && (
+                                        <tr>
+                                            <td colSpan={7} className="border border-gray-400 p-6 text-center text-gray-500 italic">
+                                                Tidak ada calon santri yang sesuai kriteria filter saat ini.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
 
-                        {/* SECTION: SANTRI TIDAK DITERIMA */}
-                        {(viewMode === 'semua' || viewMode === 'ditolak') && (
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between bg-slate-800 text-white px-3 py-1.5 rounded-t-md font-bold text-xs">
-                                    <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                                        <i className="bi bi-x-circle-fill text-red-400"></i>
-                                        {viewMode === 'semua' ? 'III.' : 'I.'} Daftar Calon Santri Tidak Diterima / Belum Memenuhi Kuota
-                                    </span>
-                                    <span className="text-[11px] bg-slate-900/80 px-2 py-0.5 rounded font-mono">
-                                        Total: {rejectedList.length} Santri
-                                    </span>
-                                </div>
-
-                                {rejectedList.length > 0 ? (
-                                    <div className="border border-slate-800 border-t-0 rounded-b-md overflow-x-auto">
-                                        <table className="w-full text-left border-collapse text-[11px] sm:text-xs">
-                                            <thead>
-                                                <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold">
-                                                    <th className="p-1.5 text-center w-8 border-r border-slate-300">No</th>
-                                                    <th className="p-1.5 w-24 border-r border-slate-300">No. Reg</th>
-                                                    <th className="p-1.5 border-r border-slate-300">Nama Lengkap Santri</th>
-                                                    <th className="p-1.5 text-center w-10 border-r border-slate-300">L/P</th>
-                                                    <th className="p-1.5 border-r border-slate-300">Jenjang</th>
-                                                    <th className="p-1.5 border-r border-slate-300">Asal Sekolah</th>
-                                                    <th className="p-1.5 text-center w-24">Keterangan</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {rejectedList.map((p, idx) => {
-                                                    const regNumber = p.nomorRegistrasi || getPsbRegistrationNumber(p, getJenjangName(p.jenjangId));
-                                                    return (
-                                                        <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                            <td className="p-1.5 text-center border-t border-r border-gray-200 font-semibold">{idx + 1}</td>
-                                                            <td className="p-1.5 border-t border-r border-gray-200 font-mono font-semibold text-slate-700">{regNumber}</td>
-                                                            <td className="p-1.5 border-t border-r border-gray-200 font-bold uppercase">{p.namaLengkap}</td>
-                                                            <td className="p-1.5 text-center border-t border-r border-gray-200">{p.jenisKelamin === 'Perempuan' ? 'P' : 'L'}</td>
-                                                            <td className="p-1.5 border-t border-r border-gray-200">{getJenjangName(p.jenjangId)}</td>
-                                                            <td className="p-1.5 border-t border-r border-gray-200 text-gray-700">{p.asalSekolah || '-'}</td>
-                                                            <td className="p-1.5 text-center border-t border-gray-200">
-                                                                <span className="font-bold text-red-800 bg-red-100 px-1.5 py-0.5 rounded text-[10px]">
-                                                                    TIDAK DITERIMA
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="p-4 border border-slate-800 border-t-0 rounded-b-md text-center text-gray-500 italic">
-                                        Tidak ada calon santri yang berstatus Tidak Diterima pada filter saat ini.
-                                    </div>
-                                )}
-
-                                {notesDitolak && (
-                                    <div className="mt-2 text-[11px] text-gray-500 italic leading-relaxed group relative flex items-center justify-between">
-                                        <p>{notesDitolak}</p>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowEditNotesPanel(true)}
-                                            className="no-print opacity-0 group-hover:opacity-100 text-[10px] text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-300 hover:bg-slate-50 transition shrink-0 ml-2"
-                                            title="Edit catatan santri tidak diterima"
-                                        >
-                                            <i className="bi bi-pencil mr-1"></i>Edit Catatan
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Catatan Tambahan Panitia (Jika Diisi) */}
-                        {customAdditionalNotes.trim() && (
-                            <div className="mb-4 p-2.5 bg-slate-50 border border-slate-200 rounded text-[11px] text-gray-700 leading-relaxed">
-                                <strong className="text-slate-900 block font-bold mb-0.5">Keterangan / Informasi Tambahan:</strong>
-                                <p className="whitespace-pre-line">{customAdditionalNotes}</p>
-                            </div>
-                        )}
-
-                        {/* RINGKASAN REKAPITULASI RESMI */}
-                        <div className="my-4 p-3 bg-gray-50 border border-gray-200 rounded-lg flex flex-wrap items-center justify-between text-[11px] gap-2">
-                            <div>
-                                <span className="font-bold text-gray-700">Rekapitulasi Seleksi:</span>
-                                <span className="ml-2 text-gray-600">
+                        {/* REKAPITULASI HASIL SINGKAT */}
+                        <div className="bg-gray-50 border border-gray-300 rounded-lg p-2.5 mb-6 flex flex-wrap justify-between items-center text-xs break-inside-avoid">
+                            <div className="flex items-center gap-2">
+                                <i className="bi bi-info-circle text-teal-700"></i>
+                                <span>
                                     Total Pendaftar Tersaring: <strong>{processedList.length}</strong> orang
                                 </span>
                             </div>
@@ -695,28 +768,71 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                             </div>
                         </div>
 
+                        {/* PETUNJUK & CATATAN PENGUMUMAN */}
+                        <div className="space-y-3 mb-6 text-xs break-inside-avoid">
+                            {/* Petunjuk Diterima */}
+                            {(viewMode === 'semua' || viewMode === 'diterima') && notesDiterima.length > 0 && (
+                                <div className="border border-emerald-300 bg-emerald-50/50 p-3 rounded-lg">
+                                    <h5 className="font-bold text-emerald-950 mb-1 flex items-center gap-1.5">
+                                        <i className="bi bi-check-circle-fill text-emerald-600"></i>
+                                        Ketentuan &amp; Tata Cara Santri yang Dinyatakan DITERIMA:
+                                    </h5>
+                                    <ol className="list-decimal pl-5 space-y-1 text-emerald-900 leading-relaxed text-[11px]">
+                                        {notesDiterima.map((pt, i) => (
+                                            <li key={i}>{pt}</li>
+                                        ))}
+                                    </ol>
+                                </div>
+                            )}
+
+                            {/* Petunjuk Cadangan */}
+                            {(viewMode === 'semua' || viewMode === 'cadangan') && notesCadangan && (
+                                <div className="border border-amber-300 bg-amber-50/50 p-2.5 rounded-lg text-amber-950">
+                                    <h5 className="font-bold mb-0.5 flex items-center gap-1.5">
+                                        <i className="bi bi-clock-history text-amber-600"></i>
+                                        Ketentuan Status CADANGAN:
+                                    </h5>
+                                    <p className="leading-relaxed text-[11px] pl-5">{notesCadangan}</p>
+                                </div>
+                            )}
+
+                            {/* Petunjuk Ditolak */}
+                            {(viewMode === 'semua' || viewMode === 'ditolak') && notesDitolak && (
+                                <div className="text-gray-600 italic text-[11px] leading-relaxed pt-1">
+                                    {notesDitolak}
+                                </div>
+                            )}
+
+                            {/* Catatan Tambahan Panitia */}
+                            {customAdditionalNotes && (
+                                <div className="border-t border-dashed border-gray-300 pt-2 text-[11px] text-gray-800">
+                                    <strong>Catatan Tambahan Panitia:</strong> {customAdditionalNotes}
+                                </div>
+                            )}
+                        </div>
+
                         {/* TANDA TANGAN & PENGESAHAN DOKUMEN */}
                         <div className="mt-8 pt-4 border-t border-gray-300 break-inside-avoid">
                             <div className="text-right text-gray-800 mb-4 text-[11px] sm:text-xs">
-                                Ditetapkan di: {settings.alamat?.split(',')[0] || 'Posko PSB Pesantren'}<br />
+                                Ditetapkan di: <strong>{tempatCetak || 'Posko PSB Pesantren'}</strong><br />
                                 Pada tanggal: {todayFormatted}
                             </div>
                             <div className="grid grid-cols-2 gap-8 text-center text-xs">
                                 <div>
                                     <p className="font-semibold text-gray-700 mb-16">
-                                        Ketua Panitia PSB,
+                                        {adminJabatan || 'Ketua Panitia PSB'},
                                     </p>
-                                    <p className="font-bold text-gray-900 underline uppercase">
-                                        ( ............................................ )
+                                    <p className="font-bold text-gray-900 underline uppercase tracking-wide">
+                                        {adminName ? adminName : '( ............................................ )'}
                                     </p>
-                                    <p className="text-[10px] text-gray-500 mt-0.5">NIP / NIY Panitia</p>
+                                    <p className="text-[10px] text-gray-500 mt-0.5">Admin / Panitia PSB</p>
                                 </div>
                                 <div>
                                     <p className="font-semibold text-gray-700 mb-16">
-                                        Pimpinan Pondok Pesantren,
+                                        Mengetahui,<br />{pimpinanJabatan || 'Pimpinan Pondok Pesantren'}
                                     </p>
-                                    <p className="font-bold text-gray-900 underline uppercase">
-                                        {settings.tenagaPengajar?.find(t => t.id === settings.mudirAamId)?.nama || '( ............................................ )'}
+                                    <p className="font-bold text-gray-900 underline uppercase tracking-wide">
+                                        {pimpinanName ? pimpinanName : '( ............................................ )'}
                                     </p>
                                     <p className="text-[10px] text-gray-500 mt-0.5">Pengasuh / Mudir 'Aam</p>
                                 </div>
@@ -732,6 +848,7 @@ export const PsbAnnouncementModal: React.FC<PsbAnnouncementModalProps> = ({
                 </div>
 
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

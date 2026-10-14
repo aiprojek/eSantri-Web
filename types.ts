@@ -552,6 +552,26 @@ export interface PsbConfig {
     namaPimpinanPsb?: string;
     jabatanPimpinanPsb?: string;
     kotaSuratPsb?: string;
+    nomorSuratPengumumanPsb?: string;
+    formatNomorSuratPsb?: 'hybrid' | 'panitia' | 'tu';
+}
+
+export interface PsbArchiveRecord {
+    id: string;
+    type: 'pengumuman-sk' | 'laporan-rekapitulasi';
+    tahunAjaran: string;
+    gelombang?: string;
+    nomorSurat?: string;
+    tanggalArsip: string;
+    totalPendaftar: number;
+    diterima: number;
+    cadangan: number;
+    ditolak: number;
+    summaryByJenjang: { id?: number; name: string; count: number; l: number; p: number }[];
+    summaryByJalur?: { name: string; count: number }[];
+    adminName?: string;
+    pimpinanName?: string;
+    catatan?: string;
 }
 
 export type AcademicYearCalendarType = 'Masehi' | 'Hijriah';

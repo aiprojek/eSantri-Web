@@ -689,6 +689,24 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 overflow: visible !important;
             }
 
+            .psb-announcement-sheet-page {
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+                width: 100% !important;
+                min-height: 297mm !important;
+                box-sizing: border-box !important;
+                padding: 10mm 12mm !important;
+                margin: 0 !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                background: white !important;
+            }
+            .psb-announcement-sheet-page:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
+            }
+
             /* Universal and complete shadow removal for clean print */
             *, *::before, *::after,
             .rounded-lg, .rounded-xl, .rounded-2xl,

@@ -1194,3 +1194,29 @@ export const PSB_DEFAULT_FIELD_HINTS: Record<string, string> = {
 
 export const PSB_ALL_STANDARD_FIELD_KEYS: string[] = PSB_STANDARD_FIELD_GROUPS.flatMap(g => g.fields.map(f => f.key));
 
+/**
+ * Mengekstrak inisial / singkatan resmi nama pondok pesantren untuk format nomor surat.
+ * Contoh:
+ * - "Pondok Pesantren Al-Ikhlas" -> "PPAI" (bukan "POND")
+ * - "Pondok Pesantren Darussalam" -> "PPD"
+ * - "Pesantren Modern Al-Hikmah" -> "PMAH"
+ * - "PP Darul Ulum" -> "PPDU"
+ * - "Darussalam" -> "DARU"
+ */
+export const extractPonpesInitials = (namaPonpes?: string): string => {
+    if (!namaPonpes || !namaPonpes.trim()) return 'PST';
+    
+    // Bersihkan tanda baca, ubah tanda hubung jadi spasi (misal Al-Ikhlas -> Al Ikhlas)
+    const clean = namaPonpes.replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
+    const words = clean.split(/\s+/).filter(Boolean);
+    
+    if (words.length === 0) return 'PST';
+    
+    // Jika terdiri dari 2 kata atau lebih, ambil huruf pertama dari setiap kata (maksimal 5 huruf)
+    if (words.length >= 2) {
+        return words.map(w => w[0].toUpperCase()).slice(0, 5).join('');
+    }
+    
+    // Jika hanya 1 kata, ambil 3-4 huruf pertama
+    return words[0].slice(0, 4).toUpperCase();
+};

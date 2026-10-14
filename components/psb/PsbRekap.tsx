@@ -13,6 +13,7 @@ import { PsbPrintFormModal } from './modals/PsbPrintFormModal';
 import { PsbGasConfigModal } from './modals/PsbGasConfigModal';
 import { PsbAnnouncementModal } from './modals/PsbAnnouncementModal';
 import { PsbDashboardReportModal } from './modals/PsbDashboardReportModal';
+import { PsbArchiveHistoryModal } from './modals/PsbArchiveHistoryModal';
 import {
     getPsbRegistrationNumber,
     calculatePsbAverageScore,
@@ -62,6 +63,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const [isArchiving, setIsArchiving] = useState(false);
     const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
 
     // Submission method from settings
     const method = settings.psbConfig.submissionMethod === 'portal' ? 'hybrid' : settings.psbConfig.submissionMethod;
@@ -970,6 +972,17 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                     <span className="xs:hidden truncate">Laporan</span>
                                 </button>
 
+                                {/* Tombol Arsip Dokumen PSB */}
+                                <button
+                                    onClick={() => setIsArchiveModalOpen(true)}
+                                    className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-2 sm:px-3 py-1 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 shadow-2xs whitespace-nowrap h-8 sm:h-9 transition-colors min-w-0"
+                                    title="Buka riwayat arsip dokumen pengumuman & laporan PSB tahun-tahun sebelumnya"
+                                >
+                                    <i className="bi bi-archive-fill text-amber-600 text-xs sm:text-sm shrink-0"></i>
+                                    <span className="hidden xs:inline truncate">Arsip Dokumen</span>
+                                    <span className="xs:hidden truncate">Arsip</span>
+                                </button>
+
                                 {/* Row 2, Col 1: Tombol Impor WA */}
                                 <button 
                                     onClick={() => setIsWaModalOpen(true)} 
@@ -1675,6 +1688,16 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                     settings={settings}
                     config={settings.psbConfig}
                     onSaveConfig={onSaveConfig}
+                />
+            )}
+
+            {/* Modal Riwayat & Arsip Dokumen PSB */}
+            {isArchiveModalOpen && (
+                <PsbArchiveHistoryModal
+                    isOpen={isArchiveModalOpen}
+                    onClose={() => setIsArchiveModalOpen(false)}
+                    settings={settings}
+                    config={settings.psbConfig}
                 />
             )}
         </div>

@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Pendaftar, PondokSettings, PsbConfig, PendaftarStatus } from '../../../types';
 import { printToPdfNative } from '../../../utils/pdfGenerator';
+import { exportPsbDashboardReportPdf } from '../../../utils/psbPdfExport';
+import { useAppContext } from '../../../AppContext';
+import { savePsbArchive } from '../utils/psbArchiveService';
 
 interface PsbDashboardReportModalProps {
     isOpen: boolean;
@@ -20,7 +23,9 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
     config,
     onSaveConfig,
 }) => {
+    const { showToast } = useAppContext();
     const printRef = useRef<HTMLDivElement>(null);
+    const [isArchiving, setIsArchiving] = useState(false);
 
     // Isolate print styles on document body when modal is mounted
     useEffect(() => {
@@ -52,6 +57,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
     const [showSignatureSettings, setShowSignatureSettings] = useState(false);
     const [zoomLevel, setZoomLevel] = useState<'fit' | '100' | '90' | '80'>('100');
     const [isSavedMessage, setIsSavedMessage] = useState(false);
+    const [isExportingPdf, setIsExportingPdf] = useState(false);
 
     // Sync if config changes
     useEffect(() => {
@@ -167,6 +173,32 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
 
     if (!isOpen) return null;
 
+    const handleExportPdfTable = async () => {
+        if (isExportingPdf) return;
+        setIsExportingPdf(true);
+        try {
+            await exportPsbDashboardReportPdf({
+                settings,
+                config,
+                pendaftarList,
+                statsByJenjang,
+                statusStats,
+                jalurStats,
+                dailyTrend,
+                adminName,
+                adminJabatan,
+                pimpinanName,
+                pimpinanJabatan,
+                tempatCetak
+            });
+        } catch (error) {
+            console.error('Gagal export PDF laporan PSB:', error);
+            alert('Terjadi kesalahan saat membuat file PDF tabel. Silakan coba lagi.');
+        } finally {
+            setIsExportingPdf(false);
+        }
+    };
+
     const handlePrint = () => {
         const taStr = (config.tahunAjaranAktif || 'Aktif').replace(/[\/\\:*?"<>|]/g, '-');
         printToPdfNative(
@@ -174,7 +206,8 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
             `Laporan_Rekapitulasi_Dashboard_PSB_TA_${taStr}_${new Date().toISOString().slice(0, 10)}`,
             {
                 paperSize: 'A4',
-                orientation: 'portrait'
+                orientation: 'portrait',
+                margin: { top: 0.5, right: 0.8, bottom: 0.5, left: 0.8 }
             }
         );
     };
@@ -184,6 +217,48 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
         month: 'long',
         year: 'numeric'
     });
+
+    const yearStr = config.tahunAjaranAktif || `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
+
+    const handleArchiveReport = () => {
+        setIsArchiving(true);
+        try {
+            const todayIso = new Date().toISOString().split('T')[0];
+            const archiveId = `psb-rep-${yearStr.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
+            
+            savePsbArchive({
+                id: archiveId,
+                type: 'laporan-rekapitulasi',
+                tahunAjaran: yearStr,
+                nomorSurat: `LAP-REKAP/PSB/${yearStr.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                tanggalArsip: todayIso,
+                totalPendaftar,
+                diterima: statusStats.Diterima || 0,
+                cadangan: statusStats.Cadangan || 0,
+                ditolak: statusStats.Ditolak || 0,
+                summaryByJenjang: statsByJenjang.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    count: s.total,
+                    l: s.l,
+                    p: s.p
+                })),
+                summaryByJalur: jalurStats.map(j => ({
+                    name: j.name,
+                    count: j.count
+                })),
+                adminName,
+                pimpinanName,
+                catatan: `Arsip Laporan Rekapitulasi Eksekutif PSB TA ${yearStr} disimpan pada ${todayFormatted}.`
+            });
+            showToast('Laporan Rekapitulasi PSB berhasil diarsipkan ke riwayat tahunan.', 'success');
+        } catch (e) {
+            console.error('Gagal arsip laporan:', e);
+            showToast('Gagal mengarsipkan laporan.', 'error');
+        } finally {
+            setIsArchiving(false);
+        }
+    };
 
     return createPortal(
         <div className="fixed inset-0 bg-black/75 z-[90] flex justify-center items-start sm:items-center p-2 sm:p-4 overflow-y-auto print-modal-target">
@@ -200,34 +275,63 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                             <p className="text-[11px] sm:text-xs text-slate-300">Format resmi rekapitulasi data eksekutif untuk pengarsipan dan pelaporan pimpinan</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    {/* Compact Action Group: Arsipkan, TTD, Export PDF, Cetak */}
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        {/* Arsipkan Button */}
+                        <button
+                            type="button"
+                            onClick={handleArchiveReport}
+                            disabled={isArchiving}
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 active:scale-95 shadow-2xs"
+                            title="Simpan rekam arsip laporan rekapitulasi ini untuk perbandingan di tahun berikutnya"
+                        >
+                            <i className={`bi ${isArchiving ? 'bi-hourglass-split animate-spin' : 'bi-archive-fill text-amber-400'} text-xs`}></i>
+                            <span className="hidden md:inline">Arsipkan</span>
+                        </button>
+
+                        {/* Atur TTD */}
                         <button
                             type="button"
                             onClick={() => setShowSignatureSettings(!showSignatureSettings)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
+                            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
                                 showSignatureSettings
-                                    ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                                    : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-xs'
+                                    : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 hover:text-white'
                             }`}
                             title="Atur Nama Admin & Pimpinan Penandatangan Laporan"
                         >
-                            <i className="bi bi-pen-fill text-xs text-amber-300"></i>
-                            <span className="hidden sm:inline">{showSignatureSettings ? 'Tutup Pengaturan TTD' : 'Atur Tanda Tangan'}</span>
-                            <span className="sm:hidden">TTD</span>
+                            <i className="bi bi-pen text-xs text-slate-400"></i>
+                            <span className="hidden md:inline">TTD</span>
                         </button>
-                        <button
-                            type="button"
-                            onClick={handlePrint}
-                            className="px-3 sm:px-4 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 sm:gap-2 transition-all shadow-sm active:scale-95"
-                            title="Cetak bersih ke kertas A4 atau simpan PDF"
-                        >
-                            <i className="bi bi-printer-fill text-xs sm:text-sm"></i>
-                            <span>Cetak / PDF</span>
-                        </button>
+
+                        {/* Unified Action Cluster: Export PDF + Cetak */}
+                        <div className="inline-flex rounded-xl bg-slate-800/90 p-0.5 border border-slate-700 shadow-2xs">
+                            <button
+                                type="button"
+                                onClick={handleExportPdfTable}
+                                disabled={isExportingPdf}
+                                className="px-2.5 sm:px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
+                                title="Export file PDF tabel resmi langsung ke komputer tanpa dialog cetak browser"
+                            >
+                                <i className={`bi ${isExportingPdf ? 'bi-arrow-repeat animate-spin' : 'bi-file-earmark-pdf-fill text-emerald-200'} text-xs`}></i>
+                                <span>Export PDF</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePrint}
+                                className="px-2.5 sm:px-3 py-1.5 hover:bg-teal-700 text-teal-200 hover:text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all active:scale-95"
+                                title="Cetak bersih pas 1 lembar kertas A4 atau simpan PDF lewat browser"
+                            >
+                                <i className="bi bi-printer-fill text-xs"></i>
+                                <span>Cetak</span>
+                            </button>
+                        </div>
+
+                        {/* Close Button */}
                         <button
                             type="button"
                             onClick={onClose}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-0.5"
                             title="Tutup Modal"
                         >
                             <i className="bi bi-x-lg text-base"></i>
@@ -386,26 +490,100 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                         <div
                             id="psb-dashboard-report-sheet"
                             ref={printRef}
-                            className="bg-white p-6 sm:p-10 shadow-2xl border border-gray-300 w-full max-w-[210mm] min-h-[297mm] text-gray-900 text-xs box-border my-2 shrink-0 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full print:max-w-none print:min-h-0"
+                            className="bg-white p-6 sm:p-9 shadow-2xl border border-gray-300 w-full max-w-[210mm] text-gray-900 text-xs box-border my-2 shrink-0 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full print:max-w-none"
                         >
+                            {/* Embedded print style to force exact 1-page A4 fit */}
+                            <style>{`
+                                @media print {
+                                    @page {
+                                        size: A4 portrait;
+                                        margin: 5mm 8mm 5mm 8mm;
+                                    }
+                                    body {
+                                        -webkit-print-color-adjust: exact !important;
+                                        print-color-adjust: exact !important;
+                                        background: #ffffff !important;
+                                        margin: 0 !important;
+                                        padding: 0 !important;
+                                    }
+                                    #psb-dashboard-report-sheet {
+                                        width: 100% !important;
+                                        max-width: 100% !important;
+                                        min-height: 0 !important;
+                                        height: auto !important;
+                                        margin: 0 !important;
+                                        padding: 0 !important;
+                                        box-shadow: none !important;
+                                        border: none !important;
+                                        background: #ffffff !important;
+                                        page-break-after: avoid !important;
+                                        page-break-inside: avoid !important;
+                                        break-inside: avoid !important;
+                                        break-after: avoid !important;
+                                    }
+                                    #psb-dashboard-report-sheet .psb-kop-area {
+                                        padding-bottom: 2mm !important;
+                                        margin-bottom: 2mm !important;
+                                    }
+                                    #psb-dashboard-report-sheet .psb-title-area {
+                                        margin-top: 1.5mm !important;
+                                        margin-bottom: 2mm !important;
+                                        padding-bottom: 1.5mm !important;
+                                    }
+                                    #psb-dashboard-report-sheet .psb-section-box {
+                                        margin-bottom: 2.2mm !important;
+                                        page-break-inside: avoid !important;
+                                        break-inside: avoid !important;
+                                    }
+                                    #psb-dashboard-report-sheet .psb-two-col-grid {
+                                        display: grid !important;
+                                        grid-template-columns: 1fr 1fr !important;
+                                        gap: 3mm !important;
+                                        margin-bottom: 2.2mm !important;
+                                        page-break-inside: avoid !important;
+                                        break-inside: avoid !important;
+                                    }
+                                    #psb-dashboard-report-sheet table th,
+                                    #psb-dashboard-report-sheet table td {
+                                        padding: 2.5px 5px !important;
+                                        font-size: 7.8pt !important;
+                                        line-height: 1.15 !important;
+                                    }
+                                    #psb-dashboard-report-sheet .psb-signature-area {
+                                        margin-top: 2.5mm !important;
+                                        padding-top: 1.8mm !important;
+                                        page-break-inside: avoid !important;
+                                        break-inside: avoid !important;
+                                    }
+                                    #psb-dashboard-report-sheet .psb-sig-spacer {
+                                        height: 38px !important;
+                                        margin-bottom: 0 !important;
+                                    }
+                                    #psb-dashboard-report-sheet .psb-footer-note {
+                                        margin-top: 1.5mm !important;
+                                        padding-top: 1mm !important;
+                                    }
+                                }
+                            `}</style>
+
                             {/* KOP SURAT */}
-                            <div className="border-b-2 border-double border-gray-900 pb-3 mb-4 text-center relative">
+                            <div className="psb-kop-area border-b-2 border-double border-gray-900 pb-3 mb-3.5 print:pb-1 print:mb-2 text-center relative">
                                 {(settings.logoPonpesUrl || settings.logoYayasanUrl) && (
                                     <img
                                         src={settings.logoPonpesUrl || settings.logoYayasanUrl}
                                         alt="Logo Pondok"
-                                        className="w-16 h-16 object-contain absolute left-0 top-0 hidden sm:block print:block"
+                                        className="w-14 h-14 object-contain absolute left-0 top-0 hidden sm:block print:block"
                                         referrerPolicy="no-referrer"
                                     />
                                 )}
-                                <div className="sm:px-16">
-                                    <h2 className="font-serif font-black text-lg sm:text-xl uppercase tracking-wide text-gray-900">
+                                <div className="sm:px-14">
+                                    <h2 className="font-serif font-black text-lg sm:text-xl uppercase tracking-wide text-gray-900 leading-tight">
                                         {settings.namaPonpes || 'PONDOK PESANTREN'}
                                     </h2>
-                                    <h3 className="font-bold text-xs sm:text-sm uppercase tracking-wider text-teal-800">
+                                    <h3 className="font-bold text-xs sm:text-sm uppercase tracking-wider text-teal-800 mt-0.5">
                                         PANITIA PENERIMAAN SANTRI BARU (PSB)
                                     </h3>
-                                    <p className="text-[11px] text-gray-600 mt-0.5">
+                                    <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">
                                         {settings.alamat || 'Alamat Lembaga Pondok Pesantren'}
                                         {settings.telepon ? ` • Telp/WA: ${settings.telepon}` : ''}
                                         {settings.email ? ` • Email: ${settings.email}` : ''}
@@ -414,7 +592,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                             </div>
 
                             {/* JUDUL LAPORAN */}
-                            <div className="text-center my-4 pb-2 border-b border-gray-200">
+                            <div className="psb-title-area text-center my-3 pb-2 print:my-1.5 print:pb-1 border-b border-gray-200">
                                 <h4 className="font-bold text-sm sm:text-base uppercase tracking-tight text-gray-900">
                                     LAPORAN EKSEKUTIF REKAPITULASI PENERIMAAN SANTRI BARU
                                 </h4>
@@ -424,37 +602,37 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                             </div>
 
                             {/* TABEL 1: IKHTISAR METRIK UTAMA */}
-                            <div className="mb-5 overflow-hidden rounded-t border border-slate-800">
+                            <div className="psb-section-box mb-4 print:mb-2 overflow-hidden rounded-t border border-slate-800">
                                 <div className="bg-slate-800 text-white px-3 py-1.5 font-bold text-xs flex items-center justify-between">
-                                    <span>I. IKHTISAR INDIKATOR UTAMA PENDAFTARAN</span>
-                                    <span className="text-[10px] font-mono text-teal-300">Ringkasan Global</span>
+                                    <span className="text-white font-bold tracking-wide">I. IKHTISAR INDIKATOR UTAMA PENDAFTARAN</span>
+                                    <span className="text-[10px] font-bold bg-slate-900 text-teal-200 px-2 py-0.5 rounded border border-slate-700">Ringkasan Global</span>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full border-collapse text-xs table-fixed min-w-[500px]">
                                         <tbody>
                                             <tr className="border-b border-gray-300">
-                                                <td className="p-2 bg-gray-50 font-bold w-1/4 border-r border-gray-300">Total Pendaftar</td>
+                                                <td className="p-2 bg-slate-100 font-bold text-slate-900 w-1/4 border-r border-gray-300">Total Pendaftar</td>
                                                 <td className="p-2 font-mono font-bold text-slate-900 w-1/4 border-r border-gray-300">{totalPendaftar} Orang</td>
-                                                <td className="p-2 bg-gray-50 font-bold w-1/4 border-r border-gray-300">Pendaftar Hari Ini</td>
+                                                <td className="p-2 bg-slate-100 font-bold text-slate-900 w-1/4 border-r border-gray-300">Pendaftar Hari Ini</td>
                                                 <td className="p-2 font-mono font-bold text-blue-700 w-1/4">{pendaftarHariIni} Orang</td>
                                             </tr>
                                             <tr className="border-b border-gray-300">
-                                                <td className="p-2 bg-gray-50 font-bold border-r border-gray-300">Santri Diterima</td>
+                                                <td className="p-2 bg-slate-100 font-bold text-slate-900 w-1/4 border-r border-gray-300">Santri Diterima</td>
                                                 <td className="p-2 font-mono font-bold text-emerald-700 border-r border-gray-300">{statusStats.Diterima} Orang ({acceptanceRate}%)</td>
-                                                <td className="p-2 bg-gray-50 font-bold border-r border-gray-300">Santri Cadangan</td>
+                                                <td className="p-2 bg-slate-100 font-bold text-slate-900 w-1/4 border-r border-gray-300">Santri Cadangan</td>
                                                 <td className="p-2 font-mono font-bold text-amber-700">{statusStats.Cadangan} Orang</td>
                                             </tr>
                                             <tr className="border-b border-gray-300">
-                                                <td className="p-2 bg-gray-50 font-bold border-r border-gray-300">Sedang Proses Seleksi</td>
+                                                <td className="p-2 bg-slate-100 font-bold text-slate-900 w-1/4 border-r border-gray-300">Sedang Proses Seleksi</td>
                                                 <td className="p-2 font-mono font-bold text-purple-700 border-r border-gray-300">{statusStats['Baru'] + statusStats['Verifikasi Berkas'] + statusStats['Ujian Masuk']} Orang</td>
-                                                <td className="p-2 bg-gray-50 font-bold border-r border-gray-300">Ditolak / Gugur</td>
+                                                <td className="p-2 bg-slate-100 font-bold text-slate-900 w-1/4 border-r border-gray-300">Ditolak / Gugur</td>
                                                 <td className="p-2 font-mono font-bold text-red-700">{statusStats.Ditolak} Orang</td>
                                             </tr>
                                             <tr>
-                                                <td className="p-2 bg-gray-50 font-bold border-r border-gray-300">Komposisi Gender</td>
-                                                <td colSpan={3} className="p-2 font-semibold text-gray-700">
-                                                    Santri Putra: <strong className="text-teal-900">{totalLaki}</strong> ({percentLaki}%) • 
-                                                    Santri Putri: <strong className="text-pink-900 ml-1">{totalPerempuan}</strong> ({percentPerempuan}%)
+                                                <td className="p-2 bg-slate-100 font-bold text-slate-900 border-r border-gray-300">Komposisi Gender</td>
+                                                <td colSpan={3} className="p-2 font-semibold text-gray-800">
+                                                    Santri Putra: <strong className="text-teal-900 font-bold">{totalLaki}</strong> ({percentLaki}%) • 
+                                                    Santri Putri: <strong className="text-pink-900 font-bold ml-1">{totalPerempuan}</strong> ({percentPerempuan}%)
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -463,40 +641,40 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                             </div>
 
                             {/* TABEL 2: REKAPITULASI BERDASARKAN JENJANG PENDIDIKAN */}
-                            <div className="mb-5 overflow-hidden rounded-t border border-teal-800">
+                            <div className="psb-section-box mb-4 print:mb-2 overflow-hidden rounded-t border border-teal-800">
                                 <div className="bg-teal-800 text-white px-3 py-1.5 font-bold text-xs flex items-center justify-between">
-                                    <span>II. DISTRIBUSI PENDAFTAR PER JENJANG PENDIDIKAN</span>
-                                    <span className="text-[10px] font-mono text-teal-200">Rincian Gender &amp; Porsi</span>
+                                    <span className="text-white font-bold tracking-wide">II. DISTRIBUSI PENDAFTAR PER JENJANG PENDIDIKAN</span>
+                                    <span className="text-[10px] font-bold bg-teal-900 text-teal-100 px-2 py-0.5 rounded border border-teal-700">Rincian Gender &amp; Porsi</span>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full border-collapse text-xs text-left min-w-[500px]">
                                         <thead>
-                                            <tr className="bg-teal-50 border-b border-teal-200 text-teal-950 font-bold">
-                                                <th className="p-1.5 text-center w-8 border-r border-teal-200">No</th>
-                                                <th className="p-1.5 border-r border-teal-200">Jenjang Pendidikan</th>
-                                                <th className="p-1.5 text-center w-20 border-r border-teal-200">Putra (L)</th>
-                                                <th className="p-1.5 text-center w-20 border-r border-teal-200">Putri (P)</th>
-                                                <th className="p-1.5 text-center w-24 border-r border-teal-200">Total</th>
-                                                <th className="p-1.5 text-center w-20">Persentase</th>
+                                            <tr className="bg-teal-100 border-b-2 border-teal-300 text-teal-950 font-black">
+                                                <th className="p-1.5 text-center w-8 border-r border-teal-300 text-teal-950 font-bold">No</th>
+                                                <th className="p-1.5 border-r border-teal-300 text-teal-950 font-bold">Jenjang Pendidikan</th>
+                                                <th className="p-1.5 text-center w-20 border-r border-teal-300 text-teal-950 font-bold">Putra (L)</th>
+                                                <th className="p-1.5 text-center w-20 border-r border-teal-300 text-teal-950 font-bold">Putri (P)</th>
+                                                <th className="p-1.5 text-center w-24 border-r border-teal-300 text-teal-950 font-bold">Total</th>
+                                                <th className="p-1.5 text-center w-20 text-teal-950 font-bold">Persentase</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {statsByJenjang.map((j, idx) => (
-                                                <tr key={j.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-teal-50/20'}>
+                                                <tr key={j.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-teal-50/30'}>
                                                     <td className="p-1.5 text-center border-t border-r border-gray-300">{idx + 1}</td>
-                                                    <td className="p-1.5 font-bold border-t border-r border-gray-300">{j.name}</td>
-                                                    <td className="p-1.5 text-center font-mono border-t border-r border-gray-300">{j.l}</td>
-                                                    <td className="p-1.5 text-center font-mono border-t border-r border-gray-300">{j.p}</td>
+                                                    <td className="p-1.5 font-bold border-t border-r border-gray-300 text-slate-900">{j.name}</td>
+                                                    <td className="p-1.5 text-center font-mono border-t border-r border-gray-300 text-slate-800">{j.l}</td>
+                                                    <td className="p-1.5 text-center font-mono border-t border-r border-gray-300 text-slate-800">{j.p}</td>
                                                     <td className="p-1.5 text-center font-mono font-bold border-t border-r border-gray-300 text-teal-900">{j.total}</td>
-                                                    <td className="p-1.5 text-center font-mono border-t border-gray-300 font-semibold">{j.percent}%</td>
+                                                    <td className="p-1.5 text-center font-mono border-t border-gray-300 font-semibold text-slate-800">{j.percent}%</td>
                                                 </tr>
                                             ))}
-                                            <tr className="bg-teal-100/60 font-bold border-t-2 border-teal-800 text-teal-950">
-                                                <td colSpan={2} className="p-1.5 text-right uppercase border-r border-teal-300">Total Akumulasi</td>
-                                                <td className="p-1.5 text-center font-mono border-r border-teal-300">{totalLaki}</td>
-                                                <td className="p-1.5 text-center font-mono border-r border-teal-300">{totalPerempuan}</td>
+                                            <tr className="bg-teal-100 font-bold border-t-2 border-teal-800 text-teal-950">
+                                                <td colSpan={2} className="p-1.5 text-right uppercase border-r border-teal-300 text-teal-950 font-bold">Total Akumulasi</td>
+                                                <td className="p-1.5 text-center font-mono border-r border-teal-300 text-teal-950">{totalLaki}</td>
+                                                <td className="p-1.5 text-center font-mono border-r border-teal-300 text-teal-950">{totalPerempuan}</td>
                                                 <td className="p-1.5 text-center font-mono font-black border-r border-teal-300 text-teal-950">{totalPendaftar}</td>
-                                                <td className="p-1.5 text-center font-mono">100%</td>
+                                                <td className="p-1.5 text-center font-mono text-teal-950 font-bold">100%</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -504,20 +682,20 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                             </div>
 
                             {/* TABEL 3: REKAPITULASI STATUS TAHAPAN SELEKSI */}
-                            <div className="mb-5 overflow-hidden rounded-t border border-slate-700">
+                            <div className="psb-section-box mb-4 print:mb-2 overflow-hidden rounded-t border border-slate-700">
                                 <div className="bg-slate-700 text-white px-3 py-1.5 font-bold text-xs flex items-center justify-between">
-                                    <span>III. STATUS TAHAPAN SELEKSI CALON SANTRI</span>
-                                    <span className="text-[10px] font-mono text-slate-300">Progress Pendaftaran</span>
+                                    <span className="text-white font-bold tracking-wide">III. STATUS TAHAPAN SELEKSI CALON SANTRI</span>
+                                    <span className="text-[10px] font-bold bg-slate-800 text-slate-100 px-2 py-0.5 rounded border border-slate-600">Progress Pendaftaran</span>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full border-collapse text-xs text-left min-w-[500px]">
                                         <thead>
-                                            <tr className="bg-slate-100 border-b border-slate-300 font-bold text-slate-800">
-                                                <th className="p-1.5 text-center w-8 border-r border-slate-300">No</th>
-                                                <th className="p-1.5 border-r border-slate-300 w-36">Status Tahapan</th>
-                                                <th className="p-1.5 text-center w-20 border-r border-slate-300">Jumlah</th>
-                                                <th className="p-1.5 text-center w-20 border-r border-slate-300">Persentase</th>
-                                                <th className="p-1.5">Keterangan / Alur Lanjutan</th>
+                                            <tr className="bg-slate-200 border-b-2 border-slate-300 text-slate-900 font-black">
+                                                <th className="p-1.5 text-center w-8 border-r border-slate-300 text-slate-900 font-bold">No</th>
+                                                <th className="p-1.5 border-r border-slate-300 w-36 text-slate-900 font-bold">Status Tahapan</th>
+                                                <th className="p-1.5 text-center w-20 border-r border-slate-300 text-slate-900 font-bold">Jumlah</th>
+                                                <th className="p-1.5 text-center w-20 border-r border-slate-300 text-slate-900 font-bold">Persentase</th>
+                                                <th className="p-1.5 text-slate-900 font-bold">Keterangan / Alur Lanjutan</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -533,10 +711,10 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                                                 return (
                                                     <tr key={row.status} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                                                         <td className="p-1.5 text-center border-t border-r border-gray-300">{idx + 1}</td>
-                                                        <td className="p-1.5 font-bold border-t border-r border-gray-300">{row.status}</td>
-                                                        <td className="p-1.5 text-center font-mono font-bold border-t border-r border-gray-300">{row.count}</td>
-                                                        <td className="p-1.5 text-center font-mono border-t border-r border-gray-300">{p}%</td>
-                                                        <td className="p-1.5 text-gray-600 border-t border-gray-300">{row.ket}</td>
+                                                        <td className="p-1.5 font-bold border-t border-r border-gray-300 text-slate-900">{row.status}</td>
+                                                        <td className="p-1.5 text-center font-mono font-bold border-t border-r border-gray-300 text-slate-900">{row.count}</td>
+                                                        <td className="p-1.5 text-center font-mono border-t border-r border-gray-300 text-slate-700">{p}%</td>
+                                                        <td className="p-1.5 text-gray-700 border-t border-gray-300">{row.ket}</td>
                                                     </tr>
                                                 );
                                             })}
@@ -546,26 +724,26 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                             </div>
 
                             {/* TABEL 4 & 5: DUA KOLOM: JALUR PENDAFTARAN & TREN 7 HARI */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5 break-inside-avoid">
+                            <div className="psb-two-col-grid grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-3.5 mb-4 print:mb-2 break-inside-avoid">
                                 {/* Jalur Pendaftaran */}
                                 <div className="overflow-hidden rounded-t border border-emerald-800">
                                     <div className="bg-emerald-800 text-white px-3 py-1.5 font-bold text-xs">
-                                        IV. Jalur Pendaftaran
+                                        <span className="text-white font-bold tracking-wide">IV. Jalur Pendaftaran</span>
                                     </div>
                                     <table className="w-full border-collapse text-xs text-left">
                                         <thead>
-                                            <tr className="bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-950">
-                                                <th className="p-1.5 border-r border-emerald-200">Nama Jalur</th>
-                                                <th className="p-1.5 text-center w-16 border-r border-emerald-200">Jumlah</th>
-                                                <th className="p-1.5 text-center w-16">Porsi</th>
+                                            <tr className="bg-emerald-100 border-b-2 border-emerald-300 text-emerald-950 font-black">
+                                                <th className="p-1.5 border-r border-emerald-300 text-emerald-950 font-bold">Nama Jalur</th>
+                                                <th className="p-1.5 text-center w-16 border-r border-emerald-300 text-emerald-950 font-bold">Jumlah</th>
+                                                <th className="p-1.5 text-center w-16 text-emerald-950 font-bold">Porsi</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {jalurStats.map((item, i) => (
                                                 <tr key={i} className="border-t border-gray-200">
-                                                    <td className="p-1.5 border-r border-gray-200 font-semibold">{item.name}</td>
-                                                    <td className="p-1.5 text-center font-mono border-r border-gray-200 font-bold">{item.count}</td>
-                                                    <td className="p-1.5 text-center font-mono">{item.percent}%</td>
+                                                    <td className="p-1.5 border-r border-gray-200 font-semibold text-slate-900">{item.name}</td>
+                                                    <td className="p-1.5 text-center font-mono border-r border-gray-200 font-bold text-emerald-900">{item.count}</td>
+                                                    <td className="p-1.5 text-center font-mono text-slate-700">{item.percent}%</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -575,19 +753,19 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                                 {/* Tren 7 Hari Terakhir */}
                                 <div className="overflow-hidden rounded-t border border-blue-800">
                                     <div className="bg-blue-800 text-white px-3 py-1.5 font-bold text-xs">
-                                        V. Tren Pendaftar 7 Hari Terakhir
+                                        <span className="text-white font-bold tracking-wide">V. Tren Pendaftar 7 Hari Terakhir</span>
                                     </div>
                                     <table className="w-full border-collapse text-xs text-left">
                                         <thead>
-                                            <tr className="bg-blue-50 border-b border-blue-200 font-bold text-blue-950">
-                                                <th className="p-1.5 border-r border-blue-200">Hari &amp; Tanggal</th>
-                                                <th className="p-1.5 text-center w-20">Pendaftar Masuk</th>
+                                            <tr className="bg-blue-100 border-b-2 border-blue-300 text-blue-950 font-black">
+                                                <th className="p-1.5 border-r border-blue-300 text-blue-950 font-bold">Hari &amp; Tanggal</th>
+                                                <th className="p-1.5 text-center w-24 text-blue-950 font-bold">Pendaftar Masuk</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {dailyTrend.map((day, idx) => (
                                                 <tr key={idx} className="border-t border-gray-200">
-                                                    <td className="p-1.5 border-r border-gray-200">{day.dateFormatted}</td>
+                                                    <td className="p-1.5 border-r border-gray-200 text-slate-800">{day.dateFormatted}</td>
                                                     <td className="p-1.5 text-center font-mono font-bold text-blue-900">{day.count}</td>
                                                 </tr>
                                             ))}
@@ -597,14 +775,14 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                             </div>
 
                             {/* PENGESAHAN LAPORAN (DENGAN NAMA ADMIN & PIMPINAN DARI PENGATURAN) */}
-                            <div className="mt-8 pt-4 border-t border-gray-300 break-inside-avoid">
-                                <div className="text-right text-gray-800 mb-4 text-[11px] sm:text-xs">
+                            <div className="psb-signature-area mt-6 print:mt-2.5 pt-3 print:pt-1.5 border-t border-gray-300 break-inside-avoid">
+                                <div className="text-right text-gray-800 mb-2.5 text-[11px] sm:text-xs">
                                     Dicetak di: <strong>{tempatCetak || 'Posko PSB Pesantren'}</strong><br />
                                     Tanggal: {todayFormatted}
                                 </div>
                                 <div className="grid grid-cols-2 gap-8 text-center text-xs">
                                     <div>
-                                        <p className="font-semibold text-gray-700 mb-16">
+                                        <p className="font-semibold text-gray-700 mb-12 print:mb-8">
                                             {adminJabatan || 'Koordinator Administrator PSB'},
                                         </p>
                                         <p className="font-bold text-gray-900 underline uppercase tracking-wide">
@@ -613,7 +791,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                                         <p className="text-[10px] text-gray-500 mt-0.5">Admin Pendataan PSB</p>
                                     </div>
                                     <div>
-                                        <p className="font-semibold text-gray-700 mb-16">
+                                        <p className="font-semibold text-gray-700 mb-12 print:mb-8">
                                             Mengetahui,<br />{pimpinanJabatan || 'Pimpinan Pondok Pesantren'}
                                         </p>
                                         <p className="font-bold text-gray-900 underline uppercase tracking-wide">
@@ -625,7 +803,7 @@ export const PsbDashboardReportModal: React.FC<PsbDashboardReportModalProps> = (
                             </div>
 
                             {/* FOOTER NOTA */}
-                            <div className="mt-6 pt-2 border-t border-dashed border-gray-300 text-[10px] text-gray-400 flex justify-between">
+                            <div className="psb-footer-note mt-5 print:mt-2 pt-2 border-t border-dashed border-gray-300 text-[10px] text-gray-400 flex justify-between">
                                 <span>Sistem Informasi Manajemen Pesantren (eSantri Web)</span>
                                 <span>Laporan Resmi Statistik PSB</span>
                             </div>

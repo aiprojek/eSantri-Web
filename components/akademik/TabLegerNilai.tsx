@@ -119,6 +119,16 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
         return wali?.nama || 'Belum Ditentukan';
     }, [currentRombel, settings.tenagaPengajar]);
 
+    const currentKelas = useMemo(() => {
+        if (!currentRombel) return null;
+        return settings.kelas.find(k => k.id === currentRombel.kelasId) || null;
+    }, [currentRombel, settings.kelas]);
+
+    const currentJenjang = useMemo(() => {
+        if (!currentKelas) return null;
+        return settings.jenjang.find(j => j.id === currentKelas.jenjangId) || null;
+    }, [currentKelas, settings.jenjang]);
+
     // Load active students in selected rombel
     const rombelStudents = useMemo(() => {
         if (!selectedRombelId) return [];
@@ -228,6 +238,8 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
             const filename = await exportLegerToExcel({
                 rombelData: legerData,
                 rombelName: currentRombel.nama,
+                jenjangName: currentJenjang?.nama,
+                kelasName: currentKelas?.nama,
                 tahunAjaran: filterTahun || defaultAcademicYear,
                 semester: filterSemester,
                 settings,
@@ -346,11 +358,23 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                 {/* Wali Kelas Context Notice */}
                 {currentRombel && (
                     <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-2 text-slate-600">
+                        <div className="flex flex-wrap items-center gap-2 text-slate-600">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg font-bold">
                                 <i className="bi bi-people-fill"></i>
                                 {currentRombel.nama}
                             </span>
+                            {currentJenjang && (
+                                <>
+                                    <span>•</span>
+                                    <span>Marhalah: <strong className="text-slate-800">{currentJenjang.nama}</strong></span>
+                                </>
+                            )}
+                            {currentKelas && (
+                                <>
+                                    <span>•</span>
+                                    <span>Kelas: <strong className="text-slate-800">{currentKelas.nama}</strong></span>
+                                </>
+                            )}
                             <span>•</span>
                             <span>Wali Kelas: <strong className="text-slate-800">{currentWaliName}</strong></span>
                             <span>•</span>
@@ -914,7 +938,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                                 <div>
                                     <h3 className="text-sm font-bold text-slate-900">Cetak Leger Nilai Hasil Belajar</h3>
                                     <p className="text-xs text-slate-500">
-                                        {currentRombel?.nama} • {filterTahun || defaultAcademicYear} • Semester {filterSemester}
+                                        {currentJenjang?.nama ? `${currentJenjang.nama} • ` : ''}{currentKelas?.nama ? `Kelas ${currentKelas.nama} • ` : ''}{currentRombel?.nama} • {filterTahun || defaultAcademicYear} • Semester {filterSemester}
                                     </p>
                                 </div>
                             </div>
@@ -951,16 +975,19 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                                             />
 
                                             <div className="grid grid-cols-2 gap-4 my-4 pb-2 border-b border-slate-300 text-xs font-medium">
-                                                <div>
+                                                <div className="space-y-0.5">
+                                                    <p>Marhalah / Jenjang : <strong>{currentJenjang?.nama || '-'}</strong></p>
+                                                    <p>Kelas : <strong>{currentKelas?.nama || '-'}</strong></p>
                                                     <p>Rombongan Belajar : <strong>{currentRombel?.nama}</strong></p>
                                                     <p>Wali Kelas : <strong>{currentWaliName}</strong></p>
                                                     {activeSheetObj && (
                                                         <p>Format / Lembar : <strong>{activeSheetObj.name}</strong></p>
                                                     )}
                                                 </div>
-                                                <div className="text-right">
+                                                <div className="text-right space-y-0.5">
                                                     <p>Tahun Ajaran : <strong>{filterTahun || defaultAcademicYear}</strong></p>
                                                     <p>Semester : <strong>{filterSemester}</strong></p>
+                                                    <p>Jumlah Santri : <strong>{legerData.totalStudents} Santri</strong></p>
                                                 </div>
                                             </div>
                                         </>

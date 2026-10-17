@@ -306,6 +306,10 @@ export const faqData: FaqCategoryData[] = [
             {
                 question: "PSB saya punya banyak formulir dan link Google Apps Script berbeda, apakah aman?",
                 answer: "Bisa dipakai, tetapi saat ini tombol 'Ambil dari Google Sheet' di Rekap membaca satu URL GAS aktif global. Rekomendasi paling stabil: gunakan satu GAS utama untuk semua formulir, lalu pisahkan data memakai sheetName/tab per formulir."
+            },
+            {
+                question: "Setelah selesai periode PSB, apakah daftar pendaftar di Rekap perlu dihapus untuk menghemat storage?",
+                answer: "TIDAK WAJIB. Data teks pendaftar di eSantri Web sangat ringan (1.000 pendaftar hanya sekitar 1-2 MB di database lokal), dan berkas dokumen tersimpan di Google Drive panitia. Selain itu, calon santri yang sudah diterima otomatis disalin permanen ke Master Santri Aktif. Menghapus data hanya dianjurkan untuk data uji coba/spam atau saat rotasi tahunan menjelang periode PSB baru berikutnya, setelah Anda mengekspor arsip Excel dan berkas ZIP."
             }
         ]
     },

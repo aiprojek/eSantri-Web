@@ -319,12 +319,14 @@ export const buildRombelLegerData = (params: {
 export const exportLegerToExcel = async (params: {
     rombelData: RombelLegerData;
     rombelName: string;
+    jenjangName?: string;
+    kelasName?: string;
     tahunAjaran: string;
     semester: string;
     settings?: PondokSettings | null;
     waliName?: string;
 }): Promise<string> => {
-    const { rombelData, rombelName, tahunAjaran, semester, settings, waliName = 'Wali Kelas' } = params;
+    const { rombelData, rombelName, jenjangName, kelasName, tahunAjaran, semester, settings, waliName = 'Wali Kelas' } = params;
     const XLSX = await loadXLSX();
 
     const wb = XLSX.utils.book_new();
@@ -355,6 +357,10 @@ export const exportLegerToExcel = async (params: {
     sheetData.push([settings?.namaPonpes ? settings.namaPonpes.toUpperCase() : 'LEMBAGA PENDIDIKAN PESANTREN']);
     sheetData.push(['LEGER NILAI HASIL BELAJAR SANTRI (REKAPITULASI RAPOR)']);
     sheetData.push([
+        `Marhalah / Jenjang: ${jenjangName || '-'}`,
+        '',
+        `Kelas: ${kelasName || '-'}`,
+        '',
         `Rombongan Belajar: ${rombelName}`,
         '',
         `Tahun Ajaran: ${tahunAjaran}`,

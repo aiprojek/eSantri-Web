@@ -511,6 +511,9 @@ export interface PsbFormTemplate {
     googleScriptUrl?: string;
     driveFolderId?: string;
     fieldHints?: Record<string, string>;
+    biayaPendaftaran?: number;
+    infoRekening?: string;
+    pesanSukses?: string;
 }
 
 export interface PsbPosterTemplate {

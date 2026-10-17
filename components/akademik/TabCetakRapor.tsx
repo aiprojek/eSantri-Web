@@ -18,6 +18,17 @@ export interface TabCetakRaporProps {
     onNavigateToTab?: (tab: string, rombelId?: number) => void;
 }
 
+export type RankingDisplayLimit = 'all' | '3' | '5' | '10' | 'none';
+
+export const getEffectiveRanking = (rawRank: number | undefined, limit: RankingDisplayLimit): number | undefined => {
+    if (!rawRank || rawRank <= 0) return undefined;
+    if (limit === 'none') return undefined;
+    if (limit === '3' && rawRank > 3) return undefined;
+    if (limit === '5' && rawRank > 5) return undefined;
+    if (limit === '10' && rawRank > 10) return undefined;
+    return rawRank;
+};
+
 // --- HELPER COMPONENT: DYNAMIC RENDERER ---
 interface DynamicRaporPreviewProps {
     template: RaporTemplate;
@@ -240,6 +251,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const [paperSize, setPaperSize] = useState<'A4' | 'F4'>('A4');
     const [showKop, setShowKop] = useState<boolean>(true);
     const [marginMode, setMarginMode] = useState<'normal' | 'narrow' | 'none'>('normal');
+    const [rankingDisplayLimit, setRankingDisplayLimit] = useState<RankingDisplayLimit>('all');
 
     // Universal / Custom Issuance Date & Place
     const [tanggalRapor, setTanggalRapor] = useState(settings.tanggalRaporDefault || new Date().toISOString().split('T')[0]);
@@ -499,11 +511,12 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const currentPreviewSantri = filteredSantriList[previewSantriIndex] || null;
     const currentPreviewRecord = currentPreviewSantri ? periodRecordsMap.get(currentPreviewSantri.id) || null : null;
     const currentPreviewRow = currentPreviewSantri ? studentLegerMap.get(currentPreviewSantri.id) : null;
+    const currentPreviewEffectiveRank = getEffectiveRanking(currentPreviewRow?.ranking, rankingDisplayLimit);
     const currentPreviewCalculation = currentPreviewRow ? {
         totalNilai: currentPreviewRow.totalNilai,
         rataRata: currentPreviewRow.rataRata,
-        ranking: currentPreviewRow.ranking,
-        totalSantri: currentPreviewRow.ranking > 0 ? (baseSantriList.filter(s => s.rombelId === currentPreviewSantri?.rombelId).length || 1) : undefined,
+        ranking: currentPreviewEffectiveRank,
+        totalSantri: currentPreviewEffectiveRank ? (baseSantriList.filter(s => s.rombelId === currentPreviewSantri?.rombelId).length || 1) : undefined,
         predikat: currentPreviewRow.predikat.predikat
     } : undefined;
 
@@ -519,6 +532,36 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
         }
     };
 
+    // Helper to build batch data with ranking limit applied
+    const buildBatchData = (targetSantri: Santri[], limit: RankingDisplayLimit) => {
+        return targetSantri.map(santri => {
+            const row = studentLegerMap.get(santri.id);
+            const rombelTotal = baseSantriList.filter(s => s.rombelId === santri.rombelId).length;
+            const effectiveRank = getEffectiveRanking(row?.ranking, limit);
+            const calculation = row ? {
+                totalNilai: row.totalNilai,
+                rataRata: row.rataRata,
+                ranking: effectiveRank,
+                totalSantri: effectiveRank ? rombelTotal : undefined,
+                predikat: row.predikat.predikat
+            } : undefined;
+
+            return {
+                santri,
+                record: periodRecordsMap.get(santri.id) || null,
+                calculation
+            };
+        });
+    };
+
+    // Sync batchData when rankingDisplayLimit changes during active batch print modal
+    useEffect(() => {
+        if (isBatchPrinting && batchData.length > 0) {
+            const targetSantri = batchData.map(b => b.santri);
+            setBatchData(buildBatchData(targetSantri, rankingDisplayLimit));
+        }
+    }, [rankingDisplayLimit]);
+
     // Batch Print Execution
     const handleStartBatchPrint = () => {
         const targetSantri = selectedSantriIds.size > 0
@@ -530,24 +573,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
             return;
         }
 
-        const data = targetSantri.map(santri => {
-            const row = studentLegerMap.get(santri.id);
-            const rombelTotal = baseSantriList.filter(s => s.rombelId === santri.rombelId).length;
-            const calculation = row ? {
-                totalNilai: row.totalNilai,
-                rataRata: row.rataRata,
-                ranking: row.ranking,
-                totalSantri: rombelTotal,
-                predikat: row.predikat.predikat
-            } : undefined;
-
-            return {
-                santri,
-                record: periodRecordsMap.get(santri.id) || null,
-                calculation
-            };
-        });
-
+        const data = buildBatchData(targetSantri, rankingDisplayLimit);
         setBatchData(data);
         setIsBatchPrinting(true);
     };
@@ -781,6 +807,24 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                             <option value="narrow">Margin Sempit</option>
                             <option value="none">Tanpa Margin (Nol)</option>
                         </select>
+
+                        {/* Batas Tampilan Ranking */}
+                        <div className="flex items-center gap-1.5 bg-amber-50/70 border border-amber-200/80 rounded-xl px-2.5 py-1 text-xs">
+                            <i className="bi bi-trophy-fill text-amber-500 text-xs"></i>
+                            <span className="font-bold text-amber-900 text-[11px] hidden sm:inline">Batas Ranking:</span>
+                            <select
+                                value={rankingDisplayLimit}
+                                onChange={e => setRankingDisplayLimit(e.target.value as RankingDisplayLimit)}
+                                className="font-bold text-xs bg-transparent text-amber-950 focus:outline-none cursor-pointer"
+                                title="Atur batasan peringkat kelas yang dicetak pada rapor santri"
+                            >
+                                <option value="all">Semua Peringkat (1 s.d. Selesai)</option>
+                                <option value="3">Hanya Top 3 (Juara 1 - 3)</option>
+                                <option value="5">Hanya Top 5 (Juara 1 - 5)</option>
+                                <option value="10">Hanya Top 10 (Juara 1 - 10)</option>
+                                <option value="none">Sembunyikan Ranking (Off)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -922,12 +966,24 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                                 </span>
 
                                                 {/* Ranking Badge */}
-                                                {row && row.ranking > 0 && (
-                                                    <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
-                                                        <i className="bi bi-award-fill text-amber-500"></i>
-                                                        <span>Juara #{row.ranking}</span>
-                                                    </span>
-                                                )}
+                                                {row && row.ranking > 0 && (() => {
+                                                    const isHidden = rankingDisplayLimit !== 'all' && (
+                                                        rankingDisplayLimit === 'none' ||
+                                                        (rankingDisplayLimit === '3' && row.ranking > 3) ||
+                                                        (rankingDisplayLimit === '5' && row.ranking > 5) ||
+                                                        (rankingDisplayLimit === '10' && row.ranking > 10)
+                                                    );
+                                                    return (
+                                                        <span
+                                                            className={`${isHidden ? 'bg-slate-100 text-slate-500 border border-slate-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'} text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1`}
+                                                            title={isHidden ? 'Peringkat ini disembunyikan pada cetak rapor sesuai batas tampilan' : 'Peringkat akan dicetak pada rapor'}
+                                                        >
+                                                            <i className={`bi bi-award-fill ${isHidden ? 'text-slate-400' : 'text-amber-500'}`}></i>
+                                                            <span>Juara #{row.ranking}</span>
+                                                            {isHidden && <span className="text-[9px] text-slate-400 font-normal italic">(Off di Rapor)</span>}
+                                                        </span>
+                                                    );
+                                                })()}
 
                                                 {/* Rata-rata Score Badge */}
                                                 {row && row.rataRata > 0 && (
@@ -1037,11 +1093,15 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                     </h3>
                                     <div className="text-[10px] text-slate-500 font-bold flex items-center gap-2">
                                         <span>NIS: {currentPreviewSantri.nis}</span>
-                                        {currentPreviewCalculation?.ranking && (
-                                            <span className="text-indigo-600">
+                                        {currentPreviewCalculation?.ranking ? (
+                                            <span className="text-indigo-600 font-bold">
                                                 Juara #{currentPreviewCalculation.ranking}
                                             </span>
-                                        )}
+                                        ) : currentPreviewRow?.ranking && currentPreviewRow.ranking > 0 ? (
+                                            <span className="text-slate-400 font-medium italic">
+                                                Rank #{currentPreviewRow.ranking} (Off di Rapor)
+                                            </span>
+                                        ) : null}
                                         <span>• Format: {paperSize}</span>
                                     </div>
                                 </div>
@@ -1062,6 +1122,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         ))}
                                     </select>
                                 )}
+
+                                <select
+                                    value={rankingDisplayLimit}
+                                    onChange={e => setRankingDisplayLimit(e.target.value as RankingDisplayLimit)}
+                                    className="px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 focus:outline-none cursor-pointer"
+                                    title="Batasi tampilan peringkat pada cetak rapor"
+                                >
+                                    <option value="all">Rank: Semua</option>
+                                    <option value="3">Rank: Top 3</option>
+                                    <option value="5">Rank: Top 5</option>
+                                    <option value="10">Rank: Top 10</option>
+                                    <option value="none">Rank: Off</option>
+                                </select>
 
                                 <button
                                     onClick={() => setPaperSize(prev => prev === 'A4' ? 'F4' : 'A4')}
@@ -1169,6 +1242,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         ))}
                                     </select>
                                 )}
+
+                                <select
+                                    value={rankingDisplayLimit}
+                                    onChange={e => setRankingDisplayLimit(e.target.value as RankingDisplayLimit)}
+                                    className="px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 focus:outline-none cursor-pointer"
+                                    title="Batasi tampilan peringkat pada cetak rapor massal"
+                                >
+                                    <option value="all">Rank: Semua</option>
+                                    <option value="3">Rank: Top 3</option>
+                                    <option value="5">Rank: Top 5</option>
+                                    <option value="10">Rank: Top 10</option>
+                                    <option value="none">Rank: Off</option>
+                                </select>
 
                                 <button
                                     onClick={() => setPaperSize(prev => prev === 'A4' ? 'F4' : 'A4')}

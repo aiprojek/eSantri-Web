@@ -698,8 +698,19 @@ const AppContent: React.FC = () => {
             </Suspense>
         );
     };
-    
-    const isPortal = window.location.pathname.startsWith('/portal/') || window.location.pathname.startsWith('/psb/');
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashStr = window.location.hash || '';
+    const isPortal =
+        window.location.pathname.startsWith('/portal/') ||
+        window.location.pathname.startsWith('/psb/') ||
+        searchParams.get('portal') === 'true' ||
+        searchParams.has('portal') ||
+        searchParams.get('psb') === 'true' ||
+        searchParams.has('psb') ||
+        hashStr.startsWith('#/portal/') ||
+        hashStr.startsWith('#/psb/') ||
+        hashStr.includes('psb=true') ||
+        hashStr.includes('portal=true');
     const syncSummary = getSyncSummary();
     const currentQuickHelpSlide = QUICK_HELP_SLIDES[quickHelpIndex];
 

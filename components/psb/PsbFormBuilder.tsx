@@ -4,6 +4,8 @@ import { PsbConfig, PondokSettings, PsbDesignStyle, PsbFormTemplate, PsbSubmissi
 import { CustomFieldEditor } from './common/CustomFieldEditor';
 import { getStandaloneDocumentStyles, getStandaloneDocumentStylesSync } from '../../utils/standaloneStyles';
 import { PSB_STANDARD_FIELD_GROUPS, PSB_DEFAULT_FIELD_HINTS, extractDriveFolderId, isPhoneFieldKey, getPsbAcademicYearOptions } from './utils/psbUtils';
+import { PsbShareLinkModal } from './modals/PsbShareLinkModal';
+import { syncPortalBridgeToGas } from '../../services/portalGasService';
 
 interface PsbFormBuilderProps {
     config: PsbConfig;
@@ -18,6 +20,8 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         return method || 'whatsapp';
     };
     const isScriptUrlValid = (url: string) => /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec/.test(url.trim());
+    const [isShareLinkModalOpen, setIsShareLinkModalOpen] = useState(false);
+    const [isSyncingGas, setIsSyncingGas] = useState(false);
     const [localConfig, setLocalConfig] = useState<PsbConfig>({
         ...config,
         // Backward compatibility: If undefined, assume all active fields are required (old behavior) or init empty
@@ -209,6 +213,28 @@ export const PsbFormBuilder: React.FC<PsbFormBuilderProps> = ({ config, settings
         setTemplateName('');
         // We keep the current config values so user can "Clone" or "Save As" easily
         showToast('Mode template baru. Silakan beri nama baru untuk menyimpan sebagai salinan.', 'info');
+    };
+
+    const handleSyncToGas = async () => {
+        const activeUrl = googleScriptUrl.trim() || settings.psbConfig?.googleScriptUrl || settings.portalConfig?.gasEndpoint;
+        if (!activeUrl) {
+            showToast('URL Google Apps Script (GAS) belum diisi. Silakan isi URL Script terlebih dahulu.', 'error');
+            return;
+        }
+        setIsSyncingGas(true);
+        try {
+            const updatedSettings: PondokSettings = {
+                ...settings,
+                psbConfig: localConfig
+            };
+            await syncPortalBridgeToGas(updatedSettings);
+            showToast('Desain formulir & data jenjang berhasil disinkronkan ke Cloud GAS!', 'success');
+        } catch (e: any) {
+            console.error('Gagal sinkronisasi:', e);
+            showToast(`Gagal sinkron ke GAS: ${e?.message || 'Periksa koneksi internet'}`, 'error');
+        } finally {
+            setIsSyncingGas(false);
+        }
     };
 
     const handleCopyGasScript = () => {
@@ -1883,6 +1909,25 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
 
                         <button
                             type="button"
+                            disabled={isSyncingGas}
+                            onClick={handleSyncToGas}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                            title="Sinkronkan Desain Formulir ini ke Cloud GAS agar calon santri langsung melihat desain formulir Anda"
+                        >
+                            <i className={`bi ${isSyncingGas ? 'bi-arrow-repeat animate-spin' : 'bi-cloud-arrow-up-fill'}`}></i>
+                            <span className="hidden sm:inline">{isSyncingGas ? 'Menyinkronkan...' : 'Sinkron ke GAS'}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setIsShareLinkModalOpen(true)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                            title="Bagikan Tautan Pendaftaran Online (PSB)"
+                        >
+                            <i className="bi bi-link-45deg text-base"></i>
+                            <span className="hidden sm:inline">Bagikan Link</span>
+                        </button>
+                        <button
+                            type="button"
                             onClick={handleDownloadPdf}
                             className="bg-gray-700 hover:bg-gray-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-xs flex items-center gap-2 transition cursor-pointer"
                             title="Cetak atau Simpan PDF"
@@ -1917,6 +1962,15 @@ ${modalHtml}${submitScript}${deadlineCheckScript}</body></html>`;
                 </div>
             </div>
         </div>
+
+        {isShareLinkModalOpen && (
+            <PsbShareLinkModal
+                isOpen={isShareLinkModalOpen}
+                onClose={() => setIsShareLinkModalOpen(false)}
+                settings={settings}
+                config={localConfig}
+            />
+        )}
     </div>
     );
 };

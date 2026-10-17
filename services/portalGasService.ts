@@ -327,18 +327,28 @@ export const fetchPortalSettingsFromGas = async (
     }
     const data = result.data || null;
 
-    if (!data) {
+    if (!data || Array.isArray(data)) {
         return { settings: null, santriSummary: [] };
     }
 
-    if (data && !data.settings && !data.santriSummary) {
+    if (data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings)) {
+        return {
+            settings: data.settings as PondokSettings,
+            santriSummary: (data.santriSummary || []) as PortalSantriSummary[],
+            updatedAt: result.updatedAt || data.metadata?.updatedAt || '',
+            serverAuthSupported: Boolean(result.version && result.version >= 2),
+        };
+    }
+
+    // Hanya jika data adalah objek tunggal PondokSettings yang valid (memiliki namaPonpes atau psbConfig)
+    if (typeof data === 'object' && !Array.isArray(data) && ((data as any).namaPonpes || (data as any).psbConfig)) {
         return { settings: data as PondokSettings, santriSummary: [] };
     }
 
     return {
-        settings: (data.settings || null) as PondokSettings | null,
-        santriSummary: (data.santriSummary || []) as PortalSantriSummary[],
-        updatedAt: result.updatedAt || data.metadata?.updatedAt || '',
+        settings: null,
+        santriSummary: [],
+        updatedAt: result.updatedAt || '',
         serverAuthSupported: Boolean(result.version && result.version >= 2),
     };
 };
@@ -430,6 +440,7 @@ export const submitPortalPsbToGas = async (
             action: 'submitPortalPsb',
             portalId,
             apiKey,
+            ...fields,
             fields,
             submittedAt: new Date().toISOString(),
         }),

@@ -8,13 +8,15 @@ interface PsbGasConfigModalProps {
     onClose: () => void;
     settings: PondokSettings;
     onSyncNow?: () => void;
+    onOpenShareLink?: () => void;
 }
 
 export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
     isOpen,
     onClose,
     settings,
-    onSyncNow
+    onSyncNow,
+    onOpenShareLink
 }) => {
     const { onUpdateSettings, showToast } = useAppContext();
     const currentUrl = settings.psbConfig?.googleScriptUrl || '';
@@ -270,30 +272,45 @@ export const PsbGasConfigModal: React.FC<PsbGasConfigModalProps> = ({
                 </div>
 
                 {/* Modal Footer */}
-                <div className="p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-end gap-2">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-200 text-xs font-semibold transition-colors"
-                    >
-                        Tutup
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                        {isSaving ? (
-                            <>
-                                <i className="bi bi-arrow-repeat animate-spin"></i>
-                                <span>Menyimpan...</span>
-                            </>
-                        ) : (
-                            <>
-                                <i className="bi bi-check2-circle"></i>
-                                <span>Simpan Tautan</span>
-                            </>
-                        )}
-                    </button>
+                <div className="p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-2">
+                    {onOpenShareLink && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onClose();
+                                onOpenShareLink();
+                            }}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+                        >
+                            <i className="bi bi-link-45deg text-base"></i>
+                            <span>Bagikan Link Online</span>
+                        </button>
+                    )}
+                    <div className="flex items-center gap-2 ml-auto">
+                        <button
+                            onClick={onClose}
+                            className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-200 text-xs font-semibold transition-colors"
+                        >
+                            Tutup
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                            {isSaving ? (
+                                <>
+                                    <i className="bi bi-arrow-repeat animate-spin"></i>
+                                    <span>Menyimpan...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <i className="bi bi-check2-circle"></i>
+                                    <span>Simpan Tautan</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

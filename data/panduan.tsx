@@ -3741,6 +3741,125 @@ export const panduanData: PanduanSectionData[] = [
                         </ul>
                     </div>
                 )
+            },
+            {
+                title: '8. Pasca-PSB: Kebijakan Penyimpanan, Penghematan Storage & Kapan Perlu Menghapus Pendaftar',
+                content: (
+                    <div className="space-y-3.5 text-sm text-gray-700">
+                        <p className="leading-relaxed">
+                            Banyak panitia posko bertanya mengenai nasib data calon santri setelah seluruh tahapan seleksi dan pengumuman berakhir: <em>Apakah daftar peserta di Rekap PSB harus dihapus agar memori atau storage tidak penuh?</em> Berikut panduan dan standar operasionalnya:
+                        </p>
+
+                        {/* Ringkasan Kebijakan */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2 text-xs text-blue-950">
+                            <strong className="text-blue-900 text-sm font-bold flex items-center gap-2">
+                                <i className="bi bi-info-circle-fill text-blue-600"></i> Prinsip Utama: TIDAK WAJIB &amp; TIDAK MENDESAK Dihapus
+                            </strong>
+                            <p className="leading-relaxed text-blue-900">
+                                Anda <strong>tidak perlu terburu-buru menghapus data pendaftar</strong>. eSantri Web menggunakan teknologi basis data lokal modern (IndexedDB) yang sangat efisien dalam penggunaan ruang penyimpanan.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                <div className="bg-white p-3 rounded-lg border border-blue-200 space-y-1">
+                                    <strong className="text-blue-900 flex items-center gap-1.5 font-semibold">
+                                        <i className="bi bi-filetype-raw text-blue-600"></i> Data Teks Sangat Ringan
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                                        Seluruh biodata, nilai seleksi, dan nomor registrasi tersimpan dalam bentuk teks terindeks. Data 500 hingga 1.000 pendaftar hanya memakan ruang sekitar <strong>1 s.d. 2 Megabyte</strong> pada memori browser.
+                                    </p>
+                                </div>
+                                <div className="bg-white p-3 rounded-lg border border-blue-200 space-y-1">
+                                    <strong className="text-blue-900 flex items-center gap-1.5 font-semibold">
+                                        <i className="bi bi-google text-red-500"></i> Berkas Berada di Google Drive
+                                    </strong>
+                                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                                        File berukuran besar (Pas Foto, KK, Ijazah, Akta Kelahiran) yang diunggah via form online tersimpan langsung di <strong>Google Drive Panitia</strong>, bukan di dalam memori lokal aplikasi.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Keamanan Data Santri yang Diterima */}
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 space-y-2 text-xs">
+                            <strong className="text-emerald-950 font-bold flex items-center gap-1.5">
+                                <i className="bi bi-shield-check text-emerald-700 text-base"></i> Apakah Menghapus Pendaftar Mempengaruhi Santri yang Sudah Diterima?
+                            </strong>
+                            <p className="text-[11px] text-emerald-900 leading-relaxed">
+                                <strong>TIDAK BERPENGARUH SAMA SEKALI.</strong> Ketika panitia menekan tombol <em>"Terima Santri"</em> atau <em>"Terima &amp; Pilih Kelas"</em>, sistem secara mandiri menyalin seluruh biodata pendaftar ke dalam <strong>Master Santri Aktif (<code>db.santri</code>)</strong> lengkap dengan NIS baru dan penempatan kelas/rombel. Jika di kemudian hari data pendaftar di Rekap PSB dihapus, data santri di menu Manajemen Santri, Tagihan, dan Akademik <strong>tetap aman dan utuh</strong>.
+                            </p>
+                        </div>
+
+                        {/* Mengapa Sebaiknya Dipertahankan */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs text-slate-800">
+                            <strong className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                                <i className="bi bi-bookmark-check-fill text-teal-600"></i> Mengapa Data Pendaftar Sangat Bermanfaat Dipertahankan?
+                            </strong>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                                <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                    <strong className="text-slate-900 block font-semibold text-[11px]">1. Panggilan Santri Cadangan</strong>
+                                    <p className="text-[10px] text-gray-600 leading-relaxed">
+                                        Saat menjelang masuk asrama, sering kali terdapat calon santri mengundurkan diri. Daftar peserta cadangan dan nilai ujiannya siap diakses kembali tanpa panitia membuka buku catatan fisik.
+                                    </p>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                    <strong className="text-slate-900 block font-semibold text-[11px]">2. Bukti Audit &amp; Transparansi</strong>
+                                    <p className="text-[10px] text-gray-600 leading-relaxed">
+                                        Menjadi dokumen rekap resmi jika ada wali santri yang menanyakan hasil seleksi, atau untuk audit pertanggungjawaban panitia kepada Pengasuh dan Yayasan.
+                                    </p>
+                                </div>
+                                <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                    <strong className="text-slate-900 block font-semibold text-[11px]">3. Tren Statistik &amp; Evaluasi</strong>
+                                    <p className="text-[10px] text-gray-600 leading-relaxed">
+                                        Data historis pendaftar digunakan di Dashboard PSB untuk membandingkan animo pendaftar antar-tahun, efektivitas jalur masuk, dan rasio kelulusan santri.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Kapan Sebaiknya Dihapus */}
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-2 text-xs">
+                            <strong className="text-amber-950 font-bold flex items-center gap-1.5">
+                                <i className="bi bi-trash3 text-amber-700 text-base"></i> Kapan Sebaiknya Fitur "Hapus" / "Hapus Massal" Digunakan?
+                            </strong>
+                            <p className="text-[11px] text-amber-900 leading-relaxed">
+                                Fitur tombol <strong>Hapus</strong> per baris maupun tombol <strong>Hapus Massal</strong> di Rekap PSB dirancang untuk skenario berikut:
+                            </p>
+                            <ul className="list-disc pl-5 text-[11px] text-amber-900 space-y-1">
+                                <li><strong>Data Percobaan (Dummy Test):</strong> Menghapus pendaftaran uji coba yang dibuat panitia saat menguji formulir online sebelum disebarkan ke publik.</li>
+                                <li><strong>Pendaftaran Ganda / Spam:</strong> Menghapus data kembar jika ada calon santri yang menekan tombol kirim berkali-kali di portal online.</li>
+                                <li><strong>Rotasi Tahunan Menjelang PSB Baru:</strong> Ketika satu tahun ajaran telah berganti penuh dan panitia akan membuka pendaftaran tahun berikutnya, panitia dapat membersihkan rekap setelah seluruh dokumen diarsipkan.</li>
+                            </ul>
+                        </div>
+
+                        {/* SOP Sebelum Menghapus */}
+                        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2.5 text-xs text-gray-700">
+                            <strong className="text-gray-900 font-bold block text-xs flex items-center gap-1.5">
+                                <i className="bi bi-card-checklist text-teal-700"></i> SOP 4 Langkah Sebelum Melakukan Penghapusan Data Pendaftar
+                            </strong>
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-center pt-1">
+                                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold">1</span>
+                                    <strong className="text-slate-900 block text-[11px]">Konversi Santri</strong>
+                                    <p className="text-[10px] text-gray-500">Pastikan seluruh santri lulus sudah diklik <em>"Terima Santri"</em>.</p>
+                                </div>
+                                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold">2</span>
+                                    <strong className="text-slate-900 block text-[11px]">Ekspor Excel / CSV</strong>
+                                    <p className="text-[10px] text-gray-500">Unduh data tabel Rekap ke file spreadsheet sebagai cadangan permanen.</p>
+                                </div>
+                                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                    <span className="w-5 h-5 mx-auto bg-teal-700 text-white rounded-full flex items-center justify-center text-[10px] font-bold">3</span>
+                                    <strong className="text-slate-900 block text-[11px]">Unduh Arsip ZIP</strong>
+                                    <p className="text-[10px] text-gray-500">Klik tombol <em>"Unduh Arsip ZIP"</em> untuk membackup berkas digital lokal.</p>
+                                </div>
+                                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                    <span className="w-5 h-5 mx-auto bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold">4</span>
+                                    <strong className="text-red-900 block text-[11px]">Eksekusi Hapus</strong>
+                                    <p className="text-[10px] text-gray-500">Centang baris yang ditargetkan lalu klik tombol <em>"Hapus (N)"</em>.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
             }
         ]
     },

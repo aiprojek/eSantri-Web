@@ -58,7 +58,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
     const [bulkExamCardList, setBulkExamCardList] = useState<Pendaftar[] | null>(null);
     const [bulkAcceptanceList, setBulkAcceptanceList] = useState<Pendaftar[] | null>(null);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
-    const [bulkStatusTarget, setBulkStatusTarget] = useState<PendaftarStatus | ''>('');
+    const [bulkStatusTarget, setBulkStatusTarget] = useState<PendaftarStatus | '__delete__' | ''>('');
     const [isBulkEditorOpen, setIsBulkEditorOpen] = useState(false);
     const [isArchiving, setIsArchiving] = useState(false);
     const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState(false);
@@ -531,6 +531,26 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
             showToast('Pendaftar dihapus', 'success');
         }, { confirmColor: 'red' });
     }
+
+    const handleBulkDelete = () => {
+        if (!canWrite || selectedIds.length === 0) return;
+        const count = selectedIds.length;
+        showConfirmation(
+            `Hapus ${count} Pendaftar?`,
+            `Apakah Anda yakin ingin menghapus ${count} data pendaftar yang dipilih secara permanen? Data yang dihapus tidak dapat dipulihkan.`,
+            async () => {
+                try {
+                    await db.pendaftar.bulkDelete(selectedIds);
+                    setSelectedIds([]);
+                    onUpdateList();
+                    showToast(`${count} data pendaftar berhasil dihapus`, 'success');
+                } catch (e: any) {
+                    showAlert('Gagal Menghapus Data', e.message || 'Terjadi kesalahan saat menghapus data.');
+                }
+            },
+            { confirmColor: 'red', confirmText: `Hapus (${count})` }
+        );
+    };
 
     const selectedPendaftarObjects = useMemo(() => {
         if (selectedIds.length === 0) return [];
@@ -1157,10 +1177,16 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                     <select
                                         value={bulkStatusTarget}
                                         onChange={e => {
-                                            const val = e.target.value as PendaftarStatus | '';
-                                            setBulkStatusTarget(val);
-                                            if (val) {
-                                                handleBulkStatusApply(val);
+                                            const val = e.target.value;
+                                            if (val === '__delete__') {
+                                                handleBulkDelete();
+                                                setBulkStatusTarget('');
+                                                return;
+                                            }
+                                            const statusVal = val as PendaftarStatus | '';
+                                            setBulkStatusTarget(statusVal);
+                                            if (statusVal) {
+                                                handleBulkStatusApply(statusVal);
                                             }
                                         }}
                                         className="bg-white text-gray-800 text-xs font-bold rounded-md px-2.5 py-1 focus:outline-none cursor-pointer"
@@ -1172,6 +1198,7 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                         <option value="Cadangan">Set Status: Cadangan</option>
                                         <option value="Diterima">Set Status: Diterima (Pilih Kelas & Rombel)</option>
                                         <option value="Ditolak">Set Status: Ditolak</option>
+                                        <option value="__delete__">🗑️ Hapus Pendaftar Terpilih</option>
                                     </select>
                                     <button
                                         type="button"
@@ -1183,6 +1210,19 @@ export const PsbRekap: React.FC<PsbRekapProps> = ({ pendaftarList, settings, onI
                                         Terima & Pilih Kelas
                                     </button>
                                 </div>
+                            )}
+
+                            {/* 4. Bulk Hapus Pendaftar */}
+                            {canWrite && (
+                                <button
+                                    type="button"
+                                    onClick={handleBulkDelete}
+                                    className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                                    title="Hapus semua pendaftar yang dipilih secara massal"
+                                >
+                                    <i className="bi bi-trash3-fill"></i>
+                                    Hapus ({selectedIds.length})
+                                </button>
                             )}
                         </div>
                     </div>

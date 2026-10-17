@@ -1,11 +1,13 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, DigitalAsset } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
 import { DYNAMIC_TAG_CATEGORIES, isMediaTag, getMediaTagImageSrc, resolveRaporText } from '../../utils/raporPlaceholderResolver';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
+import { RaporExcelPasteModal } from './modals/RaporExcelPasteModal';
+import { parseExcelClipboard, overlayPastedTableOntoGrid } from './utils/excelPasteParser';
 
 export const TabDesainRapor: React.FC = () => {
     const { settings, onSaveSettings, showToast, showConfirmation, showAlert, currentUser } = useAppContext();
@@ -23,6 +25,7 @@ export const TabDesainRapor: React.FC = () => {
     const [zoomScale, setZoomScale] = useState(1);
     const [isDesignPreviewOpen, setIsDesignPreviewOpen] = useState(false);
     const [selectedTagCategory, setSelectedTagCategory] = useState<string>('santri');
+    const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
 
     // Column & Row Live Resizing State (Excel-like drag resize)
     const [resizingCol, setResizingCol] = useState<{ colIdx: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
@@ -618,6 +621,75 @@ export const TabDesainRapor: React.FC = () => {
         reader.readAsBinaryString(file);
     };
 
+    // --- EXCEL PASTE OPERATIONS ---
+    const handleApplyPastedTable = (updatedCells: GridCell[][], newRowCount: number, newColCount: number) => {
+        if (!activeTemplate) return;
+        const currentSheetId = activeSheetId || activeTemplate.activeSheetId || activeTemplate.sheets?.[0]?.id || 'sheet_1';
+        const updatedSheets = (activeTemplate.sheets && activeTemplate.sheets.length > 0 ? activeTemplate.sheets : []).map(sh => {
+            if (sh.id === currentSheetId) {
+                return {
+                    ...sh,
+                    rowCount: newRowCount,
+                    colCount: newColCount,
+                    cells: updatedCells
+                };
+            }
+            return sh;
+        });
+
+        const nextTpl: RaporTemplate = {
+            ...activeTemplate,
+            rowCount: newRowCount,
+            colCount: newColCount,
+            cells: updatedCells,
+            sheets: updatedSheets.length > 0 ? updatedSheets : undefined
+        };
+
+        setActiveTemplate(nextTpl);
+    };
+
+    const handleCreateTemplateFromPaste = (newTpl: RaporTemplate) => {
+        const updated = [...templates, newTpl];
+        saveTemplatesToSettings(updated);
+        setActiveTemplate(newTpl);
+        setActiveSheetId(newTpl.sheets?.[0]?.id || '');
+        setIsEditing(true);
+        setZoomScale(1);
+        setSelectedCells([{ r: 0, c: 0 }]);
+    };
+
+    // Keyboard Ctrl+V listener on Canvas
+    useEffect(() => {
+        const handleGlobalPaste = (e: ClipboardEvent) => {
+            if (!isEditing || !activeTemplate) return;
+            const target = e.target as HTMLElement;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                return;
+            }
+
+            const html = e.clipboardData?.getData('text/html');
+            const text = e.clipboardData?.getData('text/plain');
+            const parsed = parseExcelClipboard(html, text);
+
+            if (parsed && parsed.rowCount > 0 && parsed.colCount > 0) {
+                e.preventDefault();
+                const startR = selectedCells[0]?.r || 0;
+                const startC = selectedCells[0]?.c || 0;
+                const { updatedCells, newRowCount, newColCount } = overlayPastedTableOntoGrid(
+                    activeTemplate.cells,
+                    parsed,
+                    startR,
+                    startC
+                );
+                handleApplyPastedTable(updatedCells, newRowCount, newColCount);
+                showToast(`Berhasil menempel ${parsed.rowCount} baris × ${parsed.colCount} kolom dari Excel ke sel (R:${startR + 1}, C:${startC + 1})!`, 'success');
+            }
+        };
+
+        window.addEventListener('paste', handleGlobalPaste);
+        return () => window.removeEventListener('paste', handleGlobalPaste);
+    }, [isEditing, activeTemplate, selectedCells, activeSheetId]);
+
     // --- GRID OPERATIONS ---
     const handleMouseDown = (r: number, c: number) => { setIsDragging(true); setDragStart({ r, c }); setSelectedCells([{ r, c }]); };
     const handleMouseEnter = (r: number, c: number) => {
@@ -1002,6 +1074,9 @@ export const TabDesainRapor: React.FC = () => {
                         <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 no-scrollbar">
                             <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls, .ods, .csv" className="hidden" />
                             <div className="flex gap-2 flex-grow sm:flex-none">
+                                <button onClick={() => setIsPasteModalOpen(true)} className="flex-1 sm:flex-none whitespace-nowrap bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-2xs" title="Paste langsung tabel desain yang disalin dari Excel">
+                                    <i className="bi bi-clipboard-data-fill text-base text-emerald-600"></i> <span>Paste Excel</span>
+                                </button>
                                 <button onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none whitespace-nowrap bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95">
                                     <i className="bi bi-file-earmark-spreadsheet text-base"></i> <span>Import</span>
                                 </button>
@@ -1234,6 +1309,18 @@ export const TabDesainRapor: React.FC = () => {
                             <i className="bi bi-plus-lg"></i>
                         </button>
                     </div>
+
+                    <div className="h-5 w-px bg-slate-300 shrink-0"></div>
+
+                    <button 
+                        type="button" 
+                        onClick={() => setIsPasteModalOpen(true)} 
+                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs shrink-0 transition-colors" 
+                        title="Paste Desain Tabel Langsung dari Excel / Spreadsheet (Ctrl+V)"
+                    >
+                        <i className="bi bi-clipboard-data-fill text-emerald-700"></i>
+                        <span>Paste Excel</span>
+                    </button>
                 </div>
                 <div className="flex-grow overflow-auto p-4 sm:p-6 relative bg-slate-200/70 flex items-start justify-start border-b min-w-0 min-h-0" onMouseUp={handleMouseUp} ref={scrollContainerRef}>
                     {/* Live Resizing Dimension Badge Overlay */}
@@ -2008,6 +2095,20 @@ export const TabDesainRapor: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {isPasteModalOpen && (
+                <RaporExcelPasteModal
+                    isOpen={isPasteModalOpen}
+                    onClose={() => setIsPasteModalOpen(false)}
+                    settings={settings}
+                    activeTemplate={activeTemplate}
+                    isEditingTemplate={isEditing}
+                    selectedCell={selectedCells[0] || { r: 0, c: 0 }}
+                    onApplyToCurrentSheet={(updatedCells, newR, newC) => handleApplyPastedTable(updatedCells, newR, newC)}
+                    onCreateNewTemplate={handleCreateTemplateFromPaste}
+                    showToast={showToast}
+                />
             )}
         </div>
     );

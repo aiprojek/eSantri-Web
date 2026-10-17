@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PondokSettings, PortalAnnouncementPost, PsbConfig } from '../../types';
 import { LoadingFallback } from '../common/LoadingFallback';
 import {
@@ -11,6 +11,8 @@ import {
 import { fetchPublicPortalSettings } from '../../services/firebasePortalRuntime';
 import { PSB_STANDARD_FIELD_GROUPS } from '../psb/utils/psbUtils';
 import { MarkdownEditor } from '../common/MarkdownEditor';
+import { db } from '../../db';
+import { initialSettings } from '../../data/mock';
 
 const fieldGroups = PSB_STANDARD_FIELD_GROUPS;
 
@@ -121,10 +123,19 @@ const resolvePortalConnectionFromUrl = (fallbackTenantId: string) => {
 };
 
 export const PublicPortal: React.FC = () => {
-    const [pathParts] = useState<string[]>(window.location.pathname.split('/').filter(p => p !== ''));
-    const portalType = pathParts[0];
-    const tenantId = pathParts[1] || 'default-portal';
-    const templateId = pathParts[2];
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashStr = window.location.hash || '';
+    const hashClean = hashStr.replace(/^#\/?/, '');
+    const hashParts = hashClean.split('/').filter(p => p !== '');
+    const [pathParts] = useState<string[]>(
+        hashParts.length > 0 ? hashParts : window.location.pathname.split('/').filter(p => p !== '')
+    );
+    const isPsbParam = searchParams.get('psb') === 'true' || searchParams.has('psb') || hashStr.includes('psb=true') || pathParts[0] === 'psb';
+    const portalType = isPsbParam ? 'psb' : (pathParts[0] || 'portal');
+    const tenantId = searchParams.get('tenant') || pathParts[1] || 'default-portal';
+    const templateId = searchParams.get('template') || searchParams.get('templateId') || pathParts[2];
+    const jenjangQuery = searchParams.get('jenjang') || searchParams.get('jenjangId');
+
     const [resolvedConn, setResolvedConn] = useState<{ portalId: string; gasEndpoint: string; gasApiKey: string; isEncrypted: boolean }>({
         portalId: tenantId,
         gasEndpoint: '',
@@ -151,6 +162,20 @@ export const PublicPortal: React.FC = () => {
             try {
                 let conn = resolvePortalConnectionFromUrl(tenantId);
 
+                // Fallback otomatis jika gasEndpoint belum ada di URL dan jenisnya PSB
+                if (!conn.gasEndpoint && portalType === 'psb') {
+                    try {
+                        const localSett = await db.settings.toCollection().first();
+                        const fallbackGas = localSett?.psbConfig?.googleScriptUrl || localSett?.portalConfig?.gasEndpoint;
+                        if (fallbackGas) {
+                            conn = {
+                                ...conn,
+                                gasEndpoint: fallbackGas
+                            };
+                        }
+                    } catch {}
+                }
+
                 if (!conn.gasEndpoint && tenantId && tenantId !== 'default-portal') {
                     try {
                         const cloudPublic = await fetchPublicPortalSettings(tenantId);
@@ -174,17 +199,61 @@ export const PublicPortal: React.FC = () => {
                 setResolvedConn(conn);
 
                 if (!conn.gasEndpoint) {
+                    if (portalType === 'psb') {
+                        throw new Error('Koneksi Pendaftaran PSB belum terhubung ke Google Apps Script (GAS). Pastikan Admin telah mengatur URL GAS di menu PSB.');
+                    }
                     throw new Error('Koneksi Portal belum terkonfigurasi. Pastikan menggunakan tautan Portal Wali resmi dari pihak pondok.');
                 }
 
-                const publicBundle = await fetchPortalPublicInfoFromGas(conn.gasEndpoint, conn.portalId, conn.gasApiKey);
-                if (publicBundle.settings) {
-                    setTenantSettings(publicBundle.settings);
-                    setSyncedAt(publicBundle.syncedAt);
-                    setIsLegacyGasWarning(Boolean(publicBundle.isLegacyGas));
-                    setLegacySantriList(publicBundle.legacySantriSummary || []);
-                } else {
-                    setError('Data profil pesantren belum ditemukan di server Portal.');
+                try {
+                    const publicBundle = await fetchPortalPublicInfoFromGas(conn.gasEndpoint, conn.portalId, conn.gasApiKey);
+                    const isBundleValid = publicBundle.settings && 
+                        typeof publicBundle.settings === 'object' && 
+                        !Array.isArray(publicBundle.settings) &&
+                        ((publicBundle.settings as any).namaPonpes || (publicBundle.settings as any).psbConfig);
+
+                    if (isBundleValid && publicBundle.settings) {
+                        let finalSettings = publicBundle.settings;
+                        // Jika dibuka di browser yang memiliki database lokal (admin/pondok), 
+                        // gabungkan psbConfig lokal agar desain terbaru yang belum sempat disinkronkan tetap tampil
+                        try {
+                            const localSett = await db.settings.toCollection().first();
+                            if (localSett?.psbConfig) {
+                                finalSettings = {
+                                    ...publicBundle.settings,
+                                    namaPonpes: localSett.namaPonpes || publicBundle.settings.namaPonpes,
+                                    logoPonpesUrl: localSett.logoPonpesUrl || publicBundle.settings.logoPonpesUrl,
+                                    jenjang: (localSett.jenjang && localSett.jenjang.length > 0) ? localSett.jenjang : publicBundle.settings.jenjang,
+                                    psbConfig: {
+                                        ...publicBundle.settings.psbConfig,
+                                        ...localSett.psbConfig,
+                                        templates: (localSett.psbConfig.templates && localSett.psbConfig.templates.length > 0)
+                                            ? localSett.psbConfig.templates
+                                            : publicBundle.settings.psbConfig?.templates
+                                    }
+                                };
+                            }
+                        } catch {}
+                        setTenantSettings(finalSettings);
+                        setSyncedAt(publicBundle.syncedAt);
+                        setIsLegacyGasWarning(Boolean(publicBundle.isLegacyGas));
+                        setLegacySantriList(publicBundle.legacySantriSummary || []);
+                    } else if (portalType === 'psb') {
+                        // GAS script PSB standar (atau respon array pendaftar) tidak mengembalikan profil lengkap,
+                        // muat konfigurasi formulir dari database lokal
+                        const localSett = await db.settings.toCollection().first();
+                        setTenantSettings(localSett || initialSettings);
+                    } else {
+                        setError('Data profil pesantren belum ditemukan di server Portal.');
+                    }
+                } catch (gasErr) {
+                    // Jika fetch info gagal tetapi ini pendaftaran PSB dan GAS aktif
+                    if (portalType === 'psb') {
+                        const localSett = await db.settings.toCollection().first();
+                        setTenantSettings(localSett || initialSettings);
+                    } else {
+                        throw gasErr;
+                    }
                 }
             } catch (err) {
                 console.error('Portal error:', err);
@@ -194,7 +263,7 @@ export const PublicPortal: React.FC = () => {
             }
         };
         fetchTenantData();
-    }, [tenantId]);
+    }, [tenantId, portalType]);
 
     if (loading) return <LoadingFallback />;
     if (error) {
@@ -280,7 +349,18 @@ export const PublicPortal: React.FC = () => {
         .concat(portalConfig?.showLibrary !== false ? [{ key: 'perpus', label: 'Perpustakaan', icon: 'bi-journal-bookmark' }] : []);
 
     if (portalType === 'psb') {
-        return <PsbPublicForm settings={tenantSettings} templateId={templateId} tenantId={resolvedConn.portalId} conn={resolvedConn} />;
+        const numericJenjangId = jenjangQuery ? parseInt(jenjangQuery, 10) : undefined;
+        const resolvedJenjangId = !isNaN(numericJenjangId!) ? numericJenjangId : undefined;
+        return (
+            <PsbPublicForm
+                settings={tenantSettings || initialSettings}
+                templateId={templateId}
+                tenantId={resolvedConn.portalId}
+                conn={resolvedConn}
+                initialJenjangId={resolvedJenjangId}
+                jenjangNameQuery={jenjangQuery}
+            />
+        );
     }
 
     const handlePortalLogin = async (e: React.FormEvent) => {
@@ -1016,17 +1096,111 @@ export const PublicPortal: React.FC = () => {
     );
 };
 
+// Helper untuk mendapatkan konfigurasi template PSB sesuai jenjang terpilih
+const resolveJenjangConfig = (
+    baseConfig: PsbConfig,
+    targetJenjangId?: number,
+    explicitTemplateId?: string
+): { activeConfig: PsbConfig; templateName: string; isCustom: boolean } => {
+    // 1. Jika ada ID template spesifik dari URL
+    if (explicitTemplateId && baseConfig.templates && baseConfig.templates.length > 0) {
+        const found = baseConfig.templates.find(t => t.id === explicitTemplateId);
+        if (found) {
+            return {
+                activeConfig: {
+                    ...baseConfig,
+                    tahunAjaranAktif: found.tahunAjaranAktif || baseConfig.tahunAjaranAktif,
+                    targetJenjangId: found.targetJenjangId || targetJenjangId,
+                    designStyle: found.designStyle || baseConfig.designStyle,
+                    activeFields: found.activeFields && found.activeFields.length > 0 ? found.activeFields : baseConfig.activeFields,
+                    requiredStandardFields: found.requiredStandardFields || baseConfig.requiredStandardFields,
+                    requiredDocuments: found.requiredDocuments || baseConfig.requiredDocuments || [],
+                    customFields: found.customFields || baseConfig.customFields || [],
+                    fieldHints: found.fieldHints || baseConfig.fieldHints || {},
+                    biayaPendaftaran: found.biayaPendaftaran !== undefined ? found.biayaPendaftaran : baseConfig.biayaPendaftaran,
+                    infoRekening: found.infoRekening || baseConfig.infoRekening,
+                    pesanSukses: found.pesanSukses || baseConfig.pesanSukses,
+                },
+                templateName: found.name,
+                isCustom: true
+            };
+        }
+    }
+
+    // 2. Jika jenjang dipilih, cari template yang khusus dibuat untuk jenjang ini di daftar templates
+    if (targetJenjangId && baseConfig.templates && baseConfig.templates.length > 0) {
+        const foundByJenjang = baseConfig.templates.find(t => t.targetJenjangId === targetJenjangId);
+        if (foundByJenjang) {
+            return {
+                activeConfig: {
+                    ...baseConfig,
+                    tahunAjaranAktif: foundByJenjang.tahunAjaranAktif || baseConfig.tahunAjaranAktif,
+                    targetJenjangId: targetJenjangId,
+                    designStyle: foundByJenjang.designStyle || baseConfig.designStyle,
+                    activeFields: foundByJenjang.activeFields && foundByJenjang.activeFields.length > 0 ? foundByJenjang.activeFields : baseConfig.activeFields,
+                    requiredStandardFields: foundByJenjang.requiredStandardFields || baseConfig.requiredStandardFields,
+                    requiredDocuments: foundByJenjang.requiredDocuments || baseConfig.requiredDocuments || [],
+                    customFields: foundByJenjang.customFields || baseConfig.customFields || [],
+                    fieldHints: foundByJenjang.fieldHints || baseConfig.fieldHints || {},
+                    biayaPendaftaran: foundByJenjang.biayaPendaftaran !== undefined ? foundByJenjang.biayaPendaftaran : baseConfig.biayaPendaftaran,
+                    infoRekening: foundByJenjang.infoRekening || baseConfig.infoRekening,
+                    pesanSukses: foundByJenjang.pesanSukses || baseConfig.pesanSukses,
+                },
+                templateName: foundByJenjang.name,
+                isCustom: true
+            };
+        }
+    }
+
+    // 3. Jika konfigurasi utama saat ini memang untuk jenjang ini
+    if (targetJenjangId && baseConfig.targetJenjangId === targetJenjangId) {
+        return {
+            activeConfig: baseConfig,
+            templateName: 'Formulir Utama',
+            isCustom: true
+        };
+    }
+
+    // 4. Default: formulir standar baseConfig dengan targetJenjangId terpasang
+    return {
+        activeConfig: {
+            ...baseConfig,
+            targetJenjangId: targetJenjangId
+        },
+        templateName: 'Formulir Standar',
+        isCustom: false
+    };
+};
+
 const PsbPublicForm: React.FC<{
     settings: PondokSettings;
     templateId?: string;
     tenantId: string;
     conn: { portalId: string; gasEndpoint: string; gasApiKey: string };
-}> = ({ settings, templateId, tenantId, conn }) => {
-    const config = settings.psbConfig;
-    let activeConfig: PsbConfig = config;
-    if (templateId && config.templates) {
-        const tpl = config.templates.find(t => t.id === templateId);
-        if (tpl) activeConfig = { ...config, ...tpl };
+    initialJenjangId?: number;
+    jenjangNameQuery?: string | null;
+}> = ({ settings, templateId, tenantId, conn, initialJenjangId, jenjangNameQuery }) => {
+    const config = settings.psbConfig || {
+        tahunAjaranAktif: `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`,
+        targetKuota: 100,
+        nomorHpAdmin: '',
+        pesanSukses: 'Terima kasih telah mendaftar!',
+        activeGelombang: 1,
+        biayaPendaftaran: 0,
+        infoRekening: '',
+        activeFields: ['namaLengkap', 'jenisKelamin', 'tempatLahir', 'tanggalLahir', 'alamat', 'namaAyah', 'teleponAyah', 'namaIbu'],
+        requiredStandardFields: ['namaLengkap', 'jenisKelamin'],
+        requiredDocuments: []
+    };
+
+    let presetJenjangId = initialJenjangId;
+    if (!presetJenjangId && jenjangNameQuery && settings.jenjang) {
+        const matched = settings.jenjang.find(j => 
+            String(j.id) === jenjangNameQuery ||
+            j.nama.toLowerCase() === jenjangNameQuery.toLowerCase() ||
+            j.nama.toLowerCase().includes(jenjangNameQuery.toLowerCase())
+        );
+        if (matched) presetJenjangId = matched.id;
     }
 
     return (
@@ -1047,7 +1221,14 @@ const PsbPublicForm: React.FC<{
                     </div>
                 </div>
                 <div className="flex-grow">
-                    <PsbFormViewer settings={settings} config={activeConfig} tenantId={tenantId} conn={conn} />
+                    <PsbFormViewer
+                        settings={settings}
+                        config={config}
+                        tenantId={tenantId}
+                        conn={conn}
+                        initialJenjangId={presetJenjangId}
+                        templateId={templateId}
+                    />
                 </div>
                 <div className="bg-gray-50 border-t p-3 text-center text-gray-400 text-[10px] no-print">
                     &copy; {new Date().getFullYear()} eSantri Web • Didukung oleh {settings.namaPonpes}
@@ -1062,15 +1243,37 @@ const PsbFormViewer: React.FC<{
     config: PsbConfig;
     tenantId: string;
     conn: { portalId: string; gasEndpoint: string; gasApiKey: string };
-}> = ({ settings, config, tenantId, conn }) => {
+    initialJenjangId?: number;
+    templateId?: string;
+}> = ({ settings, config, tenantId, conn, initialJenjangId, templateId }) => {
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [fields, setFields] = useState<Record<string, any>>({});
 
+    // Jenjang hanya terkunci jika ada parameter eksplisit di URL (?jenjang=ID atau ?template=ID)
+    const isJenjangLocked = Boolean(initialJenjangId || templateId);
+
+    // Cari jenjang default awal: prioritaskan jenjang yang sudah memiliki desain khusus
+    const defaultJenjangId = initialJenjangId ||
+        settings.jenjang?.find(j => 
+            config.templates?.some(t => t.targetJenjangId === j.id) ||
+            config.targetJenjangId === j.id
+        )?.id ||
+        settings.jenjang?.[0]?.id;
+
+    const [selectedJenjangId, setSelectedJenjangId] = useState<number | undefined>(defaultJenjangId);
+
+    // Dapatkan konfigurasi form yang dinamis sesuai jenjang yang dipilih saat ini
+    const { activeConfig: currentConfig, templateName, isCustom } = useMemo(() => {
+        return resolveJenjangConfig(config, selectedJenjangId, templateId);
+    }, [config, selectedJenjangId, templateId]);
+
     const handleInputChange = (name: string, value: any) => {
         setFields(prev => ({ ...prev, [name]: value }));
     };
+
+    const targetJenjang = settings.jenjang?.find(j => j.id === selectedJenjangId);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1078,13 +1281,25 @@ const PsbFormViewer: React.FC<{
         setSubmitError(null);
         try {
             if (!conn.gasEndpoint) {
-                throw new Error('Portal GAS URL belum tersedia.');
+                throw new Error('URL Google Apps Script belum tersedia. Pastikan panitia telah menghubungkan Web App GAS.');
             }
+
+            if (!selectedJenjangId && settings.jenjang && settings.jenjang.length > 0) {
+                throw new Error('Silakan pilih Jenjang Pendidikan Tujuan pendaftaran terlebih dahulu.');
+            }
+
+            const jenjangName = targetJenjang?.nama || 'Umum';
+            const targetSheetName = `Pendaftar ${jenjangName}`;
+
             await submitPortalPsbToGas(conn.gasEndpoint, tenantId, {
                 ...fields,
-                tahunAjaranAktif: config.tahunAjaranAktif,
-                targetJenjangId: config.targetJenjangId,
-                submissionSource: 'portal-psb'
+                tahunAjaranAktif: currentConfig.tahunAjaranAktif,
+                targetJenjangId: selectedJenjangId,
+                targetJenjangNama: jenjangName,
+                jenjangId: selectedJenjangId,
+                namaJenjang: jenjangName,
+                submissionSource: 'portal-psb',
+                sheetName: targetSheetName
             }, conn.gasApiKey);
             setSubmitted(true);
         } catch (err) {
@@ -1102,10 +1317,17 @@ const PsbFormViewer: React.FC<{
                     <i className="bi bi-check-lg text-5xl"></i>
                 </div>
                 <h2 className="text-2xl font-bold mb-2">Pendaftaran Berhasil!</h2>
-                <p className="text-gray-600 mb-8 max-w-md mx-auto">Data Anda telah kami terima di database cloud. Silakan simpan halaman ini sebagai bukti pendaftaran.</p>
+                <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                    {currentConfig.pesanSukses || 'Data pendaftaran santri baru telah kami terima di database cloud. Silakan simpan halaman ini atau catat ID Pendaftaran Anda.'}
+                </p>
                 <div className="bg-gray-50 border p-4 rounded-lg text-left max-w-sm mx-auto mb-8">
                     <div className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">ID Pendaftaran</div>
                     <div className="font-mono text-lg">{Date.now()}</div>
+                    {selectedJenjangId && (
+                        <div className="text-xs text-teal-800 font-bold mt-1">
+                            Jenjang: {targetJenjang?.nama}
+                        </div>
+                    )}
                 </div>
                 <button onClick={() => window.location.reload()} className="bg-teal-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-teal-700 transition-colors">Daftar Santri Lain</button>
             </div>
@@ -1115,27 +1337,128 @@ const PsbFormViewer: React.FC<{
     return (
         <div className="h-full relative overflow-y-auto no-print custom-scrollbar">
             <form onSubmit={handleSubmit} className="p-6 md:p-10 max-w-3xl mx-auto space-y-10">
-                <header className="text-center mb-10 border-b pb-6">
-                    <h1 className="text-2xl sm:text-3xl font-extrabold text-teal-900 mb-2 uppercase tracking-wide">{config.tahunAjaranAktif ? 'Pendaftaran Santri Baru' : 'Formulir Pendaftaran'}</h1>
-                    <div className="h-1 w-20 bg-amber-500 mx-auto rounded-full mb-4"></div>
-                    <p className="text-sm text-gray-500 uppercase tracking-widest font-bold">Tahun Ajaran {config.tahunAjaranAktif || new Date().getFullYear()}</p>
+                <header className="text-center mb-8 border-b pb-6">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-teal-900 mb-2 uppercase tracking-wide">
+                        {currentConfig.tahunAjaranAktif ? 'Pendaftaran Santri Baru' : 'Formulir Pendaftaran'}
+                    </h1>
+                    <div className="h-1 w-20 bg-amber-500 mx-auto rounded-full mb-3"></div>
+                    <p className="text-sm text-gray-500 uppercase tracking-widest font-bold">
+                        Tahun Ajaran {currentConfig.tahunAjaranAktif || new Date().getFullYear()}
+                    </p>
                 </header>
+
                 {submitError && (
                     <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 font-medium">
                         <i className="bi bi-exclamation-triangle-fill mr-2"></i>
                         {submitError}
                     </div>
                 )}
-                <div className="space-y-12">
-                    <div className="bg-teal-50 border border-teal-100 p-4 rounded-xl">
-                        <label className="block text-xs font-bold text-teal-600 uppercase mb-2 tracking-widest">Jenjang Pendidikan Tujuan</label>
-                        <div className="font-bold text-xl text-teal-900 flex items-center gap-2">
-                            <i className="bi bi-mortarboard-fill"></i>
-                            {settings.jenjang.find(j => j.id === config.targetJenjangId)?.nama || 'Semua Jenjang'}
+
+                <div className="space-y-10">
+                    {/* BAGIAN PEMILIHAN JENJANG PENDIDIKAN */}
+                    {isJenjangLocked ? (
+                        <div className="bg-teal-50 border border-teal-200 p-4 sm:p-5 rounded-2xl flex items-center justify-between shadow-2xs">
+                            <div>
+                                <label className="block text-[11px] font-bold text-teal-700 uppercase mb-1 tracking-widest">
+                                    Jenjang Pendidikan Tujuan
+                                </label>
+                                <div className="font-extrabold text-xl text-teal-950 flex items-center gap-2">
+                                    <i className="bi bi-mortarboard-fill text-teal-600"></i>
+                                    {targetJenjang?.nama || 'Semua Jenjang'}
+                                </div>
+                                {isCustom && (
+                                    <span className="inline-block mt-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                        ✓ Desain Khusus Aktif ({templateName})
+                                    </span>
+                                )}
+                            </div>
+                            <span className="bg-teal-700 text-white text-[11px] font-bold px-3 py-1 rounded-full shrink-0">
+                                Terkunci
+                            </span>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="bg-teal-50/80 border border-teal-200 p-4 sm:p-5 rounded-2xl space-y-3.5 shadow-2xs">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-teal-200/60 pb-2.5">
+                                <div>
+                                    <label className="block text-xs font-black text-teal-950 uppercase tracking-wider">
+                                        Pilih Jenjang Pendidikan Tujuan <span className="text-red-500 font-black">*</span>
+                                    </label>
+                                    <p className="text-[11px] text-teal-800 mt-0.5">
+                                        Formulir dan syarat berkas di bawah akan <strong>berganti otomatis</strong> sesuai jenjang yang Anda pilih:
+                                    </p>
+                                </div>
+
+                                {/* Dropdown Selector Cepat */}
+                                <div className="w-full sm:w-56 shrink-0">
+                                    <select
+                                        value={selectedJenjangId || ''}
+                                        onChange={e => setSelectedJenjangId(Number(e.target.value))}
+                                        className="w-full bg-white border border-teal-300 text-teal-950 text-xs font-bold rounded-xl p-2.5 shadow-2xs focus:ring-2 focus:ring-teal-500 outline-none cursor-pointer"
+                                    >
+                                        <option value="">-- Pilih Jenjang --</option>
+                                        {(settings.jenjang || []).map(j => (
+                                            <option key={j.id} value={j.id}>
+                                                {j.nama} {config.templates?.some(t => t.targetJenjangId === j.id) || config.targetJenjangId === j.id ? '★' : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Tombol Pilihan Interaktif Berbentuk Kartu */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                {(settings.jenjang || []).map(j => {
+                                    const isSelected = selectedJenjangId === j.id;
+                                    const hasDesign = config.templates?.some(t => t.targetJenjangId === j.id) || config.targetJenjangId === j.id;
+                                    return (
+                                        <button
+                                            key={j.id}
+                                            type="button"
+                                            onClick={() => setSelectedJenjangId(j.id)}
+                                            className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                                                isSelected
+                                                    ? 'bg-teal-700 text-white border-teal-800 shadow-md ring-2 ring-teal-500 font-bold'
+                                                    : 'bg-white text-gray-800 border-gray-200 hover:border-teal-300 hover:bg-teal-50/50'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <i className={`bi bi-mortarboard${isSelected ? '-fill' : ''} text-lg shrink-0 ${isSelected ? 'text-teal-200' : 'text-teal-600'}`}></i>
+                                                <div className="min-w-0">
+                                                    <span className="text-xs font-bold block truncate">{j.nama}</span>
+                                                    {hasDesign && (
+                                                        <span className={`text-[10px] block ${isSelected ? 'text-teal-200' : 'text-emerald-700'}`}>
+                                                            {isSelected ? '✓ Desain Khusus' : '★ Ada Desain'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {isSelected && <i className="bi bi-check-circle-fill text-base text-teal-200 shrink-0 ml-1"></i>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Status Desain Formulir yang Sedang Aktif */}
+                            <div className="pt-2 flex items-center justify-between text-[11px] text-teal-800 border-t border-teal-200/50">
+                                <span>
+                                    Jenjang Aktif: <strong>{targetJenjang?.nama || 'Belum Dipilih'}</strong>
+                                </span>
+                                {isCustom ? (
+                                    <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-bold">
+                                        ✓ Memuat Desain: {templateName}
+                                    </span>
+                                ) : (
+                                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium">
+                                        Formulir Standar
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* KELOMPOK DATA STANDAR (SESUAI CONFIG AKTIF) */}
                     {fieldGroups.map((group, gIdx) => {
-                        const groupFields = group.fields.filter(f => config.activeFields.includes(f.key));
+                        const groupFields = group.fields.filter(f => currentConfig.activeFields.includes(f.key));
                         if (groupFields.length === 0) return null;
                         return (
                             <section key={gIdx} className="space-y-6">
@@ -1145,10 +1468,13 @@ const PsbFormViewer: React.FC<{
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                                     {groupFields.map(f => {
-                                        const isRequired = (config.requiredStandardFields || []).includes(f.key);
+                                        const isRequired = (currentConfig.requiredStandardFields || []).includes(f.key);
+                                        const hint = currentConfig.fieldHints?.[f.key];
                                         return (
                                             <div key={f.key} className={`space-y-1.5 ${f.key === 'namaLengkap' || f.key === 'alamat' || f.key === 'catatan' || f.type === 'markdown' || f.isFullWidth ? 'md:col-span-2' : ''}`}>
-                                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{f.label} {isRequired && <span className="text-red-500">*</span>}</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                                    {f.label} {isRequired && <span className="text-red-500">*</span>}
+                                                </label>
                                                 {f.key === 'jenisKelamin' ? (
                                                     <div className="flex gap-4 p-1">
                                                         <label className="flex items-center gap-2 cursor-pointer bg-white border px-4 py-2.5 rounded-lg flex-1 text-sm has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50 transition-all">
@@ -1182,6 +1508,11 @@ const PsbFormViewer: React.FC<{
                                                 ) : (
                                                     <input required={isRequired} type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-teal-500 outline-none text-sm transition" placeholder={f.label} onChange={e => handleInputChange(f.key, e.target.value)} />
                                                 )}
+                                                {hint && (
+                                                    <p className="text-[11px] text-teal-700 italic">
+                                                        <i className="bi bi-info-circle mr-1"></i>{hint}
+                                                    </p>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -1189,11 +1520,37 @@ const PsbFormViewer: React.FC<{
                             </section>
                         );
                     })}
-                    {(config.customFields?.length ?? 0) > 0 && (
+
+                    {/* CHECKLIST PERSYARATAN BERKAS (JIKA ADA DOKUMEN YANG DIATUR) */}
+                    {(currentConfig.requiredDocuments?.length ?? 0) > 0 && (
+                        <section className="space-y-4 pt-4 border-t">
+                            <h3 className="font-bold text-lg text-gray-800 border-l-4 border-teal-600 pl-3">
+                                Persyaratan Berkas Pendaftaran
+                            </h3>
+                            <div className="p-4 bg-teal-50/60 border border-teal-200 rounded-xl space-y-2.5">
+                                <p className="text-xs text-teal-900 font-semibold">
+                                    Mohon siapkan dokumen-dokumen fisik berikut untuk diserahkan ke Panitia PSB:
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                    {currentConfig.requiredDocuments?.map((doc, idx) => (
+                                        <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-teal-100 text-gray-700">
+                                            <i className="bi bi-file-earmark-check-fill text-teal-600 text-sm"></i>
+                                            <span>{doc}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {/* PERTANYAAN KHUSUS & BERKAS UPLOAD (SESUAI TEMPLATE JENJANG) */}
+                    {(currentConfig.customFields?.length ?? 0) > 0 && (
                         <section className="space-y-6 pt-6 border-t">
-                            <h3 className="font-bold text-lg text-gray-800 border-l-4 border-teal-600 pl-3">Informasi Tambahan & Berkas</h3>
+                            <h3 className="font-bold text-lg text-gray-800 border-l-4 border-teal-600 pl-3">
+                                Informasi Tambahan &amp; Berkas ({targetJenjang?.nama || 'Jenjang'})
+                            </h3>
                             <div className="grid grid-cols-1 gap-6">
-                                {config.customFields?.map(field => (
+                                {currentConfig.customFields?.map(field => (
                                     <div key={field.id} className="space-y-2">
                                         {field.type === 'section' ? (
                                             <h4 className="font-bold text-teal-700 bg-teal-50 p-3 rounded-lg border-l-4 border-teal-500 uppercase tracking-widest text-xs">{field.label}</h4>
@@ -1255,6 +1612,11 @@ const PsbFormViewer: React.FC<{
                                                 ) : (
                                                     <input type="text" required={field.required} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-teal-500 outline-none" onChange={e => handleInputChange(`custom_${field.id}`, e.target.value)} />
                                                 )}
+                                                {field.hint && (
+                                                    <p className="text-[11px] text-teal-700 italic">
+                                                        <i className="bi bi-info-circle mr-1"></i>{field.hint}
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -1263,11 +1625,12 @@ const PsbFormViewer: React.FC<{
                         </section>
                     )}
                 </div>
+
                 <div className="pt-10 border-t mt-12">
                     <button
                         disabled={submitting}
                         type="submit"
-                        className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 text-white font-black py-5 rounded-2xl shadow-[0_6px_0_0_#0d9488] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 text-xl"
+                        className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 text-white font-black py-5 rounded-2xl shadow-[0_6px_0_0_#0d9488] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 text-xl cursor-pointer"
                     >
                         {submitting ? (
                             <>
@@ -1284,7 +1647,7 @@ const PsbFormViewer: React.FC<{
                         Data aman terenkripsi &bullet; Langsung terkirim ke sistem {settings.namaPonpes}
                     </p>
                     <div className="mt-6 pt-4 border-t text-center text-xs text-gray-500">
-                        <div>Tahun Ajaran {config.tahunAjaranAktif || new Date().getFullYear()}</div>
+                        <div>Tahun Ajaran {currentConfig.tahunAjaranAktif || new Date().getFullYear()}</div>
                         <div className="mt-1">dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id</div>
                     </div>
                 </div>

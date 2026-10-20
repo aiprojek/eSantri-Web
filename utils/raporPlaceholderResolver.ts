@@ -1,5 +1,5 @@
 import React from 'react';
-import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell } from '../types';
+import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTemplate } from '../types';
 import { formatDate, getHijriDate, formatTanggalDokumen } from './formatters';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -262,10 +262,64 @@ export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): 
     return null;
 };
 
+export const templateHasBuiltInBiodata = (template: RaporTemplate | null | undefined): boolean => {
+    if (!template) return false;
+    const sheets = template.sheets && template.sheets.length > 0 ? template.sheets : [{ cells: template.cells }];
+    for (const sheet of sheets) {
+        if (!sheet || !sheet.cells) continue;
+        for (const row of sheet.cells) {
+            for (const cell of row) {
+                if (!cell || !cell.value) continue;
+                const v = cell.value.toUpperCase();
+                if (
+                    v.includes('$NAMA') || v.includes('{{NAMA') || v.includes('{NAMA') ||
+                    v.includes('$NIS') || v.includes('{{NIS') || v.includes('{NIS') ||
+                    v.includes('$ROMBEL') || v.includes('{{ROMBEL') || v.includes('{ROMBEL') ||
+                    v.includes('$KELAS') || v.includes('{{KELAS') || v.includes('{KELAS') ||
+                    v.includes('$PERINGKAT') || v.includes('{{PERINGKAT') || v.includes('{PERINGKAT') ||
+                    v.includes('$RANKING') || v.includes('{{RANKING') || v.includes('{RANKING')
+                ) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+};
+
 export const resolveRaporText = (text: string, context: RaporResolveContext): string => {
     if (!text) return '';
     const { santri, settings, record, targetDate = new Date() } = context;
     let res = text;
+
+    // Normalisasi tag format {{nama}}, {nama}, [nama] dsb ke $TAG untuk fleksibilitas maksimal dari Excel
+    const normalizeTagWord = (word: string): string => {
+        const u = word.trim().toUpperCase();
+        if (u === 'NAMA' || u === 'NAMA_SANTRI') return '$NAMA';
+        if (u === 'NAMA_LENGKAP') return '$NAMA_LENGKAP';
+        if (u === 'NIS') return '$NIS';
+        if (u === 'NISN') return '$NISN';
+        if (u === 'ROMBEL' || u === 'KELAS') return '$ROMBEL';
+        if (u === 'PERINGKAT' || u === 'RANKING' || u === 'JUARA') return '$PERINGKAT';
+        if (u === 'TOTAL_NILAI' || u === 'TOTAL' || u === 'JUMLAH') return '$TOTAL_NILAI';
+        if (u === 'RATA_RATA' || u === 'RATA') return '$RATA_RATA';
+        if (u === 'PREDIKAT') return '$PREDIKAT_RATA_RATA';
+        if (u === 'WALI_KELAS' || u === 'NAMA_WALI_KELAS') return '$NAMA_WALI_KELAS';
+        if (u === 'MUDIR' || u === 'PIMPINAN' || u === 'KEPALA_SEKOLAH') return '$NAMA_MUDIR';
+        if (u === 'TANGGAL_RAPOR' || u === 'TANGGAL') return '$TANGGAL_DOKUMEN';
+        if (u === 'TEMPAT_RAPOR' || u === 'KOTA') return '$TEMPAT_RAPOR';
+        if (u === 'SEMESTER') return '$SEMESTER';
+        if (u === 'TAHUN_AJAR' || u === 'TAHUN_AJARAN') return '$TAHUN_AJARAN';
+        if (u === 'CATATAN_WALI' || u === 'CATATAN') return '$CATATAN_WALI_KELAS';
+        return `$${u}`;
+    };
+
+    // Replace {{tag}}
+    res = res.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, p1) => normalizeTagWord(p1));
+    // Replace {tag} (single curly)
+    res = res.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, p1) => normalizeTagWord(p1));
+    // Replace [tag] (square brackets)
+    res = res.replace(/\[([a-zA-Z0-9_]+)\]/g, (_match, p1) => normalizeTagWord(p1));
 
     // Santri Data
     if (santri) {

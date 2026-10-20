@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useAppContext } from '../../AppContext';
 import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, DigitalAsset } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
@@ -24,8 +24,8 @@ export const TabDesainRapor: React.FC = () => {
     const [dragStart, setDragStart] = useState<{r: number, c: number} | null>(null);
     const [zoomScale, setZoomScale] = useState(1);
     const [isDesignPreviewOpen, setIsDesignPreviewOpen] = useState(false);
+    const [isExcelPasteModalOpen, setIsExcelPasteModalOpen] = useState(false);
     const [selectedTagCategory, setSelectedTagCategory] = useState<string>('santri');
-    const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
 
     // Column & Row Live Resizing State (Excel-like drag resize)
     const [resizingCol, setResizingCol] = useState<{ colIdx: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
@@ -536,11 +536,42 @@ export const TabDesainRapor: React.FC = () => {
                     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
                     const rowCount = Math.min(range.e.r + 1, 100);
                     const colCount = Math.min(range.e.c + 1, 30);
-                    
+
+                    // Ekstrak lebar kolom dari format Excel asli
+                    const colWidths: number[] = [];
+                    if (ws['!cols']) {
+                        for (let c = 0; c < colCount; c++) {
+                            const colInfo = ws['!cols'][c];
+                            if (colInfo) {
+                                if (colInfo.wpx) colWidths[c] = Math.max(35, Math.min(800, Math.round(colInfo.wpx)));
+                                else if (colInfo.wch) colWidths[c] = Math.max(35, Math.min(800, Math.round(colInfo.wch * 8)));
+                                else if (colInfo.width) colWidths[c] = Math.max(35, Math.min(800, Math.round(colInfo.width * 8)));
+                            }
+                        }
+                    }
+
+                    // Ekstrak tinggi baris dari format Excel asli
+                    const rowHeights: number[] = [];
+                    if (ws['!rows']) {
+                        for (let r = 0; r < rowCount; r++) {
+                            const rowInfo = ws['!rows'][r];
+                            if (rowInfo) {
+                                if (rowInfo.hpx) rowHeights[r] = Math.max(20, Math.min(400, Math.round(rowInfo.hpx)));
+                                else if (rowInfo.hpt) rowHeights[r] = Math.max(20, Math.min(400, Math.round(rowInfo.hpt * 1.333)));
+                            }
+                        }
+                    }
+
+                    let hasBiodataInSheet = false;
                     const newCells: GridCell[][] = [];
                     for (let r = 0; r < rowCount; r++) {
                         const row: GridCell[] = [];
-                        for (let c = 0; c < colCount; c++) row.push(createEmptyCell(r, c));
+                        for (let c = 0; c < colCount; c++) {
+                            const cell = createEmptyCell(r, c);
+                            cell.width = colWidths[c] || 100;
+                            cell.height = rowHeights[r] || 30;
+                            row.push(cell);
+                        }
                         newCells.push(row);
                     }
 
@@ -553,9 +584,23 @@ export const TabDesainRapor: React.FC = () => {
                                 newCells[r][c].value = valStr;
                                 if (valStr.startsWith('=')) {
                                     newCells[r][c].type = 'formula';
+                                } else if (valStr.startsWith('{{') && valStr.endsWith('}}')) {
+                                    const inner = valStr.slice(2, -2).trim().toUpperCase();
+                                    const mappedTag = inner === 'NAMA' || inner === 'NAMA_LENGKAP' ? '$NAMA'
+                                        : inner === 'NIS' ? '$NIS'
+                                        : inner === 'NISN' ? '$NISN'
+                                        : inner === 'ROMBEL' || inner === 'KELAS' ? '$ROMBEL'
+                                        : inner === 'PERINGKAT' || inner === 'RANKING' ? '$PERINGKAT'
+                                        : `$${inner}`;
+                                    newCells[r][c].value = mappedTag;
+                                    newCells[r][c].type = 'data';
+                                    hasBiodataInSheet = true;
                                 } else if (valStr.startsWith('$')) {
                                     if (systemKeys.includes(valStr) || valStr.startsWith('$MAPEL_NAME') || valStr.startsWith('$TOTAL') || valStr.startsWith('$RATA') || valStr.startsWith('$RANK')) {
                                         newCells[r][c].type = 'data';
+                                        if (valStr === '$NAMA' || valStr === '$NIS' || valStr === '$ROMBEL' || valStr === '$PERINGKAT') {
+                                            hasBiodataInSheet = true;
+                                        }
                                     } else {
                                         newCells[r][c].type = 'input';
                                         newCells[r][c].key = valStr.substring(1).toUpperCase().replace(/[^A-Z0-9_]/g, '');
@@ -592,7 +637,10 @@ export const TabDesainRapor: React.FC = () => {
                         rowCount,
                         colCount,
                         cells: newCells,
-                        paperSize: 'A4'
+                        paperSize: 'A4',
+                        showJudul: false,
+                        showBiodataHeader: !hasBiodataInSheet,
+                        fitToPage: true
                     });
                 });
 
@@ -600,6 +648,7 @@ export const TabDesainRapor: React.FC = () => {
 
                 const cleanName = file.name.replace(/\.(xlsx|xls|ods|csv)$/i, '');
                 const firstSheet = importedSheets[0];
+                const hasAnyBiodata = importedSheets.some(s => s.showBiodataHeader === false);
                 const newTemplate: RaporTemplate = {
                     id: 'tpl_' + Date.now(),
                     name: `Import_${cleanName}`,
@@ -608,6 +657,9 @@ export const TabDesainRapor: React.FC = () => {
                     cells: firstSheet.cells,
                     sheets: importedSheets,
                     activeSheetId: firstSheet.id,
+                    showJudul: false,
+                    showBiodataHeader: !hasAnyBiodata,
+                    fitToPage: true,
                     lastModified: new Date().toISOString()
                 };
 
@@ -621,75 +673,6 @@ export const TabDesainRapor: React.FC = () => {
         reader.readAsBinaryString(file);
     };
 
-    // --- EXCEL PASTE OPERATIONS ---
-    const handleApplyPastedTable = (updatedCells: GridCell[][], newRowCount: number, newColCount: number) => {
-        if (!activeTemplate) return;
-        const currentSheetId = activeSheetId || activeTemplate.activeSheetId || activeTemplate.sheets?.[0]?.id || 'sheet_1';
-        const updatedSheets = (activeTemplate.sheets && activeTemplate.sheets.length > 0 ? activeTemplate.sheets : []).map(sh => {
-            if (sh.id === currentSheetId) {
-                return {
-                    ...sh,
-                    rowCount: newRowCount,
-                    colCount: newColCount,
-                    cells: updatedCells
-                };
-            }
-            return sh;
-        });
-
-        const nextTpl: RaporTemplate = {
-            ...activeTemplate,
-            rowCount: newRowCount,
-            colCount: newColCount,
-            cells: updatedCells,
-            sheets: updatedSheets.length > 0 ? updatedSheets : undefined
-        };
-
-        setActiveTemplate(nextTpl);
-    };
-
-    const handleCreateTemplateFromPaste = (newTpl: RaporTemplate) => {
-        const updated = [...templates, newTpl];
-        saveTemplatesToSettings(updated);
-        setActiveTemplate(newTpl);
-        setActiveSheetId(newTpl.sheets?.[0]?.id || '');
-        setIsEditing(true);
-        setZoomScale(1);
-        setSelectedCells([{ r: 0, c: 0 }]);
-    };
-
-    // Keyboard Ctrl+V listener on Canvas
-    useEffect(() => {
-        const handleGlobalPaste = (e: ClipboardEvent) => {
-            if (!isEditing || !activeTemplate) return;
-            const target = e.target as HTMLElement;
-            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-                return;
-            }
-
-            const html = e.clipboardData?.getData('text/html');
-            const text = e.clipboardData?.getData('text/plain');
-            const parsed = parseExcelClipboard(html, text);
-
-            if (parsed && parsed.rowCount > 0 && parsed.colCount > 0) {
-                e.preventDefault();
-                const startR = selectedCells[0]?.r || 0;
-                const startC = selectedCells[0]?.c || 0;
-                const { updatedCells, newRowCount, newColCount } = overlayPastedTableOntoGrid(
-                    activeTemplate.cells,
-                    parsed,
-                    startR,
-                    startC
-                );
-                handleApplyPastedTable(updatedCells, newRowCount, newColCount);
-                showToast(`Berhasil menempel ${parsed.rowCount} baris × ${parsed.colCount} kolom dari Excel ke sel (R:${startR + 1}, C:${startC + 1})!`, 'success');
-            }
-        };
-
-        window.addEventListener('paste', handleGlobalPaste);
-        return () => window.removeEventListener('paste', handleGlobalPaste);
-    }, [isEditing, activeTemplate, selectedCells, activeSheetId]);
-
     // --- GRID OPERATIONS ---
     const handleMouseDown = (r: number, c: number) => { setIsDragging(true); setDragStart({ r, c }); setSelectedCells([{ r, c }]); };
     const handleMouseEnter = (r: number, c: number) => {
@@ -701,6 +684,37 @@ export const TabDesainRapor: React.FC = () => {
         setSelectedCells(newSelection);
     };
     const handleMouseUp = () => setIsDragging(false);
+
+    const handleCanvasPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+        if (!canWrite || !activeTemplate) return;
+        const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+        if (targetTag === 'input' || targetTag === 'textarea') return;
+
+        const html = e.clipboardData.getData('text/html');
+        const text = e.clipboardData.getData('text/plain');
+        if (!html && !text) return;
+
+        const result = parseExcelClipboard(html, text);
+        if (result && result.rowCount > 0 && result.colCount > 0) {
+            e.preventDefault();
+            const startR = selectedCells[0]?.r ?? 0;
+            const startC = selectedCells[0]?.c ?? 0;
+            const { updatedCells, newRowCount, newColCount } = overlayPastedTableOntoGrid(
+                activeTemplate.cells,
+                result,
+                startR,
+                startC
+            );
+            const updated = {
+                ...activeTemplate,
+                rowCount: newRowCount,
+                colCount: newColCount,
+                cells: updatedCells
+            };
+            setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+            showToast(`Berhasil menempel ${result.rowCount} baris × ${result.colCount} kolom dari Excel!`, 'success');
+        }
+    };
 
     const addRow = () => {
         if (!activeTemplate) return;
@@ -768,6 +782,210 @@ export const TabDesainRapor: React.FC = () => {
             num = Math.floor(num / 26) - 1;
         }
         return name;
+    };
+
+    const executeDeleteRows = (rowsToDelete: number[]) => {
+        if (!activeTemplate || !canWrite) return;
+        const rowsSet = new Set(rowsToDelete);
+        const oldCells: GridCell[][] = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+
+        // Handle merged cells
+        for (let r = 0; r < activeTemplate.rowCount; r++) {
+            for (let c = 0; c < activeTemplate.colCount; c++) {
+                const cell = oldCells[r][c];
+                if (!cell.hidden && cell.rowSpan && cell.rowSpan > 1) {
+                    const spanEnd = r + cell.rowSpan - 1;
+                    if (rowsSet.has(r)) {
+                        // Master cell row is deleted; promote first non-deleted row in span
+                        let nextR = -1;
+                        for (let k = r + 1; k <= spanEnd; k++) {
+                            if (!rowsSet.has(k)) {
+                                nextR = k;
+                                break;
+                            }
+                        }
+                        if (nextR !== -1) {
+                            let remainingSpan = 0;
+                            for (let k = nextR; k <= spanEnd; k++) {
+                                if (!rowsSet.has(k)) remainingSpan++;
+                            }
+                            const targetCell = oldCells[nextR][c];
+                            targetCell.hidden = false;
+                            targetCell.value = cell.value;
+                            targetCell.type = cell.type;
+                            targetCell.key = cell.key;
+                            targetCell.align = cell.align;
+                            targetCell.borders = cell.borders;
+                            targetCell.colSpan = cell.colSpan;
+                            targetCell.rowSpan = remainingSpan;
+                        }
+                    } else {
+                        // Master cell remains; reduce span by count of deleted spanned rows
+                        let deletedInRange = 0;
+                        for (let k = r + 1; k <= spanEnd; k++) {
+                            if (rowsSet.has(k)) deletedInRange++;
+                        }
+                        if (deletedInRange > 0) {
+                            cell.rowSpan = Math.max(1, cell.rowSpan - deletedInRange);
+                        }
+                    }
+                }
+            }
+        }
+
+        const newGrid = oldCells.filter((_, r) => !rowsSet.has(r));
+        const reindexedGrid = newGrid.map((rowArr, newR) => {
+            return rowArr.map((cell, newC) => ({
+                ...cell,
+                row: newR,
+                col: newC
+            }));
+        });
+
+        const newRowCount = reindexedGrid.length;
+        const updated = {
+            ...activeTemplate,
+            rowCount: newRowCount,
+            cells: reindexedGrid
+        };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        setSelectedCells([]);
+        showToast(`Berhasil menghapus ${rowsToDelete.length} baris.`, 'success');
+    };
+
+    const handleDeleteRow = (targetRowIdx?: number) => {
+        if (!activeTemplate || !canWrite) return;
+        if (activeTemplate.rowCount <= 1) {
+            showToast('Template harus memiliki minimal 1 baris!', 'error');
+            return;
+        }
+
+        let rowsToDelete: number[] = [];
+        if (typeof targetRowIdx === 'number') {
+            rowsToDelete = [targetRowIdx];
+        } else if (selectedCells.length > 0) {
+            rowsToDelete = Array.from(new Set(selectedCells.map(s => s.r))).sort((a, b) => a - b);
+        } else {
+            rowsToDelete = [activeTemplate.rowCount - 1];
+        }
+
+        if (rowsToDelete.length === 0) return;
+        if (rowsToDelete.length >= activeTemplate.rowCount) {
+            showToast('Tidak dapat menghapus seluruh baris. Sisakan minimal 1 baris.', 'error');
+            return;
+        }
+
+        const label = rowsToDelete.map(r => r + 1).join(', ');
+        showConfirmation(
+            'Hapus Baris?',
+            `Apakah Anda yakin ingin menghapus baris ke-${label}? Data pada baris tersebut akan dihapus dari template desain rapor.`,
+            () => {
+                executeDeleteRows(rowsToDelete);
+            },
+            { confirmColor: 'red' }
+        );
+    };
+
+    const executeDeleteCols = (colsToDelete: number[]) => {
+        if (!activeTemplate || !canWrite) return;
+        const colsSet = new Set(colsToDelete);
+        const oldCells: GridCell[][] = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+
+        // Handle merged cells
+        for (let r = 0; r < activeTemplate.rowCount; r++) {
+            for (let c = 0; c < activeTemplate.colCount; c++) {
+                const cell = oldCells[r][c];
+                if (!cell.hidden && cell.colSpan && cell.colSpan > 1) {
+                    const spanEnd = c + cell.colSpan - 1;
+                    if (colsSet.has(c)) {
+                        // Master cell column is deleted; promote first non-deleted column in span
+                        let nextC = -1;
+                        for (let k = c + 1; k <= spanEnd; k++) {
+                            if (!colsSet.has(k)) {
+                                nextC = k;
+                                break;
+                            }
+                        }
+                        if (nextC !== -1) {
+                            let remainingSpan = 0;
+                            for (let k = nextC; k <= spanEnd; k++) {
+                                if (!colsSet.has(k)) remainingSpan++;
+                            }
+                            const targetCell = oldCells[r][nextC];
+                            targetCell.hidden = false;
+                            targetCell.value = cell.value;
+                            targetCell.type = cell.type;
+                            targetCell.key = cell.key;
+                            targetCell.align = cell.align;
+                            targetCell.borders = cell.borders;
+                            targetCell.rowSpan = cell.rowSpan;
+                            targetCell.colSpan = remainingSpan;
+                        }
+                    } else {
+                        // Master cell remains; reduce span by count of deleted spanned columns
+                        let deletedInRange = 0;
+                        for (let k = c + 1; k <= spanEnd; k++) {
+                            if (colsSet.has(k)) deletedInRange++;
+                        }
+                        if (deletedInRange > 0) {
+                            cell.colSpan = Math.max(1, cell.colSpan - deletedInRange);
+                        }
+                    }
+                }
+            }
+        }
+
+        const newGrid = oldCells.map(rowArr => rowArr.filter((_, c) => !colsSet.has(c)));
+        const reindexedGrid = newGrid.map((rowArr, newR) => {
+            return rowArr.map((cell, newC) => ({
+                ...cell,
+                row: newR,
+                col: newC
+            }));
+        });
+
+        const newColCount = reindexedGrid[0]?.length || 0;
+        const updated = {
+            ...activeTemplate,
+            colCount: newColCount,
+            cells: reindexedGrid
+        };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        setSelectedCells([]);
+        showToast(`Berhasil menghapus ${colsToDelete.length} kolom.`, 'success');
+    };
+
+    const handleDeleteCol = (targetColIdx?: number) => {
+        if (!activeTemplate || !canWrite) return;
+        if (activeTemplate.colCount <= 1) {
+            showToast('Template harus memiliki minimal 1 kolom!', 'error');
+            return;
+        }
+
+        let colsToDelete: number[] = [];
+        if (typeof targetColIdx === 'number') {
+            colsToDelete = [targetColIdx];
+        } else if (selectedCells.length > 0) {
+            colsToDelete = Array.from(new Set(selectedCells.map(s => s.c))).sort((a, b) => a - b);
+        } else {
+            colsToDelete = [activeTemplate.colCount - 1];
+        }
+
+        if (colsToDelete.length === 0) return;
+        if (colsToDelete.length >= activeTemplate.colCount) {
+            showToast('Tidak dapat menghapus seluruh kolom. Sisakan minimal 1 kolom.', 'error');
+            return;
+        }
+
+        const label = colsToDelete.map(c => getExcelColName(c)).join(', ');
+        showConfirmation(
+            'Hapus Kolom?',
+            `Apakah Anda yakin ingin menghapus kolom ${label}? Data pada kolom tersebut akan dihapus dari template desain rapor.`,
+            () => {
+                executeDeleteCols(colsToDelete);
+            },
+            { confirmColor: 'red' }
+        );
     };
 
     const getColWidth = (c: number): number => {
@@ -1074,8 +1292,8 @@ export const TabDesainRapor: React.FC = () => {
                         <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 no-scrollbar">
                             <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls, .ods, .csv" className="hidden" />
                             <div className="flex gap-2 flex-grow sm:flex-none">
-                                <button onClick={() => setIsPasteModalOpen(true)} className="flex-1 sm:flex-none whitespace-nowrap bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-2xs" title="Paste langsung tabel desain yang disalin dari Excel">
-                                    <i className="bi bi-clipboard-data-fill text-base text-emerald-600"></i> <span>Paste Excel</span>
+                                <button onClick={() => setIsExcelPasteModalOpen(true)} className="flex-1 sm:flex-none whitespace-nowrap bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-2xs" title="Salin tabel dari Excel lalu tempel langsung di sini">
+                                    <i className="bi bi-clipboard2-data-fill text-emerald-600 text-sm"></i> <span>Paste Excel</span>
                                 </button>
                                 <button onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none whitespace-nowrap bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95">
                                     <i className="bi bi-file-earmark-spreadsheet text-base"></i> <span>Import</span>
@@ -1221,6 +1439,22 @@ export const TabDesainRapor: React.FC = () => {
 
                     <div className="sm:hidden h-5 w-px bg-slate-300 shrink-0"></div>
 
+                    {/* Quick Excel Paste */}
+                    {canWrite && (
+                        <>
+                            <button 
+                                type="button" 
+                                onClick={() => setIsExcelPasteModalOpen(true)} 
+                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs shrink-0 transition-colors" 
+                                title="Tempel tabel dari Microsoft Excel (Ctrl+V juga bisa langsung di kanvas)"
+                            >
+                                <i className="bi bi-clipboard2-data text-emerald-600"></i>
+                                <span>Paste Excel</span>
+                            </button>
+                            <div className="h-5 w-px bg-slate-300 shrink-0"></div>
+                        </>
+                    )}
+
                     <button 
                         type="button" 
                         onClick={mergeCells} 
@@ -1261,24 +1495,59 @@ export const TabDesainRapor: React.FC = () => {
 
                     <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
-                    <button 
-                        type="button" 
-                        onClick={addRow} 
-                        className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 shrink-0 text-xs font-semibold flex items-center gap-1 shadow-2xs" 
-                        title="Tambah 1 Baris di Bawah"
-                    >
-                        <i className="bi bi-plus-lg text-teal-600"></i>
-                        <span>Baris</span>
-                    </button>
-                    <button 
-                        type="button" 
-                        onClick={addCol} 
-                        className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 shrink-0 text-xs font-semibold flex items-center gap-1 shadow-2xs" 
-                        title="Tambah 1 Kolom di Kanan"
-                    >
-                        <i className="bi bi-plus-lg text-teal-600"></i>
-                        <span>Kolom</span>
-                    </button>
+                    {/* Row Management: Add & Delete */}
+                    <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
+                        <button 
+                            type="button" 
+                            onClick={addRow} 
+                            disabled={!canWrite}
+                            className="px-2 py-1 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-40" 
+                            title="Tambah 1 Baris di Bawah"
+                        >
+                            <i className="bi bi-plus-lg text-teal-600"></i>
+                            <span>Baris</span>
+                        </button>
+                        <div className="w-px h-4 bg-slate-200"></div>
+                        <button 
+                            type="button" 
+                            onClick={() => handleDeleteRow()} 
+                            disabled={!canWrite || !activeTemplate || activeTemplate.rowCount <= 1}
+                            className="px-2 py-1 hover:bg-red-50 hover:text-red-700 text-slate-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 text-xs font-semibold flex items-center gap-1 transition-colors" 
+                            title={selectedCells.length > 0 
+                                ? `Hapus baris terpilih (${Array.from(new Set(selectedCells.map(s => s.r + 1))).join(', ')})` 
+                                : `Hapus baris terakhir (${activeTemplate?.rowCount || 1})`}
+                        >
+                            <i className="bi bi-trash3 text-red-500 text-[11px]"></i>
+                            <span>Hapus</span>
+                        </button>
+                    </div>
+
+                    {/* Column Management: Add & Delete */}
+                    <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
+                        <button 
+                            type="button" 
+                            onClick={addCol} 
+                            disabled={!canWrite}
+                            className="px-2 py-1 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-40" 
+                            title="Tambah 1 Kolom di Kanan"
+                        >
+                            <i className="bi bi-plus-lg text-teal-600"></i>
+                            <span>Kolom</span>
+                        </button>
+                        <div className="w-px h-4 bg-slate-200"></div>
+                        <button 
+                            type="button" 
+                            onClick={() => handleDeleteCol()} 
+                            disabled={!canWrite || !activeTemplate || activeTemplate.colCount <= 1}
+                            className="px-2 py-1 hover:bg-red-50 hover:text-red-700 text-slate-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-600 text-xs font-semibold flex items-center gap-1 transition-colors" 
+                            title={selectedCells.length > 0 
+                                ? `Hapus kolom terpilih (${Array.from(new Set(selectedCells.map(s => getExcelColName(s.c)))).join(', ')})` 
+                                : `Hapus kolom terakhir (${getExcelColName((activeTemplate?.colCount || 1) - 1)})`}
+                        >
+                            <i className="bi bi-trash3 text-red-500 text-[11px]"></i>
+                            <span>Hapus</span>
+                        </button>
+                    </div>
 
                     <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
@@ -1309,20 +1578,14 @@ export const TabDesainRapor: React.FC = () => {
                             <i className="bi bi-plus-lg"></i>
                         </button>
                     </div>
-
-                    <div className="h-5 w-px bg-slate-300 shrink-0"></div>
-
-                    <button 
-                        type="button" 
-                        onClick={() => setIsPasteModalOpen(true)} 
-                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs shrink-0 transition-colors" 
-                        title="Paste Desain Tabel Langsung dari Excel / Spreadsheet (Ctrl+V)"
-                    >
-                        <i className="bi bi-clipboard-data-fill text-emerald-700"></i>
-                        <span>Paste Excel</span>
-                    </button>
                 </div>
-                <div className="flex-grow overflow-auto p-4 sm:p-6 relative bg-slate-200/70 flex items-start justify-start border-b min-w-0 min-h-0" onMouseUp={handleMouseUp} ref={scrollContainerRef}>
+                <div 
+                    className="flex-grow overflow-auto p-4 sm:p-6 relative bg-slate-200/70 flex items-start justify-start border-b min-w-0 min-h-0 focus:outline-none" 
+                    onMouseUp={handleMouseUp} 
+                    onPaste={handleCanvasPaste}
+                    tabIndex={0}
+                    ref={scrollContainerRef}
+                >
                     {/* Live Resizing Dimension Badge Overlay */}
                     {resizingCol && (
                         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-slate-900/90 backdrop-blur text-white text-xs font-mono font-bold px-4 py-2 rounded-full shadow-2xl pointer-events-none flex items-center gap-2.5 border border-teal-400 animate-pulse">
@@ -1363,14 +1626,29 @@ export const TabDesainRapor: React.FC = () => {
                                         return (
                                             <th
                                                 key={cIdx}
-                                                className={`relative border border-slate-300 text-slate-700 font-bold text-[11px] text-center select-none cursor-pointer h-7 px-1 transition-colors sticky top-0 z-20 shadow-xs ${
+                                                className={`group/col relative border border-slate-300 text-slate-700 font-bold text-[11px] text-center select-none cursor-pointer h-7 px-1 transition-colors sticky top-0 z-20 shadow-xs ${
                                                     isColSelected ? 'bg-blue-200 text-blue-900 font-black' : 'bg-slate-100 hover:bg-slate-200'
                                                 }`}
                                                 style={{ width: `${colW}px`, minWidth: `${colW}px`, maxWidth: `${colW}px` }}
                                                 onClick={() => handleSelectColumn(cIdx)}
                                                 title={`Kolom ${colName} (${colW}px) - Klik untuk pilih seluruh kolom, seret pembatas kanan untuk atur lebar`}
                                             >
-                                                <span className="truncate block pointer-events-none">{colName}</span>
+                                                <div className="flex items-center justify-center gap-1 w-full h-full relative px-0.5">
+                                                    <span className="truncate block pointer-events-none">{colName}</span>
+                                                    {activeTemplate && activeTemplate.colCount > 1 && canWrite && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteCol(cIdx);
+                                                            }}
+                                                            className="opacity-0 group-hover/col:opacity-100 hover:bg-red-500 hover:text-white text-slate-400 p-0.5 rounded transition-all text-[9px] leading-none shrink-0"
+                                                            title={`Hapus Kolom ${colName}`}
+                                                        >
+                                                            <i className="bi bi-x-lg"></i>
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 {/* Excel-style Column Resizer Handle (Touch & Mouse) */}
                                                 <div
                                                     className="absolute top-0 right-0 bottom-0 w-4 -mr-1.5 cursor-col-resize hover:bg-teal-500/80 active:bg-teal-700 z-30 transition-colors touch-none flex items-center justify-center"
@@ -1392,14 +1670,29 @@ export const TabDesainRapor: React.FC = () => {
                                         <tr key={rIdx} style={{ height: `${rowH}px` }}>
                                             {/* Row Header 1, 2, 3... */}
                                             <th
-                                                className={`relative w-10 min-w-[40px] max-w-[40px] border border-slate-300 text-slate-700 font-bold text-[11px] text-center select-none cursor-pointer transition-colors sticky left-0 z-10 shadow-xs ${
+                                                className={`group/row relative w-10 min-w-[40px] max-w-[40px] border border-slate-300 text-slate-700 font-bold text-[11px] text-center select-none cursor-pointer transition-colors sticky left-0 z-10 shadow-xs ${
                                                     isRowSelected ? 'bg-blue-200 text-blue-900 font-black' : 'bg-slate-100 hover:bg-slate-200'
                                                 }`}
                                                 style={{ height: `${rowH}px`, minHeight: `${rowH}px` }}
                                                 onClick={() => handleSelectRow(rIdx)}
                                                 title={`Baris ${rIdx + 1} (${rowH}px) - Klik untuk pilih seluruh baris, seret pembatas bawah untuk atur tinggi`}
                                             >
-                                                <span className="pointer-events-none">{rIdx + 1}</span>
+                                                <div className="flex items-center justify-center gap-1 w-full h-full relative px-0.5">
+                                                    <span className="pointer-events-none">{rIdx + 1}</span>
+                                                    {activeTemplate && activeTemplate.rowCount > 1 && canWrite && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteRow(rIdx);
+                                                            }}
+                                                            className="opacity-0 group-hover/row:opacity-100 hover:bg-red-500 hover:text-white text-slate-400 p-0.5 rounded transition-all text-[8px] leading-none shrink-0"
+                                                            title={`Hapus Baris ${rIdx + 1}`}
+                                                        >
+                                                            <i className="bi bi-x-lg"></i>
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 {/* Excel-style Row Resizer Handle (Touch & Mouse) */}
                                                 <div
                                                     className="absolute left-0 right-0 bottom-0 h-4 -mb-1.5 cursor-row-resize hover:bg-teal-500/80 active:bg-teal-700 z-30 transition-colors touch-none flex items-center justify-center"
@@ -1454,7 +1747,12 @@ export const TabDesainRapor: React.FC = () => {
                                                             width: `${cellWidthPx}px`, 
                                                             minWidth: `${cellWidthPx}px`,
                                                             height: `${cellHeightPx}px`,
-                                                            textAlign: cell.align || 'center' 
+                                                            textAlign: cell.align || 'center',
+                                                            fontWeight: cell.bold ? 'bold' : undefined,
+                                                            fontStyle: cell.italic ? 'italic' : undefined,
+                                                            backgroundColor: !isSelected && cell.backgroundColor ? cell.backgroundColor : undefined,
+                                                            color: cell.color || undefined,
+                                                            fontSize: cell.fontSize ? `${cell.fontSize}px` : undefined
                                                         }}
                                                     >
                                                         <div className="w-full h-full flex flex-col items-center justify-center overflow-hidden leading-tight pointer-events-none">
@@ -1973,14 +2271,65 @@ export const TabDesainRapor: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Align */}
-                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                                <label className="text-xs font-bold text-slate-700">Perataan Teks</label>
-                                <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
+                            {/* Actions: Hapus Baris & Kolom Aktif */}
+                            {canWrite && (
+                                <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Hapus Baris / Kolom:</span>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => handleDeleteRow(activeCellData.row)} 
+                                            disabled={!activeTemplate || activeTemplate.rowCount <= 1}
+                                            className="px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:hover:bg-red-50 shadow-2xs"
+                                            title={`Hapus seluruh baris ke-${activeCellData.row + 1}`}
+                                        >
+                                            <i className="bi bi-trash3 text-red-600"></i>
+                                            <span>Baris {activeCellData.row + 1}</span>
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => handleDeleteCol(activeCellData.col)} 
+                                            disabled={!activeTemplate || activeTemplate.colCount <= 1}
+                                            className="px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:hover:bg-red-50 shadow-2xs"
+                                            title={`Hapus seluruh kolom ${getExcelColName(activeCellData.col)}`}
+                                        >
+                                            <i className="bi bi-trash3 text-red-600"></i>
+                                            <span>Kolom {getExcelColName(activeCellData.col)}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Align & Font Styling */}
+                            <div className="pt-2 border-t border-slate-200/60 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-700">Perataan & Gaya Teks</label>
+                                    <div className="flex items-center gap-1">
+                                        {/* Bold & Italic */}
+                                        <button 
+                                            type="button" 
+                                            onClick={() => updateActiveCell({ bold: !activeCellData.bold })} 
+                                            className={`p-1.5 rounded-lg text-xs font-bold transition-all border ${activeCellData.bold ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                                            title="Tebalkan Teks (Bold)"
+                                        >
+                                            <i className="bi bi-type-bold"></i>
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => updateActiveCell({ italic: !activeCellData.italic })} 
+                                            className={`p-1.5 rounded-lg text-xs font-bold transition-all border ${activeCellData.italic ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                                            title="Miringkan Teks (Italic)"
+                                        >
+                                            <i className="bi bi-type-italic"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 w-full justify-between">
                                     <button 
                                         type="button" 
                                         onClick={() => updateActiveCell({ align: 'left' })} 
-                                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${(activeCellData.align || 'center') === 'left' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                        className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'left' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
                                         title="Rata Kiri"
                                     >
                                         <i className="bi bi-text-left"></i> Kiri
@@ -1988,7 +2337,7 @@ export const TabDesainRapor: React.FC = () => {
                                     <button 
                                         type="button" 
                                         onClick={() => updateActiveCell({ align: 'center' })} 
-                                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${(activeCellData.align || 'center') === 'center' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                        className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'center' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
                                         title="Rata Tengah"
                                     >
                                         <i className="bi bi-text-center"></i> Tengah
@@ -1996,11 +2345,100 @@ export const TabDesainRapor: React.FC = () => {
                                     <button 
                                         type="button" 
                                         onClick={() => updateActiveCell({ align: 'right' })} 
-                                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${(activeCellData.align || 'center') === 'right' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                        className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'right' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
                                         title="Rata Kanan"
                                     >
                                         <i className="bi bi-text-right"></i> Kanan
                                     </button>
+                                </div>
+                            </div>
+
+                            {/* Warna Latar Sel (Background Color) */}
+                            <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
+                                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                                    <span>Warna Latar Sel</span>
+                                    {activeCellData.backgroundColor && (
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveCell({ backgroundColor: undefined })}
+                                            className="text-[10px] text-red-600 hover:underline font-semibold"
+                                        >
+                                            Reset
+                                        </button>
+                                    )}
+                                </label>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    {[
+                                        { label: 'Putih', color: '#ffffff' },
+                                        { label: 'Abu', color: '#f3f4f6' },
+                                        { label: 'Biru', color: '#dbeafe' },
+                                        { label: 'Hijau', color: '#dcfce7' },
+                                        { label: 'Kuning', color: '#fef9c3' },
+                                        { label: 'Merah', color: '#fee2e2' },
+                                        { label: 'Ungu', color: '#f3e8ff' }
+                                    ].map(c => (
+                                        <button
+                                            key={c.color}
+                                            type="button"
+                                            onClick={() => updateActiveCell({ backgroundColor: c.color })}
+                                            className="w-6 h-6 rounded-lg border border-slate-300 shadow-2xs hover:scale-110 transition-transform relative flex items-center justify-center"
+                                            style={{ backgroundColor: c.color }}
+                                            title={`Warna ${c.label}`}
+                                        >
+                                            {activeCellData.backgroundColor === c.color && (
+                                                <i className="bi bi-check text-xs font-black text-slate-800"></i>
+                                            )}
+                                        </button>
+                                    ))}
+                                    <input
+                                        type="color"
+                                        value={activeCellData.backgroundColor || '#ffffff'}
+                                        onChange={e => updateActiveCell({ backgroundColor: e.target.value })}
+                                        className="w-6 h-6 rounded-lg border border-slate-300 p-0 cursor-pointer"
+                                        title="Pilih Warna Custom"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Setelan Halaman Cetak Lembar (Fit to 1 Page & Biodata) */}
+                            <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                                <label className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-check-fill text-indigo-600"></i>
+                                    <span>Setelan Cetak Lembar Ini</span>
+                                </label>
+                                
+                                <div className="space-y-1.5 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 text-xs">
+                                    {/* Fit to 1 Page */}
+                                    <label className="flex items-center justify-between cursor-pointer font-semibold text-slate-800">
+                                        <span title="Paksa seluruh desain lembar ini pas tepat dalam 1 lembar tanpa meluber ke halaman 2">
+                                            Paksa Pas 1 Muka:
+                                        </span>
+                                        <input
+                                            type="checkbox"
+                                            checked={activeTemplate?.fitToPage !== false}
+                                            onChange={e => {
+                                                const val = e.target.checked;
+                                                setActiveTemplate(t => t ? { ...t, fitToPage: val } : null);
+                                            }}
+                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                        />
+                                    </label>
+
+                                    {/* Show Biodata Header */}
+                                    <label className="flex items-center justify-between cursor-pointer font-semibold text-slate-800">
+                                        <span title="Tampilkan kotak biodata bawaan sistem (Nama, NIS, Rombel, Ranking). Nonaktifkan jika format biodata sudah didesain sendiri di tabel ini.">
+                                            Header Biodata Otomatis:
+                                        </span>
+                                        <input
+                                            type="checkbox"
+                                            checked={activeTemplate?.showBiodataHeader === true}
+                                            onChange={e => {
+                                                const val = e.target.checked;
+                                                setActiveTemplate(t => t ? { ...t, showBiodataHeader: val } : null);
+                                            }}
+                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                        />
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -2097,19 +2535,36 @@ export const TabDesainRapor: React.FC = () => {
                 </div>
             )}
 
-            {isPasteModalOpen && (
-                <RaporExcelPasteModal
-                    isOpen={isPasteModalOpen}
-                    onClose={() => setIsPasteModalOpen(false)}
-                    settings={settings}
-                    activeTemplate={activeTemplate}
-                    isEditingTemplate={isEditing}
-                    selectedCell={selectedCells[0] || { r: 0, c: 0 }}
-                    onApplyToCurrentSheet={(updatedCells, newR, newC) => handleApplyPastedTable(updatedCells, newR, newC)}
-                    onCreateNewTemplate={handleCreateTemplateFromPaste}
-                    showToast={showToast}
-                />
-            )}
+            {/* EXCEL PASTE MODAL */}
+            <RaporExcelPasteModal
+                isOpen={isExcelPasteModalOpen}
+                onClose={() => setIsExcelPasteModalOpen(false)}
+                settings={settings}
+                activeTemplate={activeTemplate}
+                isEditingTemplate={isEditing}
+                selectedCell={selectedCells[0]}
+                onCreateNewTemplate={(newTpl) => {
+                    const updated = [...templates, newTpl];
+                    saveTemplatesToSettings(updated);
+                    setActiveTemplate(newTpl);
+                    setActiveSheetId(newTpl.activeSheetId || newTpl.sheets?.[0]?.id || '');
+                    setIsEditing(true);
+                    setZoomScale(1);
+                    setIsExcelPasteModalOpen(false);
+                }}
+                onApplyToCurrentSheet={(updatedCells, newRowCount, newColCount) => {
+                    if (!activeTemplate) return;
+                    const updated = {
+                        ...activeTemplate,
+                        rowCount: newRowCount,
+                        colCount: newColCount,
+                        cells: updatedCells
+                    };
+                    setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+                    setIsExcelPasteModalOpen(false);
+                }}
+                showToast={showToast}
+            />
         </div>
     );
 };

@@ -606,6 +606,10 @@ export interface RaporSheet {
     paperSize?: 'A4' | 'F4';
     orientation?: 'portrait' | 'landscape';
     showJudul?: boolean;
+    showBiodataHeader?: boolean;
+    fitToPage?: boolean;
+    printScale?: number | 'auto';
+    marginMode?: 'normal' | 'narrow' | 'none';
 }
 
 export interface RaporTemplate {
@@ -621,6 +625,11 @@ export interface RaporTemplate {
     activeSheetId?: string;
     lastModified: string;
     showJudul?: boolean;
+    showBiodataHeader?: boolean;
+    paperSize?: 'A4' | 'F4';
+    fitToPage?: boolean;
+    printScale?: number | 'auto';
+    marginMode?: 'normal' | 'narrow' | 'none';
 }
 
 export type RaporColumnType = 'label' | 'data' | 'input' | 'formula' | 'dropdown';
@@ -640,6 +649,11 @@ export interface GridCell {
     align?: 'left' | 'center' | 'right';
     borders?: { top: boolean; right: boolean; bottom: boolean; left: boolean };
     hidden?: boolean;
+    bold?: boolean;
+    italic?: boolean;
+    backgroundColor?: string;
+    color?: string;
+    fontSize?: number;
 }
 
 export interface PortalContact {

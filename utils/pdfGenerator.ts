@@ -466,6 +466,17 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 page-break-inside: auto !important;
                 break-inside: auto !important;
             }
+            /* Fit to 1 Page (1 Muka Rapor) Rules */
+            .rapor-fit-1-page {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+            }
+            .rapor-fit-1-page.page-break-after {
+                page-break-after: always !important;
+                break-after: page !important;
+            }
             .report-signature-footer {
                 position: relative !important;
                 left: auto !important;

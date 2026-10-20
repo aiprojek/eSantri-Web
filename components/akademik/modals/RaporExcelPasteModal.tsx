@@ -352,26 +352,57 @@ export const RaporExcelPasteModal: React.FC<RaporExcelPasteModalProps> = ({
                                 </div>
                             )}
 
+                            {/* Smart Optimization Badges */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                <div className="p-2 rounded-lg bg-indigo-50 border border-indigo-100 flex items-start gap-2 text-indigo-900">
+                                    <i className="bi bi-file-earmark-check-fill text-indigo-600 text-sm shrink-0 mt-0.5"></i>
+                                    <div>
+                                        <strong className="block font-bold">Pas 1 Muka (Fit to 1 Page)</strong>
+                                        <span className="text-[10px] text-indigo-700">Otomatis diset pas 1 lembar seperti setelan cetak Excel tanpa meluber ke halaman 2.</span>
+                                    </div>
+                                </div>
+                                <div className={`p-2 rounded-lg border flex items-start gap-2 ${
+                                    parsedTable.detectedTags.some(t => t === '$NAMA' || t === '$NIS' || t === '$ROMBEL' || t === '$KELAS' || t === '$PERINGKAT')
+                                        ? 'bg-amber-50 border-amber-200 text-amber-900'
+                                        : 'bg-emerald-50 border-emerald-100 text-emerald-900'
+                                }`}>
+                                    <i className={`bi ${parsedTable.detectedTags.some(t => t === '$NAMA' || t === '$NIS' || t === '$ROMBEL' || t === '$KELAS' || t === '$PERINGKAT') ? 'bi-shield-check text-amber-600' : 'bi-person-check text-emerald-600'} text-sm shrink-0 mt-0.5`}></i>
+                                    <div>
+                                        <strong className="block font-bold">Header Data Diri Santri</strong>
+                                        <span className="text-[10px]">
+                                            {parsedTable.detectedTags.some(t => t === '$NAMA' || t === '$NIS' || t === '$ROMBEL' || t === '$KELAS' || t === '$PERINGKAT')
+                                                ? 'Format biodata dibuat mandiri di Excel. Header bawaan otomatis dinonaktifkan agar tidak muncul ganda.'
+                                                : 'Belum ada format biodata mandiri. Header biodata ringkas bawaan tetap aktif.'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Pratinjau Mini Tabel */}
-                            <div className="border border-slate-200 rounded-lg overflow-x-auto max-h-40 bg-white">
+                            <div className="border border-slate-200 rounded-lg overflow-x-auto max-h-48 bg-white shadow-2xs">
                                 <table className="w-full text-[10px] border-collapse">
                                     <tbody>
                                         {parsedTable.cells.slice(0, 8).map((row, r) => (
                                             <tr key={r} className="border-b border-slate-100 last:border-0">
                                                 {row.slice(0, 8).map((cell, c) => {
                                                     if (cell.hidden) return null;
+                                                    const b = cell.borders || { top: true, right: true, bottom: true, left: true };
                                                     return (
                                                         <td
                                                             key={c}
                                                             rowSpan={cell.rowSpan}
                                                             colSpan={cell.colSpan}
-                                                            className={`p-1.5 border border-slate-200 truncate max-w-[120px] ${
-                                                                cell.type === 'data'
-                                                                    ? 'bg-indigo-50/70 text-indigo-800 font-semibold font-mono'
-                                                                    : cell.type === 'formula'
-                                                                    ? 'bg-amber-50 text-amber-800 font-mono'
-                                                                    : 'text-gray-700'
-                                                            } ${cell.align === 'center' ? 'text-center' : cell.align === 'right' ? 'text-right' : 'text-left'}`}
+                                                            style={{
+                                                                borderTop: b.top ? '1px solid #cbd5e1' : undefined,
+                                                                borderRight: b.right ? '1px solid #cbd5e1' : undefined,
+                                                                borderBottom: b.bottom ? '1px solid #cbd5e1' : undefined,
+                                                                borderLeft: b.left ? '1px solid #cbd5e1' : undefined,
+                                                                backgroundColor: cell.backgroundColor || (cell.type === 'data' ? '#eef2ff' : undefined),
+                                                                fontWeight: cell.bold ? 'bold' : (r === 0 ? '600' : 'normal'),
+                                                                fontStyle: cell.italic ? 'italic' : undefined,
+                                                                color: cell.color || undefined
+                                                            }}
+                                                            className={`p-1.5 truncate max-w-[120px] ${cell.align === 'center' ? 'text-center' : cell.align === 'right' ? 'text-right' : 'text-left'}`}
                                                         >
                                                             {cell.value || <span className="text-gray-300 italic">-</span>}
                                                         </td>

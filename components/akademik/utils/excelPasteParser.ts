@@ -10,6 +10,13 @@ export interface ParsedExcelCell {
     borders?: { top: boolean; right: boolean; bottom: boolean; left: boolean };
     isFormula?: boolean;
     hidden?: boolean;
+    width?: number;
+    height?: number;
+    bold?: boolean;
+    italic?: boolean;
+    backgroundColor?: string;
+    color?: string;
+    fontSize?: number;
 }
 
 export interface ParsedExcelTable {
@@ -19,6 +26,8 @@ export interface ParsedExcelTable {
     detectedTags: string[];
     mergeCount: number;
     rawText: string;
+    colWidths?: number[];
+    rowHeights?: number[];
 }
 
 const SYSTEM_KEYS = [
@@ -31,8 +40,35 @@ const SYSTEM_KEYS = [
     '$TANGGAL_RAPOR', '$TEMPAT_TANGGAL_RAPOR'
 ];
 
+export const parseCssDimension = (val: string | null | undefined): number | undefined => {
+    if (!val) return undefined;
+    const s = val.trim().toLowerCase();
+    if (s.endsWith('pt')) {
+        const pt = parseFloat(s);
+        return isNaN(pt) ? undefined : Math.max(20, Math.round(pt * 1.333));
+    }
+    if (s.endsWith('px')) {
+        const px = parseFloat(s);
+        return isNaN(px) ? undefined : Math.max(20, Math.round(px));
+    }
+    if (s.endsWith('in')) {
+        const inches = parseFloat(s);
+        return isNaN(inches) ? undefined : Math.max(20, Math.round(inches * 96));
+    }
+    if (s.endsWith('cm')) {
+        const cm = parseFloat(s);
+        return isNaN(cm) ? undefined : Math.max(20, Math.round(cm * 37.795));
+    }
+    if (s.endsWith('mm')) {
+        const mm = parseFloat(s);
+        return isNaN(mm) ? undefined : Math.max(20, Math.round(mm * 3.7795));
+    }
+    const num = parseFloat(s);
+    return isNaN(num) ? undefined : Math.max(20, Math.round(num));
+};
+
 /**
- * Mendeteksi tipe cell, formula, dan tag placeholder eSantri
+ * Mendeteksi tipe cell, formula, dan tag placeholder eSantri (mendukung $TAG, {{TAG}}, [TAG])
  */
 export const analyzeCellValue = (rawVal: string): { type: RaporColumnType; key?: string; value: string } => {
     const trimmed = (rawVal || '').trim();
@@ -44,6 +80,42 @@ export const analyzeCellValue = (rawVal: string): { type: RaporColumnType; key?:
         return { type: 'formula', value: trimmed };
     }
 
+    // Dukungan sintaks kurung kurawal {{NAMA}}, {{NIS}}, {{nama}}, dsb dari Excel
+    if (trimmed.startsWith('{{') && trimmed.endsWith('}}')) {
+        const inner = trimmed.slice(2, -2).trim().toUpperCase();
+        const tagMap: Record<string, string> = {
+            'NAMA': '$NAMA',
+            'NAMA_LENGKAP': '$NAMA_LENGKAP',
+            'NAMA_SANTRI': '$NAMA',
+            'NIS': '$NIS',
+            'NISN': '$NISN',
+            'ROMBEL': '$ROMBEL',
+            'KELAS': '$ROMBEL',
+            'PERINGKAT': '$PERINGKAT',
+            'RANKING': '$PERINGKAT',
+            'JUARA': '$PERINGKAT',
+            'TOTAL_NILAI': '$TOTAL_NILAI',
+            'TOTAL': '$TOTAL_NILAI',
+            'JUMLAH': '$TOTAL_NILAI',
+            'RATA_RATA': '$RATA_RATA',
+            'RATA': '$RATA_RATA',
+            'PREDIKAT': '$PREDIKAT_RATA_RATA',
+            'WALI_KELAS': '$NAMA_WALI_KELAS',
+            'NAMA_WALI_KELAS': '$NAMA_WALI_KELAS',
+            'MUDIR': '$NAMA_MUDIR',
+            'KEPALA_SEKOLAH': '$NAMA_MUDIR',
+            'TANGGAL_RAPOR': '$TANGGAL_DOKUMEN',
+            'LOGO': '$LOGO_PONPES',
+            'LOGO_PONDOK': '$LOGO_PONPES',
+            'LOGO_PONPES': '$LOGO_PONPES',
+            'SEMESTER': '$SEMESTER',
+            'TAHUN_AJAR': '$TAHUN_AJARAN',
+            'TAHUN_AJARAN': '$TAHUN_AJARAN'
+        };
+        const mapped = tagMap[inner] || `$${inner}`;
+        return { type: 'data', value: mapped };
+    }
+
     if (trimmed.startsWith('$')) {
         const upper = trimmed.toUpperCase();
         if (
@@ -52,7 +124,10 @@ export const analyzeCellValue = (rawVal: string): { type: RaporColumnType; key?:
             upper.startsWith('$TOTAL') ||
             upper.startsWith('$RATA') ||
             upper.startsWith('$RANK') ||
-            upper.startsWith('$NILAI_')
+            upper.startsWith('$NILAI_') ||
+            upper.startsWith('$LOGO') ||
+            upper.startsWith('$STEMPEL') ||
+            upper.startsWith('$TTD')
         ) {
             return { type: 'data', value: upper };
         }
@@ -79,18 +154,61 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
         const table = doc.querySelector('table');
         if (!table) return null;
 
+        // Parse semua rules CSS di dalam <style> Excel (.xl65 { ... })
+        const cssRulesMap: Record<string, Record<string, string>> = {};
+        const styleTags = Array.from(doc.querySelectorAll('style'));
+        styleTags.forEach(st => {
+            const text = st.textContent || '';
+            const ruleRegex = /\.([a-zA-Z0-9_\-]+)\s*\{([^}]+)\}/g;
+            let m: RegExpExecArray | null;
+            while ((m = ruleRegex.exec(text)) !== null) {
+                const className = m[1];
+                const declarations = m[2];
+                if (!cssRulesMap[className]) cssRulesMap[className] = {};
+                declarations.split(';').forEach(decl => {
+                    const colonIdx = decl.indexOf(':');
+                    if (colonIdx > 0) {
+                        const prop = decl.substring(0, colonIdx).trim().toLowerCase();
+                        const val = decl.substring(colonIdx + 1).trim();
+                        cssRulesMap[className][prop] = val;
+                    }
+                });
+            }
+        });
+
         const trElements = Array.from(table.querySelectorAll('tr'));
         if (trElements.length === 0) return null;
+
+        // Baca column widths dari <colgroup> jika ada
+        const colgroupWidths: (number | undefined)[] = [];
+        const colgroup = table.querySelector('colgroup');
+        if (colgroup) {
+            Array.from(colgroup.querySelectorAll('col')).forEach((col) => {
+                const span = parseInt(col.getAttribute('span') || '1', 10);
+                const w = parseCssDimension(col.style.width || col.getAttribute('width'));
+                for (let i = 0; i < span; i++) {
+                    colgroupWidths.push(w);
+                }
+            });
+        }
 
         // Matrix untuk melacak sel yang sudah terisi / ter-merge
         const gridMatrix: (ParsedExcelCell | null)[][] = [];
         let maxCols = 0;
         const detectedTags = new Set<string>();
         let mergeCount = 0;
+        const colWidthsMap: Record<number, number> = {};
+        const rowHeightsMap: Record<number, number> = {};
 
         trElements.forEach((tr, rIdx) => {
             if (!gridMatrix[rIdx]) gridMatrix[rIdx] = [];
             let cIdx = 0;
+
+            // Baca tinggi baris dari tr style/attribute
+            const trH = parseCssDimension(tr.style.height || tr.getAttribute('height'));
+            if (trH && trH >= 20) {
+                rowHeightsMap[rIdx] = trH;
+            }
 
             const cellsInRow = Array.from(tr.querySelectorAll('td, th')) as HTMLElement[];
             cellsInRow.forEach((td) => {
@@ -111,23 +229,83 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
                     mergeCount++;
                 }
 
+                // Ambil gabungan style dari class Excel (.xl65 dll) dan inline style
+                const classNames = (td.className || '').split(/\s+/).filter(Boolean);
+                const mergedStyle: Record<string, string> = {};
+                classNames.forEach(cn => {
+                    if (cssRulesMap[cn]) {
+                        Object.assign(mergedStyle, cssRulesMap[cn]);
+                    }
+                });
+                if (td.getAttribute('style')) {
+                    td.getAttribute('style')!.split(';').forEach(decl => {
+                        const colonIdx = decl.indexOf(':');
+                        if (colonIdx > 0) {
+                            const prop = decl.substring(0, colonIdx).trim().toLowerCase();
+                            const val = decl.substring(colonIdx + 1).trim();
+                            mergedStyle[prop] = val;
+                        }
+                    });
+                }
+
                 // Cek text-align
                 let align: 'left' | 'center' | 'right' | undefined;
-                const styleAlign = td.style.textAlign?.toLowerCase();
-                const attrAlign = td.getAttribute('align')?.toLowerCase();
-                if (styleAlign === 'center' || attrAlign === 'center') align = 'center';
-                else if (styleAlign === 'right' || attrAlign === 'right') align = 'right';
-                else if (styleAlign === 'left' || attrAlign === 'left') align = 'left';
+                const styleAlign = (mergedStyle['text-align'] || td.style.textAlign || td.getAttribute('align') || '').toLowerCase();
+                if (styleAlign === 'center') align = 'center';
+                else if (styleAlign === 'right') align = 'right';
+                else if (styleAlign === 'left') align = 'left';
 
-                // Cek borders
-                const hasBorder = Boolean(
-                    td.style.border ||
-                    td.style.borderTop ||
-                    td.style.borderRight ||
-                    td.style.borderBottom ||
-                    td.style.borderLeft ||
-                    table.getAttribute('border')
-                );
+                // Cek font-weight (bold)
+                const fw = (mergedStyle['font-weight'] || td.style.fontWeight || '').toLowerCase();
+                const hasBoldChild = td.querySelector('b, strong') !== null;
+                const isBold = hasBoldChild || fw === 'bold' || fw === '700' || fw === '800' || fw === '900';
+
+                // Cek font-style (italic)
+                const fs = (mergedStyle['font-style'] || td.style.fontStyle || '').toLowerCase();
+                const hasItalicChild = td.querySelector('i, em') !== null;
+                const isItalic = hasItalicChild || fs === 'italic';
+
+                // Cek background-color
+                let bgColor: string | undefined = mergedStyle['background-color'] || mergedStyle['background'] || td.style.backgroundColor || td.getAttribute('bgcolor') || undefined;
+                if (bgColor) {
+                    const bgLower = bgColor.toLowerCase();
+                    if (bgLower === 'none' || bgLower === 'transparent' || bgLower === 'initial') {
+                        bgColor = undefined;
+                    }
+                }
+
+                // Cek text color
+                let textColor: string | undefined = mergedStyle['color'] || td.style.color || undefined;
+                const fontTag = td.querySelector('font[color]');
+                if (fontTag) {
+                    textColor = fontTag.getAttribute('color') || textColor;
+                }
+
+                // Cek dimensi sel (lebar kolom & tinggi baris)
+                const cellW = parseCssDimension(mergedStyle['width'] || td.style.width || td.getAttribute('width'));
+                const cellH = parseCssDimension(mergedStyle['height'] || td.style.height || td.getAttribute('height'));
+                if (cellW && colSpan === 1 && (!colWidthsMap[cIdx] || cellW > colWidthsMap[cIdx])) {
+                    colWidthsMap[cIdx] = cellW;
+                }
+                if (cellH && rowSpan === 1 && (!rowHeightsMap[rIdx] || cellH > rowHeightsMap[rIdx])) {
+                    rowHeightsMap[rIdx] = cellH;
+                }
+
+                // Deteksi border presisi per sisi (Excel border mapping)
+                const checkBorder = (val: string | undefined): boolean => {
+                    if (!val) return false;
+                    const v = val.toLowerCase();
+                    if (v.includes('none') || v.includes('hidden') || v === '0' || v === '0px') return false;
+                    return v.includes('solid') || v.includes('pt') || v.includes('px') || v.includes('windowtext') || v.includes('thin') || v.includes('medium') || v.includes('#');
+                };
+
+                const generalBorderVal = mergedStyle['border'] || td.style.border || (table.getAttribute('border') && table.getAttribute('border') !== '0' ? '1px solid black' : undefined);
+                const hasGeneralBorder = checkBorder(generalBorderVal);
+
+                const bTop = checkBorder(mergedStyle['border-top'] || td.style.borderTop) || hasGeneralBorder;
+                const bRight = checkBorder(mergedStyle['border-right'] || td.style.borderRight) || hasGeneralBorder;
+                const bBottom = checkBorder(mergedStyle['border-bottom'] || td.style.borderBottom) || hasGeneralBorder;
+                const bLeft = checkBorder(mergedStyle['border-left'] || td.style.borderLeft) || hasGeneralBorder;
 
                 const parsedCell: ParsedExcelCell = {
                     value,
@@ -136,9 +314,18 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
                     colSpan,
                     rowSpan,
                     align,
-                    borders: hasBorder
-                        ? { top: true, right: true, bottom: true, left: true }
-                        : { top: false, right: false, bottom: false, left: false }
+                    width: cellW || colgroupWidths[cIdx] || undefined,
+                    height: cellH || trH || undefined,
+                    bold: isBold || undefined,
+                    italic: isItalic || undefined,
+                    backgroundColor: bgColor,
+                    color: textColor,
+                    borders: {
+                        top: bTop,
+                        right: bRight,
+                        bottom: bBottom,
+                        left: bLeft
+                    }
                 };
 
                 gridMatrix[rIdx][cIdx] = parsedCell;
@@ -171,11 +358,13 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
         const totalRows = gridMatrix.length;
         if (totalRows === 0 || maxCols === 0) return null;
 
-        // Normalisasi matrix agar semua cell terdefinisi
+        // Normalisasi matrix agar semua cell terdefinisi dan memiliki width & height konsisten per kolom/baris
         const normalizedCells: ParsedExcelCell[][] = [];
         for (let r = 0; r < totalRows; r++) {
             const row: ParsedExcelCell[] = [];
+            const rHeight = rowHeightsMap[r] || 30;
             for (let c = 0; c < maxCols; c++) {
+                const cWidth = colgroupWidths[c] || colWidthsMap[c] || 100;
                 const cell = gridMatrix[r]?.[c] || {
                     value: '',
                     type: 'label',
@@ -183,9 +372,23 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
                     rowSpan: 1,
                     borders: { top: false, right: false, bottom: false, left: false }
                 };
-                row.push(cell);
+                row.push({
+                    ...cell,
+                    width: cell.width || cWidth,
+                    height: cell.height || rHeight
+                });
             }
             normalizedCells.push(row);
+        }
+
+        const colWidthsArray: number[] = [];
+        for (let c = 0; c < maxCols; c++) {
+            colWidthsArray.push(colgroupWidths[c] || colWidthsMap[c] || 100);
+        }
+
+        const rowHeightsArray: number[] = [];
+        for (let r = 0; r < totalRows; r++) {
+            rowHeightsArray.push(rowHeightsMap[r] || 30);
         }
 
         return {
@@ -194,10 +397,11 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
             cells: normalizedCells,
             detectedTags: Array.from(detectedTags),
             mergeCount,
-            rawText: table.innerText || ''
+            rawText: table.innerText || '',
+            colWidths: colWidthsArray,
+            rowHeights: rowHeightsArray
         };
     } catch (e) {
-        console.warn('Gagal parsing HTML table dari clipboard:', e);
         return null;
     }
 };
@@ -238,7 +442,9 @@ export const parsePlainTextTsv = (tsv: string): ParsedExcelTable | null => {
                 key,
                 colSpan: 1,
                 rowSpan: 1,
-                borders: { top: true, right: true, bottom: true, left: true }
+                borders: { top: true, right: true, bottom: true, left: true },
+                width: 100,
+                height: 30
             });
         }
         cells.push(row);
@@ -310,7 +516,7 @@ export const overlayPastedTableOntoGrid = (
         newGrid.push(row);
     }
 
-    // Terapkan hasil paste ke grid
+    // Terapkan hasil paste ke grid beserta width, height, borders presisi
     for (let pr = 0; pr < pasted.rowCount; pr++) {
         for (let pc = 0; pc < pasted.colCount; pc++) {
             const targetR = startRow + pr;
@@ -328,7 +534,14 @@ export const overlayPastedTableOntoGrid = (
                 rowSpan: source.rowSpan,
                 align: source.align || newGrid[targetR][targetC].align,
                 borders: source.borders || newGrid[targetR][targetC].borders,
-                hidden: source.hidden
+                hidden: source.hidden,
+                width: source.width || newGrid[targetR][targetC].width,
+                height: source.height || newGrid[targetR][targetC].height,
+                bold: source.bold !== undefined ? source.bold : newGrid[targetR][targetC].bold,
+                italic: source.italic !== undefined ? source.italic : newGrid[targetR][targetC].italic,
+                backgroundColor: source.backgroundColor !== undefined ? source.backgroundColor : newGrid[targetR][targetC].backgroundColor,
+                color: source.color !== undefined ? source.color : newGrid[targetR][targetC].color,
+                fontSize: source.fontSize !== undefined ? source.fontSize : newGrid[targetR][targetC].fontSize
             };
         }
     }
@@ -348,11 +561,19 @@ export const buildTemplateFromExcelTable = (
     templateName: string = 'Template Rapor Excel',
     jenjangId?: number
 ): RaporTemplate => {
+    // Deteksi apakah tabel paste ini sudah memiliki data diri santri sendiri
+    const hasBuiltInBiodata = pasted.detectedTags.some(t =>
+        t === '$NAMA' || t === '$NIS' || t === '$ROMBEL' || t === '$KELAS' || t === '$PERINGKAT' || t === '$RANKING'
+    );
+
     const newCells: GridCell[][] = [];
     for (let r = 0; r < pasted.rowCount; r++) {
         const row: GridCell[] = [];
         for (let c = 0; c < pasted.colCount; c++) {
             const src = pasted.cells[r][c];
+            const w = src.width || pasted.colWidths?.[c] || 100;
+            const h = src.height || pasted.rowHeights?.[r] || 30;
+
             row.push({
                 id: `cell_${Date.now()}_${r}_${c}_${Math.random().toString(36).substr(2, 4)}`,
                 row: r,
@@ -365,8 +586,13 @@ export const buildTemplateFromExcelTable = (
                 align: src.align,
                 borders: src.borders || { top: true, right: true, bottom: true, left: true },
                 hidden: src.hidden,
-                width: 100,
-                height: 30
+                width: w,
+                height: h,
+                bold: src.bold,
+                italic: src.italic,
+                backgroundColor: src.backgroundColor,
+                color: src.color,
+                fontSize: src.fontSize
             });
         }
         newCells.push(row);
@@ -378,7 +604,12 @@ export const buildTemplateFromExcelTable = (
         rowCount: pasted.rowCount,
         colCount: pasted.colCount,
         cells: newCells,
-        paperSize: 'A4'
+        paperSize: 'A4',
+        showJudul: false, // Default matikan kop terpisah bila diimpor dari Excel yang sudah punya format sendiri
+        showBiodataHeader: !hasBuiltInBiodata, // Jika sudah ada tag $NAMA/$NIS di tabel, matikan header biodata ganda
+        fitToPage: true, // Standar Excel: Pas 1 muka per lembar
+        printScale: 'auto',
+        marginMode: 'narrow'
     };
 
     return {
@@ -390,6 +621,11 @@ export const buildTemplateFromExcelTable = (
         sheets: [defaultSheet],
         activeSheetId: defaultSheet.id,
         jenjangId,
+        showJudul: false,
+        showBiodataHeader: !hasBuiltInBiodata,
+        fitToPage: true,
+        printScale: 'auto',
+        marginMode: 'narrow',
         lastModified: new Date().toISOString()
     };
 };

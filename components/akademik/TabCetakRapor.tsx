@@ -8,7 +8,7 @@ import { PrintHeader } from '../common/PrintHeader';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { getRaporRecordsByPeriod } from '../../services/academicQueries';
-import { resolveRaporText, isMediaTag, getMediaTagImageSrc } from '../../utils/raporPlaceholderResolver';
+import { resolveRaporText, isMediaTag, getMediaTagImageSrc, templateHasBuiltInBiodata } from '../../utils/raporPlaceholderResolver';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { buildRombelLegerData, StudentLegerRow } from '../../services/raporCalculationService';
@@ -49,6 +49,9 @@ interface DynamicRaporPreviewProps {
     paperSize?: 'A4' | 'F4';
     showKop?: boolean;
     marginMode?: 'normal' | 'narrow' | 'none';
+    showBiodataHeader?: boolean;
+    fitToPage?: boolean;
+    printScale?: number | 'auto';
 }
 
 const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
@@ -63,7 +66,10 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     calculation,
     paperSize = 'A4',
     showKop = true,
-    marginMode = 'normal'
+    marginMode = 'normal',
+    showBiodataHeader,
+    fitToPage = true,
+    printScale = 'auto'
 }) => {
     const sheets = useMemo(() => {
         const allSheets = getTemplateSheets(template);
@@ -94,122 +100,178 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     };
 
     const paperDimensions = {
-        A4: { width: '21cm', minHeight: '29.7cm' },
-        F4: { width: '21.5cm', minHeight: '33cm' }
+        A4: { width: '21cm', minHeight: '29.7cm', maxHeight: '29.7cm' },
+        F4: { width: '21.5cm', minHeight: '33cm', maxHeight: '33cm' }
     };
 
     const paddingClasses = {
         normal: 'p-8',
-        narrow: 'p-5',
+        narrow: 'p-4 sm:p-5',
         none: 'p-2'
     };
 
     const currentDimensions = paperDimensions[paperSize] || paperDimensions.A4;
+    const hasBuiltInBiodata = useMemo(() => templateHasBuiltInBiodata(template), [template]);
+
+    // Hitung skala otomatis (Auto Fit 1 Lembar)
+    const getEffectiveScale = (rowCount: number) => {
+        if (!fitToPage) {
+            return typeof printScale === 'number' ? printScale / 100 : 1.0;
+        }
+        if (typeof printScale === 'number') {
+            return printScale / 100;
+        }
+        // Mode 'auto': sesuaikan rasio berdasarkan jumlah baris
+        if (rowCount <= 22) return 1.0;
+        if (rowCount <= 27) return 0.94;
+        if (rowCount <= 32) return 0.88;
+        if (rowCount <= 38) return 0.82;
+        if (rowCount <= 44) return 0.75;
+        return 0.68;
+    };
 
     return (
         <div className="dynamic-rapor-container space-y-8 print:space-y-0">
             {sheets.map((sheet, sheetIdx) => {
                 const isLastSheet = sheetIdx === sheets.length - 1;
+                const shouldShowBiodataHeader = showBiodataHeader !== undefined
+                    ? showBiodataHeader
+                    : (sheet.showBiodataHeader !== undefined 
+                        ? sheet.showBiodataHeader 
+                        : (template.showBiodataHeader !== undefined ? template.showBiodataHeader : !hasBuiltInBiodata));
+
+                const scale = getEffectiveScale(sheet.cells.length);
+
                 return (
                     <div
                         key={sheet.id}
-                        className={`bg-white text-black font-sans text-sm printable-content-wrapper shadow-md mx-auto ${paddingClasses[marginMode]} ${!isLastSheet ? 'page-break-after' : ''}`}
+                        className={`bg-white text-black font-sans text-sm printable-content-wrapper shadow-md mx-auto ${paddingClasses[marginMode]} ${!isLastSheet ? 'page-break-after' : ''} ${fitToPage ? 'rapor-fit-1-page' : ''}`}
                         style={{
                             width: currentDimensions.width,
                             minHeight: currentDimensions.minHeight,
+                            maxHeight: fitToPage ? currentDimensions.maxHeight : undefined,
+                            overflow: fitToPage ? 'hidden' : undefined,
                             pageBreakAfter: isLastSheet ? 'auto' : 'always',
-                            breakAfter: isLastSheet ? 'auto' : 'page'
+                            breakAfter: isLastSheet ? 'auto' : 'page',
+                            pageBreakInside: 'avoid',
+                            breakInside: 'avoid',
+                            boxSizing: 'border-box'
                         }}
                     >
-                        {showKop && (sheetIdx === 0 || sheet.showJudul !== false) && (
-                            <PrintHeader settings={settings} title={sheet.name || template.name} />
-                        )}
-                        
-                        <div className="mb-4">
-                            <table className="w-full text-sm font-medium mb-4">
+                        <div
+                            className="w-full h-full flex flex-col justify-start"
+                            style={{
+                                transform: scale < 1 ? `scale(${scale})` : undefined,
+                                transformOrigin: 'top center',
+                                zoom: scale < 1 ? scale : undefined
+                            }}
+                        >
+                            {showKop && (sheetIdx === 0 || sheet.showJudul !== false) && (
+                                <PrintHeader settings={settings} title={sheet.name || template.name} />
+                            )}
+                            
+                            {/* Header Data Diri Otomatis: Hanya muncul jika diizinkan & template belum memiliki biodata mandiri */}
+                            {shouldShowBiodataHeader && (
+                                <div className="mb-3">
+                                    <table className="w-full text-sm font-medium mb-3">
+                                        <tbody>
+                                            <tr>
+                                                <td className="w-24 font-bold">Nama</td>
+                                                <td>: {santri.namaLengkap}</td>
+                                                <td className="w-24 text-right font-bold">NIS</td>
+                                                <td className="w-32 text-right">: {santri.nis}</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="w-24 font-bold">Rombel</td>
+                                                <td>: {settings.rombel.find((r: any) => r.id === santri.rombelId)?.nama || '-'}</td>
+                                                <td className="w-24 text-right font-bold">{sheets.length > 1 ? 'Format / Lembar' : 'Peringkat'}</td>
+                                                <td className="w-32 text-right font-semibold">
+                                                    {sheets.length > 1
+                                                        ? `: ${sheet.name}`
+                                                        : `: ${calculation?.ranking ? `${calculation.ranking} / ${calculation.totalSantri || '-'}` : '-'}`
+                                                    }
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            <table className="w-full border-collapse border border-black text-xs">
                                 <tbody>
-                                    <tr>
-                                        <td className="w-24 font-bold">Nama</td>
-                                        <td>: {santri.namaLengkap}</td>
-                                        <td className="w-24 text-right font-bold">NIS</td>
-                                        <td className="w-32 text-right">: {santri.nis}</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="w-24 font-bold">Rombel</td>
-                                        <td>: {settings.rombel.find((r: any) => r.id === santri.rombelId)?.nama || '-'}</td>
-                                        <td className="w-24 text-right font-bold">{sheets.length > 1 ? 'Format / Lembar' : 'Peringkat'}</td>
-                                        <td className="w-32 text-right font-semibold">
-                                            {sheets.length > 1
-                                                ? `: ${sheet.name}`
-                                                : `: ${calculation?.ranking ? `${calculation.ranking} / ${calculation.totalSantri || '-'}` : '-'}`
-                                            }
-                                        </td>
-                                    </tr>
+                                    {sheet.cells.map((row, rIdx) => (
+                                        <tr key={rIdx} style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                                            {row.map((cell, cIdx) => {
+                                                if (cell.hidden) return null;
+                                                let renderedContent: React.ReactNode = cell.value;
+
+                                                if (cell.type === 'data') {
+                                                    if (isMediaTag(cell.value)) {
+                                                        const imgSrc = getMediaTagImageSrc(cell.value, resolveContext);
+                                                        if (imgSrc) {
+                                                            const isStempel = cell.value.includes('STEMPEL');
+                                                            const isTtd = cell.value.includes('TTD');
+                                                            renderedContent = (
+                                                                <div className="flex items-center justify-center p-1">
+                                                                    <img
+                                                                        src={imgSrc}
+                                                                        alt={cell.value}
+                                                                        className={`object-contain ${isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
+                                                                    />
+                                                                </div>
+                                                            );
+                                                        } else {
+                                                            renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
+                                                        }
+                                                    } else {
+                                                        renderedContent = resolveRaporText(cell.value, resolveContext);
+                                                    }
+                                                } else if ((cell.type === 'input' || cell.type === 'formula' || cell.type === 'dropdown') && cell.key) {
+                                                    renderedContent = customData[cell.key] || '';
+                                                } else if (cell.type === 'label') {
+                                                    renderedContent = resolveRaporText(cell.value, resolveContext);
+                                                }
+
+                                                // Apply borders & rich styles (Logo yayasan & pondok borderless as requested)
+                                                const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
+                                                const b = cell.borders || { top: true, right: true, bottom: true, left: true };
+                                                
+                                                // Hormati warna background, font weight, dan italic asli dari desain / Excel
+                                                const hasCustomBg = Boolean(cell.backgroundColor);
+                                                const defaultBg = (rIdx === 0 || cell.type === 'label') && cell.type !== 'input' && cell.type !== 'formula' && cell.type !== 'dropdown' && cell.value !== '' ? '#f3f4f6' : 'transparent';
+                                                const effectiveBg = hasCustomBg ? cell.backgroundColor : defaultBg;
+
+                                                const effectiveFontWeight = cell.bold !== undefined 
+                                                    ? (cell.bold ? 'bold' : 'normal') 
+                                                    : ((rIdx === 0 || cell.type === 'label') ? 'bold' : 'normal');
+
+                                                const borderStyle: React.CSSProperties = {
+                                                    borderTop: (!isLogoMedia && b.top) ? '1px solid black' : undefined,
+                                                    borderRight: (!isLogoMedia && b.right) ? '1px solid black' : undefined,
+                                                    borderBottom: (!isLogoMedia && b.bottom) ? '1px solid black' : undefined,
+                                                    borderLeft: (!isLogoMedia && b.left) ? '1px solid black' : undefined,
+                                                    textAlign: cell.align || 'center',
+                                                    width: cell.width ? `${cell.width}px` : undefined,
+                                                    height: cell.height ? `${cell.height}px` : undefined,
+                                                    backgroundColor: effectiveBg,
+                                                    fontWeight: effectiveFontWeight,
+                                                    fontStyle: cell.italic ? 'italic' : undefined,
+                                                    color: cell.color || undefined,
+                                                    fontSize: cell.fontSize ? `${cell.fontSize}px` : undefined,
+                                                    padding: '4px'
+                                                };
+
+                                                return (
+                                                    <td key={cIdx} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={borderStyle}>
+                                                        {renderedContent}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
-
-                        <table className="w-full border-collapse border border-black text-xs">
-                            <tbody>
-                                {sheet.cells.map((row, rIdx) => (
-                                    <tr key={rIdx} style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                                        {row.map((cell, cIdx) => {
-                                            if (cell.hidden) return null;
-                                            let renderedContent: React.ReactNode = cell.value;
-
-                                            if (cell.type === 'data') {
-                                                if (isMediaTag(cell.value)) {
-                                                    const imgSrc = getMediaTagImageSrc(cell.value, resolveContext);
-                                                    if (imgSrc) {
-                                                        const isStempel = cell.value.includes('STEMPEL');
-                                                        const isTtd = cell.value.includes('TTD');
-                                                        renderedContent = (
-                                                            <div className="flex items-center justify-center p-1">
-                                                                <img
-                                                                    src={imgSrc}
-                                                                    alt={cell.value}
-                                                                    className={`object-contain ${isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    } else {
-                                                        renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
-                                                    }
-                                                } else {
-                                                    renderedContent = resolveRaporText(cell.value, resolveContext);
-                                                }
-                                            } else if ((cell.type === 'input' || cell.type === 'formula' || cell.type === 'dropdown') && cell.key) {
-                                                renderedContent = customData[cell.key] || '';
-                                            } else if (cell.type === 'label') {
-                                                renderedContent = resolveRaporText(cell.value, resolveContext);
-                                            }
-
-                                            // Apply borders (Logo yayasan & pondok borderless as requested)
-                                            const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
-                                            const b = cell.borders || { top: true, right: true, bottom: true, left: true };
-                                            const borderStyle: React.CSSProperties = {
-                                                borderTop: (!isLogoMedia && b.top) ? '1px solid black' : undefined,
-                                                borderRight: (!isLogoMedia && b.right) ? '1px solid black' : undefined,
-                                                borderBottom: (!isLogoMedia && b.bottom) ? '1px solid black' : undefined,
-                                                borderLeft: (!isLogoMedia && b.left) ? '1px solid black' : undefined,
-                                                textAlign: cell.align || 'center',
-                                                width: cell.width ? `${cell.width}px` : undefined,
-                                                height: cell.height ? `${cell.height}px` : undefined,
-                                                backgroundColor: (rIdx === 0 || cell.type === 'label') && cell.type !== 'input' && cell.type !== 'formula' && cell.type !== 'dropdown' && cell.value !== '' ? '#f3f4f6' : 'transparent',
-                                                fontWeight: (rIdx === 0 || cell.type === 'label') ? 'bold' : 'normal',
-                                                padding: '4px'
-                                            };
-
-                                            return (
-                                                <td key={cIdx} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={borderStyle}>
-                                                    {renderedContent}
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
                     </div>
                 );
             })}
@@ -252,6 +314,9 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const [showKop, setShowKop] = useState<boolean>(true);
     const [marginMode, setMarginMode] = useState<'normal' | 'narrow' | 'none'>('normal');
     const [rankingDisplayLimit, setRankingDisplayLimit] = useState<RankingDisplayLimit>('all');
+    const [fitToPage, setFitToPage] = useState<boolean>(true);
+    const [printScale, setPrintScale] = useState<number | 'auto'>('auto');
+    const [showBiodataHeader, setShowBiodataHeader] = useState<boolean | 'auto'>('auto');
 
     // Universal / Custom Issuance Date & Place
     const [tanggalRapor, setTanggalRapor] = useState(settings.tanggalRaporDefault || new Date().toISOString().split('T')[0]);
@@ -580,6 +645,39 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
     const selectedTemplate = useMemo(() => settings.raporTemplates?.find(t => t.id === selectedTemplateId), [selectedTemplateId, settings.raporTemplates]);
 
+    const isTemplateHasCustomBiodata = useMemo(() => {
+        if (!selectedTemplate) return false;
+        return templateHasBuiltInBiodata(selectedTemplate);
+    }, [selectedTemplate]);
+
+    useEffect(() => {
+        if (selectedTemplate) {
+            if (selectedTemplate.fitToPage !== undefined) {
+                setFitToPage(selectedTemplate.fitToPage);
+            }
+            if (selectedTemplate.printScale !== undefined) {
+                setPrintScale(selectedTemplate.printScale);
+            }
+            if (selectedTemplate.marginMode !== undefined) {
+                setMarginMode(selectedTemplate.marginMode);
+            }
+            if (selectedTemplate.paperSize !== undefined) {
+                setPaperSize(selectedTemplate.paperSize);
+            }
+            if (selectedTemplate.showBiodataHeader !== undefined) {
+                setShowBiodataHeader(selectedTemplate.showBiodataHeader);
+            } else {
+                // Default cerdas: jika template buatan user sudah memiliki tag biodata, matikan header bawaan
+                const hasCustom = templateHasBuiltInBiodata(selectedTemplate);
+                setShowBiodataHeader(!hasCustom);
+            }
+        }
+    }, [selectedTemplate]);
+
+    const effectiveShowBiodata = showBiodataHeader === 'auto'
+        ? !isTemplateHasCustomBiodata
+        : showBiodataHeader;
+
     const templateSheets = useMemo(() => {
         if (!selectedTemplate) return [];
         return getTemplateSheets(selectedTemplate);
@@ -785,6 +883,66 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 F4 (Folio)
                             </button>
                         </div>
+
+                        {/* Fit to 1 Page (Paksa Pas 1 Muka) */}
+                        <button
+                            type="button"
+                            onClick={() => setFitToPage(prev => !prev)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                fitToPage ? 'bg-indigo-50 text-indigo-800 border-indigo-200 shadow-2xs' : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
+                            title="Fit to 1 Page: Memaksa desain rapor pas tepat dalam 1 lembar tanpa meluber ke halaman 2 seperti di Excel"
+                        >
+                            <i className={`bi ${fitToPage ? 'bi-file-earmark-check-fill text-indigo-600' : 'bi-file-earmark'}`}></i>
+                            <span>{fitToPage ? 'Pas 1 Lembar' : 'Tinggi Bebas'}</span>
+                        </button>
+
+                        {/* Skala Cetak */}
+                        <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1 text-xs shadow-xs">
+                            <i className="bi bi-aspect-ratio text-slate-500 text-xs"></i>
+                            <span className="font-bold text-slate-500 text-[11px] hidden sm:inline">Skala:</span>
+                            <select
+                                value={String(printScale)}
+                                onChange={e => {
+                                    const v = e.target.value;
+                                    setPrintScale(v === 'auto' ? 'auto' : parseInt(v, 10));
+                                }}
+                                className="font-bold text-xs bg-transparent text-slate-800 focus:outline-none cursor-pointer"
+                                title="Skala cetak rapor. Pilih 'Auto Fit' agar pas 1 lembar atau tentukan persen ukuran"
+                            >
+                                <option value="auto">Auto Fit (1 Muka)</option>
+                                <option value="100">100% (Normal)</option>
+                                <option value="95">95%</option>
+                                <option value="90">90%</option>
+                                <option value="85">85%</option>
+                                <option value="80">80%</option>
+                                <option value="75">75%</option>
+                            </select>
+                        </div>
+
+                        {/* Toggle Biodata Otomatis (Nama, NIS, Rombel, Ranking) */}
+                        <button
+                            type="button"
+                            onClick={() => setShowBiodataHeader(prev => (prev === 'auto' ? isTemplateHasCustomBiodata : !prev))}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                effectiveShowBiodata
+                                    ? 'bg-blue-50 text-blue-800 border-blue-200 shadow-2xs'
+                                    : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
+                            title={
+                                isTemplateHasCustomBiodata
+                                    ? "Template ini sudah memiliki format nama/nis/rombel sendiri di tabelnya. Header bawaan dinonaktifkan agar tidak muncul dobel."
+                                    : "Aktifkan atau nonaktifkan header identitas santri bawaan sistem"
+                            }
+                        >
+                            <i className={`bi ${effectiveShowBiodata ? 'bi-person-badge-fill text-blue-600' : 'bi-person-x text-slate-400'}`}></i>
+                            <span>{effectiveShowBiodata ? 'Biodata: Aktif' : 'Biodata: Nonaktif'}</span>
+                            {isTemplateHasCustomBiodata && !effectiveShowBiodata && (
+                                <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 py-0.5 rounded-md hidden xl:inline" title="Format santri dibuat mandiri di dalam tabel desain">
+                                    Format Sendiri
+                                </span>
+                            )}
+                        </button>
 
                         {/* Kop Toggle */}
                         <button
@@ -1187,6 +1345,9 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         paperSize={paperSize}
                                         showKop={showKop}
                                         marginMode={marginMode}
+                                        fitToPage={fitToPage}
+                                        printScale={printScale}
+                                        showBiodataHeader={effectiveShowBiodata}
                                     />
                                 ) : (
                                     <div
@@ -1310,6 +1471,9 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                                 paperSize={paperSize}
                                                 showKop={showKop}
                                                 marginMode={marginMode}
+                                                fitToPage={fitToPage}
+                                                printScale={printScale}
+                                                showBiodataHeader={effectiveShowBiodata}
                                             />
                                         ) : (
                                             <div

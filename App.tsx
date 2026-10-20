@@ -18,37 +18,38 @@ import { Page, UserPermissions, SantriFilters } from './types';
 import { APP_VERSION } from './version';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingFallback } from './components/common/LoadingFallback';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
-// --- Lazy Load Pages ---
-const Dashboard = React.lazy(() => import('./components/Dashboard'));
-const SantriList = React.lazy(() => import('./components/SantriList'));
-const DataMaster = React.lazy(() => import('./components/DataMaster'));
-const Settings = React.lazy(() => import('./components/Settings'));
-const PortalManagement = React.lazy(() => import('./components/PortalManagement'));
-const Reports = React.lazy(() => import('./components/Reports'));
-const Finance = React.lazy(() => import('./components/Finance'));
-const Asrama = React.lazy(() => import('./components/Asrama'));
-const BukuKas = React.lazy(() => import('./components/BukuKas'));
-const SuratMenyurat = React.lazy(() => import('./components/SuratMenyurat'));
-const PSB = React.lazy(() => import('./components/PSB'));
-const Tentang = React.lazy(() => import('./components/Tentang'));
-const Akademik = React.lazy(() => import('./components/Akademik'));
-const Kurikulum = React.lazy(() => import('./components/Kurikulum'));
-const Rapor = React.lazy(() => import('./components/Rapor'));
-const Absensi = React.lazy(() => import('./components/Absensi'));
-const Tahfizh = React.lazy(() => import('./components/Tahfizh'));
-const Sarpras = React.lazy(() => import('./components/Sarpras'));
-const Kalender = React.lazy(() => import('./components/Kalender'));
-const Perpustakaan = React.lazy(() => import('./components/Perpustakaan')); 
-const Kesehatan = React.lazy(() => import('./components/Kesehatan')); 
-const BK = React.lazy(() => import('./components/BK'));
-const BukuTamu = React.lazy(() => import('./components/BukuTamu')); 
-const Koperasi = React.lazy(() => import('./components/Koperasi')); 
-const PublicPortal = React.lazy(() => import('./components/portal/PublicPortal').then(module => ({ default: module.PublicPortal })));
+// --- Lazy Load Pages with Retry ---
+const Dashboard = lazyWithRetry(() => import('./components/Dashboard'));
+const SantriList = lazyWithRetry(() => import('./components/SantriList'));
+const DataMaster = lazyWithRetry(() => import('./components/DataMaster'));
+const Settings = lazyWithRetry(() => import('./components/Settings'));
+const PortalManagement = lazyWithRetry(() => import('./components/PortalManagement'));
+const Reports = lazyWithRetry(() => import('./components/Reports'));
+const Finance = lazyWithRetry(() => import('./components/Finance'));
+const Asrama = lazyWithRetry(() => import('./components/Asrama'));
+const BukuKas = lazyWithRetry(() => import('./components/BukuKas'));
+const SuratMenyurat = lazyWithRetry(() => import('./components/SuratMenyurat'));
+const PSB = lazyWithRetry(() => import('./components/PSB'));
+const Tentang = lazyWithRetry(() => import('./components/Tentang'));
+const Akademik = lazyWithRetry(() => import('./components/Akademik'));
+const Kurikulum = lazyWithRetry(() => import('./components/Kurikulum'));
+const Rapor = lazyWithRetry(() => import('./components/Rapor'));
+const Absensi = lazyWithRetry(() => import('./components/Absensi'));
+const Tahfizh = lazyWithRetry(() => import('./components/Tahfizh'));
+const Sarpras = lazyWithRetry(() => import('./components/Sarpras'));
+const Kalender = lazyWithRetry(() => import('./components/Kalender'));
+const Perpustakaan = lazyWithRetry(() => import('./components/Perpustakaan')); 
+const Kesehatan = lazyWithRetry(() => import('./components/Kesehatan')); 
+const BK = lazyWithRetry(() => import('./components/BK'));
+const BukuTamu = lazyWithRetry(() => import('./components/BukuTamu')); 
+const Koperasi = lazyWithRetry(() => import('./components/Koperasi')); 
+const PublicPortal = lazyWithRetry(() => import('./components/portal/PublicPortal').then(module => ({ default: module.PublicPortal })));
 
-const AuditLogView = React.lazy(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
-const WhatsAppCenter = React.lazy(() => import('./components/WhatsAppCenter').then(module => ({ default: module.WhatsAppCenter })));
-const AdminSyncDashboard = React.lazy(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
+const AuditLogView = lazyWithRetry(() => import('./components/AuditLogView').then(module => ({ default: module.AuditLogView })));
+const WhatsAppCenter = lazyWithRetry(() => import('./components/WhatsAppCenter').then(module => ({ default: module.WhatsAppCenter })));
+const AdminSyncDashboard = lazyWithRetry(() => import('./components/AdminSyncDashboard').then(module => ({ default: module.AdminSyncDashboard })));
 
 // --- Alert Modal Component ---
 interface AlertModalProps {

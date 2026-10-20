@@ -37,12 +37,20 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="bg-gray-100 p-3 rounded text-left text-xs font-mono text-gray-700 w-full max-w-lg overflow-auto mb-4 border border-gray-300">
             {this.state.error?.toString()}
           </div>
-          <button
-            className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
-            onClick={() => window.location.reload()}
-          >
-            Muat Ulang Aplikasi
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors text-sm font-semibold"
+              onClick={() => this.setState({ hasError: false, error: null })}
+            >
+              <i className="bi bi-arrow-clockwise mr-1.5"></i> Coba Buka Lagi
+            </button>
+            <button
+              className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm text-sm font-semibold"
+              onClick={() => window.location.reload()}
+            >
+              <i className="bi bi-arrow-repeat mr-1.5"></i> Muat Ulang Aplikasi
+            </button>
+          </div>
         </div>
       );
     }

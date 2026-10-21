@@ -443,13 +443,18 @@ export const parsePlainTextTsv = (tsv: string): ParsedExcelTable | null => {
                 detectedTags.add(value);
             }
             const isCellEmpty = !value || value.trim() === '';
+            // Jangan otomatis beri border ke baris judul/biodata terisolasi (misal baris 0-2 dengan sedikit kolom terisi)
+            const filledCountInRow = rowsData[r].filter(p => p && p.trim().length > 0).length;
+            const isHeaderOrTitleRow = r <= 2 && filledCountInRow <= 2 && maxCols >= 3;
+            const shouldHaveBorder = !isCellEmpty && !isHeaderOrTitleRow;
+
             row.push({
                 value,
                 type,
                 key,
                 colSpan: 1,
                 rowSpan: 1,
-                borders: isCellEmpty ? { top: false, right: false, bottom: false, left: false } : { top: true, right: true, bottom: true, left: true },
+                borders: shouldHaveBorder ? { top: true, right: true, bottom: true, left: true } : { top: false, right: false, bottom: false, left: false },
                 width: 100,
                 height: 30
             });

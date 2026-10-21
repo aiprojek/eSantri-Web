@@ -229,10 +229,27 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                 </div>
                             )}
 
-                            <table className="w-full border-collapse text-xs">
+                            <table className="w-full border-collapse text-xs table-fixed">
+                                <colgroup>
+                                    {Array.from({ length: sheet.colCount || sheet.cells?.[0]?.length || 0 }).map((_, cIdx) => {
+                                        let colW = 100;
+                                        if (sheet.cells) {
+                                            for (let r = 0; r < sheet.cells.length; r++) {
+                                                const w = sheet.cells[r]?.[cIdx]?.width;
+                                                if (typeof w === 'number' && w > 0) {
+                                                    colW = w;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        return <col key={cIdx} style={{ width: `${colW}px` }} />;
+                                    })}
+                                </colgroup>
                                 <tbody>
-                                    {sheet.cells.map((row, rIdx) => (
-                                        <tr key={rIdx} style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                                    {sheet.cells.map((row, rIdx) => {
+                                        const rH = row?.[0]?.height;
+                                        return (
+                                        <tr key={rIdx} style={{ breakInside: 'avoid', pageBreakInside: 'avoid', height: rH ? `${rH}px` : undefined }}>
                                             {row.map((cell, cIdx) => {
                                                 if (cell.hidden) return null;
                                                 let renderedContent: React.ReactNode = cell.value;
@@ -264,19 +281,18 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                                     renderedContent = resolveRaporText(cell.value, resolveContext);
                                                 }
 
-                                                // Apply borders & rich styles (Logo yayasan & pondok borderless as requested)
-                                                // Hanya sel yang memang memiliki border yang akan digambar garisnya
+                                                // Apply borders & rich styles (Hanya sel yang memang di-border yang akan digambar garisnya)
                                                 const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
                                                 const b = cell.borders || { top: false, right: false, bottom: false, left: false };
                                                 
                                                 // Hormati warna background, font weight, dan italic asli dari desain / Excel
-                                                const hasCustomBg = Boolean(cell.backgroundColor);
-                                                const defaultBg = (rIdx === 0 || cell.type === 'label') && cell.type !== 'input' && cell.type !== 'formula' && cell.type !== 'dropdown' && cell.value !== '' ? '#f3f4f6' : 'transparent';
-                                                const effectiveBg = hasCustomBg ? cell.backgroundColor : defaultBg;
+                                                // Tidak memaksakan latar abu-abu (#f3f4f6) agar sel non-tabel tetap bersih dan transparan
+                                                const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
+                                                const effectiveBg = hasCustomBg ? cell.backgroundColor : 'transparent';
 
                                                 const effectiveFontWeight = cell.bold !== undefined 
                                                     ? (cell.bold ? 'bold' : 'normal') 
-                                                    : ((rIdx === 0 || cell.type === 'label') ? 'bold' : 'normal');
+                                                    : 'normal';
 
                                                 const borderStyle: React.CSSProperties = {
                                                     borderTop: (!isLogoMedia && b.top) ? '1px solid black' : 'none',
@@ -291,7 +307,10 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                                     fontStyle: cell.italic ? 'italic' : undefined,
                                                     color: cell.color || undefined,
                                                     fontSize: cell.fontSize ? `${cell.fontSize}px` : undefined,
-                                                    padding: '4px'
+                                                    padding: '4px',
+                                                    boxSizing: 'border-box',
+                                                    overflow: 'hidden',
+                                                    wordBreak: 'break-word'
                                                 };
 
                                                 return (
@@ -301,7 +320,8 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                                 );
                                             })}
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

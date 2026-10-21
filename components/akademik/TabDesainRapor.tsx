@@ -26,6 +26,7 @@ export const TabDesainRapor: React.FC = () => {
     const [isDesignPreviewOpen, setIsDesignPreviewOpen] = useState(false);
     const [isExcelPasteModalOpen, setIsExcelPasteModalOpen] = useState(false);
     const [selectedTagCategory, setSelectedTagCategory] = useState<string>('santri');
+    const [showGridlines, setShowGridlines] = useState(true);
 
     // Column & Row Live Resizing State (Excel-like drag resize)
     const [resizingCol, setResizingCol] = useState<{ colIdx: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
@@ -839,6 +840,89 @@ export const TabDesainRapor: React.FC = () => {
         const updated = { ...activeTemplate, cells: newCells };
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
         showToast(cleanedCount > 0 ? `Berhasil membersihkan garis pada ${cleanedCount} sel kosong!` : 'Semua sel kosong sudah bersih tanpa garis.', 'success');
+    };
+
+    const handleCleanTitleAndOuterBorders = () => {
+        if (!activeTemplate) return;
+        let cleanedCount = 0;
+        const newCells = activeTemplate.cells.map((row, r) =>
+            row.map(cell => {
+                const val = (cell.value || '').toUpperCase();
+                const isTitleRow = r <= 3 && (val.includes('RAPOR') || val.includes('LAPORAN') || val.includes('CAPAIAN') || val.includes('EVALUASI') || val.includes('PONDOK') || val.includes('YAYASAN') || val.includes('SEMESTER'));
+                const isIdentitasRow = r <= 4 && (val.includes('NAMA') || val.includes('NIS') || val.includes('KELAS') || val.includes('ROMBEL') || cell.value === '$NAMA' || cell.value === '$NIS' || cell.value === '$ROMBEL');
+                const hasBorders = cell.borders && (cell.borders.top || cell.borders.bottom || cell.borders.left || cell.borders.right);
+                if ((isTitleRow || isIdentitasRow) && hasBorders) {
+                    cleanedCount++;
+                    return {
+                        ...cell,
+                        borders: { top: false, right: false, bottom: false, left: false }
+                    };
+                }
+                return cell;
+            })
+        );
+        const updated = { ...activeTemplate, cells: newCells };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        showToast(cleanedCount > 0 ? `Berhasil menghapus border pada ${cleanedCount} sel judul & biodata!` : 'Sel judul & biodata sudah bersih tanpa border.', 'success');
+    };
+
+    const handleClearAllBordersInSheet = () => {
+        if (!activeTemplate) return;
+        showConfirmation(
+            'Hapus Semua Border di Lembar Ini?',
+            'Semua garis border pada lembar aktif akan dihapus. Anda dapat menambahkan border kembali secara spesifik hanya pada tabel nilai yang diinginkan.',
+            () => {
+                const newCells = activeTemplate.cells.map(row =>
+                    row.map(cell => ({
+                        ...cell,
+                        borders: { top: false, right: false, bottom: false, left: false }
+                    }))
+                );
+                const updated = { ...activeTemplate, cells: newCells };
+                setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+                showToast('Seluruh border pada lembar aktif berhasil dihapus.', 'success');
+            },
+            { confirmColor: 'amber' }
+        );
+    };
+
+    const handleSetAllColWidths = (width: number) => {
+        if (!activeTemplate) return;
+        const clamped = Math.max(35, Math.min(1000, width));
+        const newCells = activeTemplate.cells.map(row =>
+            row.map(cell => ({ ...cell, width: clamped }))
+        );
+        const updated = { ...activeTemplate, cells: newCells };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        showToast(`Seluruh kolom diatur seragam menjadi ${clamped}px`, 'success');
+    };
+
+    const handleSetAllRowHeights = (height: number) => {
+        if (!activeTemplate) return;
+        const clamped = Math.max(20, Math.min(500, height));
+        const newCells = activeTemplate.cells.map(row =>
+            row.map(cell => ({ ...cell, height: clamped }))
+        );
+        const updated = { ...activeTemplate, cells: newCells };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        showToast(`Seluruh baris diatur seragam menjadi ${clamped}px`, 'success');
+    };
+
+    const handleResetDimensions = () => {
+        if (!activeTemplate) return;
+        showConfirmation(
+            'Reset Ukuran Sel ke Standar?',
+            'Semua lebar kolom akan dikembalikan ke 100px dan tinggi baris ke 30px agar sefleksibel membuat template dari nol.',
+            () => {
+                const newCells = activeTemplate.cells.map(row =>
+                    row.map(cell => ({ ...cell, width: 100, height: 30 }))
+                );
+                const updated = { ...activeTemplate, cells: newCells };
+                setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+                showToast('Ukuran kolom & baris berhasil di-reset ke standar 100px × 30px.', 'success');
+            },
+            { confirmColor: 'teal' }
+        );
     };
 
     const getExcelColName = (colIndex: number): string => {
@@ -1664,32 +1748,46 @@ export const TabDesainRapor: React.FC = () => {
 
                     <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
-                    {/* Zoom Controls */}
-                    <div className="flex items-center bg-white rounded-lg border border-slate-200 shadow-2xs shrink-0">
-                        <button 
+                    {/* Zoom Controls & Gridlines Toggle */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        <button
                             type="button"
-                            onClick={() => setZoomScale(z => Math.max(0.3, Number((z - 0.1).toFixed(1))))} 
-                            className="px-2 py-1 hover:bg-slate-100 text-slate-600 rounded-l-lg transition-colors" 
-                            title="Zoom Out"
+                            onClick={() => setShowGridlines(g => !g)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                showGridlines ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50' : 'bg-teal-50 text-teal-800 border-teal-300 shadow-2xs'
+                            }`}
+                            title={showGridlines ? "Garis bantu editor aktif (garis putus-putus abu). Klik untuk melihat tampilan hanya sel ber-border cetak asli." : "Tampilan border cetak asli aktif. Klik untuk menampilkan garis bantu editor."}
                         >
-                            <i className="bi bi-dash-lg"></i>
+                            <i className={`bi ${showGridlines ? 'bi-grid-3x3 text-slate-400' : 'bi-eye-fill text-teal-600'}`}></i>
+                            <span className="hidden sm:inline">{showGridlines ? 'Garis Bantu: Nyala' : 'Border Asli Saja'}</span>
                         </button>
-                        <button 
-                            type="button"
-                            onClick={() => setZoomScale(1)} 
-                            className="text-[10px] font-mono px-2 text-center select-none py-1 hover:bg-teal-50 hover:text-teal-700 font-bold transition-colors" 
-                            title="Reset Zoom ke 100%"
-                        >
-                            {Math.round(zoomScale * 100)}%
-                        </button>
-                        <button 
-                            type="button"
-                            onClick={() => setZoomScale(z => Math.min(2.0, Number((z + 0.1).toFixed(1))))} 
-                            className="px-2 py-1 hover:bg-slate-100 text-slate-600 rounded-r-lg transition-colors" 
-                            title="Zoom In"
-                        >
-                            <i className="bi bi-plus-lg"></i>
-                        </button>
+
+                        <div className="flex items-center bg-white rounded-lg border border-slate-200 shadow-2xs">
+                            <button 
+                                type="button"
+                                onClick={() => setZoomScale(z => Math.max(0.3, Number((z - 0.1).toFixed(1))))} 
+                                className="px-2 py-1 hover:bg-slate-100 text-slate-600 rounded-l-lg transition-colors" 
+                                title="Zoom Out"
+                            >
+                                <i className="bi bi-dash-lg"></i>
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => setZoomScale(1)} 
+                                className="text-[10px] font-mono px-2 text-center select-none py-1 hover:bg-teal-50 hover:text-teal-700 font-bold transition-colors" 
+                                title="Reset Zoom ke 100%"
+                            >
+                                {Math.round(zoomScale * 100)}%
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => setZoomScale(z => Math.min(2.0, Number((z + 0.1).toFixed(1))))} 
+                                className="px-2 py-1 hover:bg-slate-100 text-slate-600 rounded-r-lg transition-colors" 
+                                title="Zoom In"
+                            >
+                                <i className="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div 
@@ -1720,7 +1818,14 @@ export const TabDesainRapor: React.FC = () => {
                             minWidth: 'max-content'
                         }}
                     >
-                        <table className="border-collapse bg-white shadow-xl select-none border border-slate-400 table-fixed">
+                        <table className="border-collapse bg-white shadow-xl select-none table-fixed ring-1 ring-slate-300">
+                            <colgroup>
+                                <col style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }} />
+                                {Array.from({ length: activeTemplate?.colCount || activeTemplate?.cells?.[0]?.length || 0 }).map((_, cIdx) => {
+                                    const colW = getColWidth(cIdx);
+                                    return <col key={cIdx} style={{ width: `${colW}px`, minWidth: `${colW}px`, maxWidth: `${colW}px` }} />;
+                                })}
+                            </colgroup>
                             <thead>
                                 <tr className="bg-slate-100 select-none">
                                     {/* Corner Header: Select All */}
@@ -1822,7 +1927,7 @@ export const TabDesainRapor: React.FC = () => {
                                                 const isSelected = selectedCells.some(s => s.r === rIdx && s.c === cIdx);
                                                 const isActive = selectedCells.length === 1 && selectedCells[0].r === rIdx && selectedCells[0].c === cIdx;
                                                 const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
-                                                let cellClass = "text-[10px] sm:text-xs p-1 relative transition-colors border border-dashed border-gray-300 ";
+                                                let cellClass = `text-[10px] sm:text-xs p-1 relative transition-colors ${showGridlines ? 'border border-dashed border-gray-300' : 'border border-transparent'} `;
                                                 if (borders.top) cellClass += "!border-t !border-t-black !border-solid ";
                                                 if (borders.right) cellClass += "!border-r !border-r-black !border-solid ";
                                                 if (borders.bottom) cellClass += "!border-b !border-b-black !border-solid ";
@@ -2403,6 +2508,42 @@ export const TabDesainRapor: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* Flexible Sheet-wide Dimension Utilities */}
+                            {canWrite && (
+                                <div className="space-y-1.5 pt-1.5 border-t border-slate-200/60">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Atur Seluruh Lembar:</span>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSetAllColWidths(100)}
+                                            className="px-2 py-1.5 bg-slate-100 hover:bg-teal-50 hover:text-teal-800 border rounded text-[10.5px] font-bold text-slate-700 transition-colors shadow-2xs flex items-center justify-center gap-1"
+                                            title="Atur semua kolom menjadi seragam 100px"
+                                        >
+                                            <i className="bi bi-distribute-horizontal text-teal-600"></i>
+                                            <span>Kolom 100px</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSetAllRowHeights(32)}
+                                            className="px-2 py-1.5 bg-slate-100 hover:bg-teal-50 hover:text-teal-800 border rounded text-[10.5px] font-bold text-slate-700 transition-colors shadow-2xs flex items-center justify-center gap-1"
+                                            title="Atur semua baris menjadi seragam 32px"
+                                        >
+                                            <i className="bi bi-distribute-vertical text-teal-600"></i>
+                                            <span>Baris 32px</span>
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleResetDimensions}
+                                        className="w-full py-1.5 px-2 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded text-[10px] font-medium transition-colors flex items-center justify-center gap-1"
+                                        title="Kembalikan semua ukuran kolom dan baris ke standar (100px × 30px) agar sefleksibel membuat template dari nol"
+                                    >
+                                        <i className="bi bi-arrow-counterclockwise text-slate-500"></i>
+                                        <span>Reset Dimensi ke Standar (100×30)</span>
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Actions: Hapus Baris & Kolom Aktif */}
                             {canWrite && (
                                 <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
@@ -2800,22 +2941,45 @@ export const TabDesainRapor: React.FC = () => {
                             </p>
                         </div>
 
-                        {/* 6. Pembersihan Garis Sel Kosong */}
-                        <div className="pt-2 border-t border-slate-200 space-y-2">
-                            <label className="block font-bold text-xs text-slate-800">
-                                Bersihkan Garis Sel Kosong:
-                            </label>
-                            <p className="text-[10.5px] text-slate-500 leading-snug">
-                                Hapus garis border otomatis pada sel-sel kosong di luar tabel agar tampilan cetak rapi dan hanya tabel nilai yang bergaris.
-                            </p>
-                            <button
-                                type="button"
-                                onClick={handleCleanEmptyCellBorders}
-                                className="w-full py-2 px-3 bg-white hover:bg-amber-50 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs"
-                            >
-                                <i className="bi bi-eraser-fill text-amber-600"></i>
-                                <span>🧹 Bersihkan Border Sel Kosong</span>
-                            </button>
+                        {/* 6. Pembersihan & Pengaturan Border Lembar */}
+                        <div className="pt-2 border-t border-slate-200 space-y-2.5">
+                            <div>
+                                <label className="block font-bold text-xs text-slate-800">
+                                    Pembersihan Border Lembar:
+                                </label>
+                                <p className="text-[10.5px] text-slate-500 leading-snug mt-0.5">
+                                    Atur agar hanya tabel nilai yang ber-garis kotak, tanpa mengotaki judul, biodata, atau sel kosong luar.
+                                </p>
+                            </div>
+                            <div className="space-y-1.5">
+                                <button
+                                    type="button"
+                                    onClick={handleCleanEmptyCellBorders}
+                                    className="w-full py-2 px-3 bg-white hover:bg-amber-50 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                                    title="Hapus garis border otomatis pada sel-sel kosong di luar tabel nilai"
+                                >
+                                    <i className="bi bi-eraser-fill text-amber-600"></i>
+                                    <span>🧹 Bersihkan Border Sel Kosong</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleCleanTitleAndOuterBorders}
+                                    className="w-full py-2 px-3 bg-white hover:bg-blue-50 text-blue-800 border border-blue-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                                    title="Hapus garis border pada baris judul, nama ponpes, dan identitas santri agar hanya tabel nilai yang bergaris"
+                                >
+                                    <i className="bi bi-card-heading text-blue-600"></i>
+                                    <span>📋 Bersihkan Border Judul & Biodata</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleClearAllBordersInSheet}
+                                    className="w-full py-1.5 px-3 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 hover:border-rose-300 rounded-xl text-[11px] font-semibold transition-all flex items-center justify-center gap-1.5"
+                                    title="Hapus semua border pada lembar ini untuk mulai pasang border dari awal secara selektif"
+                                >
+                                    <i className="bi bi-border-none text-slate-400"></i>
+                                    <span>Hapus Semua Border di Lembar Ini</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

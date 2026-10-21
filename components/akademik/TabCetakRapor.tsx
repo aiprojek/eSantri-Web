@@ -13,6 +13,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { buildRombelLegerData, StudentLegerRow } from '../../services/raporCalculationService';
 import { getTemplateSheets } from '../../services/raporExcelService';
+import { RaporTitleEditModal } from './modals/RaporTitleEditModal';
 
 export interface TabCetakRaporProps {
     onNavigateToTab?: (tab: string, rombelId?: number) => void;
@@ -49,6 +50,7 @@ interface DynamicRaporPreviewProps {
     paperSize?: 'A4' | 'F4';
     showKop?: boolean;
     marginMode?: 'normal' | 'narrow' | 'none';
+    showJudul?: boolean;
     showBiodataHeader?: boolean;
     fitToPage?: boolean;
     printScale?: number | 'auto';
@@ -67,6 +69,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     paperSize = 'A4',
     showKop = true,
     marginMode = 'normal',
+    showJudul,
     showBiodataHeader,
     fitToPage = true,
     printScale = 'auto'
@@ -166,9 +169,38 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                 zoom: scale < 1 ? scale : undefined
                             }}
                         >
-                            {showKop && (sheetIdx === 0 || sheet.showJudul !== false) && (
-                                <PrintHeader settings={settings} title={sheet.name || template.name} />
-                            )}
+                            {(() => {
+                                if (!showKop) return null;
+
+                                // Deteksi cerdas apakah baris teratas (0-2) sudah didesain memuat judul sendiri di sel Excel
+                                const hasTitleInGrid = sheet.cells && sheet.cells.length > 0 && sheet.cells.slice(0, 3).some(row =>
+                                    row.some(cell => {
+                                        if (!cell || !cell.value) return false;
+                                        const up = cell.value.toUpperCase();
+                                        return up.includes('RAPOR') || up.includes('LAPORAN HASIL') || up.includes('CAPAIAN KOMPETENSI') || up.includes('HASIL EVALUASI');
+                                    })
+                                );
+
+                                const shouldShowTitle = showJudul !== undefined
+                                    ? showJudul
+                                    : (sheet.showJudul !== undefined
+                                        ? sheet.showJudul
+                                        : (template.showJudul !== undefined ? template.showJudul : !hasTitleInGrid));
+
+                                // Ambil teks judul: prioritaskan customTitle (bisa multi-line hingga 3 baris teks resmi)
+                                const rawTitle = sheet.customTitle !== undefined
+                                    ? sheet.customTitle
+                                    : (template.customTitle !== undefined ? template.customTitle : (shouldShowTitle ? (sheet.name || template.name) : ''));
+
+                                const resolvedTitle = rawTitle ? resolveRaporText(rawTitle, resolveContext) : undefined;
+
+                                return (
+                                    <PrintHeader
+                                        settings={settings}
+                                        title={shouldShowTitle ? resolvedTitle : undefined}
+                                    />
+                                );
+                            })()}
                             
                             {/* Header Data Diri Otomatis: Hanya muncul jika diizinkan & template belum memiliki biodata mandiri */}
                             {shouldShowBiodataHeader && (
@@ -197,7 +229,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                 </div>
                             )}
 
-                            <table className="w-full border-collapse border border-black text-xs">
+                            <table className="w-full border-collapse text-xs">
                                 <tbody>
                                     {sheet.cells.map((row, rIdx) => (
                                         <tr key={rIdx} style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
@@ -233,8 +265,9 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                                 }
 
                                                 // Apply borders & rich styles (Logo yayasan & pondok borderless as requested)
+                                                // Hanya sel yang memang memiliki border yang akan digambar garisnya
                                                 const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
-                                                const b = cell.borders || { top: true, right: true, bottom: true, left: true };
+                                                const b = cell.borders || { top: false, right: false, bottom: false, left: false };
                                                 
                                                 // Hormati warna background, font weight, dan italic asli dari desain / Excel
                                                 const hasCustomBg = Boolean(cell.backgroundColor);
@@ -246,10 +279,10 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                                     : ((rIdx === 0 || cell.type === 'label') ? 'bold' : 'normal');
 
                                                 const borderStyle: React.CSSProperties = {
-                                                    borderTop: (!isLogoMedia && b.top) ? '1px solid black' : undefined,
-                                                    borderRight: (!isLogoMedia && b.right) ? '1px solid black' : undefined,
-                                                    borderBottom: (!isLogoMedia && b.bottom) ? '1px solid black' : undefined,
-                                                    borderLeft: (!isLogoMedia && b.left) ? '1px solid black' : undefined,
+                                                    borderTop: (!isLogoMedia && b.top) ? '1px solid black' : 'none',
+                                                    borderRight: (!isLogoMedia && b.right) ? '1px solid black' : 'none',
+                                                    borderBottom: (!isLogoMedia && b.bottom) ? '1px solid black' : 'none',
+                                                    borderLeft: (!isLogoMedia && b.left) ? '1px solid black' : 'none',
                                                     textAlign: cell.align || 'center',
                                                     width: cell.width ? `${cell.width}px` : undefined,
                                                     height: cell.height ? `${cell.height}px` : undefined,
@@ -317,6 +350,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const [fitToPage, setFitToPage] = useState<boolean>(true);
     const [printScale, setPrintScale] = useState<number | 'auto'>('auto');
     const [showBiodataHeader, setShowBiodataHeader] = useState<boolean | 'auto'>('auto');
+    const [showJudul, setShowJudul] = useState<boolean | 'auto'>('auto');
 
     // Universal / Custom Issuance Date & Place
     const [tanggalRapor, setTanggalRapor] = useState(settings.tanggalRaporDefault || new Date().toISOString().split('T')[0]);
@@ -332,6 +366,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const [previewSantriIndex, setPreviewSantriIndex] = useState<number>(0);
     const [isBatchPrinting, setIsBatchPrinting] = useState(false);
     const [batchData, setBatchData] = useState<{ santri: Santri; record: RaporRecord | null; calculation?: any }[]>([]);
+    const [isTitleModalOpen, setIsTitleModalOpen] = useState(false);
 
     useEffect(() => {
         if (settings.tanggalRaporDefault && !tanggalRapor) {
@@ -341,6 +376,39 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
             setTempatRapor(settings.tempatRaporDefault);
         }
     }, [settings.tanggalRaporDefault, settings.tempatRaporDefault]);
+
+    const handleSaveRaporTitle = async (customTitle: string, isShowJudul: boolean, targetSheet: 'all' | string) => {
+        if (!selectedTemplate) return;
+        const allTemplates = (settings.raporTemplates || []) as RaporTemplate[];
+        const updated = allTemplates.map(tpl => {
+            if (tpl.id !== selectedTemplate.id) return tpl;
+            const sheets = getTemplateSheets(tpl);
+            const updatedSheets = sheets.map(s => {
+                if (targetSheet === 'all' || s.id === targetSheet) {
+                    return {
+                        ...s,
+                        customTitle,
+                        showJudul: isShowJudul
+                    };
+                }
+                return s;
+            });
+
+            return {
+                ...tpl,
+                sheets: updatedSheets,
+                customTitle: targetSheet === 'all' ? customTitle : tpl.customTitle,
+                showJudul: isShowJudul
+            };
+        });
+
+        await onUpdateSettings({
+            ...settings,
+            raporTemplates: updated
+        });
+        setShowJudul(isShowJudul);
+        showToast('Judul dokumen rapor berhasil disimpan!', 'success');
+    };
 
     const handleSaveUniversalDate = async () => {
         try {
@@ -671,12 +739,37 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                 const hasCustom = templateHasBuiltInBiodata(selectedTemplate);
                 setShowBiodataHeader(!hasCustom);
             }
+            if (selectedTemplate.showJudul !== undefined) {
+                setShowJudul(selectedTemplate.showJudul);
+            } else {
+                setShowJudul('auto');
+            }
         }
+    }, [selectedTemplate]);
+
+    const isTemplateHasCustomTitle = useMemo(() => {
+        if (!selectedTemplate) return false;
+        const sheets = getTemplateSheets(selectedTemplate);
+        return sheets.some(sh => {
+            if (sh.customTitle && sh.customTitle.trim()) return true;
+            if (!sh.cells) return false;
+            return sh.cells.slice(0, 3).some(row =>
+                row.some(cell => {
+                    if (!cell || !cell.value) return false;
+                    const up = cell.value.toUpperCase();
+                    return up.includes('RAPOR') || up.includes('LAPORAN HASIL') || up.includes('CAPAIAN KOMPETENSI') || up.includes('HASIL EVALUASI');
+                })
+            );
+        });
     }, [selectedTemplate]);
 
     const effectiveShowBiodata = showBiodataHeader === 'auto'
         ? !isTemplateHasCustomBiodata
         : showBiodataHeader;
+
+    const effectiveShowJudul = showJudul === 'auto'
+        ? (selectedTemplate?.showJudul !== undefined ? selectedTemplate.showJudul : true)
+        : showJudul;
 
     const templateSheets = useMemo(() => {
         if (!selectedTemplate) return [];
@@ -953,6 +1046,41 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                             <i className={`bi ${showKop ? 'bi-check-circle-fill text-emerald-600' : 'bi-circle'}`}></i>
                             <span>{showKop ? 'Kop Aktif' : 'Tanpa Kop'}</span>
                         </button>
+
+                        {/* Judul Rapor Toggle (Bisa 1-3 Baris) & Tombol Atur Judul */}
+                        <div className="flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setShowJudul(prev => (prev === 'auto' ? (isTemplateHasCustomTitle ? true : false) : !prev))}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                    effectiveShowJudul ? 'bg-amber-50 text-amber-800 border-amber-200 shadow-2xs' : 'bg-slate-100 text-slate-500 border-slate-200'
+                                }`}
+                                title={
+                                    effectiveShowJudul
+                                        ? "Judul dokumen rapor di bawah Kop sedang aktif (teks 1-3 baris). Klik untuk sembunyikan jika judul sudah didesain di dalam tabel."
+                                        : "Judul dokumen rapor di bawah Kop dinonaktifkan."
+                                }
+                            >
+                                <i className={`bi ${effectiveShowJudul ? 'bi-card-heading text-amber-600' : 'bi-card-text text-slate-400'}`}></i>
+                                <span>{effectiveShowJudul ? 'Judul: Aktif' : 'Judul: Nonaktif'}</span>
+                                {isTemplateHasCustomTitle && !effectiveShowJudul && (
+                                    <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 py-0.5 rounded-md hidden xl:inline" title="Judul rapor dibuat mandiri di dalam tabel sel desain">
+                                        Format Sendiri
+                                    </span>
+                                )}
+                            </button>
+                            {selectedTemplate && (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsTitleModalOpen(true)}
+                                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-amber-300 bg-amber-100/90 hover:bg-amber-200 text-amber-900 transition-all flex items-center gap-1 shadow-2xs"
+                                    title="Atur teks judul dokumen rapor resmi (bisa 1 - 3 baris dengan Enter dan tag otomatis)"
+                                >
+                                    <i className="bi bi-pencil-square text-amber-700"></i>
+                                    <span className="hidden sm:inline">Atur 3 Baris</span>
+                                </button>
+                            )}
+                        </div>
 
                         {/* Margins */}
                         <select
@@ -1347,6 +1475,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         marginMode={marginMode}
                                         fitToPage={fitToPage}
                                         printScale={printScale}
+                                        showJudul={effectiveShowJudul}
                                         showBiodataHeader={effectiveShowBiodata}
                                     />
                                 ) : (
@@ -1473,6 +1602,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                                 marginMode={marginMode}
                                                 fitToPage={fitToPage}
                                                 printScale={printScale}
+                                                showJudul={effectiveShowJudul}
                                                 showBiodataHeader={effectiveShowBiodata}
                                             />
                                         ) : (
@@ -1586,6 +1716,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 </select>
                             </div>
                         )}
+                        {selectedTemplate && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsFilterDrawerOpen(false);
+                                    setIsTitleModalOpen(true);
+                                }}
+                                className="w-full mt-2.5 py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-2xs"
+                            >
+                                <i className="bi bi-pencil-square text-amber-700"></i>
+                                <span>Atur Judul Rapor Resmi (1-3 Baris)</span>
+                            </button>
+                        )}
                     </div>
 
                     <div className="bg-teal-50/50 p-4 rounded-2xl border border-teal-100 space-y-3">
@@ -1621,6 +1764,17 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                     </div>
                 </div>
             </MobileFilterDrawer>
+
+            {/* Modal Atur Judul Rapor 1-3 Baris */}
+            <RaporTitleEditModal
+                isOpen={isTitleModalOpen}
+                onClose={() => setIsTitleModalOpen(false)}
+                template={selectedTemplate}
+                settings={settings}
+                selectedSheetId={selectedPrintSheetId}
+                onSave={handleSaveRaporTitle}
+                showToast={showToast}
+            />
         </div>
     );
 };

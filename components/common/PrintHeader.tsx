@@ -66,9 +66,28 @@ export const PrintHeader: React.FC<{ settings: PondokSettings; title?: string; c
             </div>
             <hr className={`${compact ? 'my-2' : 'my-3'} border-t-2 border-black`} />
             {title && (
-                <h3 className={`print-meta print-header-subtitle ${compact ? 'text-base' : 'text-xl'} font-semibold uppercase text-center text-black`}>
-                    {title}
-                </h3>
+                <div className={`print-meta print-header-subtitle ${compact ? 'mt-1.5 space-y-0.5' : 'mt-2 space-y-1'} text-center text-black`}>
+                    {title.split('\n').map((line, idx) => {
+                        const trimmed = line.trim();
+                        if (!trimmed) return null;
+                        return (
+                            <div
+                                key={idx}
+                                className={`${
+                                    idx === 0
+                                        ? compact
+                                            ? 'text-sm font-black tracking-wide'
+                                            : 'text-base font-black tracking-wider'
+                                        : compact
+                                        ? 'text-xs font-bold text-slate-900'
+                                        : 'text-xs sm:text-sm font-bold text-slate-900'
+                                } uppercase leading-tight`}
+                            >
+                                {trimmed}
+                            </div>
+                        );
+                    })}
+                </div>
             )}
         </div>
     );

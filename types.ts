@@ -600,6 +600,7 @@ export interface AcademicYearConfig {
 export interface RaporSheet {
     id: string;
     name: string;
+    customTitle?: string; // Judul cetak resmi dokumen (bisa 1-3 baris teks), e.g. "RAPOR HASIL BELAJAR\nMDTA AL-HIKMAH\nSEMESTER GANJIL"
     rowCount: number;
     colCount: number;
     cells: GridCell[][];
@@ -615,6 +616,7 @@ export interface RaporSheet {
 export interface RaporTemplate {
     id: string;
     name: string;
+    customTitle?: string; // Judul cetak default dokumen (bisa 1-3 baris teks)
     jenjangId?: number; // Lock to specific Marhalah
     kelasId?: number;   // Lock to specific Kelas
     rombelId?: number;  // Lock to specific Rombel

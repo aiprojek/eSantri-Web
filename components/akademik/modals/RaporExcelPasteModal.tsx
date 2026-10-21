@@ -30,6 +30,7 @@ export const RaporExcelPasteModal: React.FC<RaporExcelPasteModalProps> = ({
     );
     const [templateName, setTemplateName] = useState('Template Rapor Paste Excel');
     const [selectedJenjangId, setSelectedJenjangId] = useState<number | undefined>(undefined);
+    const [customTitle, setCustomTitle] = useState('');
     const [parsedTable, setParsedTable] = useState<ParsedExcelTable | null>(null);
     const [isPasting, setIsPasting] = useState(false);
     const [pasteMethod, setPasteMethod] = useState<'clipboard_btn' | 'manual_input'>('clipboard_btn');
@@ -41,6 +42,7 @@ export const RaporExcelPasteModal: React.FC<RaporExcelPasteModalProps> = ({
             setPasteMode(isEditingTemplate ? 'current_sheet' : 'new_template');
             setParsedTable(null);
             setManualText('');
+            setCustomTitle('');
             setTemplateName(`Template Rapor Excel ${new Date().toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}`);
         }
     }, [isOpen, isEditingTemplate]);
@@ -124,7 +126,7 @@ export const RaporExcelPasteModal: React.FC<RaporExcelPasteModalProps> = ({
 
         if (pasteMode === 'new_template') {
             const cleanName = templateName.trim() || 'Template Rapor Excel';
-            const newTpl = buildTemplateFromExcelTable(parsedTable, cleanName, selectedJenjangId);
+            const newTpl = buildTemplateFromExcelTable(parsedTable, cleanName, selectedJenjangId, customTitle.trim() || undefined);
             onCreateNewTemplate(newTpl);
             showToast(`Template "${cleanName}" berhasil dibuat dari Excel!`, 'success');
             onClose();
@@ -266,6 +268,26 @@ export const RaporExcelPasteModal: React.FC<RaporExcelPasteModalProps> = ({
                                     ))}
                                 </select>
                             </div>
+                            <div className="sm:col-span-2 pt-2 border-t border-gray-200">
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-xs font-bold text-gray-700">
+                                        Judul Dokumen Rapor (Opsional, Bisa 1-3 Baris)
+                                    </label>
+                                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold">
+                                        Mendukung Enter
+                                    </span>
+                                </div>
+                                <textarea
+                                    rows={2}
+                                    value={customTitle}
+                                    onChange={(e) => setCustomTitle(e.target.value)}
+                                    placeholder={`Contoh 3 Baris:\nLAPORAN HASIL EVALUASI BELAJAR (RAPOR)\n${settings.namaPonpes || 'PONDOK PESANTREN'}\nSEMESTER $SEMESTER TAHUN AJARAN $TAHUN_AJARAN`}
+                                    className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-medium bg-white focus:ring-2 focus:ring-emerald-500 outline-none leading-relaxed"
+                                />
+                                <p className="text-[10px] text-gray-500 mt-0.5">
+                                    💡 <em>Nama sheet di Excel tidak mendukung baris baru. Gunakan kolom ini jika ingin judul resmi 2-3 baris di bawah Kop.</em>
+                                </p>
+                            </div>
                         </div>
                     )}
 
@@ -386,17 +408,17 @@ export const RaporExcelPasteModal: React.FC<RaporExcelPasteModalProps> = ({
                                             <tr key={r} className="border-b border-slate-100 last:border-0">
                                                 {row.slice(0, 8).map((cell, c) => {
                                                     if (cell.hidden) return null;
-                                                    const b = cell.borders || { top: true, right: true, bottom: true, left: true };
+                                                    const b = cell.borders || { top: false, right: false, bottom: false, left: false };
                                                     return (
                                                         <td
                                                             key={c}
                                                             rowSpan={cell.rowSpan}
                                                             colSpan={cell.colSpan}
                                                             style={{
-                                                                borderTop: b.top ? '1px solid #cbd5e1' : undefined,
-                                                                borderRight: b.right ? '1px solid #cbd5e1' : undefined,
-                                                                borderBottom: b.bottom ? '1px solid #cbd5e1' : undefined,
-                                                                borderLeft: b.left ? '1px solid #cbd5e1' : undefined,
+                                                                borderTop: b.top ? '1px solid #cbd5e1' : 'none',
+                                                                borderRight: b.right ? '1px solid #cbd5e1' : 'none',
+                                                                borderBottom: b.bottom ? '1px solid #cbd5e1' : 'none',
+                                                                borderLeft: b.left ? '1px solid #cbd5e1' : 'none',
                                                                 backgroundColor: cell.backgroundColor || (cell.type === 'data' ? '#eef2ff' : undefined),
                                                                 fontWeight: cell.bold ? 'bold' : (r === 0 ? '600' : 'normal'),
                                                                 fontStyle: cell.italic ? 'italic' : undefined,

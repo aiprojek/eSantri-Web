@@ -38,6 +38,7 @@ export const TabDesainRapor: React.FC = () => {
 
     // Mobile View Toggle ('grid' = canvas view, 'properties' = cell settings)
     const [mobileViewTab, setMobileViewTab] = useState<'grid' | 'properties'>('grid');
+    const [sidebarTab, setSidebarTab] = useState<'cell' | 'sheet'>('cell');
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,17 +116,28 @@ export const TabDesainRapor: React.FC = () => {
                 rowCount: tpl.rowCount,
                 colCount: tpl.colCount,
                 cells: tpl.cells,
-                showJudul: tpl.showJudul
+                customTitle: tpl.customTitle !== undefined ? tpl.customTitle : sheets[idx].customTitle,
+                showJudul: tpl.showJudul !== undefined ? tpl.showJudul : sheets[idx].showJudul,
+                showBiodataHeader: tpl.showBiodataHeader !== undefined ? tpl.showBiodataHeader : sheets[idx].showBiodataHeader,
+                fitToPage: tpl.fitToPage !== undefined ? tpl.fitToPage : sheets[idx].fitToPage,
+                paperSize: tpl.paperSize || sheets[idx].paperSize,
+                printScale: tpl.printScale || sheets[idx].printScale,
+                marginMode: tpl.marginMode || sheets[idx].marginMode
             };
         } else {
             sheets.push({
                 id: sheetId,
                 name: `Lembar ${sheets.length + 1}`,
+                customTitle: tpl.customTitle,
                 rowCount: tpl.rowCount,
                 colCount: tpl.colCount,
                 cells: tpl.cells,
                 showJudul: tpl.showJudul,
-                paperSize: 'A4'
+                showBiodataHeader: tpl.showBiodataHeader,
+                fitToPage: tpl.fitToPage,
+                paperSize: tpl.paperSize || 'A4',
+                printScale: tpl.printScale,
+                marginMode: tpl.marginMode
             });
         }
 
@@ -367,7 +379,14 @@ export const TabDesainRapor: React.FC = () => {
             activeSheetId: targetSheetId,
             cells: targetSheet.cells,
             rowCount: targetSheet.rowCount,
-            colCount: targetSheet.colCount
+            colCount: targetSheet.colCount,
+            customTitle: targetSheet.customTitle,
+            showJudul: targetSheet.showJudul,
+            showBiodataHeader: targetSheet.showBiodataHeader,
+            fitToPage: targetSheet.fitToPage,
+            paperSize: targetSheet.paperSize,
+            printScale: targetSheet.printScale,
+            marginMode: targetSheet.marginMode
         });
     };
 
@@ -606,10 +625,15 @@ export const TabDesainRapor: React.FC = () => {
                                         newCells[r][c].key = valStr.substring(1).toUpperCase().replace(/[^A-Z0-9_]/g, '');
                                         newCells[r][c].value = ''; 
                                     }
-                                } else {
-                                    newCells[r][c].type = 'label';
                                 }
-                                newCells[r][c].borders = { top: true, right: true, bottom: true, left: true };
+                                const b = (cellVal as any)?.s?.border;
+                                const hasBorder = b ? {
+                                    top: Boolean(b.top && b.top.style && b.top.style !== 'none'),
+                                    right: Boolean(b.right && b.right.style && b.right.style !== 'none'),
+                                    bottom: Boolean(b.bottom && b.bottom.style && b.bottom.style !== 'none'),
+                                    left: Boolean(b.left && b.left.style && b.left.style !== 'none')
+                                } : null;
+                                newCells[r][c].borders = hasBorder || { top: false, right: false, bottom: false, left: false };
                             }
                         }
                     }
@@ -758,20 +782,63 @@ export const TabDesainRapor: React.FC = () => {
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
     };
 
-    const toggleBorder = (side: 'top' | 'right' | 'bottom' | 'left' | 'all' | 'none') => {
+    const toggleBorder = (side: 'top' | 'right' | 'bottom' | 'left' | 'all' | 'none' | 'outer') => {
         if (!activeTemplate || selectedCells.length === 0) return;
         const newCells = [...activeTemplate.cells];
-        selectedCells.forEach(({ r, c }) => {
-            const cell = newCells[r][c]; if (cell.hidden) return;
-            const currentBorders = cell.borders || { top: false, right: false, bottom: false, left: false };
-            let newBorders = { ...currentBorders };
-            if (side === 'all') newBorders = { top: true, right: true, bottom: true, left: true };
-            else if (side === 'none') newBorders = { top: false, right: false, bottom: false, left: false };
-            else newBorders[side] = !newBorders[side];
-            newCells[r][c] = { ...cell, borders: newBorders };
-        });
+        if (side === 'outer') {
+            const minR = Math.min(...selectedCells.map(c => c.r));
+            const maxR = Math.max(...selectedCells.map(c => c.r));
+            const minC = Math.min(...selectedCells.map(c => c.c));
+            const maxC = Math.max(...selectedCells.map(c => c.c));
+
+            selectedCells.forEach(({ r, c }) => {
+                const cell = newCells[r][c]; if (cell.hidden) return;
+                const currentBorders = cell.borders || { top: false, right: false, bottom: false, left: false };
+                newCells[r][c] = {
+                    ...cell,
+                    borders: {
+                        top: r === minR ? true : currentBorders.top,
+                        bottom: r === maxR ? true : currentBorders.bottom,
+                        left: c === minC ? true : currentBorders.left,
+                        right: c === maxC ? true : currentBorders.right
+                    }
+                };
+            });
+        } else {
+            selectedCells.forEach(({ r, c }) => {
+                const cell = newCells[r][c]; if (cell.hidden) return;
+                const currentBorders = cell.borders || { top: false, right: false, bottom: false, left: false };
+                let newBorders = { ...currentBorders };
+                if (side === 'all') newBorders = { top: true, right: true, bottom: true, left: true };
+                else if (side === 'none') newBorders = { top: false, right: false, bottom: false, left: false };
+                else newBorders[side] = !newBorders[side];
+                newCells[r][c] = { ...cell, borders: newBorders };
+            });
+        }
         const updated = { ...activeTemplate, cells: newCells };
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+    };
+
+    const handleCleanEmptyCellBorders = () => {
+        if (!activeTemplate) return;
+        let cleanedCount = 0;
+        const newCells = activeTemplate.cells.map(row =>
+            row.map(cell => {
+                const isBlank = (!cell.value || cell.value.trim() === '') && !cell.key && (!cell.backgroundColor || cell.backgroundColor === 'transparent' || cell.backgroundColor === '#ffffff');
+                const hasBorders = cell.borders && (cell.borders.top || cell.borders.bottom || cell.borders.left || cell.borders.right);
+                if (isBlank && hasBorders) {
+                    cleanedCount++;
+                    return {
+                        ...cell,
+                        borders: { top: false, right: false, bottom: false, left: false }
+                    };
+                }
+                return cell;
+            })
+        );
+        const updated = { ...activeTemplate, cells: newCells };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        showToast(cleanedCount > 0 ? `Berhasil membersihkan garis pada ${cleanedCount} sel kosong!` : 'Semua sel kosong sudah bersih tanpa garis.', 'success');
     };
 
     const getExcelColName = (colIndex: number): string => {
@@ -1234,6 +1301,34 @@ export const TabDesainRapor: React.FC = () => {
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
     };
 
+    const curSheet = useMemo(() => {
+        if (!activeSheets.length) return null;
+        return activeSheets.find(s => s.id === (activeSheetId || activeTemplate?.activeSheetId)) || activeSheets[0];
+    }, [activeSheets, activeSheetId, activeTemplate]);
+
+    const updateActiveSheet = (updates: Partial<RaporSheet>) => {
+        if (!activeTemplate) return;
+        const targetId = activeSheetId || activeTemplate.activeSheetId || activeTemplate.sheets?.[0]?.id || '';
+        const sheets = activeSheets.map(sh => {
+            if (sh.id === targetId) {
+                return { ...sh, ...updates };
+            }
+            return sh;
+        });
+        const updatedTpl: RaporTemplate = {
+            ...activeTemplate,
+            sheets,
+            customTitle: updates.customTitle !== undefined ? updates.customTitle : activeTemplate.customTitle,
+            showJudul: updates.showJudul !== undefined ? updates.showJudul : activeTemplate.showJudul,
+            showBiodataHeader: updates.showBiodataHeader !== undefined ? updates.showBiodataHeader : activeTemplate.showBiodataHeader,
+            fitToPage: updates.fitToPage !== undefined ? updates.fitToPage : activeTemplate.fitToPage,
+            paperSize: updates.paperSize || activeTemplate.paperSize,
+            printScale: updates.printScale || activeTemplate.printScale,
+            marginMode: updates.marginMode || activeTemplate.marginMode
+        };
+        setActiveTemplate(updatedTpl);
+    };
+
     const getSimulatedValue = (cell: GridCell) => {
         if (cell.type === 'label') return cell.value;
         if (cell.type === 'input') return <span className="text-blue-500 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key || 'NILAI'}]</span>;
@@ -1476,22 +1571,40 @@ export const TabDesainRapor: React.FC = () => {
 
                     <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
-                    <button 
-                        type="button" 
-                        onClick={() => toggleBorder('all')} 
-                        className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 shrink-0 text-xs shadow-2xs" 
-                        title="Beri Border Semua Sisi"
-                    >
-                        <i className="bi bi-border-all"></i>
-                    </button>
-                    <button 
-                        type="button" 
-                        onClick={() => toggleBorder('none')} 
-                        className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 shrink-0 text-xs shadow-2xs" 
-                        title="Hapus Border"
-                    >
-                        <i className="bi bi-border-none"></i>
-                    </button>
+                    <div className="flex items-center gap-0.5 shrink-0 bg-slate-50 p-0.5 rounded-lg border border-slate-200">
+                        <button 
+                            type="button" 
+                            onClick={() => toggleBorder('all')} 
+                            className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-700 text-xs shadow-2xs" 
+                            title="Beri Border Semua Sisi"
+                        >
+                            <i className="bi bi-border-all"></i>
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => toggleBorder('outer')} 
+                            className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-700 text-xs shadow-2xs" 
+                            title="Garis Batas Luar Saja"
+                        >
+                            <i className="bi bi-border-outer"></i>
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => toggleBorder('bottom')} 
+                            className="p-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-slate-700 text-xs shadow-2xs" 
+                            title="Garis Batas Bawah"
+                        >
+                            <i className="bi bi-border-bottom"></i>
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => toggleBorder('none')} 
+                            className="p-1.5 bg-white hover:bg-red-50 hover:text-red-700 border border-slate-200 rounded text-slate-700 text-xs shadow-2xs" 
+                            title="Hapus Garis / Tanpa Border"
+                        >
+                            <i className="bi bi-border-none"></i>
+                        </button>
+                    </div>
 
                     <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
@@ -1915,26 +2028,45 @@ export const TabDesainRapor: React.FC = () => {
 
             {/* PROPERTIES SIDEBAR (Side-by-side on desktop, switchable view on mobile) */}
             <div className={`${mobileViewTab === 'properties' ? 'flex' : 'hidden lg:flex'} w-full lg:w-80 bg-white border border-slate-300 rounded-xl flex-col shrink-0 min-h-0 overflow-hidden shadow-xs`}>
-                <div className="p-3 border-b font-bold bg-gray-50 text-gray-700 flex items-center justify-between gap-2 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <i className="bi bi-sliders text-teal-600"></i>
-                        <span>Properti Sel</span>
-                        {activeCellData && (
-                            <span className="bg-teal-100 text-teal-800 text-xs px-2 py-0.5 rounded font-mono font-bold">
-                                {getExcelColName(activeCellData.col)}{activeCellData.row + 1}
-                            </span>
-                        )}
+                <div className="p-2 border-b bg-gray-50 flex items-center justify-between gap-1 shrink-0">
+                    <div className="flex bg-slate-200/90 p-0.5 rounded-lg text-xs font-bold">
+                        <button
+                            type="button"
+                            onClick={() => setSidebarTab('cell')}
+                            className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+                                sidebarTab === 'cell' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                        >
+                            <i className="bi bi-ui-checks-grid text-teal-600"></i>
+                            <span>Sel</span>
+                            {activeCellData && (
+                                <span className="bg-teal-100 text-teal-800 text-[10px] px-1 py-0.2 rounded font-mono font-bold">
+                                    {getExcelColName(activeCellData.col)}{activeCellData.row + 1}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSidebarTab('sheet')}
+                            className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+                                sidebarTab === 'sheet' ? 'bg-white text-indigo-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                            title="Atur Nama Sheet, Judul Dokumen Rapor (1-3 Baris), Pas 1 Muka, dan Biodata"
+                        >
+                            <i className="bi bi-file-earmark-text text-indigo-600"></i>
+                            <span>Lembar &amp; Judul</span>
+                        </button>
                     </div>
                     <button
                         type="button"
                         onClick={() => setMobileViewTab('grid')}
-                        className="lg:hidden text-xs font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg border border-teal-200 flex items-center gap-1 transition-all"
+                        className="lg:hidden text-xs font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-200 flex items-center gap-1 transition-all"
                     >
                         <i className="bi bi-grid-3x3"></i>
-                        <span>Kembali ke Kanvas</span>
+                        <span>Kanvas</span>
                     </button>
                 </div>
-                {activeCellData ? (
+                {sidebarTab === 'cell' && activeCellData ? (
                     <div className="p-4 space-y-5 overflow-y-auto">
                         <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Tipe Data</label>
@@ -2400,52 +2532,291 @@ export const TabDesainRapor: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Setelan Halaman Cetak Lembar (Fit to 1 Page & Biodata) */}
-                            <div className="pt-2 border-t border-slate-200/60 space-y-2">
-                                <label className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
-                                    <i className="bi bi-file-earmark-check-fill text-indigo-600"></i>
-                                    <span>Setelan Cetak Lembar Ini</span>
+                            {/* Garis Batas Sel (Border) */}
+                            <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
+                                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                                    <span>Garis Batas Sel (Border)</span>
+                                    <span className="text-[10px] text-slate-400">Pilih Sisi</span>
                                 </label>
-                                
-                                <div className="space-y-1.5 bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 text-xs">
-                                    {/* Fit to 1 Page */}
-                                    <label className="flex items-center justify-between cursor-pointer font-semibold text-slate-800">
-                                        <span title="Paksa seluruh desain lembar ini pas tepat dalam 1 lembar tanpa meluber ke halaman 2">
-                                            Paksa Pas 1 Muka:
-                                        </span>
-                                        <input
-                                            type="checkbox"
-                                            checked={activeTemplate?.fitToPage !== false}
-                                            onChange={e => {
-                                                const val = e.target.checked;
-                                                setActiveTemplate(t => t ? { ...t, fitToPage: val } : null);
-                                            }}
-                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                                        />
-                                    </label>
-
-                                    {/* Show Biodata Header */}
-                                    <label className="flex items-center justify-between cursor-pointer font-semibold text-slate-800">
-                                        <span title="Tampilkan kotak biodata bawaan sistem (Nama, NIS, Rombel, Ranking). Nonaktifkan jika format biodata sudah didesain sendiri di tabel ini.">
-                                            Header Biodata Otomatis:
-                                        </span>
-                                        <input
-                                            type="checkbox"
-                                            checked={activeTemplate?.showBiodataHeader === true}
-                                            onChange={e => {
-                                                const val = e.target.checked;
-                                                setActiveTemplate(t => t ? { ...t, showBiodataHeader: val } : null);
-                                            }}
-                                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                                        />
-                                    </label>
+                                <div className="grid grid-cols-4 gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('all')}
+                                        className="py-1 px-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 text-[10.5px] font-semibold flex items-center justify-center gap-1 shadow-2xs"
+                                        title="Beri Garis Semua Sisi"
+                                    >
+                                        <i className="bi bi-border-all"></i> Semua
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('outer')}
+                                        className="py-1 px-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 text-[10.5px] font-semibold flex items-center justify-center gap-1 shadow-2xs"
+                                        title="Garis Luar Saja"
+                                    >
+                                        <i className="bi bi-border-outer"></i> Luar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('bottom')}
+                                        className="py-1 px-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 text-[10.5px] font-semibold flex items-center justify-center gap-1 shadow-2xs"
+                                        title="Garis Bawah Saja"
+                                    >
+                                        <i className="bi bi-border-bottom"></i> Bawah
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('none')}
+                                        className="py-1 px-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-[10.5px] font-semibold flex items-center justify-center gap-1 shadow-2xs"
+                                        title="Hapus Semua Garis pada Sel Terpilih"
+                                    >
+                                        <i className="bi bi-border-none"></i> Tanpa
+                                    </button>
                                 </div>
+                                <div className="flex items-center gap-1 pt-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('top')}
+                                        className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${
+                                            activeCellData.borders?.top ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        Atas
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('bottom')}
+                                        className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${
+                                            activeCellData.borders?.bottom ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        Bawah
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('left')}
+                                        className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${
+                                            activeCellData.borders?.left ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        Kiri
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('right')}
+                                        className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${
+                                            activeCellData.borders?.right ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        Kanan
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Quick Link to Sheet & Title Settings */}
+                            <div className="pt-2 border-t border-slate-200/60">
+                                <button
+                                    type="button"
+                                    onClick={() => setSidebarTab('sheet')}
+                                    className="w-full p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 rounded-xl border border-indigo-200 text-xs font-bold flex items-center justify-between transition-colors shadow-2xs"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <i className="bi bi-file-earmark-text text-indigo-600 text-base"></i>
+                                        <div className="text-left">
+                                            <div className="font-extrabold text-[11px]">Setelan Lembar &amp; Judul Rapor</div>
+                                            <div className="text-[10px] text-indigo-700 font-normal">Nama tab, Judul 3 baris, Pas 1 muka</div>
+                                        </div>
+                                    </div>
+                                    <i className="bi bi-chevron-right text-xs text-indigo-500"></i>
+                                </button>
                             </div>
                         </div>
                     </div>
                 ) : (
-                    <div className="p-8 text-center text-gray-400 text-sm flex flex-col items-center justify-center h-full opacity-60">
-                        <i className="bi bi-mouse text-3xl mb-2"></i><p>Klik sel untuk edit properti.</p>
+                    /* PANEL SETELAN LEMBAR & JUDUL RAPOR RESMI */
+                    <div className="p-4 space-y-4 overflow-y-auto">
+                        <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1">
+                            <div className="flex items-center gap-1.5 font-bold text-indigo-950 text-xs">
+                                <i className="bi bi-info-circle-fill text-indigo-600"></i>
+                                <span>Format Nama Tab vs Judul Dokumen</span>
+                            </div>
+                            <p className="text-[11px] text-indigo-900 leading-relaxed">
+                                <strong>Nama Tab</strong> adalah label singkat worksheet (misal: <em>Akademik</em>).
+                                Sedangkan <strong>Judul Dokumen</strong> adalah judul resmi yang dicetak (bisa 2-3 baris lengkap).
+                            </p>
+                        </div>
+
+                        {/* 1. Nama Tab Lembar */}
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">
+                                Nama Tab Lembar (Singkat)
+                            </label>
+                            <input
+                                type="text"
+                                value={curSheet?.name || ''}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    updateActiveSheet({ name: val });
+                                }}
+                                placeholder="Contoh: Lembar 1 / Akademik"
+                                className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                            <span className="text-[10px] text-slate-400 mt-1 block">Tampil pada tab navigasi di bagian bawah kanvas.</span>
+                        </div>
+
+                        {/* 2. Toggle Tampilkan Judul Rapor di Bawah Kop */}
+                        <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                            <label className="flex items-center justify-between cursor-pointer font-bold text-xs text-slate-800">
+                                <span>Tampilkan Judul di Bawah Kop:</span>
+                                <input
+                                    type="checkbox"
+                                    checked={activeTemplate?.showJudul !== false}
+                                    onChange={e => {
+                                        const val = e.target.checked;
+                                        updateActiveSheet({ showJudul: val });
+                                    }}
+                                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                />
+                            </label>
+                            <p className="text-[10.5px] text-slate-500 leading-snug">
+                                {activeTemplate?.showJudul !== false
+                                    ? "Judul resmi di bawah ini akan dicetak tepat di bawah garis Kop Pondok."
+                                    : "Judul cetak di bawah Kop dinonaktifkan (Gunakan jika judul rapor 2-3 baris sudah Anda buat sendiri di dalam sel tabel)."}
+                            </p>
+                        </div>
+
+                        {/* 3. Judul Rapor Resmi (Bisa 1-3 Baris) */}
+                        {activeTemplate?.showJudul !== false && (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        Judul Dokumen Rapor (1 - 3 Baris)
+                                    </label>
+                                    <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">
+                                        Mendukung Baris Baru
+                                    </span>
+                                </div>
+                                
+                                <textarea
+                                    rows={4}
+                                    value={curSheet?.customTitle !== undefined ? curSheet.customTitle : (activeTemplate?.customTitle || '')}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        updateActiveSheet({ customTitle: val });
+                                    }}
+                                    placeholder={`Contoh Judul 3 Baris:\nLAPORAN CAPAIAN KOMPETENSI SANTRI (RAPOR)\nMADRASAH DINIYAH TAKMILIYAH AWALIYAH\nSEMESTER $SEMESTER TAHUN AJARAN $TAHUN_AJARAN`}
+                                    className="w-full border border-slate-300 rounded-xl p-2.5 text-xs font-mono font-medium text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none leading-relaxed"
+                                />
+
+                                {/* Preset Cepat */}
+                                <div className="space-y-1">
+                                    <span className="text-[10px] font-bold text-slate-400 block uppercase">Preset Cepat:</span>
+                                    <div className="flex flex-wrap gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const standard3Lines = `LAPORAN HASIL EVALUASI BELAJAR (RAPOR)\n${settings.namaPonpes || 'PONDOK PESANTREN'}\nSEMESTER $SEMESTER TAHUN AJARAN $TAHUN_AJARAN`;
+                                                updateActiveSheet({ customTitle: standard3Lines });
+                                            }}
+                                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded text-[10px] font-semibold transition-all"
+                                            title="Isi 3 baris standar lengkap dengan variabel dinamis"
+                                        >
+                                            + Format 3 Baris Standar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const title2Lines = `RAPOR HASIL BELAJAR SANTRI\nSEMESTER $SEMESTER TAHUN AJARAN $TAHUN_AJARAN`;
+                                                updateActiveSheet({ customTitle: title2Lines });
+                                            }}
+                                            className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-semibold transition-all"
+                                        >
+                                            + Format 2 Baris
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveSheet({ customTitle: curSheet?.name || '' })}
+                                            className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-semibold transition-all"
+                                        >
+                                            Gunakan Nama Tab
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveSheet({ customTitle: '' })}
+                                            className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-[10px] font-semibold transition-all"
+                                        >
+                                            Kosongkan
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-[10px] text-slate-500">
+                                    <span className="font-bold text-slate-700">Tag Otomatis: </span>
+                                    <code className="text-indigo-600 font-bold">$SEMESTER</code>, <code className="text-indigo-600 font-bold">$TAHUN_AJARAN</code>, <code className="text-indigo-600 font-bold">$ROMBEL</code>, <code className="text-indigo-600 font-bold">$KELAS</code>, <code className="text-indigo-600 font-bold">$NAMA_PONPES</code>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 4. Fit to 1 Page */}
+                        <div className="pt-2 border-t border-slate-200 space-y-2">
+                            <label className="flex items-center justify-between cursor-pointer font-bold text-xs text-slate-800">
+                                <span className="flex items-center gap-1.5">
+                                    <i className="bi bi-file-earmark-check-fill text-indigo-600"></i>
+                                    <span>Paksa Pas 1 Muka (Fit to 1 Page):</span>
+                                </span>
+                                <input
+                                    type="checkbox"
+                                    checked={activeTemplate?.fitToPage !== false}
+                                    onChange={e => {
+                                        const val = e.target.checked;
+                                        updateActiveSheet({ fitToPage: val });
+                                    }}
+                                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                />
+                            </label>
+                            <p className="text-[10.5px] text-slate-500 leading-snug">
+                                Memaksa lembar ini pas tepat dalam 1 lembar cetak tanpa meluber ke halaman 2 seperti setelan cetak di Excel.
+                            </p>
+                        </div>
+
+                        {/* 5. Header Biodata Otomatis */}
+                        <div className="pt-2 border-t border-slate-200 space-y-2">
+                            <label className="flex items-center justify-between cursor-pointer font-bold text-xs text-slate-800">
+                                <span className="flex items-center gap-1.5">
+                                    <i className="bi bi-person-badge-fill text-blue-600"></i>
+                                    <span>Header Biodata Otomatis:</span>
+                                </span>
+                                <input
+                                    type="checkbox"
+                                    checked={activeTemplate?.showBiodataHeader === true}
+                                    onChange={e => {
+                                        const val = e.target.checked;
+                                        updateActiveSheet({ showBiodataHeader: val });
+                                    }}
+                                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                />
+                            </label>
+                            <p className="text-[10.5px] text-slate-500 leading-snug">
+                                Tampilkan kotak biodata bawaan sistem (Nama, NIS, Rombel, Ranking). Nonaktifkan jika format biodata sudah didesain sendiri di dalam sel tabel.
+                            </p>
+                        </div>
+
+                        {/* 6. Pembersihan Garis Sel Kosong */}
+                        <div className="pt-2 border-t border-slate-200 space-y-2">
+                            <label className="block font-bold text-xs text-slate-800">
+                                Bersihkan Garis Sel Kosong:
+                            </label>
+                            <p className="text-[10.5px] text-slate-500 leading-snug">
+                                Hapus garis border otomatis pada sel-sel kosong di luar tabel agar tampilan cetak rapi dan hanya tabel nilai yang bergaris.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={handleCleanEmptyCellBorders}
+                                className="w-full py-2 px-3 bg-white hover:bg-amber-50 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                            >
+                                <i className="bi bi-eraser-fill text-amber-600"></i>
+                                <span>🧹 Bersihkan Border Sel Kosong</span>
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
@@ -2501,7 +2872,7 @@ export const TabDesainRapor: React.FC = () => {
                                                         <tr key={rIdx}>
                                                             {row.map((cell, cIdx) => {
                                                                 if (cell.hidden) return null;
-                                                                const borders = cell.borders || { top: true, right: true, bottom: true, left: true };
+                                                                const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
                                                                 return (
                                                                     <td 
                                                                         key={`${rIdx}-${cIdx}`} 

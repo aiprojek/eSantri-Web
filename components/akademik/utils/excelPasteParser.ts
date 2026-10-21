@@ -292,20 +292,26 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
                 }
 
                 // Deteksi border presisi per sisi (Excel border mapping)
-                const checkBorder = (val: string | undefined): boolean => {
-                    if (!val) return false;
-                    const v = val.toLowerCase();
-                    if (v.includes('none') || v.includes('hidden') || v === '0' || v === '0px') return false;
-                    return v.includes('solid') || v.includes('pt') || v.includes('px') || v.includes('windowtext') || v.includes('thin') || v.includes('medium') || v.includes('#');
+                const checkBorder = (val: string | undefined): boolean | null => {
+                    if (!val) return null;
+                    const v = val.toLowerCase().trim();
+                    if (v.includes('none') || v.includes('hidden') || v === '0' || v === '0px' || v.startsWith('none') || v === 'medium none') return false;
+                    if (v.includes('solid') || v.includes('pt') || v.includes('px') || v.includes('windowtext') || v.includes('thin') || v.includes('medium') || v.includes('#') || v.includes('double') || v.includes('dashed')) return true;
+                    return null;
                 };
 
-                const generalBorderVal = mergedStyle['border'] || td.style.border || (table.getAttribute('border') && table.getAttribute('border') !== '0' ? '1px solid black' : undefined);
-                const hasGeneralBorder = checkBorder(generalBorderVal);
+                const generalBorderVal = mergedStyle['border'] || td.style.border;
+                const generalStatus = checkBorder(generalBorderVal);
 
-                const bTop = checkBorder(mergedStyle['border-top'] || td.style.borderTop) || hasGeneralBorder;
-                const bRight = checkBorder(mergedStyle['border-right'] || td.style.borderRight) || hasGeneralBorder;
-                const bBottom = checkBorder(mergedStyle['border-bottom'] || td.style.borderBottom) || hasGeneralBorder;
-                const bLeft = checkBorder(mergedStyle['border-left'] || td.style.borderLeft) || hasGeneralBorder;
+                const topStatus = checkBorder(mergedStyle['border-top'] || td.style.borderTop);
+                const rightStatus = checkBorder(mergedStyle['border-right'] || td.style.borderRight);
+                const bottomStatus = checkBorder(mergedStyle['border-bottom'] || td.style.borderBottom);
+                const leftStatus = checkBorder(mergedStyle['border-left'] || td.style.borderLeft);
+
+                const bTop = topStatus !== null ? topStatus : (generalStatus === true);
+                const bRight = rightStatus !== null ? rightStatus : (generalStatus === true);
+                const bBottom = bottomStatus !== null ? bottomStatus : (generalStatus === true);
+                const bLeft = leftStatus !== null ? leftStatus : (generalStatus === true);
 
                 const parsedCell: ParsedExcelCell = {
                     value,
@@ -436,13 +442,14 @@ export const parsePlainTextTsv = (tsv: string): ParsedExcelTable | null => {
             if (type === 'data' && value.startsWith('$')) {
                 detectedTags.add(value);
             }
+            const isCellEmpty = !value || value.trim() === '';
             row.push({
                 value,
                 type,
                 key,
                 colSpan: 1,
                 rowSpan: 1,
-                borders: { top: true, right: true, bottom: true, left: true },
+                borders: isCellEmpty ? { top: false, right: false, bottom: false, left: false } : { top: true, right: true, bottom: true, left: true },
                 width: 100,
                 height: 30
             });
@@ -559,7 +566,8 @@ export const overlayPastedTableOntoGrid = (
 export const buildTemplateFromExcelTable = (
     pasted: ParsedExcelTable,
     templateName: string = 'Template Rapor Excel',
-    jenjangId?: number
+    jenjangId?: number,
+    customTitle?: string
 ): RaporTemplate => {
     // Deteksi apakah tabel paste ini sudah memiliki data diri santri sendiri
     const hasBuiltInBiodata = pasted.detectedTags.some(t =>
@@ -584,7 +592,7 @@ export const buildTemplateFromExcelTable = (
                 colSpan: src.colSpan,
                 rowSpan: src.rowSpan,
                 align: src.align,
-                borders: src.borders || { top: true, right: true, bottom: true, left: true },
+                borders: src.borders || { top: false, right: false, bottom: false, left: false },
                 hidden: src.hidden,
                 width: w,
                 height: h,
@@ -605,11 +613,12 @@ export const buildTemplateFromExcelTable = (
         colCount: pasted.colCount,
         cells: newCells,
         paperSize: 'A4',
-        showJudul: false, // Default matikan kop terpisah bila diimpor dari Excel yang sudah punya format sendiri
+        showJudul: !!customTitle, // Aktifkan judul jika customTitle diberikan
         showBiodataHeader: !hasBuiltInBiodata, // Jika sudah ada tag $NAMA/$NIS di tabel, matikan header biodata ganda
         fitToPage: true, // Standar Excel: Pas 1 muka per lembar
         printScale: 'auto',
-        marginMode: 'narrow'
+        marginMode: 'narrow',
+        customTitle
     };
 
     return {
@@ -621,11 +630,12 @@ export const buildTemplateFromExcelTable = (
         sheets: [defaultSheet],
         activeSheetId: defaultSheet.id,
         jenjangId,
-        showJudul: false,
+        showJudul: !!customTitle,
         showBiodataHeader: !hasBuiltInBiodata,
         fitToPage: true,
         printScale: 'auto',
         marginMode: 'narrow',
+        customTitle,
         lastModified: new Date().toISOString()
     };
 };

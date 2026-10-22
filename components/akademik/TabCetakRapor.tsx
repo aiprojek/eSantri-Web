@@ -348,7 +348,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                                     fontStyle: cell.italic ? 'italic' : undefined,
                                                     color: cell.color || undefined,
                                                     fontSize: cell.fontSize ? `${cell.fontSize}px` : (colCount > 12 ? '10px' : undefined),
-                                                    padding: colCount > 10 ? '2px 4px' : '4px',
+                                                    padding: (sheetColWidths[cIdx] || 100) < 30 ? '1px 2px' : (colCount > 10 ? '2px 4px' : '4px'),
                                                     boxSizing: 'border-box',
                                                     overflow: 'hidden',
                                                     wordBreak: 'break-word'

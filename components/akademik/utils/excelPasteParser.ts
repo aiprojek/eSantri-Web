@@ -45,26 +45,26 @@ export const parseCssDimension = (val: string | null | undefined): number | unde
     const s = val.trim().toLowerCase();
     if (s.endsWith('pt')) {
         const pt = parseFloat(s);
-        return isNaN(pt) ? undefined : Math.max(20, Math.round(pt * 1.333));
+        return isNaN(pt) ? undefined : Math.max(8, Math.round(pt * 1.333));
     }
     if (s.endsWith('px')) {
         const px = parseFloat(s);
-        return isNaN(px) ? undefined : Math.max(20, Math.round(px));
+        return isNaN(px) ? undefined : Math.max(8, Math.round(px));
     }
     if (s.endsWith('in')) {
         const inches = parseFloat(s);
-        return isNaN(inches) ? undefined : Math.max(20, Math.round(inches * 96));
+        return isNaN(inches) ? undefined : Math.max(8, Math.round(inches * 96));
     }
     if (s.endsWith('cm')) {
         const cm = parseFloat(s);
-        return isNaN(cm) ? undefined : Math.max(20, Math.round(cm * 37.795));
+        return isNaN(cm) ? undefined : Math.max(8, Math.round(cm * 37.795));
     }
     if (s.endsWith('mm')) {
         const mm = parseFloat(s);
-        return isNaN(mm) ? undefined : Math.max(20, Math.round(mm * 3.7795));
+        return isNaN(mm) ? undefined : Math.max(8, Math.round(mm * 3.7795));
     }
     const num = parseFloat(s);
-    return isNaN(num) ? undefined : Math.max(20, Math.round(num));
+    return isNaN(num) ? undefined : Math.max(8, Math.round(num));
 };
 
 /**
@@ -206,7 +206,7 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
 
             // Baca tinggi baris dari tr style/attribute
             const trH = parseCssDimension(tr.style.height || tr.getAttribute('height'));
-            if (trH && trH >= 20) {
+            if (trH && trH >= 8) {
                 rowHeightsMap[rIdx] = trH;
             }
 

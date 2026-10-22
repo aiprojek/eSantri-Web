@@ -557,27 +557,27 @@ export const TabDesainRapor: React.FC = () => {
                     const rowCount = Math.min(range.e.r + 1, 100);
                     const colCount = Math.min(range.e.c + 1, 30);
 
-                    // Ekstrak lebar kolom dari format Excel asli
+                    // Ekstrak lebar kolom dari format Excel asli (mendukung hingga mepet 8px)
                     const colWidths: number[] = [];
                     if (ws['!cols']) {
                         for (let c = 0; c < colCount; c++) {
                             const colInfo = ws['!cols'][c];
                             if (colInfo) {
-                                if (colInfo.wpx) colWidths[c] = Math.max(35, Math.min(800, Math.round(colInfo.wpx)));
-                                else if (colInfo.wch) colWidths[c] = Math.max(35, Math.min(800, Math.round(colInfo.wch * 8)));
-                                else if (colInfo.width) colWidths[c] = Math.max(35, Math.min(800, Math.round(colInfo.width * 8)));
+                                if (colInfo.wpx) colWidths[c] = Math.max(8, Math.min(800, Math.round(colInfo.wpx)));
+                                else if (colInfo.wch) colWidths[c] = Math.max(8, Math.min(800, Math.round(colInfo.wch * 8)));
+                                else if (colInfo.width) colWidths[c] = Math.max(8, Math.min(800, Math.round(colInfo.width * 8)));
                             }
                         }
                     }
 
-                    // Ekstrak tinggi baris dari format Excel asli
+                    // Ekstrak tinggi baris dari format Excel asli (mendukung hingga mepet 8px)
                     const rowHeights: number[] = [];
                     if (ws['!rows']) {
                         for (let r = 0; r < rowCount; r++) {
                             const rowInfo = ws['!rows'][r];
                             if (rowInfo) {
-                                if (rowInfo.hpx) rowHeights[r] = Math.max(20, Math.min(400, Math.round(rowInfo.hpx)));
-                                else if (rowInfo.hpt) rowHeights[r] = Math.max(20, Math.min(400, Math.round(rowInfo.hpt * 1.333)));
+                                if (rowInfo.hpx) rowHeights[r] = Math.max(8, Math.min(400, Math.round(rowInfo.hpx)));
+                                else if (rowInfo.hpt) rowHeights[r] = Math.max(8, Math.min(400, Math.round(rowInfo.hpt * 1.333)));
                             }
                         }
                     }
@@ -888,7 +888,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleSetAllColWidths = (width: number) => {
         if (!activeTemplate) return;
-        const clamped = Math.max(35, Math.min(1000, width));
+        const clamped = Math.max(8, Math.min(1000, width));
         const newCells = activeTemplate.cells.map(row =>
             row.map(cell => ({ ...cell, width: clamped }))
         );
@@ -899,7 +899,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleSetAllRowHeights = (height: number) => {
         if (!activeTemplate) return;
-        const clamped = Math.max(20, Math.min(500, height));
+        const clamped = Math.max(8, Math.min(500, height));
         const newCells = activeTemplate.cells.map(row =>
             row.map(cell => ({ ...cell, height: clamped }))
         );
@@ -929,7 +929,7 @@ export const TabDesainRapor: React.FC = () => {
         if (!activeTemplate) return;
         const colCount = activeTemplate.colCount || 1;
         // Lebar area cetak A4 portrait standar ~720px
-        const targetColW = Math.max(35, Math.floor(720 / colCount));
+        const targetColW = Math.max(8, Math.floor(720 / colCount));
         const newCells = activeTemplate.cells.map(row =>
             row.map(cell => ({ ...cell, width: targetColW }))
         );
@@ -1198,7 +1198,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleUpdateColWidth = (cIdx: number, newWidth: number) => {
         if (!activeTemplate) return;
-        const clampedWidth = Math.max(35, Math.min(1000, Math.round(newWidth)));
+        const clampedWidth = Math.max(8, Math.min(1000, Math.round(newWidth)));
         const newCells = activeTemplate.cells.map(row =>
             row.map((cell, c) => c === cIdx ? { ...cell, width: clampedWidth } : cell)
         );
@@ -1208,7 +1208,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleUpdateRowHeight = (rIdx: number, newHeight: number) => {
         if (!activeTemplate) return;
-        const clampedHeight = Math.max(20, Math.min(600, Math.round(newHeight)));
+        const clampedHeight = Math.max(8, Math.min(600, Math.round(newHeight)));
         const newCells = activeTemplate.cells.map((row, r) =>
             r === rIdx ? row.map(cell => ({ ...cell, height: clampedHeight })) : row
         );
@@ -1302,13 +1302,13 @@ export const TabDesainRapor: React.FC = () => {
         document.body.style.userSelect = 'none';
         const onMouseMove = (e: MouseEvent) => {
             const delta = (e.clientX - resizingCol.startX) / zoomScale;
-            const newW = Math.max(35, Math.round(resizingCol.startWidth + delta));
+            const newW = Math.max(8, Math.round(resizingCol.startWidth + delta));
             setResizingCol(prev => prev ? { ...prev, currentWidth: newW } : null);
         };
         const onTouchMove = (e: TouchEvent) => {
             if (e.touches.length !== 1) return;
             const delta = (e.touches[0].clientX - resizingCol.startX) / zoomScale;
-            const newW = Math.max(35, Math.round(resizingCol.startWidth + delta));
+            const newW = Math.max(8, Math.round(resizingCol.startWidth + delta));
             setResizingCol(prev => prev ? { ...prev, currentWidth: newW } : null);
         };
         const onEnd = () => {
@@ -1342,13 +1342,13 @@ export const TabDesainRapor: React.FC = () => {
         document.body.style.userSelect = 'none';
         const onMouseMove = (e: MouseEvent) => {
             const delta = (e.clientY - resizingRow.startY) / zoomScale;
-            const newH = Math.max(20, Math.round(resizingRow.startHeight + delta));
+            const newH = Math.max(8, Math.round(resizingRow.startHeight + delta));
             setResizingRow(prev => prev ? { ...prev, currentHeight: newH } : null);
         };
         const onTouchMove = (e: TouchEvent) => {
             if (e.touches.length !== 1) return;
             const delta = (e.touches[0].clientY - resizingRow.startY) / zoomScale;
-            const newH = Math.max(20, Math.round(resizingRow.startHeight + delta));
+            const newH = Math.max(8, Math.round(resizingRow.startHeight + delta));
             setResizingRow(prev => prev ? { ...prev, currentHeight: newH } : null);
         };
         const onEnd = () => {
@@ -1872,19 +1872,20 @@ export const TabDesainRapor: React.FC = () => {
                                         const colName = getExcelColName(cIdx);
                                         const colW = getColWidth(cIdx);
                                         const isColSelected = selectedCells.length > 0 && selectedCells.every(s => s.c === cIdx);
+                                        const isNarrow = colW < 28;
                                         return (
                                             <th
                                                 key={cIdx}
-                                                className={`group/col relative border border-slate-300 text-slate-700 font-bold text-[11px] text-center select-none cursor-pointer h-7 px-1 transition-colors sticky top-0 z-20 shadow-xs ${
+                                                className={`group/col relative border border-slate-300 text-slate-700 font-bold text-center select-none cursor-pointer h-7 ${isNarrow ? 'px-0 text-[9px]' : 'px-1 text-[11px]'} transition-colors sticky top-0 z-20 shadow-xs ${
                                                     isColSelected ? 'bg-blue-200 text-blue-900 font-black' : 'bg-slate-100 hover:bg-slate-200'
                                                 }`}
-                                                style={{ width: `${colW}px`, minWidth: `${colW}px`, maxWidth: `${colW}px` }}
+                                                style={{ width: `${colW}px`, minWidth: `${colW}px`, maxWidth: `${colW}px`, boxSizing: 'border-box' }}
                                                 onClick={() => handleSelectColumn(cIdx)}
                                                 title={`Kolom ${colName} (${colW}px) - Klik untuk pilih seluruh kolom, seret pembatas kanan untuk atur lebar`}
                                             >
-                                                <div className="flex items-center justify-center gap-1 w-full h-full relative px-0.5">
+                                                <div className="flex items-center justify-center gap-0.5 w-full h-full relative overflow-hidden">
                                                     <span className="truncate block pointer-events-none">{colName}</span>
-                                                    {activeTemplate && activeTemplate.colCount > 1 && canWrite && (
+                                                    {activeTemplate && activeTemplate.colCount > 1 && canWrite && !isNarrow && (
                                                         <button
                                                             type="button"
                                                             onClick={(e) => {
@@ -1900,7 +1901,7 @@ export const TabDesainRapor: React.FC = () => {
                                                 </div>
                                                 {/* Excel-style Column Resizer Handle (Touch & Mouse) */}
                                                 <div
-                                                    className="absolute top-0 right-0 bottom-0 w-4 -mr-1.5 cursor-col-resize hover:bg-teal-500/80 active:bg-teal-700 z-30 transition-colors touch-none flex items-center justify-center"
+                                                    className="absolute top-0 right-0 bottom-0 w-3 -mr-1.5 cursor-col-resize hover:bg-teal-500/80 active:bg-teal-700 z-30 transition-colors touch-none flex items-center justify-center"
                                                     onMouseDown={(e) => handleStartColResize(e, cIdx)}
                                                     onTouchStart={(e) => handleStartColResizeTouch(e, cIdx)}
                                                     title={`Tahan & seret ke kanan/kiri untuk mengubah lebar kolom ${colName}`}
@@ -1996,17 +1997,19 @@ export const TabDesainRapor: React.FC = () => {
                                                             width: `${cellWidthPx}px`, 
                                                             minWidth: `${cellWidthPx}px`,
                                                             height: `${cellHeightPx}px`,
+                                                            padding: cellWidthPx < 28 ? '0px 1px' : (cellWidthPx < 45 ? '1px 2px' : '4px'),
+                                                            boxSizing: 'border-box',
                                                             textAlign: cell.align || 'center',
                                                             fontWeight: cell.bold ? 'bold' : undefined,
                                                             fontStyle: cell.italic ? 'italic' : undefined,
                                                             backgroundColor: !isSelected && cell.backgroundColor ? cell.backgroundColor : undefined,
                                                             color: cell.color || undefined,
-                                                            fontSize: cell.fontSize ? `${cell.fontSize}px` : undefined
+                                                            fontSize: cell.fontSize ? `${cell.fontSize}px` : (cellWidthPx < 28 ? '9px' : undefined)
                                                         }}
                                                     >
                                                         <div className="w-full h-full flex flex-col items-center justify-center overflow-hidden leading-tight pointer-events-none">
-                                                            <span className="truncate w-full">{getSimulatedValue(cell)}</span>
-                                                            {cell.key && <span className="text-[8px] opacity-60 font-normal leading-none mt-0.5">${cell.key}</span>}
+                                                            <span className="truncate w-full block text-center">{getSimulatedValue(cell)}</span>
+                                                            {cell.key && cellWidthPx >= 35 && <span className="text-[8px] opacity-60 font-normal leading-none mt-0.5">${cell.key}</span>}
                                                         </div>
 
                                                         {/* Direct Resizers on Active Cell Edge (Touch & Mouse) */}
@@ -2469,12 +2472,12 @@ export const TabDesainRapor: React.FC = () => {
                                     <div className="flex items-center">
                                         <input 
                                             type="number" 
-                                            min="35" 
+                                            min="8" 
                                             max="800" 
                                             value={getColWidth(activeCellData.col)} 
-                                            onChange={e => handleUpdateColWidth(activeCellData.col, parseInt(e.target.value) || 35)} 
+                                            onChange={e => handleUpdateColWidth(activeCellData.col, Math.max(8, parseInt(e.target.value) || 8))} 
                                             className="w-full border rounded-l-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                                            title="Ubah lebar kolom (live preview)"
+                                            title="Ubah lebar kolom (live preview, bisa sampai mepet 8px seperti Excel)"
                                         />
                                         <span className="bg-slate-200 border border-l-0 rounded-r-lg px-2 py-1.5 text-[10px] text-slate-600 font-mono font-bold">px</span>
                                     </div>
@@ -2488,12 +2491,12 @@ export const TabDesainRapor: React.FC = () => {
                                     <div className="flex items-center">
                                         <input 
                                             type="number" 
-                                            min="20" 
+                                            min="8" 
                                             max="500" 
                                             value={getRowHeight(activeCellData.row)} 
-                                            onChange={e => handleUpdateRowHeight(activeCellData.row, parseInt(e.target.value) || 20)} 
+                                            onChange={e => handleUpdateRowHeight(activeCellData.row, Math.max(8, parseInt(e.target.value) || 8))} 
                                             className="w-full border rounded-l-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                                            title="Ubah tinggi baris (live preview)"
+                                            title="Ubah tinggi baris (live preview, bisa sampai mepet 8px seperti Excel)"
                                         />
                                         <span className="bg-slate-200 border border-l-0 rounded-r-lg px-2 py-1.5 text-[10px] text-slate-600 font-mono font-bold">px</span>
                                     </div>
@@ -2504,6 +2507,22 @@ export const TabDesainRapor: React.FC = () => {
                             <div className="space-y-1.5 pt-1 border-t border-slate-200/60">
                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Preset Cepat:</span>
                                 <div className="flex flex-wrap gap-1">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => { handleUpdateColWidth(activeCellData.col, 15); handleUpdateRowHeight(activeCellData.row, 20); }} 
+                                        className="px-2 py-1 bg-white hover:bg-teal-50 hover:border-teal-300 border rounded text-[10px] font-medium text-slate-700 transition-colors shadow-2xs"
+                                        title="Set sangat mepet lebar 15px dan tinggi 20px (cocok untuk No. urut / checklist)"
+                                    >
+                                        Mepet (15×20)
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => { handleUpdateColWidth(activeCellData.col, 30); handleUpdateRowHeight(activeCellData.row, 26); }} 
+                                        className="px-2 py-1 bg-white hover:bg-teal-50 hover:border-teal-300 border rounded text-[10px] font-medium text-slate-700 transition-colors shadow-2xs"
+                                        title="Set sempit lebar 30px dan tinggi 26px"
+                                    >
+                                        Sempit (30×26)
+                                    </button>
                                     <button 
                                         type="button" 
                                         onClick={() => { handleUpdateColWidth(activeCellData.col, 60); handleUpdateRowHeight(activeCellData.row, 28); }} 

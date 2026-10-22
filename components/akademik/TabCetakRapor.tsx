@@ -3,7 +3,7 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporLengkapTemplate } from '../reports/modules/AcademicReports';
 import { printToPdfNative } from '../../utils/pdfGenerator';
-import { Santri, RaporTemplate, RaporRecord, DigitalAsset } from '../../types';
+import { Santri, RaporTemplate, RaporRecord, DigitalAsset, RaporSheet } from '../../types';
 import { PrintHeader } from '../common/PrintHeader';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
@@ -116,21 +116,53 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     const currentDimensions = paperDimensions[paperSize] || paperDimensions.A4;
     const hasBuiltInBiodata = useMemo(() => templateHasBuiltInBiodata(template), [template]);
 
-    // Hitung skala otomatis (Auto Fit 1 Lembar)
-    const getEffectiveScale = (rowCount: number) => {
-        if (!fitToPage) {
-            return typeof printScale === 'number' ? printScale / 100 : 1.0;
-        }
+    const marginPx = marginMode === 'normal' ? 64 : marginMode === 'narrow' ? 36 : 16;
+    const basePaperW = paperSize === 'F4' ? 813 : 794;
+    const availableW = Math.max(300, basePaperW - marginPx);
+
+    // Hitung skala otomatis (Auto Fit 1 Lembar - Memperhitungkan Lebar Kolom dan Tinggi Baris)
+    const getEffectiveScale = (sheet: RaporSheet) => {
         if (typeof printScale === 'number') {
             return printScale / 100;
         }
-        // Mode 'auto': sesuaikan rasio berdasarkan jumlah baris
-        if (rowCount <= 22) return 1.0;
-        if (rowCount <= 27) return 0.94;
-        if (rowCount <= 32) return 0.88;
-        if (rowCount <= 38) return 0.82;
-        if (rowCount <= 44) return 0.75;
-        return 0.68;
+
+        const rowCount = sheet.cells.length;
+        let vertScale = 1.0;
+        if (fitToPage) {
+            if (rowCount <= 22) vertScale = 1.0;
+            else if (rowCount <= 27) vertScale = 0.94;
+            else if (rowCount <= 32) vertScale = 0.88;
+            else if (rowCount <= 38) vertScale = 0.82;
+            else if (rowCount <= 44) vertScale = 0.75;
+            else vertScale = 0.68;
+        }
+
+        const colCount = sheet.colCount || sheet.cells?.[0]?.length || 1;
+        let totalColW = 0;
+        for (let c = 0; c < colCount; c++) {
+            let colW = 100;
+            if (sheet.cells) {
+                for (let r = 0; r < sheet.cells.length; r++) {
+                    const cell = sheet.cells[r]?.[c];
+                    if (cell && !cell.hidden && (!cell.colSpan || cell.colSpan === 1)) {
+                        if (typeof cell.width === 'number' && cell.width > 0) {
+                            colW = cell.width;
+                            break;
+                        }
+                    }
+                }
+            }
+            totalColW += colW;
+        }
+
+        // Pastikan tabel dengan banyak kolom dari Excel tidak terpotong di kanan
+        const horizScale = totalColW > availableW ? Math.max(0.60, availableW / totalColW) : 1.0;
+
+        if (fitToPage) {
+            return Math.min(vertScale, horizScale);
+        }
+        // Bahkan jika fitToPage false, tabel harus tetap muat secara horizontal agar tepi kanan tidak terpotong kertas
+        return Math.min(1.0, horizScale);
     };
 
     return (
@@ -143,7 +175,27 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                         ? sheet.showBiodataHeader 
                         : (template.showBiodataHeader !== undefined ? template.showBiodataHeader : !hasBuiltInBiodata));
 
-                const scale = getEffectiveScale(sheet.cells.length);
+                const scale = getEffectiveScale(sheet);
+
+                // Hitung lebar proporsional kolom untuk sheet ini
+                const colCount = sheet.colCount || sheet.cells?.[0]?.length || 0;
+                const sheetColWidths: number[] = [];
+                for (let c = 0; c < colCount; c++) {
+                    let colW = 100;
+                    if (sheet.cells) {
+                        for (let r = 0; r < sheet.cells.length; r++) {
+                            const cell = sheet.cells[r]?.[c];
+                            if (cell && !cell.hidden && (!cell.colSpan || cell.colSpan === 1)) {
+                                if (typeof cell.width === 'number' && cell.width > 0) {
+                                    colW = cell.width;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    sheetColWidths.push(colW);
+                }
+                const totalColWidth = sheetColWidths.reduce((a, b) => a + b, 0) || 720;
 
                 return (
                     <div
@@ -166,7 +218,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                             style={{
                                 transform: scale < 1 ? `scale(${scale})` : undefined,
                                 transformOrigin: 'top center',
-                                zoom: scale < 1 ? scale : undefined
+                                width: scale < 1 ? `${(100 / scale).toFixed(2)}%` : '100%'
                             }}
                         >
                             {(() => {
@@ -231,19 +283,9 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
 
                             <table className="w-full border-collapse text-xs table-fixed">
                                 <colgroup>
-                                    {Array.from({ length: sheet.colCount || sheet.cells?.[0]?.length || 0 }).map((_, cIdx) => {
-                                        let colW = 100;
-                                        if (sheet.cells) {
-                                            for (let r = 0; r < sheet.cells.length; r++) {
-                                                const w = sheet.cells[r]?.[cIdx]?.width;
-                                                if (typeof w === 'number' && w > 0) {
-                                                    colW = w;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        return <col key={cIdx} style={{ width: `${colW}px` }} />;
-                                    })}
+                                    {sheetColWidths.map((w, cIdx) => (
+                                        <col key={cIdx} style={{ width: `${((w / totalColWidth) * 100).toFixed(2)}%` }} />
+                                    ))}
                                 </colgroup>
                                 <tbody>
                                     {sheet.cells.map((row, rIdx) => {
@@ -300,14 +342,13 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                                                     borderBottom: (!isLogoMedia && b.bottom) ? '1px solid black' : 'none',
                                                     borderLeft: (!isLogoMedia && b.left) ? '1px solid black' : 'none',
                                                     textAlign: cell.align || 'center',
-                                                    width: cell.width ? `${cell.width}px` : undefined,
                                                     height: cell.height ? `${cell.height}px` : undefined,
                                                     backgroundColor: effectiveBg,
                                                     fontWeight: effectiveFontWeight,
                                                     fontStyle: cell.italic ? 'italic' : undefined,
                                                     color: cell.color || undefined,
-                                                    fontSize: cell.fontSize ? `${cell.fontSize}px` : undefined,
-                                                    padding: '4px',
+                                                    fontSize: cell.fontSize ? `${cell.fontSize}px` : (colCount > 12 ? '10px' : undefined),
+                                                    padding: colCount > 10 ? '2px 4px' : '4px',
                                                     boxSizing: 'border-box',
                                                     overflow: 'hidden',
                                                     wordBreak: 'break-word'

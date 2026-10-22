@@ -320,8 +320,8 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
                     colSpan,
                     rowSpan,
                     align,
-                    width: cellW || colgroupWidths[cIdx] || undefined,
-                    height: cellH || trH || undefined,
+                    width: (colSpan === 1 ? cellW : undefined) || colgroupWidths[cIdx] || undefined,
+                    height: (rowSpan === 1 ? cellH : undefined) || trH || undefined,
                     bold: isBold || undefined,
                     italic: isItalic || undefined,
                     backgroundColor: bgColor,
@@ -380,8 +380,8 @@ export const parseHtmlExcelTable = (html: string): ParsedExcelTable | null => {
                 };
                 row.push({
                     ...cell,
-                    width: cell.width || cWidth,
-                    height: cell.height || rHeight
+                    width: (cell.colSpan === 1 && cell.width) ? cell.width : cWidth,
+                    height: (cell.rowSpan === 1 && cell.height) ? cell.height : rHeight
                 });
             }
             normalizedCells.push(row);

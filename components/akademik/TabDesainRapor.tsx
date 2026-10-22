@@ -925,6 +925,19 @@ export const TabDesainRapor: React.FC = () => {
         );
     };
 
+    const handleFitColumnsToPageWidth = () => {
+        if (!activeTemplate) return;
+        const colCount = activeTemplate.colCount || 1;
+        // Lebar area cetak A4 portrait standar ~720px
+        const targetColW = Math.max(35, Math.floor(720 / colCount));
+        const newCells = activeTemplate.cells.map(row =>
+            row.map(cell => ({ ...cell, width: targetColW }))
+        );
+        const updated = { ...activeTemplate, cells: newCells };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        showToast(`Seluruh kolom disesuaikan menjadi ${targetColW}px agar pas 1 lembar A4.`, 'success');
+    };
+
     const getExcelColName = (colIndex: number): string => {
         let name = '';
         let num = colIndex;
@@ -1144,9 +1157,18 @@ export const TabDesainRapor: React.FC = () => {
             return resizingCol.currentWidth;
         }
         if (activeTemplate?.cells) {
+            // Prioritaskan sel unmerged (!hidden dan colSpan === 1)
             for (let r = 0; r < activeTemplate.cells.length; r++) {
-                const w = activeTemplate.cells[r]?.[c]?.width;
-                if (typeof w === 'number' && w > 0) return w;
+                const cell = activeTemplate.cells[r]?.[c];
+                if (cell && !cell.hidden && (!cell.colSpan || cell.colSpan === 1)) {
+                    const w = cell.width;
+                    if (typeof w === 'number' && w > 0) return w;
+                }
+            }
+            // Fallback jika semua sel pada kolom c ter-merge
+            for (let r = 0; r < activeTemplate.cells.length; r++) {
+                const cell = activeTemplate.cells[r]?.[c];
+                if (cell && typeof cell.width === 'number' && cell.width > 0) return cell.width;
             }
         }
         return 100;
@@ -1157,9 +1179,18 @@ export const TabDesainRapor: React.FC = () => {
             return resizingRow.currentHeight;
         }
         if (activeTemplate?.cells?.[r]) {
+            // Prioritaskan sel unmerged (!hidden dan rowSpan === 1)
             for (let c = 0; c < activeTemplate.cells[r].length; c++) {
-                const h = activeTemplate.cells[r][c]?.height;
-                if (typeof h === 'number' && h > 0) return h;
+                const cell = activeTemplate.cells[r][c];
+                if (cell && !cell.hidden && (!cell.rowSpan || cell.rowSpan === 1)) {
+                    const h = cell.height;
+                    if (typeof h === 'number' && h > 0) return h;
+                }
+            }
+            // Fallback
+            for (let c = 0; c < activeTemplate.cells[r].length; c++) {
+                const cell = activeTemplate.cells[r][c];
+                if (cell && typeof cell.height === 'number' && cell.height > 0) return cell.height;
             }
         }
         return 30;
@@ -2532,15 +2563,26 @@ export const TabDesainRapor: React.FC = () => {
                                             <span>Baris 32px</span>
                                         </button>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleResetDimensions}
-                                        className="w-full py-1.5 px-2 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded text-[10px] font-medium transition-colors flex items-center justify-center gap-1"
-                                        title="Kembalikan semua ukuran kolom dan baris ke standar (100px × 30px) agar sefleksibel membuat template dari nol"
-                                    >
-                                        <i className="bi bi-arrow-counterclockwise text-slate-500"></i>
-                                        <span>Reset Dimensi ke Standar (100×30)</span>
-                                    </button>
+                                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                                        <button
+                                            type="button"
+                                            onClick={handleFitColumnsToPageWidth}
+                                            className="py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded text-[10px] font-bold transition-colors flex items-center justify-center gap-1 shadow-2xs"
+                                            title="Sesuaikan otomatis lebar seluruh kolom agar pas tepat 1 lembar kertas A4 tanpa terpotong di kanan"
+                                        >
+                                            <i className="bi bi-arrows-collapse text-indigo-600"></i>
+                                            <span>Pas Lebar A4</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleResetDimensions}
+                                            className="py-1.5 px-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-semibold transition-colors flex items-center justify-center gap-1 shadow-2xs"
+                                            title="Kembalikan semua ukuran kolom dan baris ke standar (100px × 30px) agar sefleksibel membuat template dari nol"
+                                        >
+                                            <i className="bi bi-arrow-counterclockwise text-slate-500"></i>
+                                            <span>Reset (100×30)</span>
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -3024,47 +3066,139 @@ export const TabDesainRapor: React.FC = () => {
                         <div className="flex-grow overflow-auto bg-slate-300 p-2 sm:p-6 md:p-8 flex flex-col items-center gap-6">
                             {activeSheets
                                 .filter(sh => previewSheetId === 'all' || previewSheetId === sh.id)
-                                .map((sh, sIdx) => (
-                                    <div key={sh.id} className="w-full overflow-x-auto p-1 flex justify-start sm:justify-center">
-                                        <div className="bg-white shadow-2xl p-4 sm:p-8 relative shrink-0" style={{ width: '21cm', minHeight: '29.7cm' }}>
-                                            <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono select-none">
-                                                {sh.name} (Lembar {sIdx + 1})
-                                            </div>
-                                            <table className="border-collapse w-full">
-                                                <tbody>
-                                                    {sh.cells.map((row, rIdx) => (
-                                                        <tr key={rIdx}>
-                                                            {row.map((cell, cIdx) => {
-                                                                if (cell.hidden) return null;
-                                                                const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
+                                .map((sh, sIdx) => {
+                                    // Hitung dimensi kolom dan total lebar lembar ini
+                                    const colCount = sh.colCount || sh.cells?.[0]?.length || 0;
+                                    const colWidths: number[] = [];
+                                    for (let c = 0; c < colCount; c++) {
+                                        let colW = 100;
+                                        if (sh.cells) {
+                                            for (let r = 0; r < sh.cells.length; r++) {
+                                                const cell = sh.cells[r]?.[c];
+                                                if (cell && !cell.hidden && (!cell.colSpan || cell.colSpan === 1)) {
+                                                    if (typeof cell.width === 'number' && cell.width > 0) {
+                                                        colW = cell.width;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        colWidths.push(colW);
+                                    }
+                                    const totalColWidth = colWidths.reduce((a, b) => a + b, 0) || 720;
+                                    const isF4 = sh.paperSize === 'F4' || activeTemplate.paperSize === 'F4';
+                                    const paperWidth = isF4 ? '21.5cm' : '21cm';
+                                    const paperMinHeight = isF4 ? '33cm' : '29.7cm';
+                                    const availableW = isF4 ? 765 : 746;
+
+                                    // Hitung skala otomatis agar tidak melebihi area preview
+                                    const horizScale = totalColWidth > availableW ? Math.max(0.55, availableW / totalColWidth) : 1.0;
+                                    const rowCount = sh.cells.length;
+                                    const isFitPage = sh.fitToPage !== false && activeTemplate.fitToPage !== false;
+                                    const vertScale = isFitPage
+                                        ? (rowCount <= 22 ? 1.0 : rowCount <= 27 ? 0.94 : rowCount <= 32 ? 0.88 : rowCount <= 38 ? 0.82 : 0.72)
+                                        : 1.0;
+                                    const sheetScale = isFitPage ? Math.min(horizScale, vertScale) : horizScale;
+
+                                    return (
+                                        <div key={sh.id} className="w-full overflow-x-auto p-1 flex justify-start sm:justify-center">
+                                            <div
+                                                className="bg-white shadow-2xl p-6 sm:p-8 relative shrink-0 rounded-xs border border-slate-300"
+                                                style={{
+                                                    width: paperWidth,
+                                                    minHeight: paperMinHeight,
+                                                    boxSizing: 'border-box'
+                                                }}
+                                            >
+                                                <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono select-none flex items-center gap-2">
+                                                    <span>{sh.name} (Lembar {sIdx + 1})</span>
+                                                    <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-bold text-slate-500 uppercase">{isF4 ? 'F4' : 'A4'}</span>
+                                                    {sheetScale < 1 && (
+                                                        <span className="px-1.5 py-0.5 bg-teal-50 text-teal-700 rounded text-[9px] font-bold">
+                                                            Skala: {Math.round(sheetScale * 100)}%
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div
+                                                    className="w-full h-full flex flex-col justify-start"
+                                                    style={{
+                                                        transform: sheetScale < 1 ? `scale(${sheetScale})` : undefined,
+                                                        transformOrigin: 'top center',
+                                                        width: sheetScale < 1 ? `${(100 / sheetScale).toFixed(2)}%` : '100%'
+                                                    }}
+                                                >
+                                                    {/* Header Judul Kustom Lembar */}
+                                                    {(sh.customTitle || sh.showJudul) && (
+                                                        <div className="text-center mb-4 space-y-0.5">
+                                                            {(sh.customTitle || sh.name).split('\n').map((line, lIdx) => (
+                                                                <div
+                                                                    key={lIdx}
+                                                                    className={`${lIdx === 0 ? 'font-black text-sm text-slate-900 tracking-wide uppercase' : 'font-semibold text-xs text-slate-700'}`}
+                                                                >
+                                                                    {line
+                                                                        .replace('$SEMESTER', 'Ganjil')
+                                                                        .replace('$TAHUN_AJARAN', '2024/2025')
+                                                                        .replace('$NAMA_PONPES', settings.namaPonpes || 'Pondok Pesantren')
+                                                                        .replace('$ROMBEL', 'VII-A')}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    <table className="w-full border-collapse text-xs table-fixed">
+                                                        <colgroup>
+                                                            {colWidths.map((w, cIdx) => (
+                                                                <col key={cIdx} style={{ width: `${((w / totalColWidth) * 100).toFixed(2)}%` }} />
+                                                            ))}
+                                                        </colgroup>
+                                                        <tbody>
+                                                            {sh.cells.map((row, rIdx) => {
+                                                                const rH = row?.[0]?.height;
                                                                 return (
-                                                                    <td 
-                                                                        key={`${rIdx}-${cIdx}`} 
-                                                                        colSpan={cell.colSpan} 
-                                                                        rowSpan={cell.rowSpan} 
-                                                                        style={{ 
-                                                                            borderTop: borders.top ? '1px solid black' : 'none', 
-                                                                            borderRight: borders.right ? '1px solid black' : 'none', 
-                                                                            borderBottom: borders.bottom ? '1px solid black' : 'none', 
-                                                                            borderLeft: borders.left ? '1px solid black' : 'none', 
-                                                                            textAlign: cell.align || 'center', 
-                                                                            width: cell.width ? `${cell.width}px` : 'auto', 
-                                                                            height: cell.height ? `${cell.height}px` : 'auto',
-                                                                            padding: '4px', 
-                                                                            fontSize: '11px' 
-                                                                        }}
-                                                                    >
-                                                                        {getSimulatedValue(cell)}
-                                                                    </td>
+                                                                    <tr key={rIdx} style={{ height: rH ? `${rH}px` : undefined }}>
+                                                                        {row.map((cell, cIdx) => {
+                                                                            if (cell.hidden) return null;
+                                                                            const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
+                                                                            const isLogo = typeof cell.value === 'string' && (cell.value.includes('LOGO') || cell.value === '$LOGO');
+                                                                            const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
+
+                                                                            return (
+                                                                                <td 
+                                                                                    key={`${rIdx}-${cIdx}`} 
+                                                                                    colSpan={cell.colSpan} 
+                                                                                    rowSpan={cell.rowSpan} 
+                                                                                    style={{ 
+                                                                                        borderTop: (!isLogo && borders.top) ? '1px solid black' : 'none', 
+                                                                                        borderRight: (!isLogo && borders.right) ? '1px solid black' : 'none', 
+                                                                                        borderBottom: (!isLogo && borders.bottom) ? '1px solid black' : 'none', 
+                                                                                        borderLeft: (!isLogo && borders.left) ? '1px solid black' : 'none', 
+                                                                                        textAlign: cell.align || 'center', 
+                                                                                        backgroundColor: hasCustomBg ? cell.backgroundColor : 'transparent',
+                                                                                        fontWeight: cell.bold ? 'bold' : 'normal',
+                                                                                        fontStyle: cell.italic ? 'italic' : undefined,
+                                                                                        color: cell.color || undefined,
+                                                                                        fontSize: cell.fontSize ? `${cell.fontSize}px` : (colCount > 12 ? '10px' : '11px'),
+                                                                                        padding: colCount > 10 ? '2px 4px' : '4px',
+                                                                                        boxSizing: 'border-box',
+                                                                                        overflow: 'hidden',
+                                                                                        wordBreak: 'break-word'
+                                                                                    }}
+                                                                                >
+                                                                                    {getSimulatedValue(cell)}
+                                                                                </td>
+                                                                            );
+                                                                        })}
+                                                                    </tr>
                                                                 );
                                                             })}
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                         </div>
                     </div>
                 </div>

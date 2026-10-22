@@ -14,6 +14,7 @@ import { db } from '../../db';
 import { buildRombelLegerData, StudentLegerRow } from '../../services/raporCalculationService';
 import { getTemplateSheets } from '../../services/raporExcelService';
 import { RaporTitleEditModal } from './modals/RaporTitleEditModal';
+import { RaporWhatsAppModal } from './modals/RaporWhatsAppModal';
 
 export interface TabCetakRaporProps {
     onNavigateToTab?: (tab: string, rombelId?: number) => void;
@@ -428,6 +429,38 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const [isBatchPrinting, setIsBatchPrinting] = useState(false);
     const [batchData, setBatchData] = useState<{ santri: Santri; record: RaporRecord | null; calculation?: any }[]>([]);
     const [isTitleModalOpen, setIsTitleModalOpen] = useState(false);
+
+    // WhatsApp Distribution Modal
+    const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+    const [whatsAppTargetSantri, setWhatsAppTargetSantri] = useState<Santri | null>(null);
+
+    // Rapor Approval & Lock Status Key
+    const approvalKey = `${filterTahun}_${filterSemester}_${printRombel || 'all'}`;
+    const currentApprovalStatus = (settings.raporApprovalStatus?.[approvalKey]) || 'draft';
+
+    const handleCycleApprovalStatus = async () => {
+        const nextStatus: 'draft' | 'verified' | 'locked' = 
+            currentApprovalStatus === 'draft' ? 'verified' :
+            currentApprovalStatus === 'verified' ? 'locked' : 'draft';
+        
+        const updatedStatusMap = {
+            ...(settings.raporApprovalStatus || {}),
+            [approvalKey]: nextStatus
+        };
+
+        await onUpdateSettings({
+            ...settings,
+            raporApprovalStatus: updatedStatusMap
+        });
+
+        const label = nextStatus === 'locked' ? 'Disahkan & Terkunci' : nextStatus === 'verified' ? 'Terverifikasi Wali Kelas' : 'Draf';
+        showToast(`Status pengesahan rapor diubah: ${label}`, 'success');
+    };
+
+    const handleOpenWhatsAppModal = (santri: Santri) => {
+        setWhatsAppTargetSantri(santri);
+        setIsWhatsAppModalOpen(true);
+    };
 
     useEffect(() => {
         if (settings.tanggalRaporDefault && !tanggalRapor) {
@@ -873,8 +906,27 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                         </button>
                     </div>
 
-                    {/* Desktop Batch Print Trigger */}
+                    {/* Desktop Batch Print & Approval Trigger */}
                     <div className="hidden md:flex items-center gap-3">
+                        {/* Status Pengesahan Rapor */}
+                        <button
+                            type="button"
+                            onClick={handleCycleApprovalStatus}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition-all shadow-2xs ${
+                                currentApprovalStatus === 'locked'
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                    : currentApprovalStatus === 'verified'
+                                    ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                                    : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                            }`}
+                            title="Klik untuk mengubah alur pengesahan: Draf -> Terverifikasi Wali -> Disahkan & Terkunci"
+                        >
+                            <i className={`bi ${currentApprovalStatus === 'locked' ? 'bi-lock-fill text-emerald-600' : currentApprovalStatus === 'verified' ? 'bi-patch-check-fill text-blue-600' : 'bi-pencil-square text-amber-600'}`}></i>
+                            <span>
+                                {currentApprovalStatus === 'locked' ? 'Disahkan & Terkunci' : currentApprovalStatus === 'verified' ? 'Terverifikasi Wali' : 'Status: Draf'}
+                            </span>
+                        </button>
+
                         {selectedSantriIds.size > 0 && (
                             <button
                                 onClick={handleDeselectAll}
@@ -897,6 +949,25 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                         </button>
                     </div>
                 </div>
+
+                {/* Lock Status Alert Banner */}
+                {currentApprovalStatus === 'locked' && (
+                    <div className="mb-4 p-3 bg-emerald-50/90 border border-emerald-300 rounded-xl text-xs text-emerald-900 flex items-center justify-between gap-3 shadow-2xs animate-fade-in">
+                        <div className="flex items-center gap-2">
+                            <i className="bi bi-shield-lock-fill text-emerald-600 text-base"></i>
+                            <span>
+                                <strong>Rapor Telah Disahkan & Terkunci:</strong> Nilai rapor pada periode dan rombel ini telah diverifikasi dan dikunci untuk menjaga integritas dokumen cetak.
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleCycleApprovalStatus}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors shrink-0"
+                        >
+                            Buka Kunci
+                        </button>
+                    </div>
+                )}
 
                 {/* Filter Grid (Desktop) */}
                 <div className={`hidden md:grid grid-cols-2 ${templateSheets.length > 1 ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-3.5 mb-5`}>
@@ -1371,6 +1442,16 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
                                     {/* Right: Actions */}
                                     <div className="flex items-center gap-2 shrink-0 ml-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleOpenWhatsAppModal(santri)}
+                                            className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-emerald-200 hover:border-emerald-600 shadow-2xs active:scale-95"
+                                            title="Kirim ringkasan laporan hasil belajar santri ini via WhatsApp ke orang tua / wali"
+                                        >
+                                            <i className="bi bi-whatsapp"></i>
+                                            <span className="hidden sm:inline">Kirim WA</span>
+                                        </button>
+
                                         {status !== 'Lengkap' && onNavigateToTab && (
                                             <button
                                                 onClick={() => onNavigateToTab('input_wali', santri.rombelId)}
@@ -1497,6 +1578,16 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                     title="Toggle Kop"
                                 >
                                     {showKop ? 'Ada Kop' : 'Tanpa Kop'}
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleOpenWhatsAppModal(currentPreviewSantri)}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition-all"
+                                    title="Kirim ringkasan rapor santri ini via WhatsApp"
+                                >
+                                    <i className="bi bi-whatsapp"></i>
+                                    <span>Kirim WA</span>
                                 </button>
 
                                 <button
@@ -1836,6 +1927,33 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                 onSave={handleSaveRaporTitle}
                 showToast={showToast}
             />
+
+            {/* Modal Distribusi Rapor WhatsApp */}
+            {isWhatsAppModalOpen && whatsAppTargetSantri && (
+                <RaporWhatsAppModal
+                    isOpen={isWhatsAppModalOpen}
+                    onClose={() => {
+                        setIsWhatsAppModalOpen(false);
+                        setWhatsAppTargetSantri(null);
+                    }}
+                    santri={whatsAppTargetSantri}
+                    record={periodRecordsMap.get(whatsAppTargetSantri.id) || null}
+                    calculation={(() => {
+                        const row = studentLegerMap.get(whatsAppTargetSantri.id);
+                        return row ? {
+                            totalNilai: row.totalNilai,
+                            rataRata: row.rataRata,
+                            ranking: getEffectiveRanking(row.ranking, rankingDisplayLimit),
+                            totalSantri: baseSantriList.filter(s => s.rombelId === whatsAppTargetSantri?.rombelId).length || 1,
+                            predikat: row.predikat.predikat
+                        } : undefined;
+                    })()}
+                    settings={settings}
+                    tahunAjaran={filterTahun}
+                    semester={filterSemester}
+                    onCopySuccess={() => showToast('Ringkasan rapor santri berhasil disalin!', 'success')}
+                />
+            )}
         </div>
     );
 };

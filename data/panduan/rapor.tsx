@@ -195,19 +195,91 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '3. Desain Grid & Konfigurasi Rumus Rapor',
+            title: '3. Desain Grid, Alat Editing Lanjutan & Variabel Kurikulum Merdeka',
             color: 'indigo',
             content: (
-                <div className="space-y-3 text-sm">
+                <div className="space-y-4 text-sm">
                     <p className="text-gray-700 leading-relaxed">
-                        Menu <strong>Rapor &gt; Design &amp; Template</strong> memberikan kebebasan penuh dalam mengatur format lembar nilai:
+                        Menu <strong>Rapor &gt; Design &amp; Template</strong> menyediakan spreadsheet visual berfitur lengkap untuk menyusun format lembar nilai, ijazah, maupun syahadah:
                     </p>
-                    <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-600">
-                        <li><strong>Buat Template Baru atau Impor Excel:</strong> Anda dapat membuat struktur dari nol atau mengunggah format Excel yang sudah biasa digunakan madrasah/pesantren.</li>
-                        <li><strong>Dukungan Multi-Sheet (Multi Lembar Kerja):</strong> Rapor dapat dibagi menjadi beberapa lembar, seperti: <em>Cover Rapor</em>, <em>Nilai Akademis</em>, <em>Tahfizh &amp; Al-Qur'an</em>, <em>Sikap &amp; Kedisiplinan</em>, hingga <em>Prestasi &amp; Ekstrakurikuler</em>.</li>
-                        <li><strong>Variabel Dinamis Otomatis:</strong> Gunakan tag seperti <code>$NAMA</code>, <code>$NIS</code>, <code>$ROMBEL</code>, <code>$SEMESTER</code>, <code>$TAHUN_AJARAN</code>, atau buat kolom nilai kustom (misal: <code>$NILAI_HARIAN</code>, <code>$NILAI_PAS</code>).</li>
-                        <li><strong>Rumus Terintegrasi:</strong> Mendukung formula otomatis seperti <code>AVERAGE($UH1, $UH2)</code>, pembobotan <code>(2*$UH + $PTS + $PAS)/4</code>, hingga perangkingan kelas otomatis dengan rumus <code>RANK($TOTAL)</code>.</li>
-                    </ul>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3 bg-white rounded-xl border border-indigo-200 shadow-2xs space-y-1.5">
+                            <strong className="text-indigo-900 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-arrow-counterclockwise text-indigo-600"></i> Riwayat Undo &amp; Redo (25 Langkah)
+                            </strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Bebas bereksperimen tanpa khawatir salah format. Gunakan tombol panah di toolbar atau pintasan keyboard:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-gray-600">
+                                <li><kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Ctrl + Z</kbd> : Membatalkan perubahan terakhir (Undo).</li>
+                                <li><kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Ctrl + Y</kbd> atau <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Ctrl + Shift + Z</kbd> : Mengulang kembali perubahan (Redo).</li>
+                            </ul>
+                        </div>
+
+                        <div className="p-3 bg-white rounded-xl border border-indigo-200 shadow-2xs space-y-1.5">
+                            <strong className="text-indigo-900 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-grid-3x3 text-indigo-600"></i> Seleksi Rentang Multi-Sel &amp; Pita Format
+                            </strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Klik dan seret (drag) mouse atau tekan <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Shift + Klik</kbd> untuk memilih beberapa kotak sel sekaligus. Pita aksi melayang (*floating ribbon*) akan muncul otomatis untuk:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-gray-600">
+                                <li><strong>Border Massal:</strong> Border Semua, Border Luar Saja, atau Hapus Border dalam 1 klik.</li>
+                                <li><strong>Format Teks:</strong> Tebal (Bold), Miring (Italic), Rata Kiri/Tengah/Kanan, dan Warna Latar.</li>
+                                <li><strong>Merge / Unmerge:</strong> Menggabungkan atau memisahkan blok sel terseleksi secara instan.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    {/* Page Break Guide & Dynamic Repeater */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-1.5">
+                            <strong className="text-indigo-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-file-earmark-break text-indigo-600"></i> Panduan Batas Halaman (Page Break Guide A4 &amp; F4)
+                            </strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Nyalakan toggle <strong>"Batas Halaman"</strong> di toolbar. Garis putus-putus merah/oranye interaktif (<code>✂ BATAS HALAMAN 1</code>) akan muncul di baris penanda batas cetak 1 lembar (~980px untuk kertas A4, ~1100px untuk F4/Folio). Ini mencegah tabel terpotong jelek ke halaman kedua saat dicetak.
+                            </p>
+                        </div>
+
+                        <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-1.5">
+                            <strong className="text-indigo-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-table text-indigo-600"></i> Baris Dinamis Mata Pelajaran (+ Mapel)
+                            </strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Cukup buat 1 baris template mata pelajaran, lalu klik tombol <strong>"+ Mapel"</strong>. Sistem otomatis menyalin struktur kolom (Nomor, Nama Mapel, KKM, Nilai, Deskripsi) sesuai jumlah mata pelajaran di rombel santri.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Tag Kurikulum Merdeka */}
+                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-2 text-xs">
+                        <strong className="text-gray-900 flex items-center gap-1.5 font-bold">
+                            <i className="bi bi-tags-fill text-indigo-600"></i> Variabel Otomatis &amp; Tag Kurikulum Merdeka (CP / TP)
+                        </strong>
+                        <p className="text-gray-600 leading-relaxed">
+                            Ketik simbol <code>$</code> pada sel untuk memilih variabel otomatis. Sistem telah dilengkapi tag resmi Kurikulum Merdeka dan rapor pesantren modern:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                            <div className="p-2 bg-white rounded border border-gray-200">
+                                <code>$DESKRIPSI_CAPAIAN_TERTINGGI</code>
+                                <p className="text-gray-500 mt-0.5">Otomatis merangkum kompetensi capaian pembelajaran yang paling dikuasai santri.</p>
+                            </div>
+                            <div className="p-2 bg-white rounded border border-gray-200">
+                                <code>$DESKRIPSI_CAPAIAN_TERENDAH</code>
+                                <p className="text-gray-500 mt-0.5">Otomatis menghasilkan rekomendasi bimbingan pada kompetensi yang perlu ditingkatkan.</p>
+                            </div>
+                            <div className="p-2 bg-white rounded border border-gray-200">
+                                <code>$DESKRIPSI_KOMPETENSI</code>
+                                <p className="text-gray-500 mt-0.5">Ringkasan narasi pencapaian kompetensi gabungan untuk kolom catatan mapel.</p>
+                            </div>
+                            <div className="p-2 bg-white rounded border border-gray-200">
+                                <code>$STATUS_KELULUSAN</code>
+                                <p className="text-gray-500 mt-0.5">Keterangan kenaikan kelas / kelulusan santri (misal: "Naik ke Kelas VIII").</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )
         },
@@ -289,27 +361,73 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '7. Monitoring Progres & Cetak Rapor Fisik',
+            title: '7. Pengesahan Nilai, Distribusi WhatsApp & Cetak Rapor',
             color: 'orange',
             content: (
-                <div className="space-y-3 text-sm">
+                <div className="space-y-4 text-sm">
                     <p className="text-gray-700 leading-relaxed">
-                        Tahap akhir penerbitan rapor santri pondok pesantren:
+                        Tahap akhir penerbitan hasil belajar santri dengan standar pengamanan dan kemudahan distribusi modern:
                     </p>
-                    <ol className="list-decimal pl-5 space-y-1.5 text-xs text-gray-600">
-                        <li>
-                            <strong>Cek Tab Progres Nilai (Monitoring):</strong> Pastikan seluruh rombel telah berstatus <span className="text-green-600 font-bold">Hijau (Lengkap 100%)</span>. Jika masih berwarna kuning atau merah, hubungi guru/wali kelas terkait.
-                        </li>
-                        <li>
-                            <strong>Buka Tab Cetak Rapor:</strong> Pilih Jenjang, Rombel, dan format lembar rapor yang akan diterbitkan.
-                        </li>
-                        <li>
-                            <strong>Pengaturan Penandatangan:</strong> Tentukan tanggal penerbitan rapor, nama Kepala Madrasah/Mudir, dan Wali Kelas lengkap dengan NIP/NIY.
-                        </li>
-                        <li>
-                            <strong>Cetak / Simpan PDF:</strong> Cetak langsung ke printer atau pilih opsi <em>Save as PDF</em> untuk mendistribusikan e-Rapor kepada orang tua santri.
-                        </li>
-                    </ol>
+
+                    {/* Alur Pengesahan & Penguncian Nilai */}
+                    <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                            <strong className="text-amber-950 font-bold flex items-center gap-1.5">
+                                <i className="bi bi-shield-lock-fill text-amber-700"></i> SOP 3 Tahap Pengesahan &amp; Penguncian Nilai (Approval Workflow)
+                            </strong>
+                            <span className="px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-bold text-[10px] uppercase">
+                                Keamanan Nilai
+                            </span>
+                        </div>
+                        <p className="text-gray-700 leading-relaxed">
+                            Mencegah perubahan nilai sepihak menjelang atau setelah hari pembagian rapor melalui kontrol status per rombel:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-amber-200 shadow-2xs space-y-1">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[9px] uppercase">1. Draf (Terbuka)</span>
+                                <p className="text-gray-600">Guru mata pelajaran dan wali kelas masih bebas mengedit nilai ulangan, kehadiran, dan catatan santri.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-blue-200 shadow-2xs space-y-1">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[9px] uppercase">2. Terverifikasi Wali</span>
+                                <p className="text-gray-600">Wali kelas selesai memeriksa kebenaran nilai seluruh santri dan menyatakan siap diajukan ke Pimpinan/Mudir.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-emerald-200 shadow-2xs space-y-1">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[9px] uppercase">3. Disahkan &amp; Terkunci</span>
+                                <p className="text-gray-600">Nilai resmi dikunci total oleh Kepala Madrasah/Super Admin. Seluruh form input dibekukan agar tidak ada manipulasi data.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Distribusi WhatsApp & Cetak Masal */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 space-y-1.5">
+                            <strong className="text-emerald-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-whatsapp text-emerald-600"></i> Kirim Ringkasan Rapor via WhatsApp ke Orang Tua
+                            </strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Wali kelas dapat mengirimkan ringkasan nilai belajar langsung ke nomor Ayah, Ibu, atau Wali Santri dengan 1 klik:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
+                                <li>Klik tombol hijau <strong>"Kirim WA"</strong> di daftar santri atau di dalam jendela pratinjau rapor.</li>
+                                <li>Pilih nomor tujuan (otomatis mendeteksi nomor kontak HP di data santri).</li>
+                                <li>Teks pesan sudah tersusun rapi dengan salam pesantren, rekapitulasi nilai, peringkat, catatan wali kelas, dan tautan e-Rapor.</li>
+                            </ul>
+                        </div>
+
+                        <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200 space-y-1.5">
+                            <strong className="text-blue-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-printer-fill text-blue-600"></i> Mode Cetak Masal (Batch Printing 1 Rombel)
+                            </strong>
+                            <p className="text-gray-600 leading-relaxed">
+                                Tidak perlu mencetak satu per satu santri:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
+                                <li>Klik tombol <strong>"Cetak Masal Rombel"</strong> pada tab Cetak Rapor.</li>
+                                <li>Sistem menyatukan seluruh lembar rapor santri dalam satu dokumen cetak dengan instruksi pemisah halaman cetak (<code>page-break-after: always</code>) otomatis.</li>
+                                <li>Dapat langsung dikirim ke printer fisik berkecepatan tinggi atau disimpan sebagai satu file PDF utuh per kelas.</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             )
         }

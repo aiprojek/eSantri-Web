@@ -158,6 +158,32 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         ]
     },
     {
+        id: 'kurikulum_merdeka',
+        title: 'Kurikulum Merdeka & Capaian (CP/TP)',
+        icon: 'bi-stars',
+        color: 'text-violet-600 bg-violet-50 border-violet-200',
+        tags: [
+            { tag: '$DESKRIPSI_CAPAIAN_TERTINGGI', label: 'Deskripsi Capaian Tertinggi', description: 'Narasi kompetensi yang paling dikuasai santri secara optimal', example: 'Menunjukkan pemahaman yang sangat mendalam dan optimal dalam menguasai seluruh capaian materi pembelajaran.' },
+            { tag: '$DESKRIPSI_CAPAIAN_TERENDAH', label: 'Deskripsi Capaian Perlu Peningkatan', description: 'Narasi kompetensi yang perlu pembinaan dan bimbingan lebih', example: 'Perlu bimbingan dan peningkatan konsentrasi serta penguatan konsep materi yang belum tuntas.' },
+            { tag: '$DESKRIPSI_KOMPETENSI', label: 'Deskripsi Capaian Pembelajaran Umum', description: 'Rangkuman narasi menyeluruh perkembangan belajar santri', example: 'Menunjukkan penguasaan kompetensi yang sangat baik, berinisiatif tinggi serta aktif dalam kegiatan belajar.' },
+            { tag: '$STATUS_KELULUSAN', label: 'Status Kelulusan / Kenaikan', description: 'Lulus / Naik Kelas / Tinggal Kelas', example: 'Naik ke Tingkat Berikutnya' },
+        ]
+    },
+    {
+        id: 'mapel_repeater',
+        title: 'Repeater Mata Pelajaran',
+        icon: 'bi-list-ol',
+        color: 'text-cyan-700 bg-cyan-50 border-cyan-200',
+        tags: [
+            { tag: '$MAPEL_NO', label: 'Nomor Urut Mapel', description: 'Nomor urut otomatis 1, 2, 3...', example: '1' },
+            { tag: '$MAPEL_NAMA', label: 'Nama Mata Pelajaran', description: 'Nama mapel dinamis', example: 'Bahasa Arab' },
+            { tag: '$MAPEL_KKM', label: 'KKM / Nilai Kriteria', description: 'Nilai standar ketuntasan minimal', example: '75' },
+            { tag: '$MAPEL_NILAI', label: 'Nilai Akhir Mapel', description: 'Nilai angka hasil evaluasi', example: '88' },
+            { tag: '$MAPEL_PREDIKAT', label: 'Predikat Mapel', description: 'Huruf predikat (A / B / C atau Mumtaz)', example: 'Mumtaz' },
+            { tag: '$MAPEL_DESKRIPSI', label: 'Deskripsi Capaian Mapel', description: 'Deskripsi narasi capaian per mapel', example: 'Sangat baik dalam penguasaan kaidah nahwu dasar.' },
+        ]
+    },
+    {
         id: 'media',
         title: 'Logo, TTD & Stempel',
         icon: 'bi-image',
@@ -489,6 +515,46 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     res = res.replace(/\$PERINGKAT/g, rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
     res = res.replace(/\$RANKING/g, rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
     res = res.replace(/\$TOTAL_SANTRI/g, totalSantriVal !== undefined && totalSantriVal > 0 ? String(totalSantriVal) : '-');
+
+    // Kurikulum Merdeka & Deskripsi Capaian Pembelajaran (CP/TP)
+    const customCpTertinggi = findCustomVal('DESKRIPSI_CAPAIAN_TERTINGGI', 'CP_TERTINGGI', 'CAPAIAN_TERTINGGI', 'DESKRIPSI_TERTINGGI');
+    const customCpTerendah = findCustomVal('DESKRIPSI_CAPAIAN_TERENDAH', 'CP_TERENDAH', 'CAPAIAN_TERENDAH', 'DESKRIPSI_TERENDAH');
+    const customKompetensi = findCustomVal('DESKRIPSI_KOMPETENSI', 'CAPAIAN_UMUM', 'DESKRIPSI_RAPOR');
+    const customKelulusan = findCustomVal('STATUS_KELULUSAN', 'KELULUSAN', 'KENAIKAN_KELAS');
+
+    const defaultCpTertinggi = customCpTertinggi || (
+        avgScore && avgScore >= 85
+            ? 'Menunjukkan penguasaan yang sangat optimal dan mandiri dalam memahami seluruh tujuan pembelajaran serta mampu mengaplikasikan materi dengan sangat baik.'
+            : (avgScore && avgScore >= 75
+                ? 'Menunjukkan penguasaan yang baik dalam sebagian besar kompetensi materi pokok dan mampu menyelesaikan penugasan dengan konsisten.'
+                : 'Mampu memahami konsep-konsep dasar pembelajaran dengan cukup baik.')
+    );
+
+    const defaultCpTerendah = customCpTerendah || (
+        avgScore && avgScore < 75
+            ? 'Perlu pendampingan dan bimbingan lebih intensif dalam penguatan konsep dasar materi pembelajaran serta peningkatan disiplin belajar.'
+            : (avgScore && avgScore < 85
+                ? 'Perlu peningkatan ketelitian dan latihan berkelanjutan pada materi yang memerlukan analisis mendalam.'
+                : 'Perlu terus mempertahankan prestasi belajar dan aktif membantu rekan dalam diskusi kelompok.')
+    );
+
+    const defaultKompetensi = customKompetensi || (
+        avgScore && avgScore >= 85
+            ? 'Ananda menunjukkan antusiasme, akhlak mulia, dan capaian kompetensi belajar yang luar biasa sepanjang semester ini. Pertahankan ketekunan ini.'
+            : (avgScore && avgScore >= 75
+                ? 'Ananda telah mencapai kriteria ketuntasan dengan baik. Diharapkan dapat terus meningkatkan semangat belajar di semester berikutnya.'
+                : 'Ananda perlu lebih giat mengulang pelajaran di luar jam kelas serta meminta arahan guru pada materi yang belum dipahami.')
+    );
+
+    const defaultKelulusan = customKelulusan || (
+        keputusanVal !== '-' ? keputusanVal : (avgScore && avgScore >= 70 ? 'Naik ke Tingkat Berikutnya' : 'Perlu Evaluasi Lanjutan')
+    );
+
+    res = res.replace(/\$DESKRIPSI_CAPAIAN_TERTINGGI/g, String(defaultCpTertinggi));
+    res = res.replace(/\$DESKRIPSI_CAPAIAN_TERENDAH/g, String(defaultCpTerendah));
+    res = res.replace(/\$DESKRIPSI_KOMPETENSI/g, String(defaultKompetensi));
+    res = res.replace(/\$CAPAIAN_UMUM/g, String(defaultKompetensi));
+    res = res.replace(/\$STATUS_KELULUSAN/g, String(defaultKelulusan));
 
     // Date & Hijri
     let dateObj: Date;

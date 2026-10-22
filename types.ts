@@ -798,6 +798,7 @@ export interface PondokSettings {
     tempatRaporDefault?: string;
     formatTanggalRaporDefault?: 'masehi' | 'hijriah_masehi' | 'hijriah';
     manualHijriRaporDefault?: string;
+    raporApprovalStatus?: Record<string, 'draft' | 'verified' | 'locked'>;
 
     tanggalSyahadahDefault?: string;
     tempatSyahadahDefault?: string;

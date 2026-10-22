@@ -27,6 +27,11 @@ export const TabDesainRapor: React.FC = () => {
     const [isExcelPasteModalOpen, setIsExcelPasteModalOpen] = useState(false);
     const [selectedTagCategory, setSelectedTagCategory] = useState<string>('santri');
     const [showGridlines, setShowGridlines] = useState(true);
+    const [showPageBreakGuide, setShowPageBreakGuide] = useState(true);
+
+    // Undo & Redo History Stacks
+    const [undoStack, setUndoStack] = useState<RaporTemplate[]>([]);
+    const [redoStack, setRedoStack] = useState<RaporTemplate[]>([]);
 
     // Column & Row Live Resizing State (Excel-like drag resize)
     const [resizingCol, setResizingCol] = useState<{ colIdx: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
@@ -698,6 +703,121 @@ export const TabDesainRapor: React.FC = () => {
         reader.readAsBinaryString(file);
     };
 
+    // --- UNDO / REDO HISTORY & GRID OPERATIONS ---
+    const pushToHistory = (tpl: RaporTemplate) => {
+        try {
+            const snapshot = JSON.parse(JSON.stringify(tpl));
+            setUndoStack(prev => [...prev.slice(-24), snapshot]);
+            setRedoStack([]);
+        } catch {
+            // fallback
+        }
+    };
+
+    const handleUndo = () => {
+        if (undoStack.length === 0 || !activeTemplate) return;
+        const prev = undoStack[undoStack.length - 1];
+        setUndoStack(u => u.slice(0, -1));
+        setRedoStack(r => [...r.slice(-24), JSON.parse(JSON.stringify(activeTemplate))]);
+        setActiveTemplate(prev);
+        showToast('Undo: Berhasil membatalkan aksi terakhir.', 'info');
+    };
+
+    const handleRedo = () => {
+        if (redoStack.length === 0 || !activeTemplate) return;
+        const next = redoStack[redoStack.length - 1];
+        setRedoStack(r => r.slice(0, -1));
+        setUndoStack(u => [...u.slice(-24), JSON.parse(JSON.stringify(activeTemplate))]);
+        setActiveTemplate(next);
+        showToast('Redo: Berhasil mengulangi aksi.', 'info');
+    };
+
+    const handleBulkUpdateCells = (updates: Partial<GridCell>) => {
+        if (!activeTemplate || selectedCells.length === 0) return;
+        pushToHistory(activeTemplate);
+        const newCells = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+        selectedCells.forEach(({ r, c }) => {
+            if (newCells[r] && newCells[r][c] && !newCells[r][c].hidden) {
+                newCells[r][c] = { ...newCells[r][c], ...updates };
+            }
+        });
+        const updated = { ...activeTemplate, cells: newCells };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+    };
+
+    const handleBulkClearValues = () => {
+        if (!activeTemplate || selectedCells.length === 0) return;
+        pushToHistory(activeTemplate);
+        const newCells = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+        selectedCells.forEach(({ r, c }) => {
+            if (newCells[r] && newCells[r][c] && !newCells[r][c].hidden) {
+                newCells[r][c] = { ...newCells[r][c], value: '', key: undefined };
+            }
+        });
+        const updated = { ...activeTemplate, cells: newCells };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        showToast(`Isi pada ${selectedCells.length} sel berhasil dikosongkan.`, 'success');
+    };
+
+    const handleInsertMapelRow = () => {
+        if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
+        const setBorderOn = (c: GridCell) => ({ ...c, borders: { top: true, right: true, bottom: true, left: true } });
+        const insertAfterR = selectedCells.length > 0 ? selectedCells[selectedCells.length - 1].r : activeTemplate.rowCount - 1;
+        const targetRow = insertAfterR + 1;
+
+        const newRow: GridCell[] = [];
+        for (let c = 0; c < activeTemplate.colCount; c++) {
+            newRow.push(createEmptyCell(targetRow, c));
+        }
+
+        if (newRow.length >= 1) newRow[0] = setBorderOn({ ...newRow[0], value: '$MAPEL_NO', type: 'data', align: 'center', width: 35 });
+        if (newRow.length >= 2) newRow[1] = setBorderOn({ ...newRow[1], value: '$MAPEL_NAMA', type: 'data', align: 'left', width: 200 });
+        if (newRow.length >= 3) newRow[2] = setBorderOn({ ...newRow[2], value: '$MAPEL_KKM', type: 'data', align: 'center', width: 55 });
+        if (newRow.length >= 4) newRow[3] = setBorderOn({ ...newRow[3], value: '$MAPEL_NILAI', type: 'data', align: 'center', width: 65 });
+        if (newRow.length >= 5) newRow[4] = setBorderOn({ ...newRow[4], value: '$MAPEL_PREDIKAT', type: 'data', align: 'center', width: 65 });
+        if (newRow.length >= 6) newRow[5] = setBorderOn({ ...newRow[5], value: '$MAPEL_DESKRIPSI', type: 'data', align: 'left', width: 220 });
+
+        const newGrid = [
+            ...activeTemplate.cells.slice(0, targetRow),
+            newRow,
+            ...activeTemplate.cells.slice(targetRow)
+        ].map((rowArr, r) => rowArr.map((c, col) => ({ ...c, row: r, col })));
+
+        const updated = {
+            ...activeTemplate,
+            rowCount: newGrid.length,
+            cells: newGrid
+        };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        showToast('Berhasil menyisipkan baris mata pelajaran dengan tag dinamis.', 'success');
+    };
+
+    // Keyboard listener for Undo (Ctrl+Z) and Redo (Ctrl+Y / Ctrl+Shift+Z)
+    React.useEffect(() => {
+        if (!isEditing) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+            if (targetTag === 'input' || targetTag === 'textarea') return;
+
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    handleRedo();
+                } else {
+                    e.preventDefault();
+                    handleUndo();
+                }
+            } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                handleRedo();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isEditing, undoStack, redoStack, activeTemplate]);
+
     // --- GRID OPERATIONS ---
     const handleMouseDown = (r: number, c: number) => { setIsDragging(true); setDragStart({ r, c }); setSelectedCells([{ r, c }]); };
     const handleMouseEnter = (r: number, c: number) => {
@@ -722,6 +842,7 @@ export const TabDesainRapor: React.FC = () => {
         const result = parseExcelClipboard(html, text);
         if (result && result.rowCount > 0 && result.colCount > 0) {
             e.preventDefault();
+            pushToHistory(activeTemplate);
             const startR = selectedCells[0]?.r ?? 0;
             const startC = selectedCells[0]?.c ?? 0;
             const { updatedCells, newRowCount, newColCount } = overlayPastedTableOntoGrid(
@@ -743,6 +864,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const addRow = () => {
         if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
         const newRow = [];
         for(let c=0; c<activeTemplate.colCount; c++) newRow.push(createEmptyCell(activeTemplate.rowCount, c));
         const updatedCells = [...activeTemplate.cells, newRow];
@@ -753,6 +875,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const addCol = () => {
         if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
         const updatedCells = activeTemplate.cells.map(row => [...row, createEmptyCell(row[0].row, activeTemplate.colCount)]);
         const newColCount = activeTemplate.colCount + 1;
         const updated = { ...activeTemplate, colCount: newColCount, cells: updatedCells };
@@ -761,6 +884,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const mergeCells = () => {
         if (!activeTemplate || selectedCells.length < 2) return;
+        pushToHistory(activeTemplate);
         const rMin = Math.min(...selectedCells.map(c => c.r)); const rMax = Math.max(...selectedCells.map(c => c.r));
         const cMin = Math.min(...selectedCells.map(c => c.c)); const cMax = Math.max(...selectedCells.map(c => c.c));
         const newCells = [...activeTemplate.cells];
@@ -774,6 +898,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const unmergeCells = () => {
         if (!activeTemplate || selectedCells.length === 0) return;
+        pushToHistory(activeTemplate);
         const target = selectedCells[0]; const newCells = [...activeTemplate.cells]; const cell = newCells[target.r][target.c];
         if ((cell.rowSpan || 1) === 1 && (cell.colSpan || 1) === 1) return;
         const rMax = target.r + (cell.rowSpan || 1) - 1; const cMax = target.c + (cell.colSpan || 1) - 1;
@@ -785,6 +910,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const toggleBorder = (side: 'top' | 'right' | 'bottom' | 'left' | 'all' | 'none' | 'outer') => {
         if (!activeTemplate || selectedCells.length === 0) return;
+        pushToHistory(activeTemplate);
         const newCells = [...activeTemplate.cells];
         if (side === 'outer') {
             const minR = Math.min(...selectedCells.map(c => c.r));
@@ -822,6 +948,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleCleanEmptyCellBorders = () => {
         if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
         let cleanedCount = 0;
         const newCells = activeTemplate.cells.map(row =>
             row.map(cell => {
@@ -844,6 +971,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleCleanTitleAndOuterBorders = () => {
         if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
         let cleanedCount = 0;
         const newCells = activeTemplate.cells.map((row, r) =>
             row.map(cell => {
@@ -872,6 +1000,7 @@ export const TabDesainRapor: React.FC = () => {
             'Hapus Semua Border di Lembar Ini?',
             'Semua garis border pada lembar aktif akan dihapus. Anda dapat menambahkan border kembali secara spesifik hanya pada tabel nilai yang diinginkan.',
             () => {
+                pushToHistory(activeTemplate);
                 const newCells = activeTemplate.cells.map(row =>
                     row.map(cell => ({
                         ...cell,
@@ -888,6 +1017,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleSetAllColWidths = (width: number) => {
         if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
         const clamped = Math.max(8, Math.min(1000, width));
         const newCells = activeTemplate.cells.map(row =>
             row.map(cell => ({ ...cell, width: clamped }))
@@ -899,6 +1029,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleSetAllRowHeights = (height: number) => {
         if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
         const clamped = Math.max(8, Math.min(500, height));
         const newCells = activeTemplate.cells.map(row =>
             row.map(cell => ({ ...cell, height: clamped }))
@@ -914,6 +1045,7 @@ export const TabDesainRapor: React.FC = () => {
             'Reset Ukuran Sel ke Standar?',
             'Semua lebar kolom akan dikembalikan ke 100px dan tinggi baris ke 30px agar sefleksibel membuat template dari nol.',
             () => {
+                pushToHistory(activeTemplate);
                 const newCells = activeTemplate.cells.map(row =>
                     row.map(cell => ({ ...cell, width: 100, height: 30 }))
                 );
@@ -927,6 +1059,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleFitColumnsToPageWidth = () => {
         if (!activeTemplate) return;
+        pushToHistory(activeTemplate);
         const colCount = activeTemplate.colCount || 1;
         // Lebar area cetak A4 portrait standar ~720px
         const targetColW = Math.max(8, Math.floor(720 / colCount));
@@ -950,6 +1083,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const executeDeleteRows = (rowsToDelete: number[]) => {
         if (!activeTemplate || !canWrite) return;
+        pushToHistory(activeTemplate);
         const rowsSet = new Set(rowsToDelete);
         const oldCells: GridCell[][] = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
 
@@ -1052,6 +1186,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const executeDeleteCols = (colsToDelete: number[]) => {
         if (!activeTemplate || !canWrite) return;
+        pushToHistory(activeTemplate);
         const colsSet = new Set(colsToDelete);
         const oldCells: GridCell[][] = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
 
@@ -1398,6 +1533,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const updateActiveCell = (updates: Partial<GridCell>) => {
         if (!activeTemplate || !activeCellData) return;
+        pushToHistory(activeTemplate);
         const newCells = [...activeTemplate.cells];
         const { row, col } = activeCellData;
         newCells[row][col] = { ...newCells[row][col], ...updates };
@@ -1420,6 +1556,33 @@ export const TabDesainRapor: React.FC = () => {
         if (!activeSheets.length) return null;
         return activeSheets.find(s => s.id === (activeSheetId || activeTemplate?.activeSheetId)) || activeSheets[0];
     }, [activeSheets, activeSheetId, activeTemplate]);
+
+    const paperFormat = curSheet?.paperSize || activeTemplate?.paperSize || 'A4';
+    // Printable height estimation at 96 DPI: A4 is 297mm (printable ~980px); F4 is 330mm (printable ~1100px)
+    const pageBreakThresholdPx = paperFormat === 'F4' ? 1100 : 980;
+
+    const rowHeightsList = useMemo(() => {
+        if (!activeTemplate) return [];
+        return Array.from({ length: activeTemplate.rowCount }).map((_, rIdx) => getRowHeight(rIdx));
+    }, [activeTemplate]);
+
+    const totalDesignHeight = useMemo(() => {
+        return rowHeightsList.reduce((acc, h) => acc + h, 0);
+    }, [rowHeightsList]);
+
+    const pageBreakRowIndices = useMemo(() => {
+        const breaks: number[] = [];
+        let cum = 0;
+        let page = 1;
+        rowHeightsList.forEach((h, r) => {
+            cum += h;
+            if (cum > pageBreakThresholdPx * page && breaks.length < page) {
+                breaks.push(r);
+                page++;
+            }
+        });
+        return breaks;
+    }, [rowHeightsList, pageBreakThresholdPx]);
 
     const updateActiveSheet = (updates: Partial<RaporSheet>) => {
         if (!activeTemplate) return;
@@ -1638,6 +1801,34 @@ export const TabDesainRapor: React.FC = () => {
 
                 {/* TOOLBAR TIER 2: Excel Mobile Ribbon */}
                 <div className="px-2 py-1.5 bg-slate-50/90 border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto no-scrollbar select-none shrink-0">
+                    {/* Undo & Redo Controls */}
+                    <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
+                        <button
+                            type="button"
+                            onClick={handleUndo}
+                            disabled={undoStack.length === 0}
+                            className="px-2 py-1 hover:bg-slate-100 text-slate-700 disabled:opacity-30 disabled:hover:bg-white text-xs font-semibold flex items-center gap-1 transition-colors"
+                            title="Undo / Batalkan Aksi (Ctrl+Z)"
+                        >
+                            <i className="bi bi-arrow-counterclockwise text-slate-600"></i>
+                            <span className="hidden sm:inline">Undo</span>
+                            {undoStack.length > 0 && <span className="text-[9px] font-mono text-teal-600 font-bold">({undoStack.length})</span>}
+                        </button>
+                        <div className="w-px h-4 bg-slate-200"></div>
+                        <button
+                            type="button"
+                            onClick={handleRedo}
+                            disabled={redoStack.length === 0}
+                            className="px-2 py-1 hover:bg-slate-100 text-slate-700 disabled:opacity-30 disabled:hover:bg-white text-xs font-semibold flex items-center gap-1 transition-colors"
+                            title="Redo / Ulangi Aksi (Ctrl+Y)"
+                        >
+                            <i className="bi bi-arrow-clockwise text-slate-600"></i>
+                            <span className="hidden sm:inline">Redo</span>
+                        </button>
+                    </div>
+
+                    <div className="h-5 w-px bg-slate-300 shrink-0"></div>
+
                     <select 
                         value={activeTemplate?.jenjangId || ''} 
                         onChange={e => setActiveTemplate(t => t ? {...t, jenjangId: e.target.value ? parseInt(e.target.value) : undefined, kelasId: undefined, rombelId: undefined} : null)}
@@ -1723,7 +1914,7 @@ export const TabDesainRapor: React.FC = () => {
 
                     <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
-                    {/* Row Management: Add & Delete */}
+                    {/* Row Management: Add, Delete & Mapel Template Row */}
                     <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
                         <button 
                             type="button" 
@@ -1749,6 +1940,18 @@ export const TabDesainRapor: React.FC = () => {
                             <span>Hapus</span>
                         </button>
                     </div>
+
+                    {/* Sisipkan Format Mapel Repeater */}
+                    <button
+                        type="button"
+                        onClick={handleInsertMapelRow}
+                        disabled={!canWrite}
+                        className="px-2 py-1 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 text-cyan-800 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs shrink-0 transition-colors disabled:opacity-40"
+                        title="Sisipkan baris mapel dengan tag dinamis ($MAPEL_NO, $MAPEL_NAMA, $MAPEL_KKM, $MAPEL_NILAI, $MAPEL_PREDIKAT)"
+                    >
+                        <i className="bi bi-table text-cyan-600"></i>
+                        <span>+ Mapel</span>
+                    </button>
 
                     {/* Column Management: Add & Delete */}
                     <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
@@ -1779,8 +1982,20 @@ export const TabDesainRapor: React.FC = () => {
 
                     <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
-                    {/* Zoom Controls & Gridlines Toggle */}
+                    {/* Page Break Guide Toggle & Zoom Controls */}
                     <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setShowPageBreakGuide(g => !g)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                showPageBreakGuide ? 'bg-rose-50 text-rose-800 border-rose-300 shadow-2xs' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                            }`}
+                            title="Tampilkan garis panduan batas halaman (A4 ~980px, F4 ~1100px) agar tabel tidak terpotong saat dicetak"
+                        >
+                            <i className={`bi ${showPageBreakGuide ? 'bi-scissors text-rose-600' : 'bi-dash-lg text-slate-400'}`}></i>
+                            <span className="hidden sm:inline">{showPageBreakGuide ? 'Batas Kertas: Nyala' : 'Batas Kertas: Mati'}</span>
+                        </button>
+
                         <button
                             type="button"
                             onClick={() => setShowGridlines(g => !g)}
@@ -1849,6 +2064,116 @@ export const TabDesainRapor: React.FC = () => {
                             minWidth: 'max-content'
                         }}
                     >
+                        {/* Multi-Cell Floating Action Ribbon when >1 cells selected */}
+                        {selectedCells.length > 1 && (
+                            <div className="sticky top-0 z-40 mb-3 bg-slate-900/95 backdrop-blur-md text-white px-3.5 py-2 rounded-2xl shadow-xl border border-slate-700/80 flex flex-wrap items-center justify-between gap-2.5 animate-in fade-in slide-in-from-top-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="bg-teal-400 text-slate-950 font-black px-2 py-0.5 rounded-lg text-xs font-mono">
+                                        {selectedCells.length} Sel Terpilih
+                                    </span>
+                                    <span className="text-xs text-slate-300 font-semibold hidden sm:inline">
+                                        Format Rentang:
+                                    </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    {/* Borders */}
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('all')}
+                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                                        title="Beri Border Kotak Semua Sisi"
+                                    >
+                                        <i className="bi bi-border-all"></i>
+                                        <span>Kotak Penuh</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('outer')}
+                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                                        title="Beri Border Luar Saja"
+                                    >
+                                        <i className="bi bi-border-outer"></i>
+                                        <span>Luar</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleBorder('none')}
+                                        className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                                        title="Hapus Garis Border pada Semua Sel Terpilih"
+                                    >
+                                        <i className="bi bi-border-none"></i>
+                                        <span>Hapus Border</span>
+                                    </button>
+
+                                    <div className="h-4 w-px bg-slate-700"></div>
+
+                                    {/* Styling */}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleBulkUpdateCells({ bold: true })}
+                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold"
+                                        title="Tebalkan Teks (Bold)"
+                                    >
+                                        B
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleBulkUpdateCells({ italic: true })}
+                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs italic font-serif"
+                                        title="Miringkan Teks (Italic)"
+                                    >
+                                        I
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleBulkUpdateCells({ align: 'left' })}
+                                        className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs"
+                                        title="Rata Kiri"
+                                    >
+                                        <i className="bi bi-text-left"></i>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleBulkUpdateCells({ align: 'center' })}
+                                        className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs"
+                                        title="Rata Tengah"
+                                    >
+                                        <i className="bi bi-text-center"></i>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleBulkUpdateCells({ align: 'right' })}
+                                        className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs"
+                                        title="Rata Kanan"
+                                    >
+                                        <i className="bi bi-text-right"></i>
+                                    </button>
+
+                                    <div className="h-4 w-px bg-slate-700"></div>
+
+                                    {/* Merge & Clear */}
+                                    <button
+                                        type="button"
+                                        onClick={mergeCells}
+                                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-colors"
+                                        title="Gabungkan Sel Terpilih (Merge Cells)"
+                                    >
+                                        <i className="bi bi-intersect"></i>
+                                        <span>Merge</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleBulkClearValues}
+                                        className="px-2 py-1 bg-white/10 hover:bg-red-500/40 text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                                        title="Kosongkan Nilai pada Sel-Sel Terpilih"
+                                    >
+                                        <i className="bi bi-eraser"></i>
+                                        <span>Kosongkan</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <table className="border-collapse bg-white shadow-xl select-none table-fixed ring-1 ring-slate-300">
                             <colgroup>
                                 <col style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }} />
@@ -1916,8 +2241,26 @@ export const TabDesainRapor: React.FC = () => {
                                 {activeTemplate?.cells.map((row, rIdx) => {
                                     const rowH = getRowHeight(rIdx);
                                     const isRowSelected = selectedCells.length > 0 && selectedCells.every(s => s.r === rIdx);
+                                    const isPageBreak = showPageBreakGuide && pageBreakRowIndices.includes(rIdx);
+
                                     return (
-                                        <tr key={rIdx} style={{ height: `${rowH}px` }}>
+                                        <React.Fragment key={rIdx}>
+                                            {isPageBreak && (
+                                                <tr className="pointer-events-none select-none bg-rose-500/10">
+                                                    <td colSpan={(activeTemplate?.colCount || 1) + 1} className="p-0 border-y-2 border-dashed border-rose-500">
+                                                        <div className="bg-rose-100 text-rose-900 text-[10px] font-black py-1 px-3 flex items-center justify-between">
+                                                            <span className="flex items-center gap-1.5">
+                                                                <i className="bi bi-scissors rotate-90 text-rose-600"></i>
+                                                                <span>✂ BATAS HALAMAN ({paperFormat}: ~{pageBreakThresholdPx}px)</span>
+                                                            </span>
+                                                            <span className="text-[9px] font-bold text-rose-700 bg-white/90 px-2 py-0.5 rounded">
+                                                                Baris ke-{rIdx + 1} akan masuk ke Halaman Berikutnya
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            <tr style={{ height: `${rowH}px` }}>
                                             {/* Row Header 1, 2, 3... */}
                                             <th
                                                 className={`group/row relative w-10 min-w-[40px] max-w-[40px] border border-slate-300 text-slate-700 font-bold text-[11px] text-center select-none cursor-pointer transition-colors sticky left-0 z-10 shadow-xs ${
@@ -2035,10 +2378,35 @@ export const TabDesainRapor: React.FC = () => {
                                                 );
                                             })}
                                         </tr>
+                                        </React.Fragment>
                                     );
                                 })}
                             </tbody>
                         </table>
+
+                        {/* Page Height & Fit Summary Badge */}
+                        <div className="mt-4 flex flex-wrap items-center gap-2 select-none">
+                            <div className="inline-flex items-center gap-2 bg-white/90 backdrop-blur border border-slate-300 rounded-xl px-3 py-1.5 shadow-xs text-xs">
+                                <i className="bi bi-file-earmark-text text-teal-600"></i>
+                                <span className="text-slate-600 font-medium">Tinggi Desain:</span>
+                                <span className="font-mono font-black text-slate-800">{totalDesignHeight}px</span>
+                                <span className="text-slate-400">/</span>
+                                <span className="text-slate-500 font-medium">Batas {paperFormat}:</span>
+                                <span className="font-mono font-bold text-slate-600">{pageBreakThresholdPx}px</span>
+                            </div>
+
+                            {totalDesignHeight <= pageBreakThresholdPx ? (
+                                <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs">
+                                    <i className="bi bi-check-circle-fill text-emerald-600"></i>
+                                    <span>Pas 1 Halaman ({paperFormat})</span>
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs" title="Tabel meluber ke halaman 2. Aktifkan 'Fit to 1 Page' di tab Lembar jika ingin otomatis diskalakan pas 1 muka saat dicetak.">
+                                    <i className="bi bi-exclamation-triangle-fill text-amber-600"></i>
+                                    <span>Meluber ke Halaman 2 (Gunakan 'Fit to 1 Page' jika ingin 1 muka)</span>
+                                </span>
+                            )}
+                        </div>
                     </div>
 
                     {/* Mobile Floating Active Cell Action Pill */}

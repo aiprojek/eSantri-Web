@@ -1,18 +1,368 @@
-
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useAppContext } from '../../AppContext';
+import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, DigitalAsset } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
-import { DYNAMIC_TAG_CATEGORIES, isMediaTag, getMediaTagImageSrc, resolveRaporText } from '../../utils/raporPlaceholderResolver';
+import { DYNAMIC_TAG_CATEGORIES, isMediaTag, getMediaTagImageSrc, resolveRaporText, RaporResolveContext } from '../../utils/raporPlaceholderResolver';
+import { RAPOR_FORMULA_SUGGESTIONS } from '../../utils/raporFormulaUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { RaporExcelPasteModal } from './modals/RaporExcelPasteModal';
+import { RaporKurikulumGeneratorModal } from './modals/RaporKurikulumGeneratorModal';
 import { parseExcelClipboard, overlayPastedTableOntoGrid } from './utils/excelPasteParser';
+
+interface AutocompleteOption {
+    id: string;
+    label: string;
+    insertText: string;
+    subtitle: string;
+    badge: string;
+    badgeClass: string;
+}
+
+interface DesignPreviewSheetCardProps {
+    sh: RaporSheet;
+    sIdx: number;
+    activeTemplate: RaporTemplate;
+    settings: any;
+    digitalAssets: DigitalAsset[];
+    resolveContext: RaporResolveContext;
+    renderPreviewCell: (cell: GridCell) => { content: React.ReactNode; isMedia: boolean };
+}
+
+const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
+    sh,
+    sIdx,
+    activeTemplate,
+    resolveContext,
+    renderPreviewCell
+}) => {
+    const innerRef = useRef<HTMLDivElement>(null);
+    const [measuredHeight, setMeasuredHeight] = useState<number>(0);
+
+    const colCount = sh.colCount || sh.cells?.[0]?.length || 0;
+    const colWidths = useMemo(() => {
+        const widths: number[] = [];
+        for (let c = 0; c < colCount; c++) {
+            let colW = 100;
+            let found = false;
+            if (sh.cells) {
+                for (let r = 0; r < sh.cells.length; r++) {
+                    const cell = sh.cells[r]?.[c];
+                    if (cell && !cell.hidden && (!cell.colSpan || cell.colSpan === 1)) {
+                        if (typeof cell.width === 'number' && cell.width > 0) {
+                            colW = cell.width;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    for (let r = 0; r < sh.cells.length; r++) {
+                        const cell = sh.cells[r]?.[c];
+                        if (cell && typeof cell.width === 'number' && cell.width > 0) {
+                            colW = cell.width;
+                            break;
+                        }
+                    }
+                }
+            }
+            widths.push(colW);
+        }
+        return widths;
+    }, [sh.cells, colCount]);
+
+    const rowHeights = useMemo(() => {
+        if (!sh.cells) return [];
+        return sh.cells.map(row => {
+            for (let c = 0; c < row.length; c++) {
+                const cell = row[c];
+                if (cell && !cell.hidden && (!cell.rowSpan || cell.rowSpan === 1) && typeof cell.height === 'number' && cell.height > 0) {
+                    return cell.height;
+                }
+            }
+            for (let c = 0; c < row.length; c++) {
+                const cell = row[c];
+                if (cell && typeof cell.height === 'number' && cell.height > 0) {
+                    return cell.height;
+                }
+            }
+            return undefined;
+        });
+    }, [sh.cells]);
+
+    const totalColWidth = colWidths.reduce((a, b) => a + b, 0) || 727;
+    const isF4 = sh.paperSize === 'F4' || activeTemplate.paperSize === 'F4';
+    const marginMode = sh.marginMode || activeTemplate.marginMode || 'normal';
+    const padSidePx = marginMode === 'normal' ? 32 : marginMode === 'narrow' ? 16 : 8;
+    const paperWidth = isF4 ? '21.5cm' : '21cm';
+    const paperHeight = isF4 ? '33cm' : '29.7cm';
+    const paperPxW = isF4 ? 812.6 : 793.7;
+    const paperPxH = isF4 ? 1247.2 : 1122.5;
+    const availableW = Math.max(300, Math.floor(paperPxW - padSidePx * 2 - 2));
+    const availableH = Math.max(400, Math.floor(paperPxH - padSidePx * 2 - 8));
+
+    const naturalWidth = Math.max(availableW, totalColWidth);
+    const isFitPage = sh.fitToPage !== false && activeTemplate.fitToPage !== false;
+    const printScale = sh.printScale ?? activeTemplate.printScale ?? 'auto';
+
+    const estimatedHeight = useMemo(() => {
+        const rowsSum = rowHeights.reduce<number>((acc, h) => acc + (h || 30), 0);
+        return ((sh.customTitle || sh.showJudul) ? 55 : 0) + rowsSum + 16;
+    }, [rowHeights, sh.customTitle, sh.showJudul]);
+
+    useLayoutEffect(() => {
+        const measure = () => {
+            const el = innerRef.current;
+            if (!el) return;
+            const h = Math.max(el.offsetHeight, el.scrollHeight);
+            if (h > 0) {
+                setMeasuredHeight(prev => (Math.abs(h - prev) > 1 ? h : prev));
+            }
+        };
+        measure();
+        let ro: ResizeObserver | null = null;
+        if (typeof ResizeObserver !== 'undefined' && innerRef.current) {
+            ro = new ResizeObserver(() => measure());
+            ro.observe(innerRef.current);
+        }
+        return () => {
+            if (ro) ro.disconnect();
+        };
+    }, [sh, naturalWidth]);
+
+    const effectiveNaturalH = measuredHeight > 0 ? measuredHeight : estimatedHeight;
+    const scaleX = availableW / naturalWidth;
+    const scaleY = isFitPage && effectiveNaturalH > availableH ? availableH / effectiveNaturalH : 1;
+    const rawScale = typeof printScale === 'number'
+        ? (isFitPage ? Math.min(printScale / 100, scaleX, scaleY) : Math.min(printScale / 100, scaleX))
+        : (isFitPage ? Math.min(1, scaleX, scaleY) : Math.min(1, scaleX));
+    const sheetScale = Math.max(0.2, Math.min(1, Number(rawScale.toFixed(4))));
+    const scaledW = Math.floor(naturalWidth * sheetScale);
+    const scaledH = effectiveNaturalH > 0 ? Math.ceil(effectiveNaturalH * sheetScale) : undefined;
+
+    const paddingClass = marginMode === 'normal' ? 'p-8' : marginMode === 'narrow' ? 'p-4' : 'p-2';
+
+    return (
+        <div className="w-full overflow-x-auto p-1 flex justify-start sm:justify-center">
+            <div
+                className={`bg-white shadow-2xl ${paddingClass} relative shrink-0 rounded-xs border border-slate-300`}
+                style={{
+                    width: paperWidth,
+                    minHeight: isFitPage ? undefined : paperHeight,
+                    height: isFitPage ? paperHeight : undefined,
+                    maxHeight: isFitPage ? paperHeight : undefined,
+                    overflow: isFitPage ? 'hidden' : undefined,
+                    boxSizing: 'border-box'
+                }}
+            >
+                <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono select-none flex items-center gap-2 z-30">
+                    <span>{sh.name} (Lembar {sIdx + 1})</span>
+                    <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-bold text-slate-500 uppercase">{isF4 ? 'F4' : 'A4'}</span>
+                    {isFitPage && (
+                        <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[9px] font-bold">
+                            Fit 1 Muka ({Math.round(sheetScale * 100)}%)
+                        </span>
+                    )}
+                    {!isFitPage && sheetScale < 1 && (
+                        <span className="px-1.5 py-0.5 bg-teal-50 text-teal-700 rounded text-[9px] font-bold">
+                            Skala: {Math.round(sheetScale * 100)}%
+                        </span>
+                    )}
+                </div>
+
+                <div
+                    style={{
+                        width: `${scaledW}px`,
+                        height: sheetScale < 1 && scaledH ? `${scaledH}px` : undefined,
+                        overflow: isFitPage ? 'hidden' : 'visible',
+                        margin: '0 auto',
+                        position: 'relative'
+                    }}
+                >
+                    <div
+                        ref={innerRef}
+                        className="flex flex-col justify-start"
+                        style={{
+                            width: `${naturalWidth}px`,
+                            transform: sheetScale < 1 ? `scale(${sheetScale})` : undefined,
+                            transformOrigin: 'top left'
+                        }}
+                    >
+                        {(sh.customTitle || sh.showJudul) && (
+                            <div className="text-center mb-4 space-y-0.5">
+                                {(sh.customTitle || sh.name).split('\n').map((line, lIdx) => (
+                                    <div
+                                        key={lIdx}
+                                        className={`${lIdx === 0 ? 'font-black text-sm text-slate-900 tracking-wide uppercase' : 'font-semibold text-xs text-slate-700'}`}
+                                    >
+                                        {resolveRaporText(line, resolveContext)}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <table className="w-full border-collapse table-fixed">
+                            <colgroup>
+                                {colWidths.map((w, cIdx) => (
+                                    <col
+                                        key={cIdx}
+                                        style={{
+                                            width: totalColWidth > availableW
+                                                ? `${w}px`
+                                                : `${((w / totalColWidth) * 100).toFixed(3)}%`
+                                        }}
+                                    />
+                                ))}
+                            </colgroup>
+                            <tbody>
+                                {sh.cells.map((row, rIdx) => {
+                                    const rH = rowHeights[rIdx];
+                                    return (
+                                        <tr key={rIdx} style={{ height: rH ? `${rH}px` : undefined }}>
+                                            {row.map((cell, cIdx) => {
+                                                if (cell.hidden) return null;
+                                                const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
+                                                const isLogo = typeof cell.value === 'string' && (cell.value.includes('LOGO') || cell.value === '$LOGO');
+                                                const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
+                                                const { content, isMedia } = renderPreviewCell(cell);
+
+                                                const effectiveFontSize = cell.fontSize || 11;
+                                                const hAlign = cell.align || 'center';
+                                                const vAlign = cell.verticalAlign || 'middle';
+                                                const textWrap = cell.textWrap || 'wrap';
+                                                const isFloat = textWrap === 'float' && !isMedia;
+                                                const isClip = textWrap === 'clip';
+
+                                                const cellColSpan = cell.colSpan || 1;
+                                                let cellWidthPx = 0;
+                                                for (let i = 0; i < cellColSpan; i++) {
+                                                    cellWidthPx += colWidths[cIdx + i] || 100;
+                                                }
+
+                                                const cellRowSpan = cell.rowSpan || 1;
+                                                let cellHeightPx: number | undefined = undefined;
+                                                if (rH !== undefined || cell.height !== undefined) {
+                                                    let sumH = 0;
+                                                    for (let i = 0; i < cellRowSpan; i++) {
+                                                        sumH += rowHeights[rIdx + i] ?? cell.height ?? 30;
+                                                    }
+                                                    cellHeightPx = sumH;
+                                                }
+
+                                                const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
+
+                                                return (
+                                                    <td
+                                                        key={`${rIdx}-${cIdx}`}
+                                                        colSpan={cell.colSpan}
+                                                        rowSpan={cell.rowSpan}
+                                                        style={{
+                                                            borderTop: (!isLogo && borders.top) ? '1px solid black' : 'none',
+                                                            borderRight: (!isLogo && borders.right) ? '1px solid black' : 'none',
+                                                            borderBottom: (!isLogo && borders.bottom) ? '1px solid black' : 'none',
+                                                            borderLeft: (!isLogo && borders.left) ? '1px solid black' : 'none',
+                                                            textAlign: hAlign,
+                                                            verticalAlign: vAlign,
+                                                            height: cellHeightPx ? `${cellHeightPx}px` : undefined,
+                                                            backgroundColor: hasCustomBg ? cell.backgroundColor : 'transparent',
+                                                            fontWeight: cell.bold ? 'bold' : 'normal',
+                                                            fontStyle: cell.italic ? 'italic' : undefined,
+                                                            color: cell.color || undefined,
+                                                            fontSize: `${effectiveFontSize}px`,
+                                                            padding: 0,
+                                                            boxSizing: 'border-box',
+                                                            overflow: isFloat ? 'visible' : 'hidden',
+                                                            position: isFloat ? 'relative' : undefined
+                                                        }}
+                                                    >
+                                                        {isFloat ? (
+                                                            <div
+                                                                style={{
+                                                                    position: 'relative',
+                                                                    width: '100%',
+                                                                    height: cellHeightPx ? `${cellHeightPx}px` : '100%',
+                                                                    minHeight: cellHeightPx ? `${cellHeightPx}px` : '22px',
+                                                                    overflow: 'visible',
+                                                                    zIndex: 20
+                                                                }}
+                                                            >
+                                                                <div
+                                                                    style={{
+                                                                        position: 'absolute',
+                                                                        whiteSpace: 'pre',
+                                                                        left: hAlign === 'left' ? '4px' : hAlign === 'center' ? '50%' : undefined,
+                                                                        right: hAlign === 'right' ? '4px' : undefined,
+                                                                        top: vAlign === 'top' ? '2px' : vAlign === 'bottom' ? undefined : '50%',
+                                                                        bottom: vAlign === 'bottom' ? '2px' : undefined,
+                                                                        transform:
+                                                                            hAlign === 'center' && vAlign === 'middle'
+                                                                                ? 'translate(-50%, -50%)'
+                                                                                : hAlign === 'center'
+                                                                                ? 'translateX(-50%)'
+                                                                                : vAlign === 'middle'
+                                                                                ? 'translateY(-50%)'
+                                                                                : undefined,
+                                                                        textAlign: hAlign,
+                                                                        lineHeight: 1.25
+                                                                    }}
+                                                                >
+                                                                    {content}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div
+                                                                style={{
+                                                                    width: '100%',
+                                                                    height: cellHeightPx ? `${cellHeightPx}px` : '100%',
+                                                                    maxHeight: cellHeightPx ? `${cellHeightPx}px` : undefined,
+                                                                    padding: isMedia ? '1px' : cellPadding,
+                                                                    boxSizing: 'border-box',
+                                                                    overflow: 'hidden',
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
+                                                                    textAlign: hAlign,
+                                                                    lineHeight: 1.25
+                                                                }}
+                                                            >
+                                                                <div
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        marginTop: vAlign === 'top' ? 0 : 'auto',
+                                                                        marginBottom: vAlign === 'bottom' ? 0 : 'auto',
+                                                                        whiteSpace: isClip ? 'pre' : 'pre-wrap',
+                                                                        wordBreak: isClip ? 'normal' : 'break-word',
+                                                                        overflowWrap: isClip ? 'normal' : 'anywhere',
+                                                                        overflow: isClip ? 'hidden' : undefined,
+                                                                        textAlign: hAlign
+                                                                    }}
+                                                                >
+                                                                    {content}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export const TabDesainRapor: React.FC = () => {
     const { settings, onSaveSettings, showToast, showConfirmation, showAlert, currentUser } = useAppContext();
+    const { santriList } = useSantriContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
     const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
+    const raporRecords = useLiveQuery(() => db.raporRecords.filter(r => !r.deleted).toArray(), []) || [];
 
     const [templates, setTemplates] = useState<RaporTemplate[]>(settings.raporTemplates || []);
     const [activeTemplate, setActiveTemplate] = useState<RaporTemplate | null>(null);
@@ -24,10 +374,43 @@ export const TabDesainRapor: React.FC = () => {
     const [dragStart, setDragStart] = useState<{r: number, c: number} | null>(null);
     const [zoomScale, setZoomScale] = useState(1);
     const [isDesignPreviewOpen, setIsDesignPreviewOpen] = useState(false);
+    const [previewSantriId, setPreviewSantriId] = useState<string>('simulasi');
+    const [previewFallbackDummyGrades, setPreviewFallbackDummyGrades] = useState<boolean>(true);
     const [isExcelPasteModalOpen, setIsExcelPasteModalOpen] = useState(false);
+    const [isKurikulumGeneratorOpen, setIsKurikulumGeneratorOpen] = useState(false);
     const [selectedTagCategory, setSelectedTagCategory] = useState<string>('santri');
     const [showGridlines, setShowGridlines] = useState(true);
     const [showPageBreakGuide, setShowPageBreakGuide] = useState(true);
+
+    // Internal Clipboard & Format Painter State
+    const [internalClipboard, setInternalClipboard] = useState<{
+        cells: GridCell[][];
+        isCut: boolean;
+        sourceSheetId: string;
+        sourceRange: { rMin: number; rMax: number; cMin: number; cMax: number };
+        signature: string;
+    } | null>(null);
+    const [copiedFormat, setCopiedFormat] = useState<Partial<GridCell> | null>(null);
+    const [isFormatPainterActive, setIsFormatPainterActive] = useState(false);
+
+    // Autocomplete ($Tag & =Formula) State
+    const [autocompleteState, setAutocompleteState] = useState<{
+        source: 'fx' | 'inline';
+        query: string;
+        mode: 'formula' | 'tag';
+        replaceStart: number;
+        replaceEnd: number;
+        selectedIndex: number;
+    } | null>(null);
+    const fxInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Inline Cell Editing State (Excel-style click & type directly inside cell)
+    const [editingCell, setEditingCell] = useState<{ r: number; c: number; draft: string } | null>(null);
+    const editingCellRef = useRef<{ r: number; c: number; draft: string } | null>(null);
+    editingCellRef.current = editingCell;
+    const inlineEditorRef = useRef<HTMLTextAreaElement | null>(null);
+    const wasAlreadySingleSelectedRef = useRef(false);
+    const formulaInputHistoryPushedRef = useRef(false);
 
     // Undo & Redo History Stacks
     const [undoStack, setUndoStack] = useState<RaporTemplate[]>([]);
@@ -45,9 +428,100 @@ export const TabDesainRapor: React.FC = () => {
     // Mobile View Toggle ('grid' = canvas view, 'properties' = cell settings)
     const [mobileViewTab, setMobileViewTab] = useState<'grid' | 'properties'>('grid');
     const [sidebarTab, setSidebarTab] = useState<'cell' | 'sheet'>('cell');
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
+    const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number; r: number; c: number } | null>(null);
+
+    // Auto-dismiss context menu on outside click or scroll
+    useEffect(() => {
+        const handleDismissMenu = () => setContextMenuPos(null);
+        if (contextMenuPos) {
+            window.addEventListener('click', handleDismissMenu);
+            window.addEventListener('scroll', handleDismissMenu, true);
+            return () => {
+                window.removeEventListener('click', handleDismissMenu);
+                window.removeEventListener('scroll', handleDismissMenu, true);
+            };
+        }
+    }, [contextMenuPos]);
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const jsonInputRef = useRef<HTMLInputElement>(null);
+
+    const activeCellData = useMemo(() => {
+        if (!activeTemplate || selectedCells.length === 0) return null;
+        const { r, c } = selectedCells[0];
+        return activeTemplate.cells[r]?.[c] || null;
+    }, [activeTemplate, selectedCells]);
+
+    const activeSheets = useMemo(() => {
+        if (!activeTemplate) return [];
+        if (activeTemplate.sheets && activeTemplate.sheets.length > 0) {
+            return activeTemplate.sheets;
+        }
+        return [{
+            id: 'sheet_default',
+            name: 'Lembar 1 (Akademik)',
+            rowCount: activeTemplate.rowCount,
+            colCount: activeTemplate.colCount,
+            cells: activeTemplate.cells,
+            paperSize: 'A4' as const
+        }];
+    }, [activeTemplate]);
+
+    const getExcelColName = (colIndex: number): string => {
+        let name = '';
+        let num = colIndex;
+        while (num >= 0) {
+            name = String.fromCharCode((num % 26) + 65) + name;
+            num = Math.floor(num / 26) - 1;
+        }
+        return name;
+    };
+
+    const getColWidth = (c: number): number => {
+        if (resizingCol && resizingCol.colIdx === c) {
+            return resizingCol.currentWidth;
+        }
+        if (activeTemplate?.cells) {
+            for (let r = 0; r < activeTemplate.cells.length; r++) {
+                const cell = activeTemplate.cells[r]?.[c];
+                if (cell && !cell.hidden && (!cell.colSpan || cell.colSpan === 1)) {
+                    const w = cell.width;
+                    if (typeof w === 'number' && w > 0) return w;
+                }
+            }
+            for (let r = 0; r < activeTemplate.cells.length; r++) {
+                const cell = activeTemplate.cells[r]?.[c];
+                if (cell && typeof cell.width === 'number' && cell.width > 0) return cell.width;
+            }
+        }
+        return 100;
+    };
+
+    const getRowHeight = (r: number): number => {
+        if (resizingRow && resizingRow.rowIdx === r) {
+            return resizingRow.currentHeight;
+        }
+        if (activeTemplate?.cells?.[r]) {
+            for (let c = 0; c < activeTemplate.cells[r].length; c++) {
+                const cell = activeTemplate.cells[r][c];
+                if (cell && !cell.hidden && (!cell.rowSpan || cell.rowSpan === 1)) {
+                    const h = cell.height;
+                    if (typeof h === 'number' && h > 0) return h;
+                }
+            }
+            for (let c = 0; c < activeTemplate.cells[r].length; c++) {
+                const cell = activeTemplate.cells[r][c];
+                if (cell && typeof cell.height === 'number' && hIsValid(cell.height)) return cell.height;
+            }
+        }
+        return 30;
+    };
+    function hIsValid(h: number | undefined): h is number {
+        return typeof h === 'number' && h > 0;
+    }
 
     // --- HELPER FUNCTIONS ---
     const createEmptyCell = (r: number, c: number): GridCell => ({
@@ -371,10 +845,101 @@ export const TabDesainRapor: React.FC = () => {
         showToast('Template berhasil disalin.', 'success');
     };
 
+    const handleExportTemplateJson = (tplToExport: RaporTemplate) => {
+        try {
+            let finalTpl = tplToExport;
+            if (isEditing && activeTemplate && activeTemplate.id === tplToExport.id) {
+                let baseTpl = activeTemplate;
+                if (editingCellRef.current) {
+                    const cur = editingCellRef.current;
+                    const res = applySmartCellTextCommit(baseTpl, cur.r, cur.c, cur.draft);
+                    if (res.changed) baseTpl = res.updatedTpl;
+                }
+                finalTpl = syncCurrentSheetToTemplate(baseTpl, activeSheetId);
+            }
+            const payload = {
+                _format: 'esantri_rapor_template_v1',
+                exportedAt: new Date().toISOString(),
+                template: finalTpl
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const safeName = (finalTpl.name || 'Template_Rapor').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${safeName}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(`Template "${finalTpl.name}" berhasil diekspor ke JSON.`, 'success');
+        } catch (err) {
+            showAlert('Gagal Ekspor JSON', (err as Error).message);
+        }
+    };
+
+    const handleImportTemplateJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const raw = String(evt.target?.result || '');
+                const parsed = JSON.parse(raw);
+                const rawList: any[] = Array.isArray(parsed)
+                    ? parsed
+                    : parsed?.template
+                    ? [parsed.template]
+                    : parsed?.templates && Array.isArray(parsed.templates)
+                    ? parsed.templates
+                    : parsed?.cells || parsed?.sheets
+                    ? [parsed]
+                    : [];
+
+                if (rawList.length === 0) {
+                    throw new Error('Format file JSON tidak dikenali sebagai Template Rapor.');
+                }
+
+                const importedTemplates: RaporTemplate[] = rawList.map((item, idx) => {
+                    const cloned: RaporTemplate = JSON.parse(JSON.stringify(item));
+                    cloned.id = `tpl_json_${Date.now()}_${idx}_${Math.floor(Math.random() * 1000)}`;
+                    cloned.name = cloned.name ? `${cloned.name}` : `Import JSON ${idx + 1}`;
+                    cloned.lastModified = new Date().toISOString();
+                    return ensureTemplateSheets(cloned);
+                });
+
+                const updated = [...templates, ...importedTemplates];
+                saveTemplatesToSettings(updated);
+                if (importedTemplates.length === 1) {
+                    const first = importedTemplates[0];
+                    setActiveTemplate(first);
+                    setActiveSheetId(first.activeSheetId || first.sheets?.[0]?.id || '');
+                    setIsEditing(true);
+                    setSelectedCells([]);
+                    setZoomScale(1);
+                }
+                showToast(`Berhasil mengimpor ${importedTemplates.length} template rapor dari JSON!`, 'success');
+            } catch (err) {
+                showAlert('Gagal Import JSON', (err as Error).message);
+            } finally {
+                if (jsonInputRef.current) jsonInputRef.current.value = '';
+            }
+        };
+        reader.readAsText(file);
+    };
+
     // --- WORKSHEET TAB ACTIONS ---
     const handleSwitchSheet = (targetSheetId: string) => {
         if (!activeTemplate) return;
-        const synced = syncCurrentSheetToTemplate(activeTemplate, activeSheetId);
+        let baseTpl = activeTemplate;
+        if (editingCellRef.current) {
+            const cur = editingCellRef.current;
+            editingCellRef.current = null;
+            setEditingCell(null);
+            const res = applySmartCellTextCommit(baseTpl, cur.r, cur.c, cur.draft);
+            if (res.changed) baseTpl = res.updatedTpl;
+        }
+        const synced = syncCurrentSheetToTemplate(baseTpl, activeSheetId);
         const targetSheet = synced.sheets?.find(s => s.id === targetSheetId);
         if (!targetSheet) return;
 
@@ -502,13 +1067,21 @@ export const TabDesainRapor: React.FC = () => {
         });
     };
 
-    const handleSaveActiveTemplate = () => {
+    const handleSaveActiveTemplate = (shouldClose: boolean = false) => {
         if (!activeTemplate || !activeTemplate.name.trim()) {
             showToast('Nama template wajib diisi.', 'error');
             return;
         }
+        let baseTpl = activeTemplate;
+        if (editingCellRef.current) {
+            const cur = editingCellRef.current;
+            editingCellRef.current = null;
+            setEditingCell(null);
+            const res = applySmartCellTextCommit(baseTpl, cur.r, cur.c, cur.draft);
+            if (res.changed) baseTpl = res.updatedTpl;
+        }
         // Sync active sheet first
-        const finalTemplate = syncCurrentSheetToTemplate(activeTemplate, activeSheetId);
+        const finalTemplate = syncCurrentSheetToTemplate(baseTpl, activeSheetId);
 
         // Check duplicates across all sheets
         const allKeys: string[] = [];
@@ -535,9 +1108,35 @@ export const TabDesainRapor: React.FC = () => {
             updated = [...templates, { ...finalTemplate, lastModified: new Date().toISOString() }];
         }
         saveTemplatesToSettings(updated);
-        setIsEditing(false);
-        setActiveTemplate(null);
-        showToast('Template multi-sheet berhasil disimpan.', 'success');
+        setIsDirty(false);
+
+        if (shouldClose) {
+            setIsEditing(false);
+            setActiveTemplate(null);
+            showToast('Template multi-sheet berhasil disimpan.', 'success');
+        } else {
+            setActiveTemplate(finalTemplate);
+            showToast('Desain template tersimpan! Anda dapat terus mengedit.', 'success');
+        }
+    };
+
+    const handleCancelEditing = () => {
+        if (isDirty) {
+            showConfirmation(
+                'Batalkan Perubahan Desain?',
+                'Terdapat perubahan desain template yang belum disimpan. Yakin ingin keluar tanpa menyimpan?',
+                () => {
+                    setIsEditing(false);
+                    setActiveTemplate(null);
+                    setIsDirty(false);
+                },
+                { confirmColor: 'red' }
+            );
+        } else {
+            setIsEditing(false);
+            setActiveTemplate(null);
+            setIsDirty(false);
+        }
     };
 
     // --- IMPORT EXCEL (WITH MULTI-SHEET SUPPORT) ---
@@ -709,6 +1308,7 @@ export const TabDesainRapor: React.FC = () => {
             const snapshot = JSON.parse(JSON.stringify(tpl));
             setUndoStack(prev => [...prev.slice(-24), snapshot]);
             setRedoStack([]);
+            setIsDirty(true);
         } catch {
             // fallback
         }
@@ -793,33 +1393,657 @@ export const TabDesainRapor: React.FC = () => {
         showToast('Berhasil menyisipkan baris mata pelajaran dengan tag dinamis.', 'success');
     };
 
-    // Keyboard listener for Undo (Ctrl+Z) and Redo (Ctrl+Y / Ctrl+Shift+Z)
-    React.useEffect(() => {
-        if (!isEditing) return;
-        const handleKeyDown = (e: KeyboardEvent) => {
-            const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-            if (targetTag === 'input' || targetTag === 'textarea') return;
+    // --- INLINE CELL EDITING & EXCEL KEYBOARD NAVIGATION ---
+    const isKnownDynamicSystemTag = (raw: string): boolean => {
+        const up = raw.trim().toUpperCase();
+        if (!up.startsWith('$') || up.includes(' ')) return false;
+        if (up.startsWith('$MAPEL_') || up.startsWith('$TTD_')) return true;
+        for (const cat of DYNAMIC_TAG_CATEGORIES) {
+            if (cat.tags.some(t => t.tag.toUpperCase() === up)) return true;
+        }
+        const aliases = [
+            '$TAHUNAJAR', '$TAHUN_AJAR', '$TAHUNAJARAN', '$TAHUN_AJARAN',
+            '$MARHALAH', '$JENJANG', '$TINGKAT', '$KELAS', '$ROMBEL', '$SEMESTER',
+            '$FASE', '$CAPAIAN_KOMPETENSI', '$P5', '$CATATAN_WALIKELAS', '$LOGO'
+        ];
+        return aliases.includes(up);
+    };
 
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-                if (e.shiftKey) {
-                    e.preventDefault();
-                    handleRedo();
-                } else {
-                    e.preventDefault();
-                    handleUndo();
+    const findMasterCell = (tpl: RaporTemplate, r: number, c: number): { r: number; c: number } => {
+        const target = tpl.cells[r]?.[c];
+        if (!target || !target.hidden) return { r, c };
+        for (let mr = r; mr >= 0; mr--) {
+            for (let mc = c; mc >= 0; mc--) {
+                const candidate = tpl.cells[mr]?.[mc];
+                if (candidate && !candidate.hidden) {
+                    const rSpan = candidate.rowSpan || 1;
+                    const cSpan = candidate.colSpan || 1;
+                    if (r >= mr && r < mr + rSpan && c >= mc && c < mc + cSpan) {
+                        return { r: mr, c: mc };
+                    }
                 }
-            } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+            }
+        }
+        return { r, c };
+    };
+
+    const getEditableCellString = (cell: GridCell): string => {
+        if (cell.type === 'input') {
+            return cell.key ? `$${cell.key}` : (cell.value || '');
+        }
+        return cell.value || '';
+    };
+
+    const applySmartCellTextCommit = (
+        tpl: RaporTemplate,
+        r: number,
+        c: number,
+        rawDraft: string
+    ): { updatedTpl: RaporTemplate; changed: boolean } => {
+        const cell = tpl.cells[r]?.[c];
+        if (!cell) return { updatedTpl: tpl, changed: false };
+
+        const trimmed = rawDraft.trim();
+        let nextType: RaporColumnType = cell.type;
+        let nextValue = rawDraft;
+        let nextKey = cell.key;
+
+        if (trimmed.startsWith('=')) {
+            nextType = 'formula';
+            nextValue = rawDraft;
+        } else if (isMediaTag(trimmed) || isKnownDynamicSystemTag(trimmed)) {
+            nextType = 'data';
+            nextValue = trimmed;
+            nextKey = undefined;
+        } else if (/^\$[A-Za-z0-9_]+$/.test(trimmed)) {
+            nextType = 'input';
+            nextKey = trimmed.replace(/^\$/, '').toUpperCase().replace(/[^A-Z0-9_]/g, '');
+            nextValue = '';
+        } else if (cell.type === 'input') {
+            if (trimmed === '') {
+                nextType = 'label';
+                nextValue = '';
+                nextKey = undefined;
+            } else {
+                nextType = 'label';
+                nextValue = rawDraft;
+                nextKey = undefined;
+            }
+        } else if (cell.type === 'formula') {
+            nextType = 'label';
+            nextValue = rawDraft;
+        } else if (cell.type === 'data') {
+            nextType = 'label';
+            nextValue = rawDraft;
+        } else {
+            nextValue = rawDraft;
+        }
+
+        const changed =
+            nextValue !== (cell.value || '') ||
+            nextType !== cell.type ||
+            nextKey !== cell.key;
+
+        if (!changed) return { updatedTpl: tpl, changed: false };
+
+        const newCells = tpl.cells.map((rowArr, rIdx) =>
+            rIdx === r
+                ? rowArr.map((item, cIdx) =>
+                      cIdx === c ? { ...item, type: nextType, value: nextValue, key: nextKey } : item
+                  )
+                : rowArr
+        );
+        const updated = syncCurrentSheetToTemplate({ ...tpl, cells: newCells }, activeSheetId);
+        return { updatedTpl: updated, changed: true };
+    };
+
+    const moveSelectionFrom = (fromR: number, fromC: number, dr: number, dc: number, baseTpl?: RaporTemplate) => {
+        const tpl = baseTpl || activeTemplate;
+        if (!tpl) return;
+        const master = findMasterCell(tpl, fromR, fromC);
+        const curCell = tpl.cells[master.r]?.[master.c];
+        const rStep = dr > 0 ? (curCell?.rowSpan || 1) : dr;
+        const cStep = dc > 0 ? (curCell?.colSpan || 1) : dc;
+        const nextR = Math.max(0, Math.min(tpl.rowCount - 1, master.r + rStep));
+        const nextC = Math.max(0, Math.min(tpl.colCount - 1, master.c + cStep));
+        const dest = findMasterCell(tpl, nextR, nextC);
+        setSelectedCells([{ r: dest.r, c: dest.c }]);
+    };
+
+    const startInlineEdit = (r: number, c: number, initialOverride?: string) => {
+        if (!canWrite || !activeTemplate) return;
+        const master = findMasterCell(activeTemplate, r, c);
+        const cell = activeTemplate.cells[master.r]?.[master.c];
+        if (!cell) return;
+        const draft = initialOverride !== undefined ? initialOverride : getEditableCellString(cell);
+        setSelectedCells([{ r: master.r, c: master.c }]);
+        const next = { r: master.r, c: master.c, draft };
+        editingCellRef.current = next;
+        setEditingCell(next);
+    };
+
+    const commitInlineEdit = (moveDelta?: { dr: number; dc: number }) => {
+        const current = editingCellRef.current;
+        if (!current) return;
+        editingCellRef.current = null;
+        setEditingCell(null);
+
+        let latestTpl = activeTemplate;
+        if (activeTemplate && canWrite) {
+            const { updatedTpl, changed } = applySmartCellTextCommit(activeTemplate, current.r, current.c, current.draft);
+            if (changed) {
+                pushToHistory(activeTemplate);
+                setActiveTemplate(updatedTpl);
+                latestTpl = updatedTpl;
+            }
+        }
+
+        if (moveDelta && latestTpl) {
+            moveSelectionFrom(current.r, current.c, moveDelta.dr, moveDelta.dc, latestTpl);
+            requestAnimationFrame(() => {
+                scrollContainerRef.current?.focus({ preventScroll: true });
+            });
+        }
+    };
+
+    const cancelInlineEdit = () => {
+        editingCellRef.current = null;
+        setEditingCell(null);
+        setAutocompleteState(null);
+        requestAnimationFrame(() => {
+            scrollContainerRef.current?.focus({ preventScroll: true });
+        });
+    };
+
+    // --- AUTOCOMPLETE ($TAG & =FORMULA) ENGINE ---
+    const allAutocompletePool = useMemo<AutocompleteOption[]>(() => {
+        const items: AutocompleteOption[] = [];
+        // 1. Formula suggestions
+        RAPOR_FORMULA_SUGGESTIONS.forEach((f, idx) => {
+            items.push({
+                id: `fn_${idx}_${f.label}`,
+                label: f.syntax,
+                insertText: f.insertText,
+                subtitle: `${f.description} • Syntax: ${f.syntax}`,
+                badge: 'Rumus',
+                badgeClass: 'bg-amber-100 text-amber-800 border-amber-200'
+            });
+        });
+
+        // 2. Custom $KEY variables defined across sheets in this template
+        if (activeTemplate) {
+            const seenKeys = new Set<string>();
+            const sheetsList = activeTemplate.sheets && activeTemplate.sheets.length > 0
+                ? activeTemplate.sheets
+                : [{ id: 'cur', name: 'Lembar 1', cells: activeTemplate.cells, rowCount: activeTemplate.rowCount, colCount: activeTemplate.colCount }];
+            sheetsList.forEach(sh => {
+                const cells = sh.id === activeSheetId ? activeTemplate.cells : sh.cells;
+                cells?.forEach((row, rIdx) => {
+                    row.forEach(c => {
+                        if (c.key && !c.hidden && !seenKeys.has(c.key)) {
+                            seenKeys.add(c.key);
+                            items.push({
+                                id: `key_${c.key}`,
+                                label: `$${c.key}`,
+                                insertText: `$${c.key}`,
+                                subtitle: `Variabel ${c.type.toUpperCase()} (${sh.name}, Baris ${rIdx + 1})`,
+                                badge: 'Variabel Nilai',
+                                badgeClass: 'bg-blue-100 text-blue-800 border-blue-200'
+                            });
+                        }
+                    });
+                });
+            });
+        }
+
+        // 3. System Dynamic Tags
+        DYNAMIC_TAG_CATEGORIES.forEach(cat => {
+            cat.tags.forEach(t => {
+                items.push({
+                    id: `tag_${t.tag}`,
+                    label: t.tag,
+                    insertText: t.tag,
+                    subtitle: `${t.label} (Cth: ${t.example})`,
+                    badge: cat.title,
+                    badgeClass: 'bg-teal-100 text-teal-800 border-teal-200'
+                });
+            });
+        });
+
+        return items;
+    }, [activeTemplate, activeSheetId]);
+
+    const detectAutocompleteTrigger = (text: string, caretPos: number, source: 'fx' | 'inline') => {
+        const beforeCaret = text.slice(0, caretPos);
+        // Check $Tag or $KEY token before caret
+        const tagMatch = beforeCaret.match(/(\$[A-Za-z0-9_]*)$/);
+        if (tagMatch) {
+            const token = tagMatch[1];
+            setAutocompleteState(prev => ({
+                source,
+                query: token,
+                mode: 'tag',
+                replaceStart: caretPos - token.length,
+                replaceEnd: caretPos,
+                selectedIndex: prev?.query === token ? prev.selectedIndex : 0
+            }));
+            return;
+        }
+
+        // Check =Formula token when cell starts with =
+        if (text.trimStart().startsWith('=')) {
+            const leadingEqMatch = beforeCaret.match(/^\s*(=[A-Za-z0-9_]*)$/);
+            if (leadingEqMatch) {
+                const token = leadingEqMatch[1];
+                setAutocompleteState(prev => ({
+                    source,
+                    query: token,
+                    mode: 'formula',
+                    replaceStart: caretPos - token.length,
+                    replaceEnd: caretPos,
+                    selectedIndex: prev?.query === token ? prev.selectedIndex : 0
+                }));
+                return;
+            }
+            const nestedFnMatch = beforeCaret.match(/[=,(+\-*/\s]([A-Za-z]{2,}[0-9]*)$/);
+            if (nestedFnMatch) {
+                const token = nestedFnMatch[1];
+                setAutocompleteState(prev => ({
+                    source,
+                    query: `=${token}`,
+                    mode: 'formula',
+                    replaceStart: caretPos - token.length,
+                    replaceEnd: caretPos,
+                    selectedIndex: prev?.query === `=${token}` ? prev.selectedIndex : 0
+                }));
+                return;
+            }
+        }
+
+        setAutocompleteState(null);
+    };
+
+    const filteredAutocompleteOptions = useMemo<AutocompleteOption[]>(() => {
+        if (!autocompleteState) return [];
+        const q = autocompleteState.query.toUpperCase();
+        if (autocompleteState.mode === 'formula') {
+            return allAutocompletePool
+                .filter(opt => opt.id.startsWith('fn_') && (q === '=' || opt.insertText.toUpperCase().startsWith(q) || opt.label.toUpperCase().includes(q.replace(/^=/, ''))))
+                .slice(0, 8);
+        }
+        return allAutocompletePool
+            .filter(opt => !opt.id.startsWith('fn_') && (q === '$' || opt.insertText.toUpperCase().includes(q) || opt.subtitle.toUpperCase().includes(q.replace(/^\$/, ''))))
+            .slice(0, 10);
+    }, [autocompleteState, allAutocompletePool]);
+
+    const applyAutocompleteOption = (opt: AutocompleteOption) => {
+        if (!autocompleteState || !activeTemplate) return;
+        const { source, replaceStart, replaceEnd } = autocompleteState;
+
+        if (source === 'inline' && editingCellRef.current) {
+            const cur = editingCellRef.current;
+            const prefix = cur.draft.slice(0, replaceStart);
+            const suffix = cur.draft.slice(replaceEnd);
+            // If inserting nested function inside =IF(..., TERB -> don't duplicate leading '='
+            const rawInsert = opt.id.startsWith('fn_') && replaceStart > 0 && prefix.trimStart().startsWith('=')
+                ? opt.insertText.replace(/^=/, '')
+                : opt.insertText;
+            const nextDraft = prefix + rawInsert + suffix;
+            const nextCaret = prefix.length + rawInsert.length;
+            const nextState = { ...cur, draft: nextDraft };
+            editingCellRef.current = nextState;
+            setEditingCell(nextState);
+            setAutocompleteState(null);
+            requestAnimationFrame(() => {
+                if (inlineEditorRef.current) {
+                    inlineEditorRef.current.focus({ preventScroll: true });
+                    inlineEditorRef.current.setSelectionRange(nextCaret, nextCaret);
+                }
+            });
+            return;
+        }
+
+        if (source === 'fx' && activeCellData) {
+            const currentStr = editingCellRef.current && editingCellRef.current.r === activeCellData.row && editingCellRef.current.c === activeCellData.col
+                ? editingCellRef.current.draft
+                : getEditableCellString(activeCellData);
+            const prefix = currentStr.slice(0, replaceStart);
+            const suffix = currentStr.slice(replaceEnd);
+            const rawInsert = opt.id.startsWith('fn_') && replaceStart > 0 && prefix.trimStart().startsWith('=')
+                ? opt.insertText.replace(/^=/, '')
+                : opt.insertText;
+            const nextStr = prefix + rawInsert + suffix;
+            const nextCaret = prefix.length + rawInsert.length;
+
+            if (!formulaInputHistoryPushedRef.current) {
+                pushToHistory(activeTemplate);
+                formulaInputHistoryPushedRef.current = true;
+            }
+            const { updatedTpl, changed } = applySmartCellTextCommit(activeTemplate, activeCellData.row, activeCellData.col, nextStr);
+            if (changed) {
+                setActiveTemplate(updatedTpl);
+            }
+            setAutocompleteState(null);
+            requestAnimationFrame(() => {
+                if (fxInputRef.current) {
+                    fxInputRef.current.focus({ preventScroll: true });
+                    fxInputRef.current.setSelectionRange(nextCaret, nextCaret);
+                }
+            });
+        }
+    };
+
+    // --- INTERNAL COPY / CUT / PASTE & FORMAT PAINTER ---
+    const handleCopySelection = (isCut = false) => {
+        if (!activeTemplate || selectedCells.length === 0) return;
+        const rMin = Math.min(...selectedCells.map(s => s.r));
+        const rMax = Math.max(...selectedCells.map(s => s.r));
+        const cMin = Math.min(...selectedCells.map(s => s.c));
+        const cMax = Math.max(...selectedCells.map(s => s.c));
+
+        const copiedMatrix: GridCell[][] = [];
+        const tsvLines: string[] = [];
+        for (let r = rMin; r <= rMax; r++) {
+            const rowSlice: GridCell[] = [];
+            const txtCols: string[] = [];
+            for (let c = cMin; c <= cMax; c++) {
+                const cell = activeTemplate.cells[r]?.[c] || createEmptyCell(r, c);
+                rowSlice.push(JSON.parse(JSON.stringify(cell)));
+                txtCols.push(cell.hidden ? '' : getEditableCellString(cell));
+            }
+            copiedMatrix.push(rowSlice);
+            tsvLines.push(txtCols.join('\t'));
+        }
+        const tsv = tsvLines.join('\n');
+        const sig = tsv.trim();
+        setInternalClipboard({
+            cells: copiedMatrix,
+            isCut,
+            sourceSheetId: activeSheetId || activeTemplate.activeSheetId || '',
+            sourceRange: { rMin, rMax, cMin, cMax },
+            signature: sig
+        });
+        if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(tsv).catch(() => {});
+        }
+        const rowLen = rMax - rMin + 1;
+        const colLen = cMax - cMin + 1;
+        showToast(
+            isCut
+                ? `Dipindahkan (Cut) ${rowLen}×${colLen} sel. Klik sel tujuan lalu tekan Ctrl+V.`
+                : `Disalin ${rowLen}×${colLen} sel ke clipboard.`,
+            'info'
+        );
+    };
+
+    const handlePasteFromInternalClipboard = (): boolean => {
+        if (!activeTemplate || !canWrite || !internalClipboard) return false;
+        pushToHistory(activeTemplate);
+        const startR = selectedCells[0]?.r ?? 0;
+        const startC = selectedCells[0]?.c ?? 0;
+        const pasteRows = internalClipboard.cells.length;
+        const pasteCols = internalClipboard.cells[0]?.length || 0;
+        if (pasteRows === 0 || pasteCols === 0) return false;
+
+        const targetRowCount = Math.max(activeTemplate.rowCount, startR + pasteRows);
+        const targetColCount = Math.max(activeTemplate.colCount, startC + pasteCols);
+
+        const newGrid: GridCell[][] = [];
+        for (let r = 0; r < targetRowCount; r++) {
+            const rowArr: GridCell[] = [];
+            for (let c = 0; c < targetColCount; c++) {
+                const existing = activeTemplate.cells[r]?.[c];
+                if (existing) {
+                    rowArr.push({ ...existing, row: r, col: c });
+                } else {
+                    const w = activeTemplate.cells[0]?.[c]?.width || 100;
+                    const h = activeTemplate.cells[r]?.[0]?.height || 30;
+                    rowArr.push({ ...createEmptyCell(r, c), width: w, height: h });
+                }
+            }
+            newGrid.push(rowArr);
+        }
+
+        // If Cut on the same sheet, clear source cells first before placing destination cells
+        const isSameSheetCut = internalClipboard.isCut && internalClipboard.sourceSheetId === (activeSheetId || activeTemplate.activeSheetId || '');
+        if (isSameSheetCut) {
+            const { rMin, rMax, cMin, cMax } = internalClipboard.sourceRange;
+            for (let r = rMin; r <= rMax; r++) {
+                for (let c = cMin; c <= cMax; c++) {
+                    if (newGrid[r]?.[c]) {
+                        newGrid[r][c] = {
+                            ...createEmptyCell(r, c),
+                            width: newGrid[r][c].width,
+                            height: newGrid[r][c].height
+                        };
+                    }
+                }
+            }
+        }
+
+        // Collect existing keys across all sheets (excluding destination cells being overwritten)
+        const usedKeys = new Set<string>();
+        const syncedCheck = syncCurrentSheetToTemplate(activeTemplate, activeSheetId);
+        (syncedCheck.sheets || []).forEach(sh => {
+            const isCur = sh.id === (activeSheetId || activeTemplate.activeSheetId);
+            const gridRef = isCur ? newGrid : sh.cells;
+            gridRef.forEach((rowArr, r) => {
+                rowArr.forEach((cell, c) => {
+                    if (isCur && r >= startR && r < startR + pasteRows && c >= startC && c < startC + pasteCols) {
+                        return;
+                    }
+                    if (cell.key && !cell.hidden) usedKeys.add(cell.key.toUpperCase());
+                });
+            });
+        });
+
+        const nextSelection: { r: number; c: number }[] = [];
+        for (let dr = 0; dr < pasteRows; dr++) {
+            for (let dc = 0; dc < pasteCols; dc++) {
+                const destR = startR + dr;
+                const destC = startC + dc;
+                const src = internalClipboard.cells[dr][dc];
+                let nextKey = src.key;
+                if (nextKey && !src.hidden) {
+                    const baseKey = nextKey.toUpperCase();
+                    if (usedKeys.has(baseKey)) {
+                        let suffix = 2;
+                        while (usedKeys.has(`${baseKey}_${suffix}`)) suffix++;
+                        nextKey = `${baseKey}_${suffix}`;
+                    }
+                    usedKeys.add(nextKey.toUpperCase());
+                }
+                newGrid[destR][destC] = {
+                    ...JSON.parse(JSON.stringify(src)),
+                    id: `cell_${Date.now()}_${destR}_${destC}_${Math.random().toString(36).slice(2, 6)}`,
+                    row: destR,
+                    col: destC,
+                    key: nextKey,
+                    width: newGrid[destR][destC].width,
+                    height: newGrid[destR][destC].height
+                };
+                nextSelection.push({ r: destR, c: destC });
+            }
+        }
+
+        const updated = {
+            ...activeTemplate,
+            rowCount: targetRowCount,
+            colCount: targetColCount,
+            cells: newGrid
+        };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        setSelectedCells(nextSelection);
+        if (internalClipboard.isCut) {
+            setInternalClipboard(prev => prev ? { ...prev, isCut: false } : null);
+        }
+        showToast(`Berhasil menempel ${pasteRows}×${pasteCols} sel.`, 'success');
+        return true;
+    };
+
+    const handleToggleFormatPainter = () => {
+        if (isFormatPainterActive) {
+            setIsFormatPainterActive(false);
+            setCopiedFormat(null);
+            return;
+        }
+        if (!activeCellData) {
+            showToast('Pilih sel sumber terlebih dahulu untuk menyalin formatnya.', 'info');
+            return;
+        }
+        setCopiedFormat({
+            borders: activeCellData.borders ? { ...activeCellData.borders } : { top: false, right: false, bottom: false, left: false },
+            bold: activeCellData.bold,
+            italic: activeCellData.italic,
+            fontSize: activeCellData.fontSize,
+            align: activeCellData.align,
+            verticalAlign: activeCellData.verticalAlign,
+            textWrap: activeCellData.textWrap,
+            backgroundColor: activeCellData.backgroundColor,
+            color: activeCellData.color
+        });
+        setIsFormatPainterActive(true);
+        showToast('Format sel disalin! Klik atau blok sel tujuan untuk menerapkan format.', 'info');
+    };
+
+    const isInlineEditingOpen = Boolean(editingCell);
+    React.useEffect(() => {
+        if (editingCell && inlineEditorRef.current) {
+            const el = inlineEditorRef.current;
+            el.focus({ preventScroll: true });
+            const len = el.value.length;
+            el.setSelectionRange(len, len);
+        }
+    }, [editingCell?.r, editingCell?.c, isInlineEditingOpen]);
+
+    // Keyboard listener for Undo/Redo, Copy/Cut, Excel-style arrow navigation, F2/Enter edit, Delete, & direct typing
+    React.useEffect(() => {
+        if (!isEditing || isDesignPreviewOpen || isExcelPasteModalOpen || isKurikulumGeneratorOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const targetEl = e.target as HTMLElement | null;
+            const targetTag = targetEl?.tagName?.toLowerCase();
+            if (targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select' || targetEl?.isContentEditable) {
+                return;
+            }
+
+            if (e.key === 'Escape' && isFormatPainterActive) {
+                e.preventDefault();
+                setIsFormatPainterActive(false);
+                setCopiedFormat(null);
+                return;
+            }
+
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                e.preventDefault();
+                handleSaveActiveTemplate(false);
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b' && canWrite) {
+                e.preventDefault();
+                if (selectedCells.length > 0 && activeTemplate) {
+                    const isAnyNotBold = selectedCells.some(s => !activeTemplate.cells[s.r]?.[s.c]?.bold);
+                    handleBulkUpdateCells({ bold: isAnyNotBold });
+                }
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i' && canWrite) {
+                e.preventDefault();
+                if (selectedCells.length > 0 && activeTemplate) {
+                    const isAnyNotItalic = selectedCells.some(s => !activeTemplate.cells[s.r]?.[s.c]?.italic);
+                    handleBulkUpdateCells({ italic: isAnyNotItalic });
+                }
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) handleRedo();
+                else handleUndo();
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
                 e.preventDefault();
                 handleRedo();
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+                if (selectedCells.length > 0) {
+                    e.preventDefault();
+                    handleCopySelection(false);
+                }
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && canWrite) {
+                if (selectedCells.length > 0) {
+                    e.preventDefault();
+                    handleCopySelection(true);
+                }
+                return;
+            }
+
+            if (!activeTemplate || selectedCells.length === 0) return;
+            const primary = selectedCells[0];
+
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                moveSelectionFrom(primary.r, primary.c, -1, 0);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                moveSelectionFrom(primary.r, primary.c, 1, 0);
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                moveSelectionFrom(primary.r, primary.c, 0, -1);
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                moveSelectionFrom(primary.r, primary.c, 0, 1);
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                moveSelectionFrom(primary.r, primary.c, 0, e.shiftKey ? -1 : 1);
+            } else if (e.key === 'Enter' || e.key === 'F2') {
+                e.preventDefault();
+                startInlineEdit(primary.r, primary.c);
+            } else if ((e.key === 'Delete' || e.key === 'Backspace') && canWrite) {
+                e.preventDefault();
+                handleBulkClearValues();
+            } else if (
+                canWrite &&
+                selectedCells.length === 1 &&
+                e.key.length === 1 &&
+                !e.ctrlKey &&
+                !e.metaKey &&
+                !e.altKey
+            ) {
+                e.preventDefault();
+                startInlineEdit(primary.r, primary.c, e.key);
+                if (e.key === '$' || e.key === '=') {
+                    detectAutocompleteTrigger(e.key, 1, 'inline');
+                }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, undoStack, redoStack, activeTemplate]);
+    }, [isEditing, isDesignPreviewOpen, isExcelPasteModalOpen, isKurikulumGeneratorOpen, isFormatPainterActive, internalClipboard, undoStack, redoStack, activeTemplate, selectedCells, canWrite]);
 
     // --- GRID OPERATIONS ---
-    const handleMouseDown = (r: number, c: number) => { setIsDragging(true); setDragStart({ r, c }); setSelectedCells([{ r, c }]); };
+    const handleMouseDown = (r: number, c: number) => {
+        if (editingCellRef.current) {
+            if (editingCellRef.current.r === r && editingCellRef.current.c === c) {
+                return;
+            }
+            commitInlineEdit();
+        }
+        setAutocompleteState(null);
+        wasAlreadySingleSelectedRef.current =
+            !isFormatPainterActive && selectedCells.length === 1 && selectedCells[0].r === r && selectedCells[0].c === c;
+        setIsDragging(true);
+        setDragStart({ r, c });
+        setSelectedCells([{ r, c }]);
+        requestAnimationFrame(() => {
+            if (!editingCellRef.current) {
+                scrollContainerRef.current?.focus({ preventScroll: true });
+            }
+        });
+    };
     const handleMouseEnter = (r: number, c: number) => {
         if (!isDragging || !dragStart) return;
         const rMin = Math.min(dragStart.r, r); const rMax = Math.max(dragStart.r, r);
@@ -828,7 +2052,34 @@ export const TabDesainRapor: React.FC = () => {
         for(let i=rMin; i<=rMax; i++) for(let j=cMin; j<=cMax; j++) newSelection.push({ r: i, c: j });
         setSelectedCells(newSelection);
     };
-    const handleMouseUp = () => setIsDragging(false);
+    const handleMouseUp = () => {
+        if (isDragging && isFormatPainterActive && copiedFormat && activeTemplate && selectedCells.length > 0 && canWrite) {
+            pushToHistory(activeTemplate);
+            const newCells = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+            selectedCells.forEach(({ r, c }) => {
+                if (newCells[r]?.[c] && !newCells[r][c].hidden) {
+                    newCells[r][c] = {
+                        ...newCells[r][c],
+                        borders: copiedFormat.borders ? { ...copiedFormat.borders } : newCells[r][c].borders,
+                        bold: copiedFormat.bold,
+                        italic: copiedFormat.italic,
+                        fontSize: copiedFormat.fontSize,
+                        align: copiedFormat.align,
+                        verticalAlign: copiedFormat.verticalAlign,
+                        textWrap: copiedFormat.textWrap,
+                        backgroundColor: copiedFormat.backgroundColor,
+                        color: copiedFormat.color
+                    };
+                }
+            });
+            const updated = { ...activeTemplate, cells: newCells };
+            setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+            setIsFormatPainterActive(false);
+            setCopiedFormat(null);
+            showToast(`Format berhasil diterapkan ke ${selectedCells.length} sel.`, 'success');
+        }
+        setIsDragging(false);
+    };
 
     const handleCanvasPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         if (!canWrite || !activeTemplate) return;
@@ -837,7 +2088,20 @@ export const TabDesainRapor: React.FC = () => {
 
         const html = e.clipboardData.getData('text/html');
         const text = e.clipboardData.getData('text/plain');
-        if (!html && !text) return;
+
+        // Prefer internal rich clipboard when clipboard text matches our internal copy/cut
+        if (internalClipboard && (!html || html.trim() === '') && text.trim() === internalClipboard.signature) {
+            e.preventDefault();
+            handlePasteFromInternalClipboard();
+            return;
+        }
+        if (!html && !text) {
+            if (internalClipboard) {
+                e.preventDefault();
+                handlePasteFromInternalClipboard();
+            }
+            return;
+        }
 
         const result = parseExcelClipboard(html, text);
         if (result && result.rowCount > 0 && result.colCount > 0) {
@@ -866,7 +2130,10 @@ export const TabDesainRapor: React.FC = () => {
         if (!activeTemplate) return;
         pushToHistory(activeTemplate);
         const newRow = [];
-        for(let c=0; c<activeTemplate.colCount; c++) newRow.push(createEmptyCell(activeTemplate.rowCount, c));
+        for(let c=0; c<activeTemplate.colCount; c++) {
+            const w = getColWidth(c);
+            newRow.push({ ...createEmptyCell(activeTemplate.rowCount, c), width: w });
+        }
         const updatedCells = [...activeTemplate.cells, newRow];
         const newRowCount = activeTemplate.rowCount + 1;
         const updated = { ...activeTemplate, rowCount: newRowCount, cells: updatedCells };
@@ -876,10 +2143,243 @@ export const TabDesainRapor: React.FC = () => {
     const addCol = () => {
         if (!activeTemplate) return;
         pushToHistory(activeTemplate);
-        const updatedCells = activeTemplate.cells.map(row => [...row, createEmptyCell(row[0].row, activeTemplate.colCount)]);
+        const updatedCells = activeTemplate.cells.map((row, rIdx) => [
+            ...row,
+            { ...createEmptyCell(rIdx, activeTemplate.colCount), height: getRowHeight(rIdx) }
+        ]);
         const newColCount = activeTemplate.colCount + 1;
         const updated = { ...activeTemplate, colCount: newColCount, cells: updatedCells };
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+    };
+
+    const handleInsertRowRelative = (position: 'above' | 'below') => {
+        if (!activeTemplate || !canWrite) return;
+        pushToHistory(activeTemplate);
+
+        let insertIdx = position === 'above' ? 0 : activeTemplate.rowCount;
+        if (selectedCells.length > 0) {
+            if (position === 'above') {
+                insertIdx = Math.min(...selectedCells.map(s => s.r));
+            } else {
+                let maxR = 0;
+                selectedCells.forEach(s => {
+                    const master = findMasterCell(activeTemplate, s.r, s.c);
+                    const cell = activeTemplate.cells[master.r]?.[master.c];
+                    const endR = master.r + ((cell?.rowSpan || 1) - 1);
+                    if (endR > maxR) maxR = endR;
+                });
+                insertIdx = maxR + 1;
+            }
+        }
+
+        const oldCells: GridCell[][] = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+        const newRow: GridCell[] = [];
+        for (let c = 0; c < activeTemplate.colCount; c++) {
+            newRow.push({
+                ...createEmptyCell(insertIdx, c),
+                width: getColWidth(c),
+                height: 30
+            });
+        }
+
+        // Adjust rowSpan for merged cells that cross across insertIdx
+        for (let r = 0; r < insertIdx; r++) {
+            for (let c = 0; c < activeTemplate.colCount; c++) {
+                const cell = oldCells[r]?.[c];
+                if (cell && !cell.hidden && (cell.rowSpan || 1) > 1) {
+                    const rEnd = r + (cell.rowSpan || 1) - 1;
+                    if (rEnd >= insertIdx) {
+                        cell.rowSpan = (cell.rowSpan || 1) + 1;
+                        const cSpan = cell.colSpan || 1;
+                        for (let dc = 0; dc < cSpan; dc++) {
+                            if (newRow[c + dc]) newRow[c + dc].hidden = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        const spliced = [
+            ...oldCells.slice(0, insertIdx),
+            newRow,
+            ...oldCells.slice(insertIdx)
+        ].map((rowArr, r) => rowArr.map((cell, c) => ({ ...cell, row: r, col: c })));
+
+        const updated = {
+            ...activeTemplate,
+            rowCount: spliced.length,
+            cells: spliced
+        };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        const activeC = selectedCells[0]?.c ?? 0;
+        const targetSelect = findMasterCell(updated, insertIdx, activeC);
+        setSelectedCells([{ r: targetSelect.r, c: targetSelect.c }]);
+        showToast(
+            position === 'above'
+                ? `1 baris disisipkan di atas Baris ${insertIdx + 1}.`
+                : `1 baris disisipkan di bawah Baris ${insertIdx}.`,
+            'success'
+        );
+    };
+
+    const handleInsertColRelative = (position: 'left' | 'right') => {
+        if (!activeTemplate || !canWrite) return;
+        pushToHistory(activeTemplate);
+
+        let insertIdx = position === 'left' ? 0 : activeTemplate.colCount;
+        if (selectedCells.length > 0) {
+            if (position === 'left') {
+                insertIdx = Math.min(...selectedCells.map(s => s.c));
+            } else {
+                let maxC = 0;
+                selectedCells.forEach(s => {
+                    const master = findMasterCell(activeTemplate, s.r, s.c);
+                    const cell = activeTemplate.cells[master.r]?.[master.c];
+                    const endC = master.c + ((cell?.colSpan || 1) - 1);
+                    if (endC > maxC) maxC = endC;
+                });
+                insertIdx = maxC + 1;
+            }
+        }
+
+        const oldCells: GridCell[][] = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
+        const hiddenRowsInNewCol = new Set<number>();
+
+        // Adjust colSpan for merged cells that cross across insertIdx
+        for (let r = 0; r < activeTemplate.rowCount; r++) {
+            for (let c = 0; c < insertIdx; c++) {
+                const cell = oldCells[r]?.[c];
+                if (cell && !cell.hidden && (cell.colSpan || 1) > 1) {
+                    const cEnd = c + (cell.colSpan || 1) - 1;
+                    if (cEnd >= insertIdx) {
+                        cell.colSpan = (cell.colSpan || 1) + 1;
+                        const rSpan = cell.rowSpan || 1;
+                        for (let dr = 0; dr < rSpan; dr++) {
+                            hiddenRowsInNewCol.add(r + dr);
+                        }
+                    }
+                }
+            }
+        }
+
+        const spliced = oldCells.map((rowArr, r) => {
+            const insertedCell: GridCell = {
+                ...createEmptyCell(r, insertIdx),
+                width: 100,
+                height: getRowHeight(r),
+                hidden: hiddenRowsInNewCol.has(r)
+            };
+            const nextRow = [
+                ...rowArr.slice(0, insertIdx),
+                insertedCell,
+                ...rowArr.slice(insertIdx)
+            ];
+            return nextRow.map((cell, c) => ({ ...cell, row: r, col: c }));
+        });
+
+        const updated = {
+            ...activeTemplate,
+            colCount: spliced[0]?.length || activeTemplate.colCount + 1,
+            cells: spliced
+        };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        const activeR = selectedCells[0]?.r ?? 0;
+        const targetSelect = findMasterCell(updated, activeR, insertIdx);
+        setSelectedCells([{ r: targetSelect.r, c: targetSelect.c }]);
+        showToast(
+            position === 'left'
+                ? `1 kolom disisipkan di kiri Kolom ${getExcelColName(insertIdx)}.`
+                : `1 kolom disisipkan di kanan Kolom ${getExcelColName(Math.max(0, insertIdx - 1))}.`,
+            'success'
+        );
+    };
+
+    const handleApplyKurikulumRows = (
+        generatedRows: GridCell[][],
+        insertMode: 'insert_below' | 'replace_sheet',
+        colWidths: number[]
+    ) => {
+        if (!activeTemplate || !canWrite || generatedRows.length === 0) return;
+        pushToHistory(activeTemplate);
+
+        if (insertMode === 'replace_sheet') {
+            const newColCount = generatedRows[0]?.length || 1;
+            const reindexed = generatedRows.map((rowArr, r) =>
+                rowArr.map((cell, c) => ({
+                    ...cell,
+                    row: r,
+                    col: c,
+                    width: colWidths[c] || cell.width || 100
+                }))
+            );
+            const updated = {
+                ...activeTemplate,
+                rowCount: reindexed.length,
+                colCount: newColCount,
+                cells: reindexed
+            };
+            setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+            setSelectedCells([{ r: 0, c: 0 }]);
+            showToast(`Berhasil membuat tabel kurikulum (${reindexed.length} baris).`, 'success');
+            return;
+        }
+
+        // insert_below active cell row (or bottom of sheet)
+        const insertAfterR = selectedCells.length > 0
+            ? Math.max(...selectedCells.map(s => s.r))
+            : activeTemplate.rowCount - 1;
+        const insertIdx = Math.min(activeTemplate.rowCount, insertAfterR + 1);
+        const genColCount = generatedRows[0]?.length || 1;
+        const finalColCount = Math.max(activeTemplate.colCount, genColCount);
+
+        const normalizedExisting = activeTemplate.cells.map((rowArr, r) => {
+            const padded = [...rowArr.map(c => ({ ...c }))];
+            while (padded.length < finalColCount) {
+                const cIdx = padded.length;
+                padded.push({
+                    ...createEmptyCell(r, cIdx),
+                    width: colWidths[cIdx] || 100,
+                    height: getRowHeight(r)
+                });
+            }
+            return padded;
+        });
+
+        const normalizedGen = generatedRows.map((rowArr, r) => {
+            const padded = [...rowArr.map(c => ({ ...c }))];
+            while (padded.length < finalColCount) {
+                const cIdx = padded.length;
+                padded.push({
+                    ...createEmptyCell(r, cIdx),
+                    width: getColWidth(cIdx),
+                    height: padded[0]?.height || 28
+                });
+            }
+            return padded;
+        });
+
+        const combined = [
+            ...normalizedExisting.slice(0, insertIdx),
+            ...normalizedGen,
+            ...normalizedExisting.slice(insertIdx)
+        ].map((rowArr, r) =>
+            rowArr.map((cell, c) => ({
+                ...cell,
+                row: r,
+                col: c,
+                width: c < colWidths.length && activeTemplate.rowCount <= 1 ? colWidths[c] : (cell.width || getColWidth(c))
+            }))
+        );
+
+        const updated = {
+            ...activeTemplate,
+            rowCount: combined.length,
+            colCount: finalColCount,
+            cells: combined
+        };
+        setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+        setSelectedCells([{ r: insertIdx, c: 0 }]);
+        showToast(`Berhasil menyisipkan ${generatedRows.length} baris mapel kurikulum.`, 'success');
     };
 
     const mergeCells = () => {
@@ -1069,16 +2569,6 @@ export const TabDesainRapor: React.FC = () => {
         const updated = { ...activeTemplate, cells: newCells };
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
         showToast(`Seluruh kolom disesuaikan menjadi ${targetColW}px agar pas 1 lembar A4.`, 'success');
-    };
-
-    const getExcelColName = (colIndex: number): string => {
-        let name = '';
-        let num = colIndex;
-        while (num >= 0) {
-            name = String.fromCharCode((num % 26) + 65) + name;
-            num = Math.floor(num / 26) - 1;
-        }
-        return name;
     };
 
     const executeDeleteRows = (rowsToDelete: number[]) => {
@@ -1287,50 +2777,6 @@ export const TabDesainRapor: React.FC = () => {
         );
     };
 
-    const getColWidth = (c: number): number => {
-        if (resizingCol && resizingCol.colIdx === c) {
-            return resizingCol.currentWidth;
-        }
-        if (activeTemplate?.cells) {
-            // Prioritaskan sel unmerged (!hidden dan colSpan === 1)
-            for (let r = 0; r < activeTemplate.cells.length; r++) {
-                const cell = activeTemplate.cells[r]?.[c];
-                if (cell && !cell.hidden && (!cell.colSpan || cell.colSpan === 1)) {
-                    const w = cell.width;
-                    if (typeof w === 'number' && w > 0) return w;
-                }
-            }
-            // Fallback jika semua sel pada kolom c ter-merge
-            for (let r = 0; r < activeTemplate.cells.length; r++) {
-                const cell = activeTemplate.cells[r]?.[c];
-                if (cell && typeof cell.width === 'number' && cell.width > 0) return cell.width;
-            }
-        }
-        return 100;
-    };
-
-    const getRowHeight = (r: number): number => {
-        if (resizingRow && resizingRow.rowIdx === r) {
-            return resizingRow.currentHeight;
-        }
-        if (activeTemplate?.cells?.[r]) {
-            // Prioritaskan sel unmerged (!hidden dan rowSpan === 1)
-            for (let c = 0; c < activeTemplate.cells[r].length; c++) {
-                const cell = activeTemplate.cells[r][c];
-                if (cell && !cell.hidden && (!cell.rowSpan || cell.rowSpan === 1)) {
-                    const h = cell.height;
-                    if (typeof h === 'number' && h > 0) return h;
-                }
-            }
-            // Fallback
-            for (let c = 0; c < activeTemplate.cells[r].length; c++) {
-                const cell = activeTemplate.cells[r][c];
-                if (cell && typeof cell.height === 'number' && cell.height > 0) return cell.height;
-            }
-        }
-        return 30;
-    };
-
     const handleUpdateColWidth = (cIdx: number, newWidth: number) => {
         if (!activeTemplate) return;
         const clampedWidth = Math.max(8, Math.min(1000, Math.round(newWidth)));
@@ -1510,27 +2956,6 @@ export const TabDesainRapor: React.FC = () => {
         };
     }, [resizingRow, zoomScale, activeTemplate, activeSheetId]);
 
-    const activeCellData = useMemo(() => {
-        if (!activeTemplate || selectedCells.length === 0) return null;
-        const { r, c } = selectedCells[0];
-        return activeTemplate.cells[r]?.[c] || null;
-    }, [activeTemplate, selectedCells]);
-
-    const activeSheets = useMemo(() => {
-        if (!activeTemplate) return [];
-        if (activeTemplate.sheets && activeTemplate.sheets.length > 0) {
-            return activeTemplate.sheets;
-        }
-        return [{
-            id: 'sheet_default',
-            name: 'Lembar 1 (Akademik)',
-            rowCount: activeTemplate.rowCount,
-            colCount: activeTemplate.colCount,
-            cells: activeTemplate.cells,
-            paperSize: 'A4' as const
-        }];
-    }, [activeTemplate]);
-
     const updateActiveCell = (updates: Partial<GridCell>) => {
         if (!activeTemplate || !activeCellData) return;
         pushToHistory(activeTemplate);
@@ -1656,6 +3081,13 @@ export const TabDesainRapor: React.FC = () => {
         return cell.value;
     };
 
+    const handleToolbarWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+        const el = e.currentTarget;
+        if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+            el.scrollLeft += e.deltaY;
+        }
+    };
+
     if (!isEditing) {
         return (
             <div className="space-y-4">
@@ -1664,14 +3096,18 @@ export const TabDesainRapor: React.FC = () => {
                     {canWrite && (
                         <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 no-scrollbar">
                             <input type="file" ref={fileInputRef} onChange={handleImportExcel} accept=".xlsx, .xls, .ods, .csv" className="hidden" />
+                            <input type="file" ref={jsonInputRef} onChange={handleImportTemplateJson} accept=".json,application/json" className="hidden" />
                             <div className="flex gap-2 flex-grow sm:flex-none">
                                 <button onClick={() => setIsExcelPasteModalOpen(true)} className="flex-1 sm:flex-none whitespace-nowrap bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-2xs" title="Salin tabel dari Excel lalu tempel langsung di sini">
                                     <i className="bi bi-clipboard2-data-fill text-emerald-600 text-sm"></i> <span>Paste Excel</span>
                                 </button>
-                                <button onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none whitespace-nowrap bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95">
-                                    <i className="bi bi-file-earmark-spreadsheet text-base"></i> <span>Import</span>
+                                <button onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none whitespace-nowrap bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95" title="Import dari file Excel (.xlsx, .xls, .ods, .csv)">
+                                    <i className="bi bi-file-earmark-spreadsheet text-base"></i> <span>Import Excel</span>
                                 </button>
-                                <button onClick={handleCreateSampleTemplate} className="flex-1 sm:flex-none whitespace-nowrap bg-purple-50 text-purple-700 border border-purple-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95">
+                                <button onClick={() => jsonInputRef.current?.click()} className="flex-1 sm:flex-none whitespace-nowrap bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95" title="Import file desain template rapor (.json)">
+                                    <i className="bi bi-filetype-json text-base text-amber-600"></i> <span>Import JSON</span>
+                                </button>
+                                <button onClick={handleCreateSampleTemplate} className="flex-1 sm:flex-none whitespace-nowrap bg-purple-50 text-purple-700 border border-purple-100 hover:bg-purple-100 px-3 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-center gap-1.5 transition-all active:scale-95">
                                     <i className="bi bi-magic text-base"></i> <span>Demo</span>
                                 </button>
                                 <button onClick={handleCreateTemplate} className="flex-1 sm:flex-none whitespace-nowrap bg-teal-600 text-white px-4 py-2.5 rounded-xl shadow-lg shadow-teal-100 hover:bg-teal-700 text-xs font-black flex items-center justify-center gap-2 transition-all active:scale-95">
@@ -1700,11 +3136,16 @@ export const TabDesainRapor: React.FC = () => {
                                 )}
                             </div>
                             <div className="text-xs text-gray-400 mt-2">{new Date(tpl.lastModified).toLocaleDateString()}</div>
-                            {canWrite && <div className="mt-3 flex gap-2 justify-end">
-                                <button onClick={() => handleDuplicateTemplate(tpl.id)} className="bg-green-50 text-green-600 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1" title="Duplikasi Template"><i className="bi bi-copy"></i> Copy</button>
-                                <button onClick={() => handleEditTemplate(tpl)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100">Edit</button>
-                                <button onClick={() => handleDeleteTemplate(tpl.id)} className="bg-red-50 text-red-600 px-3 py-1 rounded text-xs hover:bg-red-100">Hapus</button>
-                            </div>}
+                            <div className="mt-3 flex flex-wrap gap-1.5 justify-end">
+                                <button onClick={() => handleExportTemplateJson(tpl)} className="bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded text-xs hover:bg-amber-100 flex items-center gap-1" title="Ekspor Template ke File JSON"><i className="bi bi-download"></i> JSON</button>
+                                {canWrite && (
+                                    <>
+                                        <button onClick={() => handleDuplicateTemplate(tpl.id)} className="bg-green-50 text-green-600 px-2.5 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1" title="Duplikasi Template"><i className="bi bi-copy"></i> Copy</button>
+                                        <button onClick={() => handleEditTemplate(tpl)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 font-semibold">Edit</button>
+                                        <button onClick={() => handleDeleteTemplate(tpl.id)} className="bg-red-50 text-red-600 px-2.5 py-1 rounded text-xs hover:bg-red-100">Hapus</button>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     ))}
                     {templates.length === 0 && <p className="col-span-3 text-center text-gray-500 italic py-10 border rounded bg-gray-50">Belum ada template. Silakan buat baru atau import dari Excel.</p>}
@@ -1727,27 +3168,39 @@ export const TabDesainRapor: React.FC = () => {
                     <div className="flex items-center gap-2 flex-grow min-w-0">
                         <button 
                             type="button"
-                            onClick={() => setIsEditing(false)} 
+                            onClick={handleCancelEditing} 
                             className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" 
-                            title="Batal & Kembali ke Daftar"
+                            title="Batal & Kembali ke Daftar (Memeriksa perubahan belum tersimpan)"
                         >
                             <i className="bi bi-chevron-left text-sm"></i>
                             <span className="hidden sm:inline">Batal</span>
                         </button>
 
-                        <div className="flex-grow max-w-xs min-w-0">
+                        <div className="flex items-center gap-2 flex-grow max-w-xs min-w-0">
                             <input 
                                 type="text" 
                                 value={activeTemplate?.name} 
-                                onChange={e => setActiveTemplate(t => t ? {...t, name: e.target.value} : null)} 
+                                onChange={e => {
+                                    setIsDirty(true);
+                                    setActiveTemplate(t => t ? {...t, name: e.target.value} : null);
+                                }} 
                                 className="w-full border border-slate-200 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-teal-500 bg-slate-50 focus:bg-white" 
                                 placeholder="Nama Template Rapor" 
                             />
+                            {isDirty && (
+                                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full shrink-0" title="Ada perubahan yang belum disimpan (Ctrl+S untuk simpan cepat)">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                    <span>Draf</span>
+                                </span>
+                            )}
                         </div>
 
                         <select 
                             value={activeTemplate?.jenjangId || ''} 
-                            onChange={e => setActiveTemplate(t => t ? {...t, jenjangId: e.target.value ? parseInt(e.target.value) : undefined, kelasId: undefined, rombelId: undefined} : null)}
+                            onChange={e => {
+                                setIsDirty(true);
+                                setActiveTemplate(t => t ? {...t, jenjangId: e.target.value ? parseInt(e.target.value) : undefined, kelasId: undefined, rombelId: undefined} : null);
+                            }}
                             className="hidden sm:block border border-slate-200 rounded-xl px-2 py-1 text-xs font-semibold bg-slate-50 focus:ring-2 focus:ring-teal-500 max-w-[140px]"
                             title="Pilih Marhalah / Jenjang"
                         >
@@ -1778,9 +3231,36 @@ export const TabDesainRapor: React.FC = () => {
                             </button>
                         </div>
 
+                        {/* Collapsible Right Sidebar Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => setIsSidebarCollapsed(prev => !prev)}
+                            className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all shrink-0 ${
+                                isSidebarCollapsed
+                                    ? 'bg-teal-50 text-teal-800 border-teal-300 shadow-2xs font-black'
+                                    : 'bg-white text-slate-600 hover:text-slate-900 border-slate-200'
+                            }`}
+                            title={isSidebarCollapsed ? "Tampilkan Panel Properti Sel (Perlebar)" : "Sembunyikan Panel Properti (Maksimalkan Kanvas)"}
+                        >
+                            <i className={`bi ${isSidebarCollapsed ? 'bi-layout-sidebar' : 'bi-layout-sidebar-reverse'} text-sm`}></i>
+                            <span className="hidden xl:inline">{isSidebarCollapsed ? 'Panel Properti' : 'Perlebar'}</span>
+                        </button>
+
+                        {activeTemplate && (
+                            <button
+                                type="button"
+                                onClick={() => handleExportTemplateJson(activeTemplate)}
+                                className="bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all shrink-0"
+                                title="Ekspor Template ke File JSON (Backup / Bagikan)"
+                            >
+                                <i className="bi bi-download text-xs"></i>
+                                <span className="hidden xl:inline">JSON</span>
+                            </button>
+                        )}
+
                         <button 
                             type="button"
-                            onClick={() => setIsDesignPreviewOpen(true)} 
+                            onClick={() => { commitInlineEdit(); setIsDesignPreviewOpen(true); }} 
                             className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all shrink-0" 
                             title="Pratinjau Hasil Cetak"
                         >
@@ -1788,19 +3268,36 @@ export const TabDesainRapor: React.FC = () => {
                             <span className="hidden md:inline">Preview</span>
                         </button>
                         
+                        {/* Quick Save in place (Ctrl+S) */}
                         <button 
                             type="button"
-                            onClick={handleSaveActiveTemplate} 
-                            className="bg-teal-600 hover:bg-teal-700 text-white px-3 sm:px-4 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95 transition-all shrink-0"
+                            onClick={() => handleSaveActiveTemplate(false)} 
+                            className="bg-teal-600 hover:bg-teal-700 text-white px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95 transition-all shrink-0"
+                            title="Simpan perubahan langsung di kanvas tanpa menutup editor (Ctrl+S)"
                         >
-                            <i className="bi bi-save"></i>
+                            <i className="bi bi-floppy"></i>
                             <span>Simpan</span>
+                            {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-300"></span>}
+                        </button>
+
+                        {/* Save and Exit */}
+                        <button 
+                            type="button"
+                            onClick={() => handleSaveActiveTemplate(true)} 
+                            className="hidden sm:flex bg-slate-800 hover:bg-slate-900 text-white px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold items-center gap-1 shadow-sm active:scale-95 transition-all shrink-0"
+                            title="Simpan perubahan dan kembali ke daftar template rapor"
+                        >
+                            <i className="bi bi-check-lg"></i>
+                            <span>Selesai</span>
                         </button>
                     </div>
                 </div>
 
-                {/* TOOLBAR TIER 2: Excel Mobile Ribbon */}
-                <div className="px-2 py-1.5 bg-slate-50/90 border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto no-scrollbar select-none shrink-0">
+                {/* TOOLBAR TIER 2: Excel Ribbon (Horizontally Scrollable) */}
+                <div
+                    onWheel={handleToolbarWheel}
+                    className="w-full max-w-full px-2 py-1.5 bg-slate-50/95 border-b border-slate-200 flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-width:thin] select-none shrink-0"
+                >
                     {/* Undo & Redo Controls */}
                     <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
                         <button
@@ -1914,17 +3411,83 @@ export const TabDesainRapor: React.FC = () => {
 
                     <div className="h-5 w-px bg-slate-300 shrink-0"></div>
 
-                    {/* Row Management: Add, Delete & Mapel Template Row */}
+                    {/* Copy / Cut / Paste & Format Painter */}
+                    {canWrite && (
+                        <>
+                            <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleCopySelection(false)}
+                                    className="px-2 py-1 hover:bg-slate-100 text-slate-700 disabled:opacity-40 text-xs font-semibold flex items-center gap-1 transition-colors"
+                                    title="Salin Sel Terpilih (Ctrl+C)"
+                                >
+                                    <i className="bi bi-copy text-slate-600"></i>
+                                    <span className="hidden xl:inline">Salin</span>
+                                </button>
+                                <div className="w-px h-4 bg-slate-200"></div>
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleCopySelection(true)}
+                                    className="px-2 py-1 hover:bg-slate-100 text-slate-700 disabled:opacity-40 text-xs font-semibold flex items-center gap-1 transition-colors"
+                                    title="Potong / Pindahkan Sel Terpilih (Ctrl+X)"
+                                >
+                                    <i className="bi bi-scissors text-slate-600"></i>
+                                </button>
+                                <div className="w-px h-4 bg-slate-200"></div>
+                                <button
+                                    type="button"
+                                    disabled={!internalClipboard}
+                                    onClick={() => handlePasteFromInternalClipboard()}
+                                    className="px-2 py-1 hover:bg-slate-100 text-slate-700 disabled:opacity-40 text-xs font-semibold flex items-center gap-1 transition-colors"
+                                    title="Tempel Sel (Ctrl+V)"
+                                >
+                                    <i className="bi bi-clipboard-check text-teal-600"></i>
+                                </button>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleToggleFormatPainter}
+                                disabled={!activeCellData && !isFormatPainterActive}
+                                className={`px-2 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-2xs shrink-0 transition-all disabled:opacity-40 ${
+                                    isFormatPainterActive
+                                        ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-300 animate-pulse'
+                                        : 'bg-white hover:bg-amber-50 text-slate-700 border-slate-200'
+                                }`}
+                                title="Salin Format (Format Painter): Menyalin border, warna, font, dan rata teks ke sel lain"
+                            >
+                                <i className="bi bi-brush"></i>
+                                <span className="hidden lg:inline">{isFormatPainterActive ? 'Klik Target...' : 'Format'}</span>
+                            </button>
+
+                            <div className="h-5 w-px bg-slate-300 shrink-0"></div>
+                        </>
+                    )}
+
+                    {/* Row Management: Insert Above, Insert Below & Delete */}
                     <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
                         <button 
                             type="button" 
-                            onClick={addRow} 
+                            onClick={() => handleInsertRowRelative('above')} 
                             disabled={!canWrite}
-                            className="px-2 py-1 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-40" 
-                            title="Tambah 1 Baris di Bawah"
+                            className="px-2 py-1 hover:bg-teal-50 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-40" 
+                            title="Sisipkan 1 Baris di Atas Sel Aktif"
                         >
-                            <i className="bi bi-plus-lg text-teal-600"></i>
-                            <span>Baris</span>
+                            <i className="bi bi-arrow-bar-up text-teal-600"></i>
+                            <span>+Atas</span>
+                        </button>
+                        <div className="w-px h-4 bg-slate-200"></div>
+                        <button 
+                            type="button" 
+                            onClick={() => handleInsertRowRelative('below')} 
+                            disabled={!canWrite}
+                            className="px-2 py-1 hover:bg-teal-50 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-40" 
+                            title="Sisipkan 1 Baris di Bawah Sel Aktif"
+                        >
+                            <i className="bi bi-arrow-bar-down text-teal-600"></i>
+                            <span>+Bawah</span>
                         </button>
                         <div className="w-px h-4 bg-slate-200"></div>
                         <button 
@@ -1937,33 +3500,54 @@ export const TabDesainRapor: React.FC = () => {
                                 : `Hapus baris terakhir (${activeTemplate?.rowCount || 1})`}
                         >
                             <i className="bi bi-trash3 text-red-500 text-[11px]"></i>
-                            <span>Hapus</span>
                         </button>
                     </div>
 
-                    {/* Sisipkan Format Mapel Repeater */}
+                    {/* Generator Tabel Mapel Kurikulum 1-Klik & + Mapel Repeater */}
+                    <button
+                        type="button"
+                        onClick={() => setIsKurikulumGeneratorOpen(true)}
+                        disabled={!canWrite}
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs shrink-0 transition-colors disabled:opacity-40"
+                        title="Generate tabel mata pelajaran lengkap otomatis dari Data Master Kurikulum (+ Terbilang/Arab, Predikat, Jumlah & Rata-rata)"
+                    >
+                        <i className="bi bi-journal-check text-indigo-600"></i>
+                        <span>Mapel Kurikulum</span>
+                    </button>
+
                     <button
                         type="button"
                         onClick={handleInsertMapelRow}
                         disabled={!canWrite}
                         className="px-2 py-1 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 text-cyan-800 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs shrink-0 transition-colors disabled:opacity-40"
-                        title="Sisipkan baris mapel dengan tag dinamis ($MAPEL_NO, $MAPEL_NAMA, $MAPEL_KKM, $MAPEL_NILAI, $MAPEL_PREDIKAT)"
+                        title="Sisipkan 1 baris mapel dengan tag dinamis ($MAPEL_NO, $MAPEL_NAMA, $MAPEL_KKM, $MAPEL_NILAI, $MAPEL_PREDIKAT)"
                     >
                         <i className="bi bi-table text-cyan-600"></i>
                         <span>+ Mapel</span>
                     </button>
 
-                    {/* Column Management: Add & Delete */}
+                    {/* Column Management: Insert Left, Insert Right & Delete */}
                     <div className="flex items-center rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden shrink-0">
                         <button 
                             type="button" 
-                            onClick={addCol} 
+                            onClick={() => handleInsertColRelative('left')} 
                             disabled={!canWrite}
-                            className="px-2 py-1 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-40" 
-                            title="Tambah 1 Kolom di Kanan"
+                            className="px-2 py-1 hover:bg-teal-50 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-40" 
+                            title="Sisipkan 1 Kolom di Kiri Sel Aktif"
                         >
-                            <i className="bi bi-plus-lg text-teal-600"></i>
-                            <span>Kolom</span>
+                            <i className="bi bi-arrow-bar-left text-teal-600"></i>
+                            <span>+Kiri</span>
+                        </button>
+                        <div className="w-px h-4 bg-slate-200"></div>
+                        <button 
+                            type="button" 
+                            onClick={() => handleInsertColRelative('right')} 
+                            disabled={!canWrite}
+                            className="px-2 py-1 hover:bg-teal-50 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors disabled:opacity-40" 
+                            title="Sisipkan 1 Kolom di Kanan Sel Aktif"
+                        >
+                            <i className="bi bi-arrow-bar-right text-teal-600"></i>
+                            <span>+Kanan</span>
                         </button>
                         <div className="w-px h-4 bg-slate-200"></div>
                         <button 
@@ -1976,7 +3560,6 @@ export const TabDesainRapor: React.FC = () => {
                                 : `Hapus kolom terakhir (${getExcelColName((activeTemplate?.colCount || 1) - 1)})`}
                         >
                             <i className="bi bi-trash3 text-red-500 text-[11px]"></i>
-                            <span>Hapus</span>
                         </button>
                     </div>
 
@@ -2036,6 +3619,443 @@ export const TabDesainRapor: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* TOOLBAR TIER 3: Cell Formula / Direct Input & Quick Cell Formatting Toolbar (Horizontally Scrollable) */}
+                <div
+                    onWheel={handleToolbarWheel}
+                    className="w-full max-w-full px-2 py-1.5 bg-white border-b border-slate-200 flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-width:thin] shrink-0"
+                >
+                    {/* Active Cell Address Badge */}
+                    <div
+                        className="px-2 py-1 bg-slate-100 border border-slate-300 rounded-lg text-[11px] font-mono font-black text-slate-700 min-w-[54px] text-center select-none shrink-0"
+                        title="Alamat Sel Aktif (Klik sel lalu langsung ketik seperti di Excel)"
+                    >
+                        {selectedCells.length === 0
+                            ? '—'
+                            : selectedCells.length === 1
+                            ? `${getExcelColName(selectedCells[0].c)}${selectedCells[0].r + 1}`
+                            : `${getExcelColName(selectedCells[0].c)}${selectedCells[0].r + 1}:${getExcelColName(selectedCells[selectedCells.length - 1].c)}${selectedCells[selectedCells.length - 1].r + 1}`}
+                    </div>
+
+                    {/* Quick Cell Type Selector */}
+                    <select
+                        value={activeCellData?.type || 'label'}
+                        disabled={!activeCellData || !canWrite}
+                        onChange={(e) => updateActiveCell({ type: e.target.value as RaporColumnType })}
+                        className="border border-slate-200 rounded-lg px-1.5 py-1 text-[11px] font-bold bg-slate-50 text-slate-700 focus:ring-1 focus:ring-teal-500 disabled:opacity-40 shrink-0"
+                        title="Tipe Data Sel Aktif"
+                    >
+                        <option value="label">Teks</option>
+                        <option value="data">Data ($)</option>
+                        <option value="input">Input</option>
+                        <option value="formula">Rumus (=)</option>
+                        <option value="dropdown">Dropdown</option>
+                    </select>
+
+                    {/* Excel fx Formula / Direct Value Input with $Tag & =Formula Autocomplete */}
+                    <div className="relative flex items-center w-48 sm:w-64 xl:flex-grow min-w-[180px] shrink-0 border border-slate-300 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500 rounded-lg bg-white">
+                        <span className="px-2 py-1 bg-slate-50 border-r border-slate-200 rounded-l-lg text-[11px] font-serif italic font-bold text-slate-500 select-none shrink-0">
+                            fx
+                        </span>
+                        <input
+                            ref={fxInputRef}
+                            type="text"
+                            disabled={!activeCellData || !canWrite}
+                            value={
+                                editingCell && activeCellData && editingCell.r === activeCellData.row && editingCell.c === activeCellData.col
+                                    ? editingCell.draft
+                                    : activeCellData
+                                    ? getEditableCellString(activeCellData)
+                                    : ''
+                            }
+                            onFocus={() => {
+                                formulaInputHistoryPushedRef.current = false;
+                            }}
+                            onBlur={() => {
+                                setTimeout(() => {
+                                    setAutocompleteState(prev => (prev?.source === 'fx' ? null : prev));
+                                }, 150);
+                            }}
+                            onChange={(e) => {
+                                if (!activeTemplate || !activeCellData || !canWrite) return;
+                                const val = e.target.value;
+                                const caret = e.target.selectionStart ?? val.length;
+                                detectAutocompleteTrigger(val, caret, 'fx');
+                                if (editingCellRef.current && editingCellRef.current.r === activeCellData.row && editingCellRef.current.c === activeCellData.col) {
+                                    const next = { ...editingCellRef.current, draft: val };
+                                    editingCellRef.current = next;
+                                    setEditingCell(next);
+                                    return;
+                                }
+                                if (!formulaInputHistoryPushedRef.current) {
+                                    pushToHistory(activeTemplate);
+                                    formulaInputHistoryPushedRef.current = true;
+                                }
+                                const { updatedTpl, changed } = applySmartCellTextCommit(activeTemplate, activeCellData.row, activeCellData.col, val);
+                                if (changed) {
+                                    setActiveTemplate(updatedTpl);
+                                }
+                            }}
+                            onKeyDown={(e) => {
+                                if (autocompleteState?.source === 'fx' && filteredAutocompleteOptions.length > 0) {
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        setAutocompleteState(prev => prev ? { ...prev, selectedIndex: (prev.selectedIndex + 1) % filteredAutocompleteOptions.length } : null);
+                                        return;
+                                    }
+                                    if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        setAutocompleteState(prev => prev ? { ...prev, selectedIndex: (prev.selectedIndex - 1 + filteredAutocompleteOptions.length) % filteredAutocompleteOptions.length } : null);
+                                        return;
+                                    }
+                                    if (e.key === 'Tab' || e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const chosen = filteredAutocompleteOptions[autocompleteState.selectedIndex] || filteredAutocompleteOptions[0];
+                                        if (chosen) applyAutocompleteOption(chosen);
+                                        return;
+                                    }
+                                    if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        setAutocompleteState(null);
+                                        return;
+                                    }
+                                }
+                                if (e.key === 'Enter' && activeCellData) {
+                                    e.preventDefault();
+                                    moveSelectionFrom(activeCellData.row, activeCellData.col, 1, 0);
+                                    scrollContainerRef.current?.focus({ preventScroll: true });
+                                }
+                            }}
+                            placeholder={activeCellData ? 'Ketik = untuk Rumus atau $ untuk Tag Dinamis (Cth: =TERBILANG($MTK))' : 'Klik sel pada tabel lalu langsung ketik seperti di Excel...'}
+                            className="w-full px-2.5 py-1 text-xs text-slate-800 rounded-r-lg focus:outline-none disabled:bg-slate-50"
+                        />
+                    </div>
+
+                    {/* Quick Font Size, Align, Vertical Align & Float Text Controls (Scrollable Left-Right on All Screen Sizes) */}
+                    {canWrite && (
+                        <div className="flex items-center gap-1 shrink-0 pr-2">
+                            {/* Font Size Stepper */}
+                            <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50 overflow-hidden shrink-0" title="Ukuran Font (Tetap konsisten meskipun sel diperkecil)">
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleBulkUpdateCells({ fontSize: Math.max(7, (activeCellData?.fontSize || 11) - 1) })}
+                                    className="px-1.5 py-1 hover:bg-slate-200 text-slate-600 text-[10px] font-bold disabled:opacity-40"
+                                >
+                                    <i className="bi bi-dash"></i>
+                                </button>
+                                <span className="px-1.5 text-[11px] font-mono font-bold text-slate-800 bg-white border-x border-slate-200 py-0.5 min-w-[26px] text-center">
+                                    {activeCellData?.fontSize || 11}
+                                </span>
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleBulkUpdateCells({ fontSize: Math.min(36, (activeCellData?.fontSize || 11) + 1) })}
+                                    className="px-1.5 py-1 hover:bg-slate-200 text-slate-600 text-[10px] font-bold disabled:opacity-40"
+                                >
+                                    <i className="bi bi-plus"></i>
+                                </button>
+                            </div>
+
+                            {/* Bold & Italic */}
+                            <button
+                                type="button"
+                                disabled={selectedCells.length === 0}
+                                onClick={() => handleBulkUpdateCells({ bold: !activeCellData?.bold })}
+                                className={`px-2 py-1 rounded-lg text-xs font-black border transition-colors disabled:opacity-40 ${activeCellData?.bold ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                                title="Tebal (Bold)"
+                            >
+                                B
+                            </button>
+                            <button
+                                type="button"
+                                disabled={selectedCells.length === 0}
+                                onClick={() => handleBulkUpdateCells({ italic: !activeCellData?.italic })}
+                                className={`px-2 py-1 rounded-lg text-xs italic font-serif font-bold border transition-colors disabled:opacity-40 ${activeCellData?.italic ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                                title="Miring (Italic)"
+                            >
+                                I
+                            </button>
+
+                            {/* Horizontal Align */}
+                            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                {(['left', 'center', 'right'] as const).map((al) => {
+                                    const active = (activeCellData?.align || 'center') === al;
+                                    const icon = al === 'left' ? 'bi-text-left' : al === 'center' ? 'bi-text-center' : 'bi-text-right';
+                                    const label = al === 'left' ? 'Rata Kiri' : al === 'center' ? 'Rata Tengah' : 'Rata Kanan';
+                                    return (
+                                        <button
+                                            key={al}
+                                            type="button"
+                                            disabled={selectedCells.length === 0}
+                                            onClick={() => handleBulkUpdateCells({ align: al })}
+                                            className={`px-1.5 py-0.5 rounded text-xs transition-colors disabled:opacity-40 ${active ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-white'}`}
+                                            title={label}
+                                        >
+                                            <i className={`bi ${icon}`}></i>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Vertical Align */}
+                            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                {(['top', 'middle', 'bottom'] as const).map((va) => {
+                                    const active = (activeCellData?.verticalAlign || 'middle') === va;
+                                    const icon = va === 'top' ? 'bi-align-top' : va === 'middle' ? 'bi-align-middle' : 'bi-align-bottom';
+                                    const label = va === 'top' ? 'Rata Atas' : va === 'middle' ? 'Rata Tengah Vertikal' : 'Rata Bawah';
+                                    return (
+                                        <button
+                                            key={va}
+                                            type="button"
+                                            disabled={selectedCells.length === 0}
+                                            onClick={() => handleBulkUpdateCells({ verticalAlign: va })}
+                                            className={`px-1.5 py-0.5 rounded text-xs transition-colors disabled:opacity-40 ${active ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-white'}`}
+                                            title={label}
+                                        >
+                                            <i className={`bi ${icon}`}></i>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Wrap vs Float Text Toggle */}
+                            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleBulkUpdateCells({ textWrap: 'wrap' })}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-colors disabled:opacity-40 ${(activeCellData?.textWrap || 'wrap') === 'wrap' ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-white'}`}
+                                    title="Wrap Text: Teks turun ke baris bawah jika lebar sel sempit (seperti Wrap Text di Excel)"
+                                >
+                                    <i className="bi bi-text-wrap"></i>
+                                    <span>Wrap</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleBulkUpdateCells({ textWrap: 'float' })}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 transition-colors disabled:opacity-40 ${activeCellData?.textWrap === 'float' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-white'}`}
+                                    title="Float Text: Teks melayang melewati batas sel samping tanpa perlu Merge sel (seperti teks panjang di Excel)"
+                                >
+                                    <i className="bi bi-arrows-expand-vertical rotate-90"></i>
+                                    <span>Float</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleBulkUpdateCells({ textWrap: 'clip' })}
+                                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-colors disabled:opacity-40 ${activeCellData?.textWrap === 'clip' ? 'bg-slate-700 text-white shadow-2xs' : 'text-slate-600 hover:bg-white'}`}
+                                    title="Potong Teks (Clip): Teks tetap 1 baris dan terpotong rapi sesuai lebar sel"
+                                >
+                                    <i className="bi bi-scissors"></i>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* FLOATING AUTOCOMPLETE BAR FOR FX / INLINE CELL EDITOR */}
+                {autocompleteState && filteredAutocompleteOptions.length > 0 && (
+                    <div className="bg-slate-900 text-white px-2.5 py-1.5 border-b border-slate-700 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 z-40">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-teal-300 shrink-0 flex items-center gap-1">
+                            <i className="bi bi-lightning-charge-fill"></i>
+                            {autocompleteState.mode === 'formula' ? 'Saran Rumus:' : 'Saran Tag / Variabel:'}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                            {filteredAutocompleteOptions.map((opt, idx) => {
+                                const isSel = idx === autocompleteState.selectedIndex;
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            applyAutocompleteOption(opt);
+                                        }}
+                                        className={`px-2 py-0.5 rounded-lg text-[11px] font-mono flex items-center gap-1.5 transition-all shrink-0 border ${
+                                            isSel
+                                                ? 'bg-teal-500 text-slate-950 font-black border-teal-300 shadow-sm'
+                                                : 'bg-slate-800 hover:bg-slate-700 text-slate-100 border-slate-700'
+                                        }`}
+                                        title={opt.subtitle}
+                                    >
+                                        <span>{opt.label}</span>
+                                        <span className={`text-[9px] font-sans px-1 rounded ${isSel ? 'bg-slate-900/20 text-slate-950' : 'bg-slate-700 text-slate-300'}`}>
+                                            {opt.badge}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <span className="text-[10px] text-slate-400 ml-auto hidden md:inline shrink-0">
+                            Tab / Klik untuk sisipkan • Esc tutup
+                        </span>
+                    </div>
+                )}
+
+                {/* MULTI-CELL SELECTION TOOLBAR: Docked to Viewport Width & Horizontally Scrollable */}
+                {selectedCells.length > 1 && (
+                    <div
+                        onWheel={handleToolbarWheel}
+                        className="w-full max-w-full px-2.5 py-1.5 bg-slate-900 text-white border-b border-slate-800 flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-width:thin] select-none shrink-0"
+                    >
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="bg-teal-400 text-slate-950 font-black px-2 py-0.5 rounded-lg text-xs font-mono whitespace-nowrap">
+                                {selectedCells.length} Sel Terpilih
+                            </span>
+                            <span className="text-xs text-slate-300 font-semibold whitespace-nowrap hidden sm:inline">
+                                Format Rentang:
+                            </span>
+                        </div>
+
+                        <div className="flex flex-nowrap items-center gap-1.5 shrink-0 pr-2">
+                            {/* Borders */}
+                            <button
+                                type="button"
+                                onClick={() => toggleBorder('all')}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors"
+                                title="Beri Border Kotak Semua Sisi"
+                            >
+                                <i className="bi bi-border-all"></i>
+                                <span>Kotak Penuh</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => toggleBorder('outer')}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors"
+                                title="Beri Border Luar Saja"
+                            >
+                                <i className="bi bi-border-outer"></i>
+                                <span>Luar</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => toggleBorder('none')}
+                                className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors"
+                                title="Hapus Garis Border pada Semua Sel Terpilih"
+                            >
+                                <i className="bi bi-border-none"></i>
+                                <span>Hapus Border</span>
+                            </button>
+
+                            <div className="h-4 w-px bg-slate-700 shrink-0"></div>
+
+                            {/* Styling */}
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ bold: true })}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold shrink-0"
+                                title="Tebalkan Teks (Bold)"
+                            >
+                                B
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ italic: true })}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs italic font-serif shrink-0"
+                                title="Miringkan Teks (Italic)"
+                            >
+                                I
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ align: 'left' })}
+                                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs shrink-0"
+                                title="Rata Kiri"
+                            >
+                                <i className="bi bi-text-left"></i>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ align: 'center' })}
+                                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs shrink-0"
+                                title="Rata Tengah"
+                            >
+                                <i className="bi bi-text-center"></i>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ align: 'right' })}
+                                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs shrink-0"
+                                title="Rata Kanan"
+                            >
+                                <i className="bi bi-text-right"></i>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ verticalAlign: 'top' })}
+                                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs shrink-0"
+                                title="Rata Atas"
+                            >
+                                <i className="bi bi-align-top"></i>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ verticalAlign: 'middle' })}
+                                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs shrink-0"
+                                title="Rata Tengah Vertikal"
+                            >
+                                <i className="bi bi-align-middle"></i>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ verticalAlign: 'bottom' })}
+                                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs shrink-0"
+                                title="Rata Bawah"
+                            >
+                                <i className="bi bi-align-bottom"></i>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ textWrap: 'wrap' })}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold whitespace-nowrap shrink-0"
+                                title="Wrap Text (Teks turun ke baris bawah)"
+                            >
+                                Wrap
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ textWrap: 'float' })}
+                                className="px-2 py-1 bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 border border-amber-400/30 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0"
+                                title="Float Text (Teks melayang melewati batas sel samping)"
+                            >
+                                Float
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ textWrap: 'clip' })}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold whitespace-nowrap shrink-0"
+                                title="Potong Teks (Clip)"
+                            >
+                                Clip
+                            </button>
+
+                            <div className="h-4 w-px bg-slate-700 shrink-0"></div>
+
+                            {/* Merge & Clear */}
+                            <button
+                                type="button"
+                                onClick={mergeCells}
+                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm whitespace-nowrap shrink-0 transition-colors"
+                                title="Gabungkan Sel Terpilih (Merge Cells)"
+                            >
+                                <i className="bi bi-intersect"></i>
+                                <span>Merge</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleBulkClearValues}
+                                className="px-2 py-1 bg-white/10 hover:bg-red-500/40 text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors"
+                                title="Kosongkan Nilai pada Sel-Sel Terpilih"
+                            >
+                                <i className="bi bi-eraser"></i>
+                                <span>Kosongkan</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <div 
                     className="flex-grow overflow-auto p-4 sm:p-6 relative bg-slate-200/70 flex items-start justify-start border-b min-w-0 min-h-0 focus:outline-none" 
                     onMouseUp={handleMouseUp} 
@@ -2064,116 +4084,6 @@ export const TabDesainRapor: React.FC = () => {
                             minWidth: 'max-content'
                         }}
                     >
-                        {/* Multi-Cell Floating Action Ribbon when >1 cells selected */}
-                        {selectedCells.length > 1 && (
-                            <div className="sticky top-0 z-40 mb-3 bg-slate-900/95 backdrop-blur-md text-white px-3.5 py-2 rounded-2xl shadow-xl border border-slate-700/80 flex flex-wrap items-center justify-between gap-2.5 animate-in fade-in slide-in-from-top-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="bg-teal-400 text-slate-950 font-black px-2 py-0.5 rounded-lg text-xs font-mono">
-                                        {selectedCells.length} Sel Terpilih
-                                    </span>
-                                    <span className="text-xs text-slate-300 font-semibold hidden sm:inline">
-                                        Format Rentang:
-                                    </span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    {/* Borders */}
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleBorder('all')}
-                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
-                                        title="Beri Border Kotak Semua Sisi"
-                                    >
-                                        <i className="bi bi-border-all"></i>
-                                        <span>Kotak Penuh</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleBorder('outer')}
-                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
-                                        title="Beri Border Luar Saja"
-                                    >
-                                        <i className="bi bi-border-outer"></i>
-                                        <span>Luar</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleBorder('none')}
-                                        className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
-                                        title="Hapus Garis Border pada Semua Sel Terpilih"
-                                    >
-                                        <i className="bi bi-border-none"></i>
-                                        <span>Hapus Border</span>
-                                    </button>
-
-                                    <div className="h-4 w-px bg-slate-700"></div>
-
-                                    {/* Styling */}
-                                    <button
-                                        type="button"
-                                        onClick={() => handleBulkUpdateCells({ bold: true })}
-                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold"
-                                        title="Tebalkan Teks (Bold)"
-                                    >
-                                        B
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleBulkUpdateCells({ italic: true })}
-                                        className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs italic font-serif"
-                                        title="Miringkan Teks (Italic)"
-                                    >
-                                        I
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleBulkUpdateCells({ align: 'left' })}
-                                        className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs"
-                                        title="Rata Kiri"
-                                    >
-                                        <i className="bi bi-text-left"></i>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleBulkUpdateCells({ align: 'center' })}
-                                        className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs"
-                                        title="Rata Tengah"
-                                    >
-                                        <i className="bi bi-text-center"></i>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleBulkUpdateCells({ align: 'right' })}
-                                        className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs"
-                                        title="Rata Kanan"
-                                    >
-                                        <i className="bi bi-text-right"></i>
-                                    </button>
-
-                                    <div className="h-4 w-px bg-slate-700"></div>
-
-                                    {/* Merge & Clear */}
-                                    <button
-                                        type="button"
-                                        onClick={mergeCells}
-                                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-colors"
-                                        title="Gabungkan Sel Terpilih (Merge Cells)"
-                                    >
-                                        <i className="bi bi-intersect"></i>
-                                        <span>Merge</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleBulkClearValues}
-                                        className="px-2 py-1 bg-white/10 hover:bg-red-500/40 text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
-                                        title="Kosongkan Nilai pada Sel-Sel Terpilih"
-                                    >
-                                        <i className="bi bi-eraser"></i>
-                                        <span>Kosongkan</span>
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
                         <table className="border-collapse bg-white shadow-xl select-none table-fixed ring-1 ring-slate-300">
                             <colgroup>
                                 <col style={{ width: '40px', minWidth: '40px', maxWidth: '40px' }} />
@@ -2301,14 +4211,15 @@ export const TabDesainRapor: React.FC = () => {
                                                 if (cell.hidden) return null;
                                                 const isSelected = selectedCells.some(s => s.r === rIdx && s.c === cIdx);
                                                 const isActive = selectedCells.length === 1 && selectedCells[0].r === rIdx && selectedCells[0].c === cIdx;
+                                                const isEditingThisCell = Boolean(editingCell && editingCell.r === rIdx && editingCell.c === cIdx);
                                                 const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
-                                                let cellClass = `text-[10px] sm:text-xs p-1 relative transition-colors ${showGridlines ? 'border border-dashed border-gray-300' : 'border border-transparent'} `;
+                                                let cellClass = `relative transition-colors ${showGridlines ? 'border border-dashed border-gray-300' : 'border border-transparent'} `;
                                                 if (borders.top) cellClass += "!border-t !border-t-black !border-solid ";
                                                 if (borders.right) cellClass += "!border-r !border-r-black !border-solid ";
                                                 if (borders.bottom) cellClass += "!border-b !border-b-black !border-solid ";
                                                 if (borders.left) cellClass += "!border-l !border-l-black !border-solid ";
-                                                if (isSelected) cellClass += "bg-blue-100 ";
-                                                if (isActive) cellClass += "ring-2 ring-blue-500 z-10 ";
+                                                if (isSelected) cellClass += "bg-blue-100/80 ";
+                                                if (isActive && !isEditingThisCell) cellClass += "ring-2 ring-blue-500 ";
 
                                                 const cellColSpan = cell.colSpan || 1;
                                                 let cellWidthPx = getColWidth(cIdx);
@@ -2328,6 +4239,14 @@ export const TabDesainRapor: React.FC = () => {
                                                     }
                                                 }
 
+                                                const effectiveFontSize = cell.fontSize || 11;
+                                                const hAlign = cell.align || 'center';
+                                                const vAlign = cell.verticalAlign || 'middle';
+                                                const textWrap = cell.textWrap || 'wrap';
+                                                const isFloat = textWrap === 'float' && !(cell.type === 'data' && isMediaTag(cell.value || ''));
+                                                const isClip = textWrap === 'clip';
+                                                const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
+
                                                 return (
                                                     <td 
                                                         key={cell.id} 
@@ -2335,28 +4254,200 @@ export const TabDesainRapor: React.FC = () => {
                                                         rowSpan={cellRowSpan} 
                                                         className={cellClass} 
                                                         onMouseDown={() => handleMouseDown(rIdx, cIdx)} 
-                                                        onMouseEnter={() => handleMouseEnter(rIdx, cIdx)} 
+                                                        onMouseEnter={() => handleMouseEnter(rIdx, cIdx)}
+                                                        onClick={() => {
+                                                            if (wasAlreadySingleSelectedRef.current && selectedCells.length === 1 && !editingCellRef.current && canWrite) {
+                                                                startInlineEdit(rIdx, cIdx);
+                                                            }
+                                                        }}
+                                                        onDoubleClick={() => startInlineEdit(rIdx, cIdx)}
+                                                        onContextMenu={(e) => {
+                                                            e.preventDefault();
+                                                            if (editingCellRef.current) commitInlineEdit();
+                                                            const isAlreadyInSelection = selectedCells.some(s => s.r === rIdx && s.c === cIdx);
+                                                            if (!isAlreadyInSelection) {
+                                                                setSelectedCells([{ r: rIdx, c: cIdx }]);
+                                                            }
+                                                            setContextMenuPos({ x: e.clientX, y: e.clientY, r: rIdx, c: cIdx });
+                                                        }}
                                                         style={{ 
                                                             width: `${cellWidthPx}px`, 
                                                             minWidth: `${cellWidthPx}px`,
                                                             height: `${cellHeightPx}px`,
-                                                            padding: cellWidthPx < 28 ? '0px 1px' : (cellWidthPx < 45 ? '1px 2px' : '4px'),
+                                                            padding: 0,
                                                             boxSizing: 'border-box',
-                                                            textAlign: cell.align || 'center',
-                                                            fontWeight: cell.bold ? 'bold' : undefined,
+                                                            textAlign: hAlign,
+                                                            verticalAlign: vAlign,
+                                                            fontWeight: cell.bold ? 'bold' : 'normal',
                                                             fontStyle: cell.italic ? 'italic' : undefined,
                                                             backgroundColor: !isSelected && cell.backgroundColor ? cell.backgroundColor : undefined,
                                                             color: cell.color || undefined,
-                                                            fontSize: cell.fontSize ? `${cell.fontSize}px` : (cellWidthPx < 28 ? '9px' : undefined)
+                                                            fontSize: `${effectiveFontSize}px`,
+                                                            overflow: (isEditingThisCell || isFloat) ? 'visible' : 'hidden',
+                                                            zIndex: isEditingThisCell ? 40 : isActive ? 25 : isFloat ? 15 : undefined
                                                         }}
                                                     >
-                                                        <div className="w-full h-full flex flex-col items-center justify-center overflow-hidden leading-tight pointer-events-none">
-                                                            <span className="truncate w-full block text-center">{getSimulatedValue(cell)}</span>
-                                                            {cell.key && cellWidthPx >= 35 && <span className="text-[8px] opacity-60 font-normal leading-none mt-0.5">${cell.key}</span>}
-                                                        </div>
+                                                        {isEditingThisCell && editingCell ? (
+                                                            <textarea
+                                                                ref={inlineEditorRef}
+                                                                value={editingCell.draft}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    const caret = e.target.selectionStart ?? val.length;
+                                                                    detectAutocompleteTrigger(val, caret, 'inline');
+                                                                    setEditingCell(prev => {
+                                                                        const next = prev ? { ...prev, draft: val } : null;
+                                                                        editingCellRef.current = next;
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                onDoubleClick={(e) => e.stopPropagation()}
+                                                                onBlur={() => commitInlineEdit()}
+                                                                onKeyDown={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (autocompleteState?.source === 'inline' && filteredAutocompleteOptions.length > 0) {
+                                                                        if (e.key === 'ArrowDown') {
+                                                                            e.preventDefault();
+                                                                            setAutocompleteState(prev => prev ? { ...prev, selectedIndex: (prev.selectedIndex + 1) % filteredAutocompleteOptions.length } : null);
+                                                                            return;
+                                                                        }
+                                                                        if (e.key === 'ArrowUp') {
+                                                                            e.preventDefault();
+                                                                            setAutocompleteState(prev => prev ? { ...prev, selectedIndex: (prev.selectedIndex - 1 + filteredAutocompleteOptions.length) % filteredAutocompleteOptions.length } : null);
+                                                                            return;
+                                                                        }
+                                                                        if (e.key === 'Tab') {
+                                                                            e.preventDefault();
+                                                                            const chosen = filteredAutocompleteOptions[autocompleteState.selectedIndex] || filteredAutocompleteOptions[0];
+                                                                            if (chosen) applyAutocompleteOption(chosen);
+                                                                            return;
+                                                                        }
+                                                                    }
+                                                                    if (e.key === 'Escape') {
+                                                                        e.preventDefault();
+                                                                        if (autocompleteState) {
+                                                                            setAutocompleteState(null);
+                                                                        } else {
+                                                                            cancelInlineEdit();
+                                                                        }
+                                                                    } else if (e.key === 'Enter' && !e.altKey && !e.shiftKey) {
+                                                                        e.preventDefault();
+                                                                        if (autocompleteState?.source === 'inline' && filteredAutocompleteOptions.length > 0) {
+                                                                            const chosen = filteredAutocompleteOptions[autocompleteState.selectedIndex] || filteredAutocompleteOptions[0];
+                                                                            if (chosen) applyAutocompleteOption(chosen);
+                                                                            return;
+                                                                        }
+                                                                        commitInlineEdit({ dr: 1, dc: 0 });
+                                                                    } else if (e.key === 'Enter' && (e.altKey || e.shiftKey)) {
+                                                                        e.preventDefault();
+                                                                        const ta = e.currentTarget;
+                                                                        const start = ta.selectionStart ?? editingCell.draft.length;
+                                                                        const end = ta.selectionEnd ?? editingCell.draft.length;
+                                                                        const nextVal = editingCell.draft.slice(0, start) + '\n' + editingCell.draft.slice(end);
+                                                                        setEditingCell(prev => {
+                                                                            const next = prev ? { ...prev, draft: nextVal } : null;
+                                                                            editingCellRef.current = next;
+                                                                            return next;
+                                                                        });
+                                                                        requestAnimationFrame(() => {
+                                                                            ta.selectionStart = ta.selectionEnd = start + 1;
+                                                                        });
+                                                                    } else if (e.key === 'Tab') {
+                                                                        e.preventDefault();
+                                                                        commitInlineEdit({ dr: 0, dc: e.shiftKey ? -1 : 1 });
+                                                                    }
+                                                                }}
+                                                                title="Enter: Simpan & Turun | Ketik = atau $ untuk saran otomatis | Alt/Shift+Enter: Baris Baru | Esc: Batal"
+                                                                className="absolute top-0 left-0 bg-white text-slate-900 resize-none focus:outline-none ring-2 ring-teal-600 shadow-xl z-50 select-text"
+                                                                style={{
+                                                                    minWidth: `${Math.max(cellWidthPx, 130)}px`,
+                                                                    width: `${Math.max(cellWidthPx, 130)}px`,
+                                                                    minHeight: `${Math.max(cellHeightPx, 28)}px`,
+                                                                    height: `${Math.max(cellHeightPx, 28)}px`,
+                                                                    padding: '3px 5px',
+                                                                    fontSize: `${effectiveFontSize}px`,
+                                                                    fontWeight: cell.bold ? 'bold' : 'normal',
+                                                                    fontStyle: cell.italic ? 'italic' : 'normal',
+                                                                    textAlign: hAlign,
+                                                                    lineHeight: 1.25
+                                                                }}
+                                                            />
+                                                        ) : isFloat ? (
+                                                            <div
+                                                                className="pointer-events-none"
+                                                                style={{
+                                                                    position: 'relative',
+                                                                    width: '100%',
+                                                                    height: `${cellHeightPx}px`,
+                                                                    minHeight: `${cellHeightPx}px`,
+                                                                    overflow: 'visible',
+                                                                    zIndex: 20
+                                                                }}
+                                                            >
+                                                                <div
+                                                                    style={{
+                                                                        position: 'absolute',
+                                                                        whiteSpace: 'pre',
+                                                                        left: hAlign === 'left' ? '4px' : hAlign === 'center' ? '50%' : undefined,
+                                                                        right: hAlign === 'right' ? '4px' : undefined,
+                                                                        top: vAlign === 'top' ? '2px' : vAlign === 'bottom' ? undefined : '50%',
+                                                                        bottom: vAlign === 'bottom' ? '2px' : undefined,
+                                                                        transform:
+                                                                            hAlign === 'center' && vAlign === 'middle'
+                                                                                ? 'translate(-50%, -50%)'
+                                                                                : hAlign === 'center'
+                                                                                ? 'translateX(-50%)'
+                                                                                : vAlign === 'middle'
+                                                                                ? 'translateY(-50%)'
+                                                                                : undefined,
+                                                                        textAlign: hAlign,
+                                                                        lineHeight: 1.25
+                                                                    }}
+                                                                >
+                                                                    {getSimulatedValue(cell)}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div
+                                                                className="pointer-events-none"
+                                                                style={{
+                                                                    width: '100%',
+                                                                    height: `${cellHeightPx}px`,
+                                                                    maxHeight: `${cellHeightPx}px`,
+                                                                    padding: cellPadding,
+                                                                    boxSizing: 'border-box',
+                                                                    overflow: 'hidden',
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
+                                                                    textAlign: hAlign,
+                                                                    lineHeight: 1.25
+                                                                }}
+                                                            >
+                                                                <div
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        marginTop: vAlign === 'top' ? 0 : 'auto',
+                                                                        marginBottom: vAlign === 'bottom' ? 0 : 'auto',
+                                                                        whiteSpace: isClip ? 'pre' : 'pre-wrap',
+                                                                        wordBreak: isClip ? 'normal' : 'break-word',
+                                                                        overflowWrap: isClip ? 'normal' : 'anywhere',
+                                                                        overflow: isClip ? 'hidden' : undefined,
+                                                                        textAlign: hAlign
+                                                                    }}
+                                                                >
+                                                                    {getSimulatedValue(cell)}
+                                                                </div>
+                                                                {cell.key && cellWidthPx >= 35 && cellHeightPx >= 26 && (
+                                                                    <span className="text-[8px] opacity-60 font-normal leading-none mt-0.5 shrink-0">${cell.key}</span>
+                                                                )}
+                                                            </div>
+                                                        )}
 
                                                         {/* Direct Resizers on Active Cell Edge (Touch & Mouse) */}
-                                                        {isActive && (
+                                                        {isActive && !isEditingThisCell && (
                                                             <>
                                                                 <div
                                                                     className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize z-30 hover:bg-teal-500/60 transition-colors touch-none"
@@ -2438,7 +4529,10 @@ export const TabDesainRapor: React.FC = () => {
                 </div>
 
                 {/* WORKSHEET / MULTI-SHEET TABS BAR */}
-                <div className="bg-slate-100 border-t border-slate-300 px-3 py-1 flex items-center gap-1.5 overflow-x-auto select-none shrink-0 no-scrollbar">
+                <div
+                    onWheel={handleToolbarWheel}
+                    className="w-full max-w-full bg-slate-100 border-t border-slate-300 px-3 py-1 flex flex-nowrap items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-width:thin] select-none shrink-0"
+                >
                     <div className="flex items-center gap-1 shrink-0">
                         {activeSheets.map((sh) => {
                             const isActive = sh.id === (activeSheetId || activeTemplate?.activeSheetId);
@@ -2534,7 +4628,7 @@ export const TabDesainRapor: React.FC = () => {
             </div>
 
             {/* PROPERTIES SIDEBAR (Side-by-side on desktop, switchable view on mobile) */}
-            <div className={`${mobileViewTab === 'properties' ? 'flex' : 'hidden lg:flex'} w-full lg:w-80 bg-white border border-slate-300 rounded-xl flex-col shrink-0 min-h-0 overflow-hidden shadow-xs`}>
+            <div className={`${mobileViewTab === 'properties' ? 'flex' : isSidebarCollapsed ? 'hidden' : 'hidden lg:flex'} w-full lg:w-80 bg-white border border-slate-300 rounded-xl flex-col shrink-0 min-h-0 overflow-hidden shadow-xs transition-all`}>
                 <div className="p-2 border-b bg-gray-50 flex items-center justify-between gap-1 shrink-0">
                     <div className="flex bg-slate-200/90 p-0.5 rounded-lg text-xs font-bold">
                         <button
@@ -2564,14 +4658,24 @@ export const TabDesainRapor: React.FC = () => {
                             <span>Lembar &amp; Judul</span>
                         </button>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setMobileViewTab('grid')}
-                        className="lg:hidden text-xs font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-200 flex items-center gap-1 transition-all"
-                    >
-                        <i className="bi bi-grid-3x3"></i>
-                        <span>Kanvas</span>
-                    </button>
+                    <div className="flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={() => setIsSidebarCollapsed(true)}
+                            className="hidden lg:flex p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-md transition-colors"
+                            title="Sembunyikan Panel Properti (Perlebar Kanvas)"
+                        >
+                            <i className="bi bi-chevron-right text-xs"></i>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setMobileViewTab('grid')}
+                            className="lg:hidden text-xs font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-200 flex items-center gap-1 transition-all"
+                        >
+                            <i className="bi bi-grid-3x3"></i>
+                            <span>Kanvas</span>
+                        </button>
+                    </div>
                 </div>
                 {sidebarTab === 'cell' && activeCellData ? (
                     <div className="p-4 space-y-5 overflow-y-auto">
@@ -2806,15 +4910,15 @@ export const TabDesainRapor: React.FC = () => {
                                     <details className="cursor-pointer group">
                                         <summary className="font-semibold text-yellow-700 hover:underline">Lihat Daftar Rumus</summary>
                                         <ul className="mt-1 space-y-1 text-[10px] text-gray-600 pl-2 border-l-2 border-yellow-300">
-                                            <li><code>RATA2($A, $B)</code> : Rata-rata nilai</li>
-                                            <li><code>SUM($A, $B)</code> : Penjumlahan</li>
-                                            <li><code>MAX($A, $B)</code> : Nilai tertinggi</li>
-                                            <li><code>MIN($A, $B)</code> : Nilai terendah</li>
-                                            <li><code>IF($A&gt;75, "Lulus", "Remidi")</code> : Logika IF</li>
-                                            <li><code>TERBILANG($A)</code> : Mengubah angka jadi teks</li>
-                                            <li><code>RANK($TOTAL, "rombel")</code> : Peringkat per Rombel</li>
-                                            <li><code>RANK($TOTAL, "kelas")</code> : Peringkat per Tingkat Kelas</li>
-                                            <li><code>RANK($TOTAL, "jenjang")</code> : Peringkat per Jenjang</li>
+                                            <li><code>=RATA2($A, $B)</code> : Rata-rata nilai</li>
+                                            <li><code>=SUM($A, $B)</code> : Penjumlahan nilai</li>
+                                            <li><code>=TERBILANG($A)</code> : Angka ke huruf Indonesia</li>
+                                            <li><code>=ARAB($A)</code> : Angka ke Arab-Timur (٨٨)</li>
+                                            <li><code>=PREDIKAT($A, "pesantren")</code> : Mumtaz / Jayyid Jiddan</li>
+                                            <li><code>=PREDIKAT($A, "huruf")</code> : Predikat A / B / C / D</li>
+                                            <li><code>=IF($A&gt;=75, "Tuntas", "Remidi")</code> : Logika IF</li>
+                                            <li><code>=MAX($A, $B)</code> / <code>=MIN($A, $B)</code> : Nilai maks / min</li>
+                                            <li><code>=RANK($TOTAL, "rombel")</code> : Peringkat per Rombel</li>
                                         </ul>
                                     </details>
                                 </div>
@@ -2973,11 +5077,45 @@ export const TabDesainRapor: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Actions: Hapus Baris & Kolom Aktif */}
+                            {/* Actions: Sisipkan & Hapus Baris / Kolom Aktif */}
                             {canWrite && (
                                 <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Hapus Baris / Kolom:</span>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Sisipkan / Hapus di Sel Aktif:</span>
                                     <div className="grid grid-cols-2 gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleInsertRowRelative('above')}
+                                            className="px-2 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors shadow-2xs"
+                                        >
+                                            <i className="bi bi-arrow-bar-up"></i>
+                                            <span>+ Baris Atas</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleInsertRowRelative('below')}
+                                            className="px-2 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors shadow-2xs"
+                                        >
+                                            <i className="bi bi-arrow-bar-down"></i>
+                                            <span>+ Baris Bawah</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleInsertColRelative('left')}
+                                            className="px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors shadow-2xs"
+                                        >
+                                            <i className="bi bi-arrow-bar-left"></i>
+                                            <span>+ Kolom Kiri</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleInsertColRelative('right')}
+                                            className="px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 transition-colors shadow-2xs"
+                                        >
+                                            <i className="bi bi-arrow-bar-right"></i>
+                                            <span>+ Kolom Kanan</span>
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                                         <button 
                                             type="button" 
                                             onClick={() => handleDeleteRow(activeCellData.row)} 
@@ -2986,7 +5124,7 @@ export const TabDesainRapor: React.FC = () => {
                                             title={`Hapus seluruh baris ke-${activeCellData.row + 1}`}
                                         >
                                             <i className="bi bi-trash3 text-red-600"></i>
-                                            <span>Baris {activeCellData.row + 1}</span>
+                                            <span>Hapus Baris {activeCellData.row + 1}</span>
                                         </button>
                                         <button 
                                             type="button" 
@@ -2996,17 +5134,43 @@ export const TabDesainRapor: React.FC = () => {
                                             title={`Hapus seluruh kolom ${getExcelColName(activeCellData.col)}`}
                                         >
                                             <i className="bi bi-trash3 text-red-600"></i>
-                                            <span>Kolom {getExcelColName(activeCellData.col)}</span>
+                                            <span>Hapus Kolom {getExcelColName(activeCellData.col)}</span>
                                         </button>
                                     </div>
                                 </div>
                             )}
 
-                            {/* Align & Font Styling */}
+                            {/* Align, Font Size, Vertical Align & Float Text */}
                             <div className="pt-2 border-t border-slate-200/60 space-y-2.5">
                                 <div className="flex items-center justify-between">
-                                    <label className="text-xs font-bold text-slate-700">Perataan & Gaya Teks</label>
+                                    <label className="text-xs font-bold text-slate-700">Gaya, Font &amp; Perataan</label>
                                     <div className="flex items-center gap-1">
+                                        {/* Ukuran Font (px) */}
+                                        <div className="flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden mr-1" title="Ukuran Font (px) - Tetap konsisten saat sel diperkecil">
+                                            <button
+                                                type="button"
+                                                onClick={() => updateActiveCell({ fontSize: Math.max(7, (activeCellData.fontSize || 11) - 1) })}
+                                                className="px-1.5 py-1 hover:bg-slate-100 text-slate-600 text-[10px] font-bold"
+                                            >
+                                                -
+                                            </button>
+                                            <input
+                                                type="number"
+                                                min="7"
+                                                max="48"
+                                                value={activeCellData.fontSize || 11}
+                                                onChange={(e) => updateActiveCell({ fontSize: Math.max(7, Math.min(48, parseInt(e.target.value) || 11)) })}
+                                                className="w-9 text-center text-[11px] font-mono font-bold text-slate-800 border-x border-slate-200 py-0.5 focus:outline-none"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => updateActiveCell({ fontSize: Math.min(48, (activeCellData.fontSize || 11) + 1) })}
+                                                className="px-1.5 py-1 hover:bg-slate-100 text-slate-600 text-[10px] font-bold"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+
                                         {/* Bold & Italic */}
                                         <button 
                                             type="button" 
@@ -3027,31 +5191,101 @@ export const TabDesainRapor: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 w-full justify-between">
-                                    <button 
-                                        type="button" 
-                                        onClick={() => updateActiveCell({ align: 'left' })} 
-                                        className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'left' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
-                                        title="Rata Kiri"
-                                    >
-                                        <i className="bi bi-text-left"></i> Kiri
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        onClick={() => updateActiveCell({ align: 'center' })} 
-                                        className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'center' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
-                                        title="Rata Tengah"
-                                    >
-                                        <i className="bi bi-text-center"></i> Tengah
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        onClick={() => updateActiveCell({ align: 'right' })} 
-                                        className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'right' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
-                                        title="Rata Kanan"
-                                    >
-                                        <i className="bi bi-text-right"></i> Kanan
-                                    </button>
+                                {/* Horizontal Align */}
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Rata Horizontal:</span>
+                                    <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 w-full justify-between">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => updateActiveCell({ align: 'left' })} 
+                                            className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'left' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                            title="Rata Kiri"
+                                        >
+                                            <i className="bi bi-text-left"></i> Kiri
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => updateActiveCell({ align: 'center' })} 
+                                            className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'center' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                            title="Rata Tengah"
+                                        >
+                                            <i className="bi bi-text-center"></i> Tengah
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => updateActiveCell({ align: 'right' })} 
+                                            className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.align || 'center') === 'right' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                            title="Rata Kanan"
+                                        >
+                                            <i className="bi bi-text-right"></i> Kanan
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Vertical Align */}
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Rata Vertikal:</span>
+                                    <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 w-full justify-between">
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveCell({ verticalAlign: 'top' })}
+                                            className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.verticalAlign || 'middle') === 'top' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                        >
+                                            <i className="bi bi-align-top"></i> Atas
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveCell({ verticalAlign: 'middle' })}
+                                            className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.verticalAlign || 'middle') === 'middle' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                        >
+                                            <i className="bi bi-align-middle"></i> Tengah
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveCell({ verticalAlign: 'bottom' })}
+                                            className={`flex-1 py-1 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${(activeCellData.verticalAlign || 'middle') === 'bottom' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                        >
+                                            <i className="bi bi-align-bottom"></i> Bawah
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Mode Teks: Wrap / Float Text / Clip */}
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Mode Teks &amp; Float Text:</span>
+                                    <div className="grid grid-cols-3 gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveCell({ textWrap: 'wrap' })}
+                                            className={`py-1 px-1 rounded text-[11px] font-bold transition-colors flex items-center justify-center gap-1 ${(activeCellData.textWrap || 'wrap') === 'wrap' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                            title="Wrap Text: Teks turun ke bawah saat lebar sel kecil, terpotong jika tinggi dikurangi"
+                                        >
+                                            <i className="bi bi-text-wrap"></i> Wrap
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveCell({ textWrap: 'float' })}
+                                            className={`py-1 px-1 rounded text-[11px] font-bold transition-colors flex items-center justify-center gap-1 ${activeCellData.textWrap === 'float' ? 'bg-amber-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                            title="Float Text: Teks melayang melewati batas sel samping seperti Excel tanpa perlu Merge"
+                                        >
+                                            <i className="bi bi-arrows-expand-vertical rotate-90"></i> Float
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateActiveCell({ textWrap: 'clip' })}
+                                            className={`py-1 px-1 rounded text-[11px] font-bold transition-colors flex items-center justify-center gap-1 ${activeCellData.textWrap === 'clip' ? 'bg-slate-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                            title="Potong (Clip): Teks tetap 1 baris dan dipotong rapi di tepi sel"
+                                        >
+                                            <i className="bi bi-scissors"></i> Potong
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                                        {activeCellData.textWrap === 'float'
+                                            ? 'Float Text aktif: teks panjang melayang bebas lintas sel samping tanpa perlu Merge.'
+                                            : activeCellData.textWrap === 'clip'
+                                            ? 'Potong aktif: teks dijaga 1 baris dan dipotong tepat di batas sel.'
+                                            : 'Wrap aktif: ukuran font tetap utuh, teks otomatis turun ke bawah atau terpotong jika tinggi baris dikurangi.'}
+                                    </p>
                                 </div>
                             </div>
 
@@ -3414,181 +5648,281 @@ export const TabDesainRapor: React.FC = () => {
                 )}
             </div>
             
-            {/* PREVIEW MODAL */}
-            {isDesignPreviewOpen && activeTemplate && (
-                <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[80] flex justify-center items-center p-0 sm:p-4">
-                    <div className="bg-white sm:rounded-2xl shadow-2xl w-full max-w-6xl h-full sm:h-[92vh] flex flex-col overflow-hidden">
-                        <div className="p-3 sm:p-4 border-b border-slate-200 flex flex-wrap justify-between items-center bg-slate-50 gap-2 shrink-0">
-                            <div className="flex items-center gap-2 sm:gap-3 flex-grow min-w-0">
-                                <h3 className="text-sm sm:text-base font-black text-slate-800 shrink-0">Preview Rapor</h3>
-                                <div className="flex bg-slate-200/80 p-0.5 sm:p-1 rounded-xl text-xs font-bold overflow-x-auto no-scrollbar max-w-full">
-                                    <button
-                                        type="button"
-                                        onClick={() => setPreviewSheetId('all')}
-                                        className={`px-2.5 py-1 rounded-lg transition-all shrink-0 ${previewSheetId === 'all' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
-                                    >
-                                        Semua ({activeSheets.length})
-                                    </button>
-                                    {activeSheets.map((sh) => (
-                                        <button
-                                            key={sh.id}
-                                            type="button"
-                                            onClick={() => setPreviewSheetId(sh.id)}
-                                            className={`px-2.5 py-1 rounded-lg transition-all shrink-0 ${previewSheetId === sh.id ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
-                                        >
-                                            {sh.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <button 
-                                type="button"
-                                onClick={() => setIsDesignPreviewOpen(false)} 
-                                className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors shrink-0"
-                                title="Tutup"
-                            >
-                                <i className="bi bi-x-lg text-sm"></i>
-                            </button>
-                        </div>
-                        <div className="flex-grow overflow-auto bg-slate-300 p-2 sm:p-6 md:p-8 flex flex-col items-center gap-6">
-                            {activeSheets
-                                .filter(sh => previewSheetId === 'all' || previewSheetId === sh.id)
-                                .map((sh, sIdx) => {
-                                    // Hitung dimensi kolom dan total lebar lembar ini
-                                    const colCount = sh.colCount || sh.cells?.[0]?.length || 0;
-                                    const colWidths: number[] = [];
-                                    for (let c = 0; c < colCount; c++) {
-                                        let colW = 100;
-                                        if (sh.cells) {
-                                            for (let r = 0; r < sh.cells.length; r++) {
-                                                const cell = sh.cells[r]?.[c];
-                                                if (cell && !cell.hidden && (!cell.colSpan || cell.colSpan === 1)) {
-                                                    if (typeof cell.width === 'number' && cell.width > 0) {
-                                                        colW = cell.width;
-                                                        break;
-                                                    }
-                                                }
-                                            }
+            {/* PREVIEW MODAL WITH LIVE SANTRI DATA SELECTOR */}
+            {isDesignPreviewOpen && activeTemplate && (() => {
+                const candidateSantriList = santriList.filter(s => {
+                    if (s.status !== 'Aktif') return false;
+                    if (activeTemplate.rombelId) return s.rombelId === activeTemplate.rombelId;
+                    if (activeTemplate.kelasId) return s.kelasId === activeTemplate.kelasId;
+                    if (activeTemplate.jenjangId) return s.jenjangId === activeTemplate.jenjangId;
+                    return true;
+                });
+                const effectiveSantriOptions = candidateSantriList.length > 0
+                    ? candidateSantriList
+                    : santriList.filter(s => s.status === 'Aktif');
+
+                const selectedRealSantri = previewSantriId !== 'simulasi'
+                    ? santriList.find(s => String(s.id) === previewSantriId) || null
+                    : null;
+
+                const matchingRecords = selectedRealSantri
+                    ? raporRecords
+                        .filter(r => r.santriId === selectedRealSantri.id)
+                        .sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
+                    : [];
+                const activeRecord = matchingRecords[0];
+
+                let realParsedCustomData: Record<string, any> = {};
+                if (activeRecord?.customData) {
+                    try {
+                        realParsedCustomData = typeof activeRecord.customData === 'string'
+                            ? JSON.parse(activeRecord.customData)
+                            : activeRecord.customData;
+                    } catch {
+                        realParsedCustomData = {};
+                    }
+                }
+
+                const previewSantriObj = selectedRealSantri || ({
+                    id: 1,
+                    namaLengkap: 'Ahmad Fauzan',
+                    nis: '202401001',
+                    nisn: '0081234567',
+                    tempatLahir: 'Banda Aceh',
+                    tanggalLahir: '2010-05-14',
+                    namaAyah: 'H. Abdullah',
+                    namaIbu: 'Hj. Siti Aminah',
+                    rombelId: activeTemplate.rombelId || settings.rombel?.[0]?.id || 1,
+                    kelasId: activeTemplate.kelasId || settings.kelas?.[0]?.id || 1,
+                    jenjangId: activeTemplate.jenjangId || settings.jenjang?.[0]?.id || 1,
+                    status: 'Aktif'
+                } as any);
+
+                // Collect initial variables across all sheets (real grades or sample 85-92 numbers so formulas work)
+                const baseExtraVars: Record<string, any> = { ...realParsedCustomData };
+                let sampleIdx = 0;
+                const sampleGrades = [88, 92, 85, 79, 90, 84, 87, 94];
+                activeSheets.forEach(sheetObj => {
+                    sheetObj.cells.forEach(row => {
+                        row.forEach(c => {
+                            if (c.hidden || !c.key) return;
+                            const existingVal = baseExtraVars[c.key];
+                            const hasVal = existingVal !== undefined && existingVal !== null && String(existingVal).trim() !== '';
+                            if (!hasVal) {
+                                if (!selectedRealSantri || previewFallbackDummyGrades) {
+                                    if (c.type === 'input') {
+                                        const ku = c.key.toUpperCase();
+                                        if (ku.includes('CATATAN')) {
+                                            baseExtraVars[c.key] = 'Tingkatkan terus semangat belajar, muraja\'ah hafalan, dan adab keseharian di asrama.';
+                                        } else if (ku.includes('KEPUTUSAN')) {
+                                            baseExtraVars[c.key] = 'NAIK KE KELAS BERIKUTNYA';
+                                        } else {
+                                            baseExtraVars[c.key] = String(sampleGrades[sampleIdx % sampleGrades.length]);
+                                            sampleIdx++;
                                         }
-                                        colWidths.push(colW);
+                                    } else if (c.type === 'dropdown') {
+                                        baseExtraVars[c.key] = c.options && c.options.length > 0 ? c.options[0] : 'Baik';
                                     }
-                                    const totalColWidth = colWidths.reduce((a, b) => a + b, 0) || 720;
-                                    const isF4 = sh.paperSize === 'F4' || activeTemplate.paperSize === 'F4';
-                                    const paperWidth = isF4 ? '21.5cm' : '21cm';
-                                    const paperMinHeight = isF4 ? '33cm' : '29.7cm';
-                                    const availableW = isF4 ? 765 : 746;
+                                }
+                            }
+                        });
+                    });
+                });
 
-                                    // Hitung skala otomatis agar tidak melebihi area preview
-                                    const horizScale = totalColWidth > availableW ? Math.max(0.55, availableW / totalColWidth) : 1.0;
-                                    const rowCount = sh.cells.length;
-                                    const isFitPage = sh.fitToPage !== false && activeTemplate.fitToPage !== false;
-                                    const vertScale = isFitPage
-                                        ? (rowCount <= 22 ? 1.0 : rowCount <= 27 ? 0.94 : rowCount <= 32 ? 0.88 : rowCount <= 38 ? 0.82 : 0.72)
-                                        : 1.0;
-                                    const sheetScale = isFitPage ? Math.min(horizScale, vertScale) : horizScale;
+                // Compute numeric summary from baseExtraVars for $TOTAL_NILAI & $RATA_RATA
+                const numericInputs: number[] = [];
+                activeSheets.forEach(sheetObj => {
+                    sheetObj.cells.forEach(row => {
+                        row.forEach(c => {
+                            if (!c.hidden && c.type === 'input' && c.key) {
+                                const n = Number(baseExtraVars[c.key]);
+                                if (!isNaN(n) && String(baseExtraVars[c.key] ?? '').trim() !== '') {
+                                    numericInputs.push(n);
+                                }
+                            }
+                        });
+                    });
+                });
+                const sumVal = numericInputs.reduce((a, b) => a + b, 0);
+                const avgVal = numericInputs.length > 0 ? Number((sumVal / numericInputs.length).toFixed(1)) : 88;
 
-                                    return (
-                                        <div key={sh.id} className="w-full overflow-x-auto p-1 flex justify-start sm:justify-center">
-                                            <div
-                                                className="bg-white shadow-2xl p-6 sm:p-8 relative shrink-0 rounded-xs border border-slate-300"
-                                                style={{
-                                                    width: paperWidth,
-                                                    minHeight: paperMinHeight,
-                                                    boxSizing: 'border-box'
-                                                }}
+                const baseResolveContext: RaporResolveContext = {
+                    settings,
+                    digitalAssets,
+                    santri: previewSantriObj,
+                    record: activeRecord,
+                    targetDate: new Date(),
+                    extraVars: baseExtraVars,
+                    calculation: {
+                        totalNilai: sumVal || 850,
+                        rataRata: avgVal,
+                        ranking: 1,
+                        totalSantri: Math.max(1, effectiveSantriOptions.length || 28),
+                        predikat: avgVal >= 90 ? 'A' : avgVal >= 80 ? 'B' : 'C'
+                    }
+                };
+
+                // Multi-pass chained evaluation so formula cells with keys feed into downstream formulas (e.g. =TERBILANG($TOTAL))
+                for (let pass = 0; pass < 2; pass++) {
+                    activeSheets.forEach(sheetObj => {
+                        sheetObj.cells.forEach(row => {
+                            row.forEach(c => {
+                                if (!c.hidden && c.type === 'formula' && c.key && c.value) {
+                                    baseExtraVars[c.key] = resolveRaporText(c.value, baseResolveContext);
+                                }
+                            });
+                        });
+                    });
+                }
+
+                return (
+                    <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[80] flex justify-center items-center p-0 sm:p-4">
+                        <div className="bg-white sm:rounded-2xl shadow-2xl w-full max-w-6xl h-full sm:h-[92vh] flex flex-col overflow-hidden">
+                            <div className="p-3 sm:p-4 border-b border-slate-200 flex flex-wrap justify-between items-center bg-slate-50 gap-2 shrink-0">
+                                <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-grow min-w-0">
+                                    <h3 className="text-sm sm:text-base font-black text-slate-800 shrink-0 flex items-center gap-1.5">
+                                        <i className="bi bi-printer text-teal-600"></i>
+                                        <span>Preview Cetak</span>
+                                    </h3>
+                                    <div className="flex bg-slate-200/80 p-0.5 sm:p-1 rounded-xl text-xs font-bold overflow-x-auto no-scrollbar max-w-full">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreviewSheetId('all')}
+                                            className={`px-2.5 py-1 rounded-lg transition-all shrink-0 ${previewSheetId === 'all' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+                                        >
+                                            Semua ({activeSheets.length})
+                                        </button>
+                                        {activeSheets.map((sh) => (
+                                            <button
+                                                key={sh.id}
+                                                type="button"
+                                                onClick={() => setPreviewSheetId(sh.id)}
+                                                className={`px-2.5 py-1 rounded-lg transition-all shrink-0 ${previewSheetId === sh.id ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
                                             >
-                                                <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono select-none flex items-center gap-2">
-                                                    <span>{sh.name} (Lembar {sIdx + 1})</span>
-                                                    <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-bold text-slate-500 uppercase">{isF4 ? 'F4' : 'A4'}</span>
-                                                    {sheetScale < 1 && (
-                                                        <span className="px-1.5 py-0.5 bg-teal-50 text-teal-700 rounded text-[9px] font-bold">
-                                                            Skala: {Math.round(sheetScale * 100)}%
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                {sh.name}
+                                            </button>
+                                        ))}
+                                    </div>
 
-                                                <div
-                                                    className="w-full h-full flex flex-col justify-start"
-                                                    style={{
-                                                        transform: sheetScale < 1 ? `scale(${sheetScale})` : undefined,
-                                                        transformOrigin: 'top center',
-                                                        width: sheetScale < 1 ? `${(100 / sheetScale).toFixed(2)}%` : '100%'
-                                                    }}
-                                                >
-                                                    {/* Header Judul Kustom Lembar */}
-                                                    {(sh.customTitle || sh.showJudul) && (
-                                                        <div className="text-center mb-4 space-y-0.5">
-                                                            {(sh.customTitle || sh.name).split('\n').map((line, lIdx) => (
-                                                                <div
-                                                                    key={lIdx}
-                                                                    className={`${lIdx === 0 ? 'font-black text-sm text-slate-900 tracking-wide uppercase' : 'font-semibold text-xs text-slate-700'}`}
-                                                                >
-                                                                    {line
-                                                                        .replace('$SEMESTER', 'Ganjil')
-                                                                        .replace('$TAHUN_AJARAN', '2024/2025')
-                                                                        .replace('$NAMA_PONPES', settings.namaPonpes || 'Pondok Pesantren')
-                                                                        .replace('$ROMBEL', 'VII-A')}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-
-                                                    <table className="w-full border-collapse text-xs table-fixed">
-                                                        <colgroup>
-                                                            {colWidths.map((w, cIdx) => (
-                                                                <col key={cIdx} style={{ width: `${((w / totalColWidth) * 100).toFixed(2)}%` }} />
-                                                            ))}
-                                                        </colgroup>
-                                                        <tbody>
-                                                            {sh.cells.map((row, rIdx) => {
-                                                                const rH = row?.[0]?.height;
-                                                                return (
-                                                                    <tr key={rIdx} style={{ height: rH ? `${rH}px` : undefined }}>
-                                                                        {row.map((cell, cIdx) => {
-                                                                            if (cell.hidden) return null;
-                                                                            const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
-                                                                            const isLogo = typeof cell.value === 'string' && (cell.value.includes('LOGO') || cell.value === '$LOGO');
-                                                                            const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
-
-                                                                            return (
-                                                                                <td 
-                                                                                    key={`${rIdx}-${cIdx}`} 
-                                                                                    colSpan={cell.colSpan} 
-                                                                                    rowSpan={cell.rowSpan} 
-                                                                                    style={{ 
-                                                                                        borderTop: (!isLogo && borders.top) ? '1px solid black' : 'none', 
-                                                                                        borderRight: (!isLogo && borders.right) ? '1px solid black' : 'none', 
-                                                                                        borderBottom: (!isLogo && borders.bottom) ? '1px solid black' : 'none', 
-                                                                                        borderLeft: (!isLogo && borders.left) ? '1px solid black' : 'none', 
-                                                                                        textAlign: cell.align || 'center', 
-                                                                                        backgroundColor: hasCustomBg ? cell.backgroundColor : 'transparent',
-                                                                                        fontWeight: cell.bold ? 'bold' : 'normal',
-                                                                                        fontStyle: cell.italic ? 'italic' : undefined,
-                                                                                        color: cell.color || undefined,
-                                                                                        fontSize: cell.fontSize ? `${cell.fontSize}px` : (colCount > 12 ? '10px' : '11px'),
-                                                                                        padding: colCount > 10 ? '2px 4px' : '4px',
-                                                                                        boxSizing: 'border-box',
-                                                                                        overflow: 'hidden',
-                                                                                        wordBreak: 'break-word'
-                                                                                    }}
-                                                                                >
-                                                                                    {getSimulatedValue(cell)}
-                                                                                </td>
-                                                                            );
-                                                                        })}
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
+                                    {/* Live Santri Data Selector */}
+                                    <div className="flex flex-wrap items-center gap-2 ml-auto sm:ml-2">
+                                        <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-2.5 py-1 shadow-2xs">
+                                            <i className="bi bi-person-check-fill text-teal-600 text-xs"></i>
+                                            <select
+                                                value={previewSantriId}
+                                                onChange={(e) => setPreviewSantriId(e.target.value)}
+                                                className="text-xs font-bold text-slate-700 bg-transparent focus:outline-none max-w-[210px] sm:max-w-[260px]"
+                                                title="Uji tampilan desain dengan data santri asli dari database"
+                                            >
+                                                <option value="simulasi">Data Simulasi (Ahmad Fauzan)</option>
+                                                {effectiveSantriOptions.slice(0, 150).map(s => {
+                                                    const rName = settings.rombel.find(r => r.id === s.rombelId)?.nama || '-';
+                                                    const hasRec = raporRecords.some(rec => rec.santriId === s.id);
+                                                    return (
+                                                        <option key={s.id} value={String(s.id)}>
+                                                            {s.namaLengkap} ({rName}){hasRec ? ' ✓ Ada Nilai' : ''}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
                                         </div>
-                                    );
-                                })}
+
+                                        {selectedRealSantri && (
+                                            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-xl cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={previewFallbackDummyGrades}
+                                                    onChange={(e) => setPreviewFallbackDummyGrades(e.target.checked)}
+                                                    className="rounded text-teal-600 focus:ring-teal-500"
+                                                />
+                                                <span>Isi contoh angka jika nilai kosong</span>
+                                            </label>
+                                        )}
+                                    </div>
+                                </div>
+                                <button 
+                                    type="button"
+                                    onClick={() => setIsDesignPreviewOpen(false)} 
+                                    className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors shrink-0"
+                                    title="Tutup"
+                                >
+                                    <i className="bi bi-x-lg text-sm"></i>
+                                </button>
+                            </div>
+                            <div className="flex-grow overflow-auto bg-slate-300 p-2 sm:p-6 md:p-8 flex flex-col items-center gap-6">
+                                {activeSheets
+                                    .filter(sh => previewSheetId === 'all' || previewSheetId === sh.id)
+                                    .map((sh, sIdx) => {
+                                        const renderPreviewCell = (cell: GridCell): { content: React.ReactNode; isMedia: boolean } => {
+                                            if (cell.type === 'data' && isMediaTag(cell.value || '')) {
+                                                const imgSrc = getMediaTagImageSrc(cell.value?.trim() || '', baseResolveContext);
+                                                if (imgSrc) {
+                                                    const val = cell.value?.trim() || '';
+                                                    const isStempel = val.includes('STEMPEL');
+                                                    const isTtd = val.includes('TTD');
+                                                    return {
+                                                        content: (
+                                                            <div className="flex items-center justify-center p-0.5">
+                                                                <img
+                                                                    src={imgSrc}
+                                                                    alt={val}
+                                                                    className={`object-contain ${isStempel ? 'max-h-12 max-w-[80px] opacity-90' : isTtd ? 'max-h-10 max-w-[100px]' : 'max-h-10 max-w-[80px]'}`}
+                                                                />
+                                                            </div>
+                                                        ),
+                                                        isMedia: true
+                                                    };
+                                                }
+                                                return { content: getSimulatedValue(cell), isMedia: true };
+                                            }
+                                            if (cell.type === 'input') {
+                                                const v = cell.key ? baseExtraVars[cell.key] : '';
+                                                return { content: v !== undefined && v !== '' ? String(v) : '-', isMedia: false };
+                                            }
+                                            if (cell.type === 'dropdown') {
+                                                const v = cell.key ? baseExtraVars[cell.key] : undefined;
+                                                const fallbackOpt = cell.options && cell.options.length > 0 ? cell.options[0] : '-';
+                                                return { content: v !== undefined && v !== '' ? String(v) : fallbackOpt, isMedia: false };
+                                            }
+                                            if (cell.value && (cell.value.includes('$') || cell.value.trim().startsWith('=') || cell.type === 'formula')) {
+                                                const rawExpr = cell.type === 'formula' && !cell.value.trim().startsWith('=')
+                                                    ? `=${cell.value.trim()}`
+                                                    : cell.value;
+                                                return { content: resolveRaporText(rawExpr, baseResolveContext), isMedia: false };
+                                            }
+                                            return { content: getSimulatedValue(cell), isMedia: false };
+                                        };
+
+                                        return (
+                                            <DesignPreviewSheetCard
+                                                key={sh.id}
+                                                sh={sh}
+                                                sIdx={sIdx}
+                                                activeTemplate={activeTemplate}
+                                                settings={settings}
+                                                digitalAssets={digitalAssets}
+                                                resolveContext={baseResolveContext}
+                                                renderPreviewCell={renderPreviewCell}
+                                            />
+                                        );
+                                    })}
+                            </div>
                         </div>
                     </div>
-                </div>
+                );
+            })()}
+
+            {/* 1-CLICK KURIKULUM GENERATOR MODAL */}
+            {activeTemplate && (
+                <RaporKurikulumGeneratorModal
+                    isOpen={isKurikulumGeneratorOpen}
+                    onClose={() => setIsKurikulumGeneratorOpen(false)}
+                    settings={settings}
+                    defaultJenjangId={activeTemplate.jenjangId}
+                    existingGrid={activeTemplate.cells}
+                    activeRowIndex={selectedCells.length > 0 ? Math.max(...selectedCells.map(s => s.r)) : 0}
+                    onGenerateRows={handleApplyKurikulumRows}
+                />
             )}
 
             {/* EXCEL PASTE MODAL */}
@@ -3621,6 +5955,201 @@ export const TabDesainRapor: React.FC = () => {
                 }}
                 showToast={showToast}
             />
+
+            {/* CUSTOM CONTEXT MENU (Right-click on Table Cell) */}
+            {contextMenuPos && (
+                <div
+                    className="fixed z-[100] bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 w-60 text-xs font-semibold text-slate-700 animate-fade-in select-none"
+                    style={{
+                        top: `${Math.min(contextMenuPos.y, window.innerHeight - 440)}px`,
+                        left: `${Math.min(contextMenuPos.x, window.innerWidth - 260)}px`
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                        <span>Aksi Sel ({getExcelColName(contextMenuPos.c)}{contextMenuPos.r + 1})</span>
+                        <span className="text-slate-300 font-mono text-[9px]">Menu Excel</span>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleCopySelection(true);
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite || selectedCells.length === 0}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center justify-between disabled:opacity-40"
+                    >
+                        <span className="flex items-center gap-2"><i className="bi bi-scissors text-slate-500"></i> Potong (Cut)</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Ctrl+X</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleCopySelection(false);
+                            setContextMenuPos(null);
+                        }}
+                        disabled={selectedCells.length === 0}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center justify-between disabled:opacity-40"
+                    >
+                        <span className="flex items-center gap-2"><i className="bi bi-copy text-slate-500"></i> Salin (Copy)</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Ctrl+C</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handlePasteFromInternalClipboard();
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite || !internalClipboard}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center justify-between disabled:opacity-40"
+                    >
+                        <span className="flex items-center gap-2"><i className="bi bi-clipboard text-slate-500"></i> Tempel (Paste)</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Ctrl+V</span>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100"></div>
+
+                    {selectedCells.length > 1 ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                mergeCells();
+                                setContextMenuPos(null);
+                            }}
+                            disabled={!canWrite}
+                            className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2 text-indigo-700 font-bold"
+                        >
+                            <i className="bi bi-union"></i>
+                            <span>Gabungkan Sel (Merge)</span>
+                        </button>
+                    ) : (activeCellData && ((activeCellData.rowSpan || 1) > 1 || (activeCellData.colSpan || 1) > 1)) ? (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                unmergeCells();
+                                setContextMenuPos(null);
+                            }}
+                            disabled={!canWrite}
+                            className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2 text-amber-700 font-bold"
+                        >
+                            <i className="bi bi-arrows-angle-expand"></i>
+                            <span>Pisahkan Sel (Unmerge)</span>
+                        </button>
+                    ) : null}
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleInsertRowRelative('above');
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2"
+                    >
+                        <i className="bi bi-arrow-bar-up text-teal-600"></i>
+                        <span>Sisipkan Baris Di Atas</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleInsertRowRelative('below');
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2"
+                    >
+                        <i className="bi bi-arrow-bar-down text-teal-600"></i>
+                        <span>Sisipkan Baris Di Bawah</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleInsertColRelative('left');
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2"
+                    >
+                        <i className="bi bi-arrow-bar-left text-teal-600"></i>
+                        <span>Sisipkan Kolom Di Kiri</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleInsertColRelative('right');
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2"
+                    >
+                        <i className="bi bi-arrow-bar-right text-teal-600"></i>
+                        <span>Sisipkan Kolom Di Kanan</span>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100"></div>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleDeleteRow(contextMenuPos.r);
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite || !activeTemplate || activeTemplate.rowCount <= 1}
+                        className="w-full px-3 py-1.5 text-left hover:bg-rose-50 text-rose-700 flex items-center gap-2"
+                    >
+                        <i className="bi bi-trash text-rose-500"></i>
+                        <span>Hapus Baris Ini</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleDeleteCol(contextMenuPos.c);
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite || !activeTemplate || activeTemplate.colCount <= 1}
+                        className="w-full px-3 py-1.5 text-left hover:bg-rose-50 text-rose-700 flex items-center gap-2"
+                    >
+                        <i className="bi bi-trash text-rose-500"></i>
+                        <span>Hapus Kolom Ini</span>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100"></div>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleBulkClearValues();
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center justify-between text-slate-600"
+                    >
+                        <span className="flex items-center gap-2"><i className="bi bi-backspace"></i> Kosongkan Isi Sel</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Del</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            toggleBorder('none');
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center gap-2 text-slate-600"
+                    >
+                        <i className="bi bi-border"></i>
+                        <span>Hapus Garis / Border Sel</span>
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
+

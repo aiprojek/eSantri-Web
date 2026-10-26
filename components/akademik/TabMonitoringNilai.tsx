@@ -6,6 +6,7 @@ import { db } from '../../db';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { formatAcademicYearDisplay } from '../../utils/academicYear';
+import { extractTemplateKeys } from '../../services/raporExcelService';
 
 export interface TabMonitoringNilaiProps {
     onNavigateToTab?: (tab: string, rombelId?: number) => void;
@@ -43,7 +44,10 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                     .toArray();
                 
                 // Map records by Santri ID for fast lookup
-                const recordMap = new Set(records.map(r => r.santriId));
+                const recMap = new Map<number, any>();
+                records.forEach(r => recMap.set(r.santriId, r));
+
+                const templates = settings.raporTemplates || [];
 
                 // 2. Iterate Rombels to build stats
                 const rombelStats = settings.rombel.map(rombel => {
@@ -51,26 +55,72 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                     const jenjang = settings.jenjang.find(j => j.id === kelas?.jenjangId);
                     const wali = settings.tenagaPengajar.find(t => t.id === rombel.waliKelasId);
 
+                    // Find template to know expected keys
+                    const matchedTemplate =
+                        templates.find(t => t.jenjangId === kelas?.jenjangId && (!t.kelasId || t.kelasId === kelas?.id)) ||
+                        templates.find(t => t.jenjangId === kelas?.jenjangId) ||
+                        (templates.length > 0 ? templates[0] : null);
+
+                    const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
+                    const expectedCount = templateKeys.length;
+
                     // Get Active Santri in this Rombel
                     const santriInRombel = santriList.filter(s => s.rombelId === rombel.id && s.status === 'Aktif');
                     const totalSantri = santriInRombel.length;
 
-                    // Count how many have records
-                    const submittedCount = santriInRombel.filter(s => recordMap.has(s.id)).length;
-                    
-                    const percent = totalSantri > 0 ? Math.round((submittedCount / totalSantri) * 100) : 0;
-                    
+                    let completeCount = 0;
+                    let partialCount = 0;
+                    let emptyCount = 0;
+
+                    santriInRombel.forEach(s => {
+                        const rec = recMap.get(s.id);
+                        if (!rec || !rec.customData) {
+                            emptyCount++;
+                            return;
+                        }
+                        let filled = 0;
+                        try {
+                            const parsed = JSON.parse(rec.customData);
+                            filled = Object.keys(parsed).filter(
+                                k => parsed[k] !== undefined && parsed[k] !== null && String(parsed[k]).trim() !== ''
+                            ).length;
+                        } catch {
+                            filled = 0;
+                        }
+
+                        if (filled === 0) {
+                            emptyCount++;
+                        } else if (expectedCount > 0 ? filled >= expectedCount : filled >= 3) {
+                            completeCount++;
+                        } else {
+                            partialCount++;
+                        }
+                    });
+
+                    // Percent calculation: weighted complete (1.0) and partial (0.5)
+                    const percent =
+                        totalSantri > 0
+                            ? Math.min(100, Math.round(((completeCount + partialCount * 0.5) / totalSantri) * 100))
+                            : 0;
+
                     let status: 'Lengkap' | 'Sebagian' | 'Kosong' = 'Kosong';
                     if (totalSantri > 0) {
-                        if (submittedCount === totalSantri) status = 'Lengkap';
-                        else if (submittedCount > 0) status = 'Sebagian';
+                        if (completeCount === totalSantri) status = 'Lengkap';
+                        else if (completeCount > 0 || partialCount > 0) status = 'Sebagian';
                     }
 
-                    // Last update in this rombel (optional visualization)
+                    // Last update in this rombel
                     const rombelRecords = records.filter(r => r.rombelId === rombel.id);
-                    const lastUpdate = rombelRecords.length > 0 
-                        ? new Date(Math.max(...rombelRecords.map(r => new Date(r.lastModified || r.tanggalRapor).getTime())))
-                        : null;
+                    const lastUpdate =
+                        rombelRecords.length > 0
+                            ? new Date(
+                                  Math.max(
+                                      ...rombelRecords.map(r =>
+                                          new Date(r.lastModified || r.tanggalRapor).getTime()
+                                      )
+                                  )
+                              )
+                            : null;
 
                     return {
                         id: rombel.id,
@@ -79,7 +129,11 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                         kelas: kelas?.nama,
                         wali: wali?.nama || 'Belum Ditentukan',
                         totalSantri,
-                        submittedCount,
+                        submittedCount: completeCount,
+                        completeCount,
+                        partialCount,
+                        emptyCount,
+                        expectedCount,
                         percent,
                         status,
                         lastUpdate
@@ -295,11 +349,16 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                                 
                                 <div className="mb-3">
                                     <div className="flex justify-between text-xs mb-1 font-medium text-gray-700">
-                                        <span>Progres: {rombel.submittedCount} / {rombel.totalSantri} Santri</span>
-                                        <span>{rombel.percent}%</span>
+                                        <span>Progres: {rombel.completeCount} / {rombel.totalSantri} Santri Lengkap</span>
+                                        <span className="font-bold">{rombel.percent}%</span>
                                     </div>
                                     <div className="w-full bg-gray-200 rounded-full h-2.5">
                                         <div className={`h-2.5 rounded-full transition-all duration-1000 ${progressBarColor}`} style={{ width: `${rombel.percent}%` }}></div>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-1.5 text-[10px] font-bold">
+                                        <span className="text-emerald-700">{rombel.completeCount} Lengkap</span>
+                                        <span className="text-amber-700">{rombel.partialCount} Sebagian</span>
+                                        <span className="text-rose-700">{rombel.emptyCount} Belum</span>
                                     </div>
                                 </div>
 

@@ -315,18 +315,37 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '5. Input Nilai Langsung & Leger Nilai (Wali Kelas & Admin)',
+            title: '5. Input Nilai Langsung & Leger Nilai (Desktop & Mobile)',
             color: 'green',
             content: (
                 <div className="space-y-3 text-sm">
                     <p className="text-gray-700 leading-relaxed">
-                        Bagi staf akademik atau wali kelas yang memiliki akses sistem:
+                        Bagi wali kelas maupun staf akademik yang mengelola nilai langsung di dalam aplikasi, tersedia fitur percepatan input dan peninjauan leger yang adaptif untuk laptop maupun HP:
                     </p>
-                    <ul className="list-disc pl-5 space-y-1.5 text-xs text-gray-600">
-                        <li><strong>Tab Input Nilai:</strong> Pilih rombel aktif, cari nama santri, dan masukkan nilai langsung pada kolom yang disediakan. Setiap nilai tersimpan otomatis dan divalidasi bobotnya.</li>
-                        <li><strong>Tab Leger Nilai:</strong> Tinjau rekapitulasi seluruh mata pelajaran dalam format matriks satu kelas. Di sini wali kelas dapat mengecek rata-rata nilai santri, peringkat paralel/kelas, dan ketuntasan KKM.</li>
-                        <li><strong>Ekspor Leger:</strong> Leger nilai dapat diunduh langsung dalam format Excel atau dicetak sebagai arsip resmi madrasah.</li>
-                    </ul>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-1.5">
+                            <strong className="text-emerald-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-pencil-square text-emerald-600"></i> Tab Input Nilai &amp; Aksi Cepat
+                            </strong>
+                            <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
+                                <li><strong>2 Mode Input:</strong> Pilih <strong>Tabel Leger</strong> di laptop (mendukung tombol panah/Enter &amp; <em>paste</em> langsung blok sel dari Excel/Sheets) atau <strong>Form Kartu (Mobile)</strong> untuk pengisian nyaman di layar HP.</li>
+                                <li><strong>Tarik Data Otomatis:</strong> Gunakan <strong>Tarik Presensi Otomatis</strong> (rekap Sakit/Izin/Alfa), <strong>Tarik Data Tahfizh</strong>, serta <strong>Isi Cepat Catatan &amp; Keputusan</strong> secara massal.</li>
+                                <li><strong>Auto-Draft &amp; Validasi:</strong> Dilengkapi pemulihan draf lokal otomatis jika tab tertutup serta penanda khusus untuk nilai di bawah KKM atau di luar rentang <code>0–100</code>.</li>
+                            </ul>
+                        </div>
+
+                        <div className="p-3 bg-teal-50/70 rounded-xl border border-teal-200 space-y-1.5">
+                            <strong className="text-teal-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-table text-teal-600"></i> Tab Leger Nilai &amp; Kenyamanan Layar HP
+                            </strong>
+                            <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
+                                <li><strong>Mode Tabel vs Kartu Santri:</strong> Di layar HP, alihkan tampilan ke <strong>Kartu Santri</strong> untuk melihat daftar nilai, rata-rata, dan peringkat secara vertikal tanpa geser ke samping.</li>
+                                <li><strong>Tombol Kunci Kolom (Freeze):</strong> Saat memakai mode <strong>Tabel</strong> di HP, kolom nama otomatis dilepas agar ruang nilai tetap lega, dan dapat dikunci/dilepas kapan saja lewat tombol <strong>Kunci Kolom</strong>.</li>
+                                <li><strong>Multi-Sheet, Rincian &amp; Ekspor:</strong> Pindah lembar kerja rapor dengan mudah, klik <strong>Rincian</strong> untuk mengecek kolom mapel yang masih kosong, atau unduh Leger ke Excel/Cetak.</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             )
         },
@@ -361,12 +380,12 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '7. Pengesahan Nilai, Distribusi WhatsApp & Cetak Rapor',
+            title: '7. Pengesahan Nilai, Tata Letak Cetak & Distribusi WhatsApp',
             color: 'orange',
             content: (
                 <div className="space-y-4 text-sm">
                     <p className="text-gray-700 leading-relaxed">
-                        Tahap akhir penerbitan hasil belajar santri dengan standar pengamanan dan kemudahan distribusi modern:
+                        Tahap akhir penerbitan hasil belajar santri dengan standar pengamanan nilai, fleksibilitas tata letak cetak, dan kemudahan distribusi modern:
                     </p>
 
                     {/* Alur Pengesahan & Penguncian Nilai */}
@@ -398,6 +417,31 @@ export const raporPanduan: PanduanSectionData = {
                         </div>
                     </div>
 
+                    {/* Kontrol Tata Letak Cetak & Titimangsa */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-xs">
+                        <strong className="text-slate-900 font-bold flex items-center gap-1.5">
+                            <i className="bi bi-sliders2 text-indigo-600"></i> Pengaturan Tata Letak Cetak, Titimangsa &amp; Seleksi Cerdas
+                        </strong>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                                <strong className="text-slate-800 block">Titimangsa &amp; Set Default</strong>
+                                <p className="text-gray-600">Atur kota serta tanggal penerbitan rapor secara serentak untuk satu rombel maupun per santri, lalu klik <strong>Set Default</strong> agar tersimpan otomatis.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                                <strong className="text-slate-800 block">Kertas A4/F4 &amp; Pas 1 Lembar</strong>
+                                <p className="text-gray-600">Pilih ukuran kertas <strong>A4</strong> atau <strong>F4</strong> dan aktifkan tombol <strong>Pas 1 Lembar</strong> agar skala rapor menyesuaikan otomatis tanpa meluber ke halaman ke-2.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                                <strong className="text-slate-800 block">Panel Atur Lanjutan</strong>
+                                <p className="text-gray-600">Sesuaikan <strong>Kop Rapor</strong> (Aktif/Tanpa Kop untuk kertas berlogo), <strong>Judul Rapor (1–3 baris)</strong>, <strong>Header Biodata</strong>, Margin, Skala (%), serta <strong>Batas Ranking</strong> (<em>Semua / Top 3 / Top 5 / Top 10 / Off</em>).</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                                <strong className="text-slate-800 block">Seleksi Santri Siap Cetak</strong>
+                                <p className="text-gray-600">Filter kesiapan nilai santri dan gunakan tombol <strong>Pilih Hanya yang Lengkap 100%</strong> untuk menyeleksi santri yang nilainya sudah tuntas secara instan.</p>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Distribusi WhatsApp & Cetak Masal */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                         <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 space-y-1.5">
@@ -416,15 +460,15 @@ export const raporPanduan: PanduanSectionData = {
 
                         <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200 space-y-1.5">
                             <strong className="text-blue-950 flex items-center gap-1.5 font-bold">
-                                <i className="bi bi-printer-fill text-blue-600"></i> Mode Cetak Masal (Batch Printing 1 Rombel)
+                                <i className="bi bi-printer-fill text-blue-600"></i> Pratinjau &amp; Mode Cetak Masal (1 Rombel)
                             </strong>
                             <p className="text-gray-600 leading-relaxed">
-                                Tidak perlu mencetak satu per satu santri:
+                                Mendukung pratinjau responsif di laptop maupun HP tanpa perlu mencetak satu per satu:
                             </p>
                             <ul className="list-disc pl-4 space-y-1 text-gray-600 text-[11px]">
-                                <li>Klik tombol <strong>"Cetak Masal Rombel"</strong> pada tab Cetak Rapor.</li>
-                                <li>Sistem menyatukan seluruh lembar rapor santri dalam satu dokumen cetak dengan instruksi pemisah halaman cetak (<code>page-break-after: always</code>) otomatis.</li>
-                                <li>Dapat langsung dikirim ke printer fisik berkecepatan tinggi atau disimpan sebagai satu file PDF utuh per kelas.</li>
+                                <li>Gunakan tombol <strong>Cetak Terpilih</strong> atau <strong>Cetak Masal Rombel</strong> pada tab Cetak Rapor.</li>
+                                <li>Sistem menyatukan seluruh lembar rapor santri dalam satu dokumen dengan pemisah halaman (<code>page-break-after: always</code>) otomatis.</li>
+                                <li>Dapat langsung dikirim ke printer fisik atau disimpan sebagai satu file PDF utuh per kelas.</li>
                             </ul>
                         </div>
                     </div>

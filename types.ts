@@ -656,6 +656,8 @@ export interface GridCell {
     backgroundColor?: string;
     color?: string;
     fontSize?: number;
+    verticalAlign?: 'top' | 'middle' | 'bottom';
+    textWrap?: 'wrap' | 'float' | 'clip';
 }
 
 export interface PortalContact {

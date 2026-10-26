@@ -98,6 +98,8 @@ export const faqData: FaqCategoryData[] = [
             { question: "Bagaimana cara menyalin jadwal pelajaran?", answer: "Masuk menu Jadwal, pilih kelas target yang masih kosong. Klik tombol 'Salin Jadwal Dari...', lalu pilih kelas sumber yang sudah ada jadwalnya. Jadwal akan terduplikasi." },
             { question: "Guru tidak bisa membuka file input nilai di HP?", answer: "Pastikan guru menggunakan browser modern (Chrome/Firefox/Safari). File formulir nilai berbasis HTML5 standar yang ringan dan tidak butuh aplikasi khusus." },
             { question: "Rumus Ranking di Rapor tidak muncul?", answer: "Pastikan Anda menggunakan formula =RANK($NA) di kolom ranking pada Desain Rapor. '$NA' harus merujuk pada Kode Variabel kolom Nilai Akhir." },
+            { question: "Saat membuka Leger Nilai di HP, bagaimana agar kolom nilai tidak tertutup atau sempit?", answer: "Pada tab Leger Nilai di layar HP, ubah tampilan ke mode 'Kartu Santri' untuk membaca seluruh nilai, rata-rata, dan ranking secara vertikal tanpa geser ke samping. Jika tetap ingin menggunakan mode 'Tabel', kolom nama otomatis dilepas agar ruang nilai lega, dan Anda bisa menekan tombol 'Kunci Kolom' kapan saja jika ingin membekukan kolom nama." },
+            { question: "Bagaimana cara agar hasil cetak Rapor pas 1 lembar dan tidak terpotong ke halaman kedua?", answer: "Di tab Cetak Rapor, pilih ukuran kertas (A4 atau F4) lalu aktifkan tombol 'Pas 1 Lembar' agar skala cetak menyesuaikan otomatis. Untuk penyesuaian lebih detail (Margin, Skala %, Kop Rapor, Judul 1–3 baris, atau Batas Tampilan Ranking), buka panel 'Atur Lanjutan'." },
         ]
     },
     {

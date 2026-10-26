@@ -15,9 +15,17 @@ import { formatDate } from '../../utils/formatters';
 
 interface TabLegerNilaiProps {
     onNavigateToInputWali?: (rombelId?: number) => void;
+    initialRombelId?: number;
+    initialTahunAjaran?: string;
+    initialSemester?: 'Ganjil' | 'Genap';
 }
 
-export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputWali }) => {
+export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
+    onNavigateToInputWali,
+    initialRombelId,
+    initialTahunAjaran,
+    initialSemester
+}) => {
     const { settings, currentUser, showToast } = useAppContext();
     const { santriList } = useSantriContext();
 
@@ -39,7 +47,17 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
     // Filter selectors
     const [selectedJenjangId, setSelectedJenjangId] = useState<string>('');
     const [selectedKelasId, setSelectedKelasId] = useState<string>('');
-    const [selectedRombelId, setSelectedRombelId] = useState<string>(assignedRombel ? String(assignedRombel.id) : '');
+    const [selectedRombelId, setSelectedRombelId] = useState<string>(
+        initialRombelId ? String(initialRombelId) : (assignedRombel ? String(assignedRombel.id) : '')
+    );
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+
+    // Sync from initial props when provided
+    useEffect(() => {
+        if (initialTahunAjaran) setFilterTahun(initialTahunAjaran);
+        if (initialSemester) setFilterSemester(initialSemester);
+        if (initialRombelId) setSelectedRombelId(String(initialRombelId));
+    }, [initialTahunAjaran, initialSemester, initialRombelId]);
 
     // Data state
     const [template, setTemplate] = useState<RaporTemplate | null>(null);
@@ -60,6 +78,8 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
     const [showRanking, setShowRanking] = useState<boolean>(true);
     const [showPredikat, setShowPredikat] = useState<boolean>(true);
     const [showPresensi, setShowPresensi] = useState<boolean>(true);
+    const [mobileViewMode, setMobileViewMode] = useState<'table' | 'cards'>('table');
+    const [freezeMobileColumns, setFreezeMobileColumns] = useState<boolean>(false);
 
     // Modals
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -87,12 +107,14 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
 
     // Auto-select initial rombel if not set
     useEffect(() => {
-        if (assignedRombel) {
+        if (initialRombelId) {
+            setSelectedRombelId(String(initialRombelId));
+        } else if (assignedRombel) {
             setSelectedRombelId(String(assignedRombel.id));
         } else if (!selectedRombelId && settings.rombel.length > 0) {
             setSelectedRombelId(String(settings.rombel[0].id));
         }
-    }, [assignedRombel, selectedRombelId, settings.rombel]);
+    }, [initialRombelId, assignedRombel, selectedRombelId, settings.rombel]);
 
     // Sync Jenjang & Kelas when Rombel changes
     useEffect(() => {
@@ -107,6 +129,35 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
             }
         }
     }, [selectedRombelId, settings.rombel, settings.kelas]);
+
+    // Available Templates for the chosen Jenjang/Kelas/Rombel
+    const availableTemplates = useMemo(() => {
+        const templates = (settings.raporTemplates || []) as RaporTemplate[];
+        const rId = selectedRombelId ? parseInt(selectedRombelId) : null;
+        const rombel = rId ? settings.rombel.find(r => r.id === rId) : null;
+        const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : null;
+        const jId = kelas?.jenjangId || (selectedJenjangId ? parseInt(selectedJenjangId) : null);
+
+        if (!jId) return templates;
+        return templates.filter(t => {
+            if (!t.jenjangId) return true;
+            if (t.jenjangId !== jId) return false;
+            if (t.kelasId && (!kelas || t.kelasId !== kelas.id)) return false;
+            if (t.rombelId && (!rombel || t.rombelId !== rombel.id)) return false;
+            return true;
+        });
+    }, [settings.raporTemplates, selectedRombelId, selectedJenjangId, settings.rombel, settings.kelas]);
+
+    // Keep selectedTemplateId in sync
+    useEffect(() => {
+        if (availableTemplates.length > 0) {
+            if (!selectedTemplateId || !availableTemplates.some(t => t.id === selectedTemplateId)) {
+                setSelectedTemplateId(availableTemplates[0].id);
+            }
+        } else {
+            setSelectedTemplateId('');
+        }
+    }, [availableTemplates, selectedTemplateId]);
 
     // Current selected Rombel object & details
     const currentRombel = useMemo(() => {
@@ -151,13 +202,11 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
 
                 // 1. Fetch matching template
                 let matchedTemplate: RaporTemplate | null = null;
-                const templates = (settings.raporTemplates || []) as RaporTemplate[];
-
-                if (kelas?.jenjangId) {
-                    matchedTemplate = templates.find((t: RaporTemplate) => t.jenjangId === kelas.jenjangId) || null;
+                if (selectedTemplateId) {
+                    matchedTemplate = availableTemplates.find(t => t.id === selectedTemplateId) || null;
                 }
-                if (!matchedTemplate && templates.length > 0) {
-                    matchedTemplate = templates[0];
+                if (!matchedTemplate && availableTemplates.length > 0) {
+                    matchedTemplate = availableTemplates[0];
                 }
                 setTemplate(matchedTemplate);
 
@@ -178,7 +227,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
         };
 
         fetchData();
-    }, [selectedRombelId, filterTahun, filterSemester, settings, defaultAcademicYear]);
+    }, [selectedRombelId, selectedTemplateId, availableTemplates, filterTahun, filterSemester, settings, defaultAcademicYear]);
 
     // Build consolidated Leger Data with full calculations
     const legerData = useMemo(() => {
@@ -274,7 +323,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                     </button>
                 </div>
 
-                <div className="hidden md:grid md:grid-cols-5 gap-4 items-end">
+                <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
                     <div>
                         <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1.5 tracking-wider">
                             Tahun Ajaran
@@ -282,7 +331,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                         <select
                             value={filterTahun}
                             onChange={e => setFilterTahun(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
                         >
                             {availableYears.map(y => (
                                 <option key={y} value={y}>{y}</option>
@@ -297,7 +346,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                         <select
                             value={filterSemester}
                             onChange={e => setFilterSemester(e.target.value as any)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
                         >
                             <option value="Ganjil">Ganjil (Semester 1)</option>
                             <option value="Genap">Genap (Semester 2)</option>
@@ -314,7 +363,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                                 setSelectedJenjangId(e.target.value);
                                 setSelectedKelasId('');
                             }}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
                         >
                             <option value="">Semua Jenjang</option>
                             {settings.jenjang.map(j => (
@@ -330,7 +379,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                         <select
                             value={selectedKelasId}
                             onChange={e => setSelectedKelasId(e.target.value)}
-                            className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
+                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
                         >
                             <option value="">Semua Kelas</option>
                             {filteredKelasList.map(k => (
@@ -346,11 +395,30 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                         <select
                             value={selectedRombelId}
                             onChange={e => setSelectedRombelId(e.target.value)}
-                            className="w-full border-2 border-emerald-200 rounded-xl px-3 py-2.5 text-sm font-bold bg-emerald-50 text-emerald-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
+                            className="w-full border-2 border-emerald-200 rounded-xl px-3 py-2 text-xs font-bold bg-emerald-50 text-emerald-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
                         >
                             {filteredRombelList.map(r => (
                                 <option key={r.id} value={r.id}>{r.nama}</option>
                             ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-[11px] font-bold text-teal-700 uppercase mb-1.5 tracking-wider">
+                            Template Rapor
+                        </label>
+                        <select
+                            value={selectedTemplateId}
+                            onChange={e => setSelectedTemplateId(e.target.value)}
+                            className="w-full border-2 border-teal-200 rounded-xl px-3 py-2 text-xs font-bold bg-teal-50 text-teal-900 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all"
+                        >
+                            {availableTemplates.length === 0 ? (
+                                <option value="">Tidak ada template</option>
+                            ) : (
+                                availableTemplates.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))
+                            )}
                         </select>
                     </div>
                 </div>
@@ -522,39 +590,92 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                     </div>
                 </div>
 
-                {/* Display Toggles */}
-                <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-4 text-xs font-medium text-slate-600">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tampilkan Kolom:</span>
-                    
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={showRanking}
-                            onChange={e => setShowRanking(e.target.checked)}
-                            className="rounded text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <span>Peringkat (Ranking)</span>
-                    </label>
+                {/* Display Toggles & Mobile UX Controls */}
+                <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs font-medium text-slate-600">
+                    <div className="flex flex-wrap items-center gap-4">
+                        <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tampilkan Kolom:</span>
+                        
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={showRanking}
+                                onChange={e => setShowRanking(e.target.checked)}
+                                className="rounded text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>Peringkat</span>
+                        </label>
 
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={showPredikat}
-                            onChange={e => setShowPredikat(e.target.checked)}
-                            className="rounded text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <span>Predikat Nilai</span>
-                    </label>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={showPredikat}
+                                onChange={e => setShowPredikat(e.target.checked)}
+                                className="rounded text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>Predikat</span>
+                        </label>
 
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={showPresensi}
-                            onChange={e => setShowPresensi(e.target.checked)}
-                            className="rounded text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <span>Presensi & Kehadiran (S/I/A)</span>
-                    </label>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={showPresensi}
+                                onChange={e => setShowPresensi(e.target.checked)}
+                                className="rounded text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <span>Presensi</span>
+                        </label>
+                    </div>
+
+                    {/* Mobile UX Controls: View Switcher (Tabel vs Kartu) & Freeze Toggle */}
+                    <div className="flex items-center gap-2">
+                        {/* Toggle Mode: Tabel vs Kartu */}
+                        <div className="inline-flex p-0.5 bg-slate-100 rounded-xl border border-slate-200">
+                            <button
+                                type="button"
+                                onClick={() => setMobileViewMode('table')}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    mobileViewMode === 'table' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                                title="Tampilan Matriks Tabel Lengkap"
+                            >
+                                <i className="bi bi-table"></i>
+                                <span>Tabel</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setMobileViewMode('cards')}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    mobileViewMode === 'cards' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                                title="Tampilan Kartu Santri Responsif Khusus Layar HP"
+                            >
+                                <i className="bi bi-grid-fill"></i>
+                                <span>Kartu Santri</span>
+                            </button>
+                        </div>
+
+                        {/* Freeze Column Switch (Aktif / Lepas di Mobile) */}
+                        {mobileViewMode === 'table' && (
+                            <button
+                                type="button"
+                                onClick={() => setFreezeMobileColumns(prev => !prev)}
+                                className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                    freezeMobileColumns
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
+                                        : 'bg-white text-slate-600 hover:text-slate-900 border-slate-200'
+                                }`}
+                                title={
+                                    freezeMobileColumns
+                                        ? "Kolom No, NIS, dan Nama terkunci saat digeser. Klik untuk melepas agar tabel leluasa di layar HP."
+                                        : "Kolom No, NIS, dan Nama bebas bergeser (tidak menutupi nilai mapel di HP). Klik untuk mengunci kembali."
+                                }
+                            >
+                                <i className={`bi ${freezeMobileColumns ? 'bi-pin-angle-fill text-emerald-600' : 'bi-pin-angle'}`}></i>
+                                <span className="hidden sm:inline">{freezeMobileColumns ? 'Kunci Kolom: Aktif' : 'Kunci Kolom: Lepas (Bebas)'}</span>
+                                <span className="sm:hidden">{freezeMobileColumns ? 'Kunci: On' : 'Kunci: Lepas'}</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -613,18 +734,178 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                             Belum ada santri aktif dalam rombel ini atau tidak ada santri yang sesuai dengan filter pencarian.
                         </p>
                     </div>
+                ) : mobileViewMode === 'cards' ? (
+                    /* MODE KARTU SANTRI (Mobile-First UX: Tidak Perlu Scroll Horizontal) */
+                    <div className="p-3 sm:p-5 bg-slate-50/60 divide-y divide-slate-100 space-y-3">
+                        <div className="flex items-center justify-between text-xs font-semibold text-slate-500 pb-1">
+                            <span>Menampilkan <strong>{displayedStudents.length}</strong> Santri</span>
+                            <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-bold">
+                                Mode Kartu Mobile
+                            </span>
+                        </div>
+
+                        {displayedStudents.map((row, idx) => (
+                            <div
+                                key={row.santri.id}
+                                className="bg-white rounded-2xl border border-slate-200 p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition-all space-y-3"
+                            >
+                                {/* Card Header: Number + Name + Rank Badge + Scores */}
+                                <div className="flex items-start justify-between gap-2.5">
+                                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                        <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-black shrink-0">
+                                            {idx + 1}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <h4 className="font-black text-sm text-slate-800 break-words" title={row.santri.namaLengkap}>
+                                                    {row.santri.namaLengkap}
+                                                </h4>
+                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                                    row.santri.jenisKelamin === 'Laki-laki' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'
+                                                }`}>
+                                                    {row.santri.jenisKelamin === 'Laki-laki' ? 'L' : 'P'}
+                                                </span>
+                                            </div>
+                                            <div className="text-[11px] text-slate-400 font-semibold flex items-center gap-2 mt-0.5 flex-wrap">
+                                                <span>NIS: {row.santri.nis || '-'}</span>
+                                                {showRanking && row.ranking > 0 && (
+                                                    <span className="text-amber-800 font-black bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md text-[10px] flex items-center gap-1">
+                                                        <span>{row.ranking === 1 ? '🥇' : row.ranking === 2 ? '🥈' : row.ranking === 3 ? '🥉' : '🎖️'}</span>
+                                                        <span>Juara #{row.ranking}</span>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Rata-Rata & Predikat */}
+                                    <div className="text-right shrink-0 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-xl">
+                                        <div className="text-xs font-black text-emerald-700">
+                                            Rerata: {row.rataRataFormatted}
+                                        </div>
+                                        {showPredikat && row.rataRata > 0 && (
+                                            <div className="text-[10px] font-bold text-slate-500">
+                                                Predikat: <span className="text-emerald-800 font-black">{row.predikat.predikatHuruf}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Card Body: Subject Grades Grid (2 columns on mobile, 3 on tablet) */}
+                                <div className="bg-slate-50/70 rounded-xl p-2.5 border border-slate-200/60">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                                        <span>Nilai Mata Pelajaran ({legerData.gradeKeys.length})</span>
+                                        <span className="font-bold text-slate-600">Total: <strong className="text-slate-900">{row.totalNilai || 0}</strong></span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                        {legerData.gradeKeys.map(k => {
+                                            const score = row.numericGrades[k.key];
+                                            const raw = row.grades[k.key];
+                                            const isFilled = score !== undefined || (raw !== undefined && raw !== '');
+                                            const isLow = score !== undefined && score < 70;
+
+                                            return (
+                                                <div
+                                                    key={k.key}
+                                                    className="bg-white p-2 rounded-lg border border-slate-200/70 flex items-center justify-between gap-1 text-[11px] shadow-2xs"
+                                                    title={k.label}
+                                                >
+                                                    <span className="text-slate-600 font-medium truncate flex-1" title={k.label}>
+                                                        {k.label}
+                                                    </span>
+                                                    <span className={`font-bold shrink-0 ${
+                                                        !isFilled
+                                                            ? 'text-slate-300 font-mono'
+                                                            : isLow
+                                                            ? 'text-rose-600 font-black bg-rose-50 px-1 rounded'
+                                                            : 'text-slate-800'
+                                                    }`}>
+                                                        {isFilled ? (score ?? raw) : '-'}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Card Footer: Presensi & Actions */}
+                                <div className="flex items-center justify-between pt-1 text-xs gap-2 flex-wrap">
+                                    {showPresensi ? (
+                                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-600">
+                                            <span className="bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200">S: {row.sakit}</span>
+                                            <span className="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded border border-blue-200">I: {row.izin}</span>
+                                            <span className="bg-rose-50 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200 font-bold">A: {row.alpha}</span>
+                                        </div>
+                                    ) : (
+                                        <div />
+                                    )}
+
+                                    {/* Status & Detail Modal Trigger */}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        {row.completenessStatus === 'Lengkap' ? (
+                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+                                                <i className="bi bi-check-circle-fill"></i> Siap Cetak
+                                            </span>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => setInspectStudent(row)}
+                                                className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1 transition-colors"
+                                            >
+                                                <i className="bi bi-exclamation-triangle-fill"></i>
+                                                <span>{row.missingKeys.length > 0 ? `${row.missingKeys.length} Kurang` : 'Kosong'}</span>
+                                            </button>
+                                        )}
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setInspectStudent(row)}
+                                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition-all flex items-center gap-1"
+                                            title="Buka rincian status nilai santri"
+                                        >
+                                            <i className="bi bi-info-circle"></i>
+                                            <span>Rincian</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 ) : (
-                    <div className="overflow-x-auto max-h-[600px] relative">
+                    <div>
+                        {/* Mobile Scroll Helper Banner */}
+                        <div className="sm:hidden px-3.5 py-1.5 bg-emerald-50/70 border-b border-emerald-100 text-[11px] text-emerald-800 flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                                <i className="bi bi-arrows-expand"></i>
+                                {freezeMobileColumns ? 'Kolom No-NIS-Nama terkunci di kiri' : 'Tabel bebas digeser ke kanan untuk melihat nilai'}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setMobileViewMode('cards')}
+                                className="font-black underline text-emerald-900"
+                            >
+                                Ganti Kartu
+                            </button>
+                        </div>
+
+                        <div className="overflow-x-auto max-h-[600px] relative">
                         <table className="w-full text-left border-collapse text-xs">
                             <thead className="bg-slate-50 text-slate-700 sticky top-0 z-20 border-b border-slate-200">
                                 <tr>
-                                    <th className="p-3 w-12 text-center font-bold sticky left-0 bg-slate-50 z-30 border-r border-slate-200">
+                                    <th className={`p-3 w-12 text-center font-bold border-r border-slate-200 ${
+                                        freezeMobileColumns ? 'sticky left-0 bg-slate-50 z-30' : 'sm:sticky sm:left-0 bg-slate-50 sm:z-30'
+                                    }`}>
                                         No
                                     </th>
-                                    <th className="p-3 w-28 font-bold sticky left-12 bg-slate-50 z-30 border-r border-slate-200">
+                                    <th className={`p-3 w-28 font-bold border-r border-slate-200 ${
+                                        freezeMobileColumns ? 'sticky left-12 bg-slate-50 z-30' : 'sm:sticky sm:left-12 bg-slate-50 sm:z-30'
+                                    }`}>
                                         NIS
                                     </th>
-                                    <th className="p-3 min-w-[200px] font-bold sticky left-40 bg-slate-50 z-30 border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.03)]">
+                                    <th className={`p-3 min-w-[180px] sm:min-w-[200px] font-bold border-r border-slate-200 shadow-[2px_0_4px_rgba(0,0,0,0.03)] ${
+                                        freezeMobileColumns ? 'sticky left-40 bg-slate-50 z-30' : 'sm:sticky sm:left-40 bg-slate-50 sm:z-30'
+                                    }`}>
                                         Nama Santri
                                     </th>
 
@@ -692,13 +973,19 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                             <tbody className="divide-y divide-slate-100">
                                 {displayedStudents.map((row, idx) => (
                                     <tr key={row.santri.id} className="hover:bg-slate-50/80 transition-colors">
-                                        <td className="p-3 text-center font-semibold text-slate-500 sticky left-0 bg-white border-r border-slate-100 z-10">
+                                        <td className={`p-3 text-center font-semibold text-slate-500 border-r border-slate-100 ${
+                                            freezeMobileColumns ? 'sticky left-0 bg-white z-10' : 'sm:sticky sm:left-0 bg-white sm:z-10'
+                                        }`}>
                                             {idx + 1}
                                         </td>
-                                        <td className="p-3 font-mono text-slate-600 sticky left-12 bg-white border-r border-slate-100 z-10">
+                                        <td className={`p-3 font-mono text-slate-600 border-r border-slate-100 ${
+                                            freezeMobileColumns ? 'sticky left-12 bg-white z-10' : 'sm:sticky sm:left-12 bg-white sm:z-10'
+                                        }`}>
                                             {row.santri.nis || '-'}
                                         </td>
-                                        <td className="p-3 font-bold text-slate-900 sticky left-40 bg-white border-r border-slate-100 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.03)]">
+                                        <td className={`p-3 font-bold text-slate-900 border-r border-slate-100 shadow-[2px_0_4px_rgba(0,0,0,0.03)] ${
+                                            freezeMobileColumns ? 'sticky left-40 bg-white z-10' : 'sm:sticky sm:left-40 bg-white sm:z-10'
+                                        }`}>
                                             <div className="flex items-center justify-between gap-2">
                                                 <span className="truncate">{row.santri.namaLengkap}</span>
                                                 {row.santri.jenisKelamin === 'Laki-laki' ? (
@@ -827,7 +1114,9 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                             {/* Statistical Footer Summary */}
                             <tfoot className="bg-slate-100 text-slate-800 font-bold border-t-2 border-slate-300">
                                 <tr>
-                                    <td colSpan={3} className="p-3 text-right uppercase tracking-wider text-[11px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200">
+                                    <td colSpan={3} className={`p-3 text-right uppercase tracking-wider text-[11px] border-r border-slate-200 ${
+                                        freezeMobileColumns ? 'sticky left-0 bg-slate-100 z-10' : 'sm:sticky sm:left-0 bg-slate-100 sm:z-10'
+                                    }`}>
                                         Rata-Rata Kelas
                                     </td>
                                     {legerData.gradeKeys.map(k => (
@@ -851,7 +1140,8 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({ onNavigateToInputW
                             </tfoot>
                         </table>
                     </div>
-                )}
+                </div>
+            )}
             </div>
 
             {/* Inspect Student Missing Fields Modal */}

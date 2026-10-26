@@ -18,6 +18,14 @@ const TabLoadingFallback = () => (
     </div>
 );
 
+export interface SharedRaporContext {
+    rombelId?: number;
+    santriId?: number;
+    tahunAjaran?: string;
+    semester?: 'Ganjil' | 'Genap';
+    templateId?: string;
+}
+
 type RaporTabId = 'designer' | 'generator' | 'import' | 'monitoring' | 'data' | 'print' | 'input_wali' | 'leger';
 
 const Rapor: React.FC = () => {
@@ -28,6 +36,27 @@ const Rapor: React.FC = () => {
     const canReadAkademik = isAdmin || isWaliKelas || akademikPermission === 'read' || akademikPermission === 'write';
     const canWriteAkademik = isAdmin || akademikPermission === 'write';
     const [activeTab, setActiveTab] = useState<RaporTabId>(isWaliKelas ? 'input_wali' : 'monitoring');
+
+    // Shared navigation context across all tabs
+    const [sharedContext, setSharedContext] = useState<SharedRaporContext>({});
+
+    const handleNavigateWithContext = (
+        tab: string,
+        contextPayload?: number | Partial<SharedRaporContext>
+    ) => {
+        let updatedContext: SharedRaporContext = { ...sharedContext };
+        if (typeof contextPayload === 'number') {
+            updatedContext.rombelId = contextPayload;
+        } else if (contextPayload && typeof contextPayload === 'object') {
+            updatedContext = { ...updatedContext, ...contextPayload };
+        }
+        setSharedContext(updatedContext);
+        setActiveTab(tab as RaporTabId);
+    };
+
+    const handleUpdateSharedContext = (newContext: Partial<SharedRaporContext>) => {
+        setSharedContext(prev => ({ ...prev, ...newContext }));
+    };
 
     const raporTabs = useMemo(() => {
         const tabs: Array<{ value: RaporTabId; label: string; icon: string; mobileLabel?: string }> = [];
@@ -88,11 +117,31 @@ const Rapor: React.FC = () => {
                 <Suspense fallback={<TabLoadingFallback />}>
                     {activeTab === 'designer' && <TabDesainRapor />}
                     {activeTab === 'generator' && <TabGeneratorFormulir />}
-                    {activeTab === 'monitoring' && <TabMonitoringNilai onNavigateToTab={(tab) => setActiveTab(tab as RaporTabId)} />}
+                    {activeTab === 'monitoring' && (
+                        <TabMonitoringNilai 
+                            onNavigateToTab={(tab, payload) => handleNavigateWithContext(tab, payload)} 
+                        />
+                    )}
                     {activeTab === 'data' && <TabDataNilai />}
-                    {activeTab === 'print' && <TabCetakRapor onNavigateToTab={(tab) => setActiveTab(tab as RaporTabId)} />}
-                    {(activeTab === 'input_wali' || activeTab === 'import') && <TabInputNilaiWali />}
-                    {activeTab === 'leger' && <TabLegerNilai onNavigateToInputWali={() => setActiveTab('input_wali')} />}
+                    {activeTab === 'print' && (
+                        <TabCetakRapor 
+                            onNavigateToTab={(tab, payload) => handleNavigateWithContext(tab, payload)} 
+                        />
+                    )}
+                    {(activeTab === 'input_wali' || activeTab === 'import') && (
+                        <TabInputNilaiWali 
+                            initialContext={sharedContext}
+                            onContextChange={handleUpdateSharedContext}
+                        />
+                    )}
+                    {activeTab === 'leger' && (
+                        <TabLegerNilai 
+                            initialRombelId={sharedContext.rombelId}
+                            initialTahunAjaran={sharedContext.tahunAjaran}
+                            initialSemester={sharedContext.semester}
+                            onNavigateToInputWali={(rId) => handleNavigateWithContext('input_wali', rId)} 
+                        />
+                    )}
                 </Suspense>
             </div>
         </div>

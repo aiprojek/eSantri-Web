@@ -3,6 +3,7 @@ import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTempl
 import { formatDate, getHijriDate, formatTanggalDokumen } from './formatters';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+import { evaluateRaporFormula } from './raporFormulaUtils';
 
 export interface DynamicTagItem {
     tag: string;
@@ -77,6 +78,8 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
             { tag: '$TARGET_JUZ', label: 'Target Hafalan (Juz)', description: 'Target juz yang ditetapkan', example: '30' },
             { tag: '$CAPAIAN_TAHFIZH', label: 'Capaian Terakhir', description: 'Surah dan ayat terakhir yang disetorkan', example: 'Juz 30, QS. An-Naba: 1-40' },
             { tag: '$TOTAL_SETORAN_TAHFIZH', label: 'Total Setoran', description: 'Jumlah mutaba\'ah setoran santri', example: '42 Setoran' },
+            { tag: '$NILAI_TAHFIZH', label: 'Nilai Rata-rata Tahfizh', description: 'Skor angka rata-rata setoran/ujian tahfizh', example: '90' },
+            { tag: '$PREDIKAT_TAHFIZH', label: 'Predikat Tahfizh', description: 'Predikat kelancaran tahfizh santri', example: 'Sangat Lancar' },
         ]
     },
     {
@@ -211,6 +214,7 @@ export interface RaporResolveContext {
         totalSantri?: number;
         predikat?: string;
     };
+    extraVars?: Record<string, any>;
 }
 
 export const isMediaTag = (value: string): boolean => {
@@ -320,23 +324,25 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
 
     // Normalisasi tag format {{nama}}, {nama}, [nama] dsb ke $TAG untuk fleksibilitas maksimal dari Excel
     const normalizeTagWord = (word: string): string => {
-        const u = word.trim().toUpperCase();
-        if (u === 'NAMA' || u === 'NAMA_SANTRI') return '$NAMA';
-        if (u === 'NAMA_LENGKAP') return '$NAMA_LENGKAP';
+        const u = word.trim().toUpperCase().replace(/[\s-]+/g, '_');
+        if (u === 'NAMA' || u === 'NAMA_SANTRI' || u === 'NAMASANTRI') return '$NAMA';
+        if (u === 'NAMA_LENGKAP' || u === 'NAMALENGKAP') return '$NAMA_LENGKAP';
         if (u === 'NIS') return '$NIS';
         if (u === 'NISN') return '$NISN';
-        if (u === 'ROMBEL' || u === 'KELAS') return '$ROMBEL';
+        if (u === 'ROMBEL') return '$ROMBEL';
+        if (u === 'KELAS') return '$KELAS';
+        if (u === 'JENJANG' || u === 'MARHALAH') return '$JENJANG';
         if (u === 'PERINGKAT' || u === 'RANKING' || u === 'JUARA') return '$PERINGKAT';
-        if (u === 'TOTAL_NILAI' || u === 'TOTAL' || u === 'JUMLAH') return '$TOTAL_NILAI';
-        if (u === 'RATA_RATA' || u === 'RATA') return '$RATA_RATA';
+        if (u === 'TOTAL_NILAI' || u === 'TOTAL' || u === 'JUMLAH' || u === 'TOTALNILAI') return '$TOTAL_NILAI';
+        if (u === 'RATA_RATA' || u === 'RATA' || u === 'RATARATA' || u === 'RATA2') return '$RATA_RATA';
         if (u === 'PREDIKAT') return '$PREDIKAT_RATA_RATA';
-        if (u === 'WALI_KELAS' || u === 'NAMA_WALI_KELAS') return '$NAMA_WALI_KELAS';
-        if (u === 'MUDIR' || u === 'PIMPINAN' || u === 'KEPALA_SEKOLAH') return '$NAMA_MUDIR';
-        if (u === 'TANGGAL_RAPOR' || u === 'TANGGAL') return '$TANGGAL_DOKUMEN';
-        if (u === 'TEMPAT_RAPOR' || u === 'KOTA') return '$TEMPAT_RAPOR';
+        if (u === 'WALI_KELAS' || u === 'NAMA_WALI_KELAS' || u === 'WALIKELAS') return '$NAMA_WALI_KELAS';
+        if (u === 'MUDIR' || u === 'PIMPINAN' || u === 'KEPALA_SEKOLAH' || u === 'KEPALASEKOLAH') return '$NAMA_MUDIR';
+        if (u === 'TANGGAL_RAPOR' || u === 'TANGGAL' || u === 'TANGGALRAPOR') return '$TANGGAL_DOKUMEN';
+        if (u === 'TEMPAT_RAPOR' || u === 'KOTA' || u === 'TEMPATRAPOR') return '$TEMPAT_RAPOR';
         if (u === 'SEMESTER') return '$SEMESTER';
-        if (u === 'TAHUN_AJAR' || u === 'TAHUN_AJARAN') return '$TAHUN_AJARAN';
-        if (u === 'CATATAN_WALI' || u === 'CATATAN') return '$CATATAN_WALI_KELAS';
+        if (u === 'TAHUN_AJAR' || u === 'TAHUN_AJARAN' || u === 'TAHUNAJAR' || u === 'TAHUNAJARAN' || u === 'TAPEL' || u === 'TAHUN_PELAJARAN') return '$TAHUN_AJARAN';
+        if (u === 'CATATAN_WALI' || u === 'CATATAN' || u === 'CATATANWALIKELAS' || u === 'CATATAN_WALI_KELAS') return '$CATATAN_WALI_KELAS';
         return `$${u}`;
     };
 
@@ -346,6 +352,8 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     res = res.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, p1) => normalizeTagWord(p1));
     // Replace [tag] (square brackets)
     res = res.replace(/\[([a-zA-Z0-9_]+)\]/g, (_match, p1) => normalizeTagWord(p1));
+    // Replace $tag (mendukung penulisan $Jenjang, $jenjang, $tahunajar, dsb. secara case-insensitive)
+    res = res.replace(/\$([a-zA-Z0-9_]+)/g, (_match, p1) => normalizeTagWord(p1));
 
     // Santri Data
     if (santri) {
@@ -382,6 +390,7 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
             const rombel = settings.rombel.find(r => r.id === santri.rombelId);
             const halaqah = (settings.kelompokHalaqah || []).find(h => h.id === santri.halaqahId);
             res = res.replace(/\$JENJANG/g, jenjang?.nama || '');
+            res = res.replace(/\$MARHALAH/g, jenjang?.nama || '');
             res = res.replace(/\$KELAS/g, kelas?.nama || '');
             res = res.replace(/\$ROMBEL/g, rombel?.nama || '');
             res = res.replace(/\$HALAQAH/g, halaqah?.nama || '-');
@@ -439,12 +448,16 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         }
     }
 
-    // Period / Record
-    const sem = record?.semester || 'Ganjil';
+    // Period / Record (dengan fallback ke settings aktif)
+    const sem = record?.semester || settings?.semesterAktif || 'Ganjil';
     res = res.replace(/\$SEMESTER_ANGKA/g, sem === 'Genap' ? '2' : '1');
     res = res.replace(/\$SEMESTER/g, sem);
-    res = res.replace(/\$TAHUN_AJARAN/g, record?.tahunAjaran || '-');
-    res = res.replace(/\$TAHUN_AJAR/g, record?.tahunAjaran || '-');
+    const tahunAjarAktif = record?.tahunAjaran || settings?.tahunAjaranAktif || '-';
+    res = res.replace(/\$TAHUN_AJARAN/g, tahunAjarAktif);
+    res = res.replace(/\$TAHUN_AJAR/g, tahunAjarAktif);
+    res = res.replace(/\$TAHUNAJAR/g, tahunAjarAktif);
+    res = res.replace(/\$TAHUNAJARAN/g, tahunAjarAktif);
+    res = res.replace(/\$TAHUN_PELAJARAN/g, tahunAjarAktif);
 
     // Presensi & Catatan Wali
     let customObj: Record<string, any> = {};
@@ -475,6 +488,19 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     res = res.replace(/\$CATATAN_WALI_KELAS/g, String(catatanWali));
     res = res.replace(/\$CATATAN_WALI/g, String(catatanWali));
     res = res.replace(/\$KEPUTUSAN/g, String(keputusanVal));
+
+    // Tahfizh Dynamic Tags (dari record tahfizhGanjil/Genap atau customData hasil Tarik Tahfizh)
+    const tahfizhSem = sem === 'Genap' ? record?.tahfizhGenap : record?.tahfizhGanjil;
+    const capaianTahfizhVal = findCustomVal('CAPAIAN_TAHFIZH', 'TAHFIZH_CAPAIAN', 'HAFALAN_TERAKHIR')
+        || (tahfizhSem?.lastSurah ? `Juz ${tahfizhSem.lastJuz || '-'}, QS. ${tahfizhSem.lastSurah}` : '-');
+    const totalSetoranVal = findCustomVal('TOTAL_SETORAN_TAHFIZH', 'TOTAL_SETORAN', 'JUMLAH_SETORAN') || '-';
+    const nilaiTahfizhVal = findCustomVal('NILAI_TAHFIZH', 'TAHFIZH_NILAI', 'TAHFIZH') || '-';
+    const predikatTahfizhVal = findCustomVal('PREDIKAT_TAHFIZH', 'TAHFIZH_PREDIKAT') || tahfizhSem?.averagePredikat || '-';
+
+    res = res.replace(/\$CAPAIAN_TAHFIZH/g, String(capaianTahfizhVal));
+    res = res.replace(/\$TOTAL_SETORAN_TAHFIZH/g, String(totalSetoranVal));
+    res = res.replace(/\$NILAI_TAHFIZH/g, String(nilaiTahfizhVal));
+    res = res.replace(/\$PREDIKAT_TAHFIZH/g, String(predikatTahfizhVal));
 
     // Kalkulasi & Ranking
     let totalScore = context.calculation?.totalNilai;
@@ -598,9 +624,30 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     res = res.replace(/\$TEMPAT_RAPOR/g, kotaPondok);
     res = res.replace(/\$KOTA_PONPES/g, kotaPondok);
     res = res.replace(/\$KOTA_TANGGAL_HIJRIAH_MASEHI/g, `${kotaPondok}, ${hijriMasehiCombined}`);
-    res = res.replace(/\$KOTA_TANGGAL_HIJRIAH/g, `${kotaPondok}, ${hijriFullWithH || ''}`);
+    res = res.replace(/\$KOTA_TANGGAL_HIJRIAH/g, `${kotaPondok}, ${hijriFullWithH || '-'}`);
     res = res.replace(/\$KOTA_TANGGAL_DOKUMEN/g, `${kotaPondok}, ${docFormattedDate}`);
     res = res.replace(/\$KOTA_TANGGAL/g, `${kotaPondok}, ${masehiStr}`);
 
-    return res;
+    // Substitusi seluruh variabel input kustom ($MTK, $FIQIH, $UH1, dsb.) dari customData & extraVars
+    const mergedVars: Record<string, any> = {
+        ...customObj,
+        ...(context.extraVars || {})
+    };
+    const sortedCustomKeys = Object.keys(mergedVars)
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length);
+
+    for (const rawKey of sortedCustomKeys) {
+        const val = mergedVars[rawKey];
+        if (val === undefined || val === null) continue;
+        const upperKey = rawKey.trim().toUpperCase().replace(/[\s-]+/g, '_');
+        if (!upperKey) continue;
+        const token = `$${upperKey}`;
+        if (res.includes(token)) {
+            res = res.split(token).join(String(val));
+        }
+    }
+
+    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =IF, =PREDIKAT, =TERBILANG, =ARAB, =MAX, =MIN, =RANK, =CONCAT, &)
+    return evaluateRaporFormula(res, rankVal);
 };

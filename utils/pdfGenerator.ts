@@ -31,7 +31,13 @@ const getRenderablePages = (element: HTMLElement): HTMLElement[] => {
 
     if (wrappers.length === 1) {
         const wrapper = wrappers[0] as HTMLElement;
-        if (wrapper.style.pageBreakAfter === 'always' || wrapper.style.width === '21cm' || wrapper.style.width === '33cm') {
+        if (
+            wrapper.style.pageBreakAfter === 'always' ||
+            wrapper.style.width === '21cm' ||
+            wrapper.style.width === '21.5cm' ||
+            wrapper.style.width === '33cm' ||
+            wrapper.classList.contains('rapor-fit-1-page')
+        ) {
             return [wrapper];
         }
         return Array.from(wrapper.children) as HTMLElement[];
@@ -436,7 +442,7 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
             }
             @page { 
                 margin: ${marginStr}; 
-                size: ${paperSize} ${actualOrientation}; 
+                size: ${paperSize === 'F4' ? `${pageWidth}cm ${pageHeight}cm` : `${paperSize} ${actualOrientation}`}; 
             }
             * {
                 box-shadow: none !important;
@@ -467,7 +473,13 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 break-inside: auto !important;
             }
             /* Fit to 1 Page (1 Muka Rapor) Rules */
+            .printable-content-wrapper.rapor-fit-1-page,
             .rapor-fit-1-page {
+                height: ${pageHeight}cm !important;
+                max-height: ${pageHeight}cm !important;
+                min-height: 0 !important;
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 box-sizing: border-box !important;

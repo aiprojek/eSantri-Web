@@ -89,8 +89,89 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         syntax: '=CONCAT("Marhalah ", $JENJANG)',
         description: 'Menggabungkan teks statis dengan variabel dinamis',
         category: 'formula'
+    },
+    {
+        token: '=UPPER',
+        insertText: '=UPPER(',
+        label: 'Huruf Besar Semua (UPPER)',
+        syntax: '=UPPER($NAMA)',
+        description: 'Mengubah seluruh huruf menjadi KAPITAL / HURUF BESAR',
+        category: 'formula'
+    },
+    {
+        token: '=LOWER',
+        insertText: '=LOWER(',
+        label: 'Huruf Kecil Semua (LOWER)',
+        syntax: '=LOWER($TEKS)',
+        description: 'Mengubah seluruh huruf menjadi huruf kecil',
+        category: 'formula'
+    },
+    {
+        token: '=PROPER',
+        insertText: '=PROPER(',
+        label: 'Kapital Awal Kata / Judul (PROPER)',
+        syntax: '=PROPER($NAMA)',
+        description: 'Mengubah huruf pertama setiap kata menjadi Kapital (Ahmad Fauzan)',
+        category: 'formula'
+    },
+    {
+        token: '=TAHUN_AJAR',
+        insertText: '=TAHUN_AJAR()',
+        label: 'Tahun Ajaran Aktif',
+        syntax: '=TAHUN_AJAR()',
+        description: 'Memanggil tahun ajaran aktif dari Data Master (misal 2026/2027)',
+        category: 'formula'
+    },
+    {
+        token: '=SEMESTER',
+        insertText: '=SEMESTER()',
+        label: 'Semester Aktif',
+        syntax: '=SEMESTER()',
+        description: 'Memanggil semester aktif berjalan (Ganjil / Genap)',
+        category: 'formula'
     }
 ];
+
+export type TextTransformMode = 'none' | 'uppercase' | 'lowercase' | 'capitalize' | 'sentence';
+
+export interface FormulaEvalMeta {
+    rank?: number;
+    tahunAjaran?: string;
+    tahunAjaranHijriah?: string;
+    semester?: string;
+}
+
+/**
+ * Mengubah teks menjadi Kapital Setiap Kata (Title Case / Proper Case) termasuk bila sumbernya HURUF BESAR SEMUA
+ */
+export function toTitleCase(input: string): string {
+    if (!input) return '';
+    return input
+        .toLowerCase()
+        .replace(/(^|[\s\-/'".()[\]]+)([a-zà-ÿ])/g, (_m, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`);
+}
+
+/**
+ * Mengubah teks menjadi Kapital Awal Kalimat (Sentence case)
+ */
+export function toSentenceCase(input: string): string {
+    if (!input) return '';
+    return input
+        .toLowerCase()
+        .replace(/(^\s*|[.!?]\s+|\n\s*)([a-zà-ÿ])/g, (_m, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`);
+}
+
+/**
+ * Menerapkan format huruf sel (UPPERCASE, lowercase, Title Case, Sentence case) secara konsisten di kanvas, preview, dan cetak PDF
+ */
+export function applyCellTextTransform(text: string, mode?: TextTransformMode): string {
+    if (!text || !mode || mode === 'none') return text;
+    if (mode === 'uppercase') return text.toUpperCase();
+    if (mode === 'lowercase') return text.toLowerCase();
+    if (mode === 'capitalize') return toTitleCase(text);
+    if (mode === 'sentence') return toSentenceCase(text);
+    return text;
+}
 
 const SATUAN = [
     '',
@@ -273,10 +354,27 @@ function splitTopLevelArgs(argsStr: string): string[] {
     return result;
 }
 
+function isSingleQuotedLiteral(str: string): boolean {
+    const t = str.trim();
+    if (t.length < 2) return false;
+    const quote = t[0];
+    if (quote !== '"' && quote !== "'") return false;
+    for (let i = 1; i < t.length; i++) {
+        if (t[i] === quote && t[i - 1] !== '\\') {
+            return i === t.length - 1;
+        }
+    }
+    return false;
+}
+
 function unquote(str: string): string {
     const t = str.trim();
-    if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
-        return t.slice(1, -1);
+    if (isSingleQuotedLiteral(t)) {
+        const q = t[0];
+        const inner = t.slice(1, -1);
+        return q === '"'
+            ? inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+            : inner.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
     }
     return t;
 }
@@ -360,7 +458,7 @@ function evaluateSafeMath(expr: string): number | null {
     }
 }
 
-function evaluateCondition(condExpr: string, fallbackRank?: number): boolean {
+function evaluateCondition(condExpr: string, meta?: FormulaEvalMeta): boolean {
     const ops = ['>=', '<=', '<>', '!=', '==', '=', '>', '<'] as const;
     let inQuote: '"' | "'" | null = null;
     let depth = 0;
@@ -384,8 +482,8 @@ function evaluateCondition(condExpr: string, fallbackRank?: number): boolean {
                 if (op === '=' && (condExpr[i - 1] === '>' || condExpr[i - 1] === '<' || condExpr[i - 1] === '!' || condExpr[i + 1] === '=')) {
                     continue;
                 }
-                const leftRaw = evaluateFormulaNode(condExpr.slice(0, i), fallbackRank);
-                const rightRaw = evaluateFormulaNode(condExpr.slice(i + op.length), fallbackRank);
+                const leftRaw = evaluateFormulaNode(condExpr.slice(0, i), meta);
+                const rightRaw = evaluateFormulaNode(condExpr.slice(i + op.length), meta);
                 const leftNum = Number(unquote(leftRaw).replace(',', '.'));
                 const rightNum = Number(unquote(rightRaw).replace(',', '.'));
                 const bothNum = unquote(leftRaw).trim() !== '' && unquote(rightRaw).trim() !== '' && !isNaN(leftNum) && !isNaN(rightNum);
@@ -407,17 +505,16 @@ function evaluateCondition(condExpr: string, fallbackRank?: number): boolean {
         }
     }
 
-    const val = unquote(evaluateFormulaNode(condExpr, fallbackRank)).trim().toLowerCase();
+    const val = unquote(evaluateFormulaNode(condExpr, meta)).trim().toLowerCase();
     return Boolean(val && val !== '0' && val !== 'false' && val !== '-');
 }
 
-function evaluateFormulaNode(expr: string, fallbackRank?: number): string {
+function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
     const trimmed = expr.trim();
     if (!trimmed) return '';
 
     // String literal murni
-    if ((trimmed.startsWith('"') && trimmed.endsWith('"') && !trimmed.slice(1, -1).includes('"')) ||
-        (trimmed.startsWith("'") && trimmed.endsWith("'") && !trimmed.slice(1, -1).includes("'"))) {
+    if (isSingleQuotedLiteral(trimmed)) {
         return unquote(trimmed);
     }
 
@@ -446,7 +543,7 @@ function evaluateFormulaNode(expr: string, fallbackRank?: number): string {
         }
         if (ampParts.length > 0) {
             ampParts.push(cur);
-            return ampParts.map(p => unquote(evaluateFormulaNode(p, fallbackRank))).join('');
+            return ampParts.map(p => unquote(evaluateFormulaNode(p, meta))).join('');
         }
     }
 
@@ -482,17 +579,61 @@ function evaluateFormulaNode(expr: string, fallbackRank?: number): string {
 
             if (fnName === 'IF' || fnName === 'JIKA') {
                 if (rawArgs.length >= 2) {
-                    const cond = evaluateCondition(rawArgs[0], fallbackRank);
-                    if (cond) return unquote(evaluateFormulaNode(rawArgs[1], fallbackRank));
-                    return rawArgs[2] !== undefined ? unquote(evaluateFormulaNode(rawArgs[2], fallbackRank)) : '';
+                    const cond = evaluateCondition(rawArgs[0], meta);
+                    if (cond) return unquote(evaluateFormulaNode(rawArgs[1], meta));
+                    return rawArgs[2] !== undefined ? unquote(evaluateFormulaNode(rawArgs[2], meta)) : '';
                 }
                 return '-';
             }
 
-            const evalArgs = rawArgs.map(a => evaluateFormulaNode(a, fallbackRank));
+            const evalArgs = rawArgs.map(a => evaluateFormulaNode(a, meta));
 
             if (fnName === 'CONCAT' || fnName === 'CONCATENATE' || fnName === 'GABUNG') {
                 return evalArgs.map(unquote).join('');
+            }
+            if (fnName === 'UPPER' || fnName === 'BESAR' || fnName === 'KAPITAL') {
+                return evalArgs.map(unquote).join(' ').toUpperCase();
+            }
+            if (fnName === 'LOWER' || fnName === 'KECIL') {
+                return evalArgs.map(unquote).join(' ').toLowerCase();
+            }
+            if (fnName === 'PROPER' || fnName === 'JUDUL' || fnName === 'TITLE' || fnName === 'CAPITALIZE') {
+                return toTitleCase(evalArgs.map(unquote).join(' '));
+            }
+            if (fnName === 'SENTENCE' || fnName === 'KALIMAT') {
+                return toSentenceCase(evalArgs.map(unquote).join(' '));
+            }
+            if (fnName === 'TRIM') {
+                return evalArgs.map(unquote).join(' ').replace(/\s+/g, ' ').trim();
+            }
+            if (fnName === 'TAHUN_AJAR' || fnName === 'TAHUN_AJARAN' || fnName === 'TAHUNAJAR' || fnName === 'TAHUNAJARAN' || fnName === 'TAPEL' || fnName === 'TAHUN_PELAJARAN') {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim().toLowerCase() : '';
+                if (modeArg === 'hijriah' || modeArg === 'hijri') {
+                    return meta?.tahunAjaranHijriah || '-';
+                }
+                if (modeArg === 'lengkap' || modeArg === 'gabungan') {
+                    const h = meta?.tahunAjaranHijriah;
+                    const m = meta?.tahunAjaran || '-';
+                    return h && h !== '-' ? `${h} / ${m} M` : m;
+                }
+                return meta?.tahunAjaran || '-';
+            }
+            if (fnName === 'TAHUN_AJAR_HIJRIAH' || fnName === 'TAHUN_AJARAN_HIJRIAH') {
+                return meta?.tahunAjaranHijriah || '-';
+            }
+            if (fnName === 'SEMESTER') {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim().toLowerCase() : '';
+                const semStr = meta?.semester || 'Ganjil';
+                if (modeArg === 'angka' || modeArg === 'nomor') {
+                    return semStr === 'Genap' ? '2' : '1';
+                }
+                if (modeArg === 'romawi') {
+                    return semStr === 'Genap' ? 'II' : 'I';
+                }
+                return semStr;
+            }
+            if (fnName === 'SEMESTER_ANGKA') {
+                return (meta?.semester || 'Ganjil') === 'Genap' ? '2' : '1';
             }
             if (fnName === 'SUM' || fnName === 'JUMLAH' || fnName === 'TOTAL') {
                 const nums = parseNumericValues(evalArgs);
@@ -534,7 +675,7 @@ function evaluateFormulaNode(expr: string, fallbackRank?: number): string {
                 return nilaiKePredikatOtomatis(val, mode);
             }
             if (fnName === 'RANK' || fnName === 'PERINGKAT') {
-                return fallbackRank && fallbackRank > 0 ? String(fallbackRank) : '-';
+                return meta?.rank && meta.rank > 0 ? String(meta.rank) : '-';
             }
         }
     }
@@ -548,19 +689,35 @@ function evaluateFormulaNode(expr: string, fallbackRank?: number): string {
     return unquote(trimmed);
 }
 
+const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|SEMESTER|SEMESTER_ANGKA)\s*\([\s\S]*\)$/i;
+
+/**
+ * Mengecek apakah string teks sel merupakan ekspresi rumus rapor
+ */
+export function isRaporFormulaExpression(rawText: string): boolean {
+    const trimmed = (rawText || '').trim();
+    if (!trimmed) return false;
+    if (trimmed.startsWith('=')) return true;
+    return KNOWN_FORMULA_CALL_REGEX.test(trimmed);
+}
+
 /**
  * Mengevaluasi rumus sel rapor setelah seluruh placeholder $TAG disubstitusi.
  * Mendukung penulisan dengan awalan '=' (misal '=RATA2(80, 90)') maupun fungsi langsung pada sel bertipe formula ('RATA2(80, 90)').
  */
-export function evaluateRaporFormula(resolvedText: string, fallbackRank?: number): string {
+export function evaluateRaporFormula(resolvedText: string, rankOrMeta?: number | FormulaEvalMeta): string {
     const trimmed = resolvedText.trim();
     if (!trimmed) return '';
+
+    const meta: FormulaEvalMeta | undefined = typeof rankOrMeta === 'number'
+        ? { rank: rankOrMeta }
+        : rankOrMeta;
 
     const isExplicitFormula = trimmed.startsWith('=');
     const body = isExplicitFormula ? trimmed.slice(1).trim() : trimmed;
 
     // Jika diawali '=' atau cocok dengan pola fungsi rumus standar rapor
-    const isKnownFunctionCall = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG)\s*\([\s\S]*\)$/i.test(body);
+    const isKnownFunctionCall = KNOWN_FORMULA_CALL_REGEX.test(body);
 
     if (!isExplicitFormula && !isKnownFunctionCall) {
         return resolvedText;
@@ -568,7 +725,7 @@ export function evaluateRaporFormula(resolvedText: string, fallbackRank?: number
 
     // Jika masih ada variabel $BELUM_DIISI yang tersisa di dalam rumus, anggap kosong ("") agar tidak merusak perhitungan SUM/RATA2
     const sanitizedBody = body.replace(/\$[A-Z0-9_]+/gi, '""');
-    return evaluateFormulaNode(sanitizedBody, fallbackRank);
+    return evaluateFormulaNode(sanitizedBody, meta);
 }
 
 /**

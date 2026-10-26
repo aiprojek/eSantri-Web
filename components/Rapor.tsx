@@ -28,6 +28,8 @@ export interface SharedRaporContext {
 
 type RaporTabId = 'designer' | 'generator' | 'import' | 'monitoring' | 'data' | 'print' | 'input_wali' | 'leger';
 
+const RAPOR_ACTIVE_TAB_KEY = 'esantri_rapor_active_tab';
+
 const Rapor: React.FC = () => {
     const { currentUser } = useAppContext();
     const isWaliKelas = currentUser?.role === 'wali_kelas';
@@ -35,7 +37,16 @@ const Rapor: React.FC = () => {
     const akademikPermission = currentUser?.permissions?.akademik;
     const canReadAkademik = isAdmin || isWaliKelas || akademikPermission === 'read' || akademikPermission === 'write';
     const canWriteAkademik = isAdmin || akademikPermission === 'write';
-    const [activeTab, setActiveTab] = useState<RaporTabId>(isWaliKelas ? 'input_wali' : 'monitoring');
+    const [activeTab, setActiveTab] = useState<RaporTabId>(() => {
+        const defaultTab: RaporTabId = isWaliKelas ? 'input_wali' : 'monitoring';
+        try {
+            const saved = sessionStorage.getItem(RAPOR_ACTIVE_TAB_KEY) as RaporTabId | null;
+            if (saved) return saved;
+        } catch {
+            // ignore storage errors
+        }
+        return defaultTab;
+    });
 
     // Shared navigation context across all tabs
     const [sharedContext, setSharedContext] = useState<SharedRaporContext>({});
@@ -86,6 +97,12 @@ const Rapor: React.FC = () => {
     useEffect(() => {
         if (!raporTabs.find(tab => tab.value === activeTab) && raporTabs.length > 0) {
             setActiveTab(raporTabs[0].value);
+            return;
+        }
+        try {
+            sessionStorage.setItem(RAPOR_ACTIVE_TAB_KEY, activeTab);
+        } catch {
+            // ignore storage errors
         }
     }, [raporTabs, activeTab]);
 

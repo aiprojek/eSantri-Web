@@ -3,7 +3,8 @@ import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTempl
 import { formatDate, getHijriDate, formatTanggalDokumen } from './formatters';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
-import { evaluateRaporFormula } from './raporFormulaUtils';
+import { evaluateRaporFormula, isRaporFormulaExpression } from './raporFormulaUtils';
+import { getAcademicYearsFromSettings, getDefaultAcademicYear } from './academicYear';
 
 export interface DynamicTagItem {
     tag: string;
@@ -60,9 +61,11 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         icon: 'bi-book-half',
         color: 'text-indigo-600 bg-indigo-50 border-indigo-200',
         tags: [
-            { tag: '$SEMESTER', label: 'Semester (Teks)', description: 'Ganjil atau Genap', example: 'Ganjil' },
+            { tag: '$SEMESTER', label: 'Semester (Teks)', description: 'Ganjil atau Genap (otomatis dari periode aktif)', example: 'Ganjil' },
             { tag: '$SEMESTER_ANGKA', label: 'Semester (Angka)', description: '1 atau 2', example: '1' },
-            { tag: '$TAHUN_AJAR', label: 'Tahun Ajaran', description: 'Tahun pelajaran berjalan', example: '2026/2027' },
+            { tag: '$TAHUN_AJAR', label: 'Tahun Ajaran Aktif', description: 'Tahun pelajaran aktif dari Data Master', example: '2026/2027' },
+            { tag: '$TAHUN_AJAR_HIJRIAH', label: 'Tahun Ajaran Hijriah', description: 'Tahun pelajaran Hijriah dari pengaturan Tahun Ajaran', example: '1447/1448 H' },
+            { tag: '$TAHUN_AJAR_LENGKAP', label: 'Tahun Ajaran Hijriah / Masehi', description: 'Gabungan Tahun Ajaran Hijriah & Masehi bila diaktifkan', example: '1447/1448 H / 2026/2027 M' },
             { tag: '$JENJANG', label: 'Jenjang / Marhalah', description: 'Nama marhalah pendidikan', example: 'Tsanawiyyah' },
             { tag: '$KELAS', label: 'Tingkat Kelas', description: 'Nama kelas', example: 'Kelas 7' },
             { tag: '$ROMBEL', label: 'Rombongan Belajar', description: 'Nama rombel santri', example: '7A Ula' },
@@ -215,6 +218,8 @@ export interface RaporResolveContext {
         predikat?: string;
     };
     extraVars?: Record<string, any>;
+    tahunAjaran?: string;
+    semester?: 'Ganjil' | 'Genap';
 }
 
 export const isMediaTag = (value: string): boolean => {
@@ -319,7 +324,7 @@ export const templateHasBuiltInBiodata = (template: RaporTemplate | null | undef
 
 export const resolveRaporText = (text: string, context: RaporResolveContext): string => {
     if (!text) return '';
-    const { santri, settings, record, targetDate = new Date() } = context;
+    const { santri, settings, record } = context;
     let res = text;
 
     // Normalisasi tag format {{nama}}, {nama}, [nama] dsb ke $TAG untuk fleksibilitas maksimal dari Excel
@@ -340,8 +345,25 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         if (u === 'MUDIR' || u === 'PIMPINAN' || u === 'KEPALA_SEKOLAH' || u === 'KEPALASEKOLAH') return '$NAMA_MUDIR';
         if (u === 'TANGGAL_RAPOR' || u === 'TANGGAL' || u === 'TANGGALRAPOR') return '$TANGGAL_DOKUMEN';
         if (u === 'TEMPAT_RAPOR' || u === 'KOTA' || u === 'TEMPATRAPOR') return '$TEMPAT_RAPOR';
-        if (u === 'SEMESTER') return '$SEMESTER';
-        if (u === 'TAHUN_AJAR' || u === 'TAHUN_AJARAN' || u === 'TAHUNAJAR' || u === 'TAHUNAJARAN' || u === 'TAPEL' || u === 'TAHUN_PELAJARAN') return '$TAHUN_AJARAN';
+        if (u === 'SEMESTER' || u === 'SEMESTER_AKTIF') return '$SEMESTER';
+        if (
+            u === 'TAHUN_AJAR' ||
+            u === 'TAHUN_AJARAN' ||
+            u === 'TAHUNAJAR' ||
+            u === 'TAHUNAJARAN' ||
+            u === 'TAPEL' ||
+            u === 'TAHUN_PELAJARAN' ||
+            u === 'TAHUN_AJAR_AKTIF' ||
+            u === 'TAHUN_AJARAN_AKTIF'
+        ) {
+            return '$TAHUN_AJARAN';
+        }
+        if (u === 'TAHUN_AJAR_HIJRIAH' || u === 'TAHUN_AJARAN_HIJRIAH' || u === 'TAHUN_HIJRIYAH') {
+            return '$TAHUN_AJAR_HIJRIAH';
+        }
+        if (u === 'TAHUN_AJAR_LENGKAP' || u === 'TAHUN_AJARAN_LENGKAP') {
+            return '$TAHUN_AJAR_LENGKAP';
+        }
         if (u === 'CATATAN_WALI' || u === 'CATATAN' || u === 'CATATANWALIKELAS' || u === 'CATATAN_WALI_KELAS') return '$CATATAN_WALI_KELAS';
         return `$${u}`;
     };
@@ -355,31 +377,36 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     // Replace $tag (mendukung penulisan $Jenjang, $jenjang, $tahunajar, dsb. secara case-insensitive)
     res = res.replace(/\$([a-zA-Z0-9_]+)/g, (_match, p1) => normalizeTagWord(p1));
 
+    const tokenMap = new Map<string, string>();
+    const setToken = (key: string, val: string) => {
+        tokenMap.set(key.startsWith('$') ? key.toUpperCase() : `$${key.toUpperCase()}`, val);
+    };
+
     // Santri Data
     if (santri) {
-        res = res.replace(/\$NAMA_LENGKAP/g, santri.namaLengkap);
-        res = res.replace(/\$NAMA/g, santri.namaLengkap);
-        res = res.replace(/\$NAMA_HIJRAH/g, santri.namaHijrah || santri.namaLengkap);
-        res = res.replace(/\$NISN/g, santri.nisn || '-');
-        res = res.replace(/\$NIS/g, santri.nis);
-        res = res.replace(/\$NIK/g, santri.nik || '-');
-        res = res.replace(/\$TEMPAT_LAHIR/g, santri.tempatLahir || '-');
-        res = res.replace(/\$TANGGAL_LAHIR/g, santri.tanggalLahir ? formatDate(santri.tanggalLahir) : '-');
-        res = res.replace(/\$TTL/g, `${santri.tempatLahir || '-'}, ${santri.tanggalLahir ? formatDate(santri.tanggalLahir) : '-'}`);
-        res = res.replace(/\$JENIS_KELAMIN/g, santri.jenisKelamin || '-');
+        setToken('$NAMA_LENGKAP', santri.namaLengkap);
+        setToken('$NAMA', santri.namaLengkap);
+        setToken('$NAMA_HIJRAH', santri.namaHijrah || santri.namaLengkap);
+        setToken('$NISN', santri.nisn || '-');
+        setToken('$NIS', santri.nis);
+        setToken('$NIK', santri.nik || '-');
+        setToken('$TEMPAT_LAHIR', santri.tempatLahir || '-');
+        setToken('$TANGGAL_LAHIR', santri.tanggalLahir ? formatDate(santri.tanggalLahir) : '-');
+        setToken('$TTL', `${santri.tempatLahir || '-'}, ${santri.tanggalLahir ? formatDate(santri.tanggalLahir) : '-'}`);
+        setToken('$JENIS_KELAMIN', santri.jenisKelamin || '-');
         const alamatStr = santri.alamat ? `${santri.alamat.detail || ''} ${santri.alamat.desaKelurahan || ''} ${santri.alamat.kecamatan || ''} ${santri.alamat.kabupatenKota || ''} ${santri.alamat.provinsi || ''}`.trim() : '-';
-        res = res.replace(/\$ALAMAT_SANTRI/g, alamatStr || '-');
+        setToken('$ALAMAT_SANTRI', alamatStr || '-');
 
         // Orang Tua / Wali
-        res = res.replace(/\$NAMA_AYAH/g, santri.namaAyah || '-');
-        res = res.replace(/\$NAMA_IBU/g, santri.namaIbu || '-');
-        res = res.replace(/\$NAMA_WALI/g, santri.namaWali || santri.namaAyah || santri.namaIbu || '-');
-        res = res.replace(/\$TELEPON_ORTU/g, santri.teleponAyah || santri.teleponIbu || santri.teleponWali || '-');
-        res = res.replace(/\$PEKERJAAN_AYAH/g, santri.pekerjaanAyah || '-');
-        res = res.replace(/\$PEKERJAAN_IBU/g, santri.pekerjaanIbu || '-');
+        setToken('$NAMA_AYAH', santri.namaAyah || '-');
+        setToken('$NAMA_IBU', santri.namaIbu || '-');
+        setToken('$NAMA_WALI', santri.namaWali || santri.namaAyah || santri.namaIbu || '-');
+        setToken('$TELEPON_ORTU', santri.teleponAyah || santri.teleponIbu || santri.teleponWali || '-');
+        setToken('$PEKERJAAN_AYAH', santri.pekerjaanAyah || '-');
+        setToken('$PEKERJAAN_IBU', santri.pekerjaanIbu || '-');
 
         // Tahfizh Data
-        res = res.replace(/\$TARGET_JUZ/g, santri.targetJuz ? `${santri.targetJuz} Juz` : '-');
+        setToken('$TARGET_JUZ', santri.targetJuz ? `${santri.targetJuz} Juz` : '-');
     }
 
     // Settings & Academic
@@ -389,11 +416,11 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
             const kelas = settings.kelas.find(k => k.id === santri.kelasId);
             const rombel = settings.rombel.find(r => r.id === santri.rombelId);
             const halaqah = (settings.kelompokHalaqah || []).find(h => h.id === santri.halaqahId);
-            res = res.replace(/\$JENJANG/g, jenjang?.nama || '');
-            res = res.replace(/\$MARHALAH/g, jenjang?.nama || '');
-            res = res.replace(/\$KELAS/g, kelas?.nama || '');
-            res = res.replace(/\$ROMBEL/g, rombel?.nama || '');
-            res = res.replace(/\$HALAQAH/g, halaqah?.nama || '-');
+            setToken('$JENJANG', jenjang?.nama || '');
+            setToken('$MARHALAH', jenjang?.nama || '');
+            setToken('$KELAS', kelas?.nama || '');
+            setToken('$ROMBEL', rombel?.nama || '');
+            setToken('$HALAQAH', halaqah?.nama || '-');
 
             // Wali Kelas
             let waliName = '-';
@@ -405,8 +432,8 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
                     waliNip = teacher.kodeGuru || teacher.telepon || '-';
                 }
             }
-            res = res.replace(/\$NAMA_WALI_KELAS/g, waliName);
-            res = res.replace(/\$NIP_WALI_KELAS/g, waliNip);
+            setToken('$NAMA_WALI_KELAS', waliName);
+            setToken('$NIP_WALI_KELAS', waliNip);
         }
 
         // Mudir / Pimpinan
@@ -419,45 +446,73 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
                 mudirNip = mudir.kodeGuru || mudir.telepon || '-';
             }
         }
-        res = res.replace(/\$NAMA_MUDIR/g, mudirName);
-        res = res.replace(/\$NAMA_PIMPINAN/g, mudirName);
-        res = res.replace(/\$NAMA_KEPALA_SEKOLAH/g, mudirName);
-        res = res.replace(/\$NIP_MUDIR/g, mudirNip);
+        setToken('$NAMA_MUDIR', mudirName);
+        setToken('$NAMA_PIMPINAN', mudirName);
+        setToken('$NAMA_KEPALA_SEKOLAH', mudirName);
+        setToken('$NIP_MUDIR', mudirNip);
 
         // Identitas Lembaga
-        res = res.replace(/\$NAMA_PONPES/g, settings.namaPonpes || '');
-        res = res.replace(/\$NAMA_YAYASAN/g, settings.namaYayasan || '');
-        res = res.replace(/\$NSPP/g, settings.nspp || '-');
-        res = res.replace(/\$NPSN/g, settings.npsn || '-');
-        res = res.replace(/\$ALAMAT_PONPES/g, settings.alamat || '');
-        res = res.replace(/\$TELEPON_PONPES/g, settings.telepon || '-');
-        res = res.replace(/\$EMAIL_PONPES/g, settings.email || '-');
-        res = res.replace(/\$WEBSITE_PONPES/g, settings.website || '-');
+        setToken('$NAMA_PONPES', settings.namaPonpes || '');
+        setToken('$NAMA_YAYASAN', settings.namaYayasan || '');
+        setToken('$NSPP', settings.nspp || '-');
+        setToken('$NPSN', settings.npsn || '-');
+        setToken('$ALAMAT_PONPES', settings.alamat || '');
+        setToken('$TELEPON_PONPES', settings.telepon || '-');
+        setToken('$EMAIL_PONPES', settings.email || '-');
+        setToken('$WEBSITE_PONPES', settings.website || '-');
 
         if (Array.isArray(settings.customInfoFields)) {
             settings.customInfoFields.forEach((field) => {
                 if (field && field.label) {
                     const cleanKey = field.label.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
                     if (cleanKey) {
-                        const val = field.value || '-';
-                        res = res.split(`$${cleanKey}`).join(val);
-                        res = res.split(`{${cleanKey}}`).join(val);
+                        setToken(`$${cleanKey}`, field.value || '-');
                     }
                 }
             });
         }
     }
 
-    // Period / Record (dengan fallback ke settings aktif)
-    const sem = record?.semester || settings?.semesterAktif || 'Ganjil';
-    res = res.replace(/\$SEMESTER_ANGKA/g, sem === 'Genap' ? '2' : '1');
-    res = res.replace(/\$SEMESTER/g, sem);
-    const tahunAjarAktif = record?.tahunAjaran || settings?.tahunAjaranAktif || '-';
-    res = res.replace(/\$TAHUN_AJARAN/g, tahunAjarAktif);
-    res = res.replace(/\$TAHUN_AJAR/g, tahunAjarAktif);
-    res = res.replace(/\$TAHUNAJAR/g, tahunAjarAktif);
-    res = res.replace(/\$TAHUNAJARAN/g, tahunAjarAktif);
-    res = res.replace(/\$TAHUN_PELAJARAN/g, tahunAjarAktif);
+    // Period / Record (terhubung langsung ke Tahun Ajaran Aktif di Data Master settings.academicYears)
+    const academicYears = getAcademicYearsFromSettings(settings);
+    const activeYearCfg = academicYears.find(y => y.isActive) || academicYears[0];
+    const legacyTahunAktif = (settings as any)?.tahunAjaranAktif;
+    const legacySemesterAktif = (settings as any)?.semesterAktif;
+
+    const tahunAjarAktif = (
+        context.tahunAjaran?.trim() ||
+        record?.tahunAjaran?.trim() ||
+        activeYearCfg?.labelMasehi?.trim() ||
+        (typeof legacyTahunAktif === 'string' ? legacyTahunAktif.trim() : '') ||
+        getDefaultAcademicYear(settings) ||
+        '-'
+    );
+    const matchedYearCfg = academicYears.find(y => y.labelMasehi?.trim() === tahunAjarAktif) || activeYearCfg;
+    const rawHijriLabel = matchedYearCfg?.labelHijriah?.trim() || '';
+    const tahunAjarHijriah = rawHijriLabel
+        ? (/\bH$/i.test(rawHijriLabel) ? rawHijriLabel : `${rawHijriLabel} H`)
+        : '-';
+    const tahunAjarLengkap = (matchedYearCfg?.hijriEnabled && rawHijriLabel)
+        ? `${tahunAjarHijriah} / ${tahunAjarAktif} M`
+        : tahunAjarAktif;
+
+    const sem: 'Ganjil' | 'Genap' = (
+        context.semester ||
+        record?.semester ||
+        matchedYearCfg?.semesterAktif ||
+        (legacySemesterAktif === 'Genap' ? 'Genap' : legacySemesterAktif === 'Ganjil' ? 'Ganjil' : undefined) ||
+        'Ganjil'
+    );
+
+    setToken('$SEMESTER_ANGKA', sem === 'Genap' ? '2' : '1');
+    setToken('$SEMESTER', sem);
+    setToken('$TAHUN_AJARAN', tahunAjarAktif);
+    setToken('$TAHUN_AJAR', tahunAjarAktif);
+    setToken('$TAHUNAJAR', tahunAjarAktif);
+    setToken('$TAHUNAJARAN', tahunAjarAktif);
+    setToken('$TAHUN_PELAJARAN', tahunAjarAktif);
+    setToken('$TAHUN_AJAR_HIJRIAH', tahunAjarHijriah);
+    setToken('$TAHUN_AJAR_LENGKAP', tahunAjarLengkap);
 
     // Presensi & Catatan Wali
     let customObj: Record<string, any> = {};
@@ -481,13 +536,13 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     const catatanWali = record?.catatanWaliKelas || findCustomVal('CATATAN_WALI_KELAS', 'catatanWaliKelas', 'CATATAN_WALI', 'catatan_wali') || '-';
     const keputusanVal = record?.keputusan || findCustomVal('KEPUTUSAN', 'keputusan') || '-';
 
-    res = res.replace(/\$SAKIT/g, String(sakitVal));
-    res = res.replace(/\$IZIN/g, String(izinVal));
-    res = res.replace(/\$ALPHA/g, String(alphaVal));
-    res = res.replace(/\$TOTAL_ABSEN/g, String(totalAbsen));
-    res = res.replace(/\$CATATAN_WALI_KELAS/g, String(catatanWali));
-    res = res.replace(/\$CATATAN_WALI/g, String(catatanWali));
-    res = res.replace(/\$KEPUTUSAN/g, String(keputusanVal));
+    setToken('$SAKIT', String(sakitVal));
+    setToken('$IZIN', String(izinVal));
+    setToken('$ALPHA', String(alphaVal));
+    setToken('$TOTAL_ABSEN', String(totalAbsen));
+    setToken('$CATATAN_WALI_KELAS', String(catatanWali));
+    setToken('$CATATAN_WALI', String(catatanWali));
+    setToken('$KEPUTUSAN', String(keputusanVal));
 
     // Tahfizh Dynamic Tags (dari record tahfizhGanjil/Genap atau customData hasil Tarik Tahfizh)
     const tahfizhSem = sem === 'Genap' ? record?.tahfizhGenap : record?.tahfizhGanjil;
@@ -497,16 +552,16 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     const nilaiTahfizhVal = findCustomVal('NILAI_TAHFIZH', 'TAHFIZH_NILAI', 'TAHFIZH') || '-';
     const predikatTahfizhVal = findCustomVal('PREDIKAT_TAHFIZH', 'TAHFIZH_PREDIKAT') || tahfizhSem?.averagePredikat || '-';
 
-    res = res.replace(/\$CAPAIAN_TAHFIZH/g, String(capaianTahfizhVal));
-    res = res.replace(/\$TOTAL_SETORAN_TAHFIZH/g, String(totalSetoranVal));
-    res = res.replace(/\$NILAI_TAHFIZH/g, String(nilaiTahfizhVal));
-    res = res.replace(/\$PREDIKAT_TAHFIZH/g, String(predikatTahfizhVal));
+    setToken('$CAPAIAN_TAHFIZH', String(capaianTahfizhVal));
+    setToken('$TOTAL_SETORAN_TAHFIZH', String(totalSetoranVal));
+    setToken('$NILAI_TAHFIZH', String(nilaiTahfizhVal));
+    setToken('$PREDIKAT_TAHFIZH', String(predikatTahfizhVal));
 
     // Kalkulasi & Ranking
     let totalScore = context.calculation?.totalNilai;
     let avgScore = context.calculation?.rataRata;
     let predikatStr = context.calculation?.predikat;
-    let rankVal = context.calculation?.ranking;
+    const rankVal = context.calculation?.ranking;
     const totalSantriVal = context.calculation?.totalSantri;
 
     if (totalScore === undefined || avgScore === undefined) {
@@ -535,12 +590,12 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         }
     }
 
-    res = res.replace(/\$TOTAL_NILAI/g, totalScore !== undefined && totalScore > 0 ? String(totalScore) : '-');
-    res = res.replace(/\$RATA_RATA/g, avgScore !== undefined && avgScore > 0 ? avgScore.toFixed(2) : '-');
-    res = res.replace(/\$PREDIKAT_RATA_RATA/g, predikatStr || '-');
-    res = res.replace(/\$PERINGKAT/g, rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
-    res = res.replace(/\$RANKING/g, rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
-    res = res.replace(/\$TOTAL_SANTRI/g, totalSantriVal !== undefined && totalSantriVal > 0 ? String(totalSantriVal) : '-');
+    setToken('$TOTAL_NILAI', totalScore !== undefined && totalScore > 0 ? String(totalScore) : '-');
+    setToken('$RATA_RATA', avgScore !== undefined && avgScore > 0 ? avgScore.toFixed(2) : '-');
+    setToken('$PREDIKAT_RATA_RATA', predikatStr || '-');
+    setToken('$PERINGKAT', rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
+    setToken('$RANKING', rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
+    setToken('$TOTAL_SANTRI', totalSantriVal !== undefined && totalSantriVal > 0 ? String(totalSantriVal) : '-');
 
     // Kurikulum Merdeka & Deskripsi Capaian Pembelajaran (CP/TP)
     const customCpTertinggi = findCustomVal('DESKRIPSI_CAPAIAN_TERTINGGI', 'CP_TERTINGGI', 'CAPAIAN_TERTINGGI', 'DESKRIPSI_TERTINGGI');
@@ -576,11 +631,11 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         keputusanVal !== '-' ? keputusanVal : (avgScore && avgScore >= 70 ? 'Naik ke Tingkat Berikutnya' : 'Perlu Evaluasi Lanjutan')
     );
 
-    res = res.replace(/\$DESKRIPSI_CAPAIAN_TERTINGGI/g, String(defaultCpTertinggi));
-    res = res.replace(/\$DESKRIPSI_CAPAIAN_TERENDAH/g, String(defaultCpTerendah));
-    res = res.replace(/\$DESKRIPSI_KOMPETENSI/g, String(defaultKompetensi));
-    res = res.replace(/\$CAPAIAN_UMUM/g, String(defaultKompetensi));
-    res = res.replace(/\$STATUS_KELULUSAN/g, String(defaultKelulusan));
+    setToken('$DESKRIPSI_CAPAIAN_TERTINGGI', String(defaultCpTertinggi));
+    setToken('$DESKRIPSI_CAPAIAN_TERENDAH', String(defaultCpTerendah));
+    setToken('$DESKRIPSI_KOMPETENSI', String(defaultKompetensi));
+    setToken('$CAPAIAN_UMUM', String(defaultKompetensi));
+    setToken('$STATUS_KELULUSAN', String(defaultKelulusan));
 
     // Date & Hijri
     let dateObj: Date;
@@ -606,48 +661,111 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         manualHijri: settings?.manualHijriRaporDefault
     });
 
-    res = res.replace(/\$TANGGAL_MASEHI/g, masehiStr);
-    res = res.replace(/\$TANGGAL_SINGKAT_MASEHI/g, format(dateObj, 'dd/MM/yyyy'));
-    res = res.replace(/\$TAHUN_MASEHI/g, format(dateObj, 'yyyy'));
-    res = res.replace(/\$BULAN_MASEHI/g, format(dateObj, 'MMMM', { locale: idLocale }));
+    setToken('$TANGGAL_MASEHI', masehiStr);
+    setToken('$TANGGAL_SINGKAT_MASEHI', format(dateObj, 'dd/MM/yyyy'));
+    setToken('$TAHUN_MASEHI', format(dateObj, 'yyyy'));
+    setToken('$BULAN_MASEHI', format(dateObj, 'MMMM', { locale: idLocale }));
 
-    res = res.replace(/\$TANGGAL_HIJRIAH_MASEHI/g, hijriMasehiCombined);
-    res = res.replace(/\$TANGGAL_HIJRIAH/g, hijriFullWithH || '-');
-    res = res.replace(/\$TAHUN_HIJRIAH/g, hijriInfo.year ? `${hijriInfo.year} H` : '-');
-    res = res.replace(/\$BULAN_HIJRIAH/g, hijriInfo.month || '-');
+    setToken('$TANGGAL_HIJRIAH_MASEHI', hijriMasehiCombined);
+    setToken('$TANGGAL_HIJRIAH', hijriFullWithH || '-');
+    setToken('$TAHUN_HIJRIAH', hijriInfo.year ? `${hijriInfo.year} H` : '-');
+    setToken('$BULAN_HIJRIAH', hijriInfo.month || '-');
 
-    res = res.replace(/\$TANGGAL_DOKUMEN/g, docFormattedDate);
+    setToken('$TANGGAL_DOKUMEN', docFormattedDate);
 
     const kotaPondok = settings?.tempatRaporDefault?.trim() 
         || (settings?.alamat ? (settings.alamat.includes(',') ? settings.alamat.split(',')[0].trim() : 'Pesantren') : 'Pesantren');
     
-    res = res.replace(/\$TEMPAT_RAPOR/g, kotaPondok);
-    res = res.replace(/\$KOTA_PONPES/g, kotaPondok);
-    res = res.replace(/\$KOTA_TANGGAL_HIJRIAH_MASEHI/g, `${kotaPondok}, ${hijriMasehiCombined}`);
-    res = res.replace(/\$KOTA_TANGGAL_HIJRIAH/g, `${kotaPondok}, ${hijriFullWithH || '-'}`);
-    res = res.replace(/\$KOTA_TANGGAL_DOKUMEN/g, `${kotaPondok}, ${docFormattedDate}`);
-    res = res.replace(/\$KOTA_TANGGAL/g, `${kotaPondok}, ${masehiStr}`);
+    setToken('$TEMPAT_RAPOR', kotaPondok);
+    setToken('$KOTA_PONPES', kotaPondok);
+    setToken('$KOTA_TANGGAL_HIJRIAH_MASEHI', `${kotaPondok}, ${hijriMasehiCombined}`);
+    setToken('$KOTA_TANGGAL_HIJRIAH', `${kotaPondok}, ${hijriFullWithH || '-'}`);
+    setToken('$KOTA_TANGGAL_DOKUMEN', `${kotaPondok}, ${docFormattedDate}`);
+    setToken('$KOTA_TANGGAL', `${kotaPondok}, ${masehiStr}`);
 
     // Substitusi seluruh variabel input kustom ($MTK, $FIQIH, $UH1, dsb.) dari customData & extraVars
     const mergedVars: Record<string, any> = {
         ...customObj,
         ...(context.extraVars || {})
     };
-    const sortedCustomKeys = Object.keys(mergedVars)
-        .filter(Boolean)
-        .sort((a, b) => b.length - a.length);
-
-    for (const rawKey of sortedCustomKeys) {
-        const val = mergedVars[rawKey];
-        if (val === undefined || val === null) continue;
+    for (const [rawKey, val] of Object.entries(mergedVars)) {
+        if (!rawKey || val === undefined || val === null) continue;
         const upperKey = rawKey.trim().toUpperCase().replace(/[\s-]+/g, '_');
         if (!upperKey) continue;
-        const token = `$${upperKey}`;
-        if (res.includes(token)) {
-            res = res.split(token).join(String(val));
-        }
+        setToken(`$${upperKey}`, String(val));
     }
 
-    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =IF, =PREDIKAT, =TERBILANG, =ARAB, =MAX, =MIN, =RANK, =CONCAT, &)
-    return evaluateRaporFormula(res, rankVal);
+    const isFormula = isRaporFormulaExpression(res);
+    const PURE_NUMBER_REGEX = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
+
+    // Substitusi token $TAG dengan pemindai sadar-kutip agar nilai teks seperti "2026/2027" atau "Ust. Rizki, S.Pd."
+    // tidak pernah dibagi secara matematis menjadi "1" atau terpecah komanya saat berada di dalam rumus (=...)
+    let substituted = '';
+    let inQuote: '"' | "'" | null = null;
+    let idx = 0;
+    while (idx < res.length) {
+        const ch = res[idx];
+        if (inQuote) {
+            if (ch === inQuote && res[idx - 1] !== '\\') {
+                inQuote = null;
+                substituted += ch;
+                idx++;
+                continue;
+            }
+            if (ch === '$') {
+                const m = res.slice(idx).match(/^\$([A-Z0-9_]+)/);
+                if (m) {
+                    const tok = `$${m[1]}`;
+                    const found = tokenMap.get(tok);
+                    if (found !== undefined) {
+                        const escaped = isFormula
+                            ? (inQuote === '"' ? found.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : found.replace(/\\/g, '\\\\').replace(/'/g, "\\'"))
+                            : found;
+                        substituted += escaped;
+                        idx += tok.length;
+                        continue;
+                    }
+                }
+            }
+            substituted += ch;
+            idx++;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            inQuote = ch;
+            substituted += ch;
+            idx++;
+            continue;
+        }
+
+        if (ch === '$') {
+            const m = res.slice(idx).match(/^\$([A-Z0-9_]+)/);
+            if (m) {
+                const tok = `$${m[1]}`;
+                const found = tokenMap.get(tok);
+                if (found !== undefined) {
+                    if (isFormula && !PURE_NUMBER_REGEX.test(found.trim())) {
+                        const escaped = found.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                        substituted += `"${escaped}"`;
+                    } else {
+                        substituted += found;
+                    }
+                    idx += tok.length;
+                    continue;
+                }
+            }
+        }
+
+        substituted += ch;
+        idx++;
+    }
+
+    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =IF, =PREDIKAT, =TERBILANG, =ARAB, =UPPER, =LOWER, =PROPER, =TAHUN_AJAR, =SEMESTER, &)
+    return evaluateRaporFormula(substituted, {
+        rank: rankVal,
+        tahunAjaran: tahunAjarAktif,
+        tahunAjaranHijriah: tahunAjarHijriah,
+        semester: sem
+    });
 };

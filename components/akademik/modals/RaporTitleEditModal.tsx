@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RaporTemplate, PondokSettings, RaporSheet } from '../../../types';
 import { getTemplateSheets } from '../../../services/raporExcelService';
+import { getAcademicYearsFromSettings, getDefaultAcademicYear } from '../../../utils/academicYear';
 
 interface RaporTitleEditModalProps {
     isOpen: boolean;
@@ -71,15 +72,23 @@ export const RaporTitleEditModal: React.FC<RaporTitleEditModalProps> = ({
         }
     };
 
-    // Live preview parsing tags with dummy data
+    // Live preview parsing tags with active academic year from settings
+    const years = getAcademicYearsFromSettings(settings);
+    const activeYearCfg = years.find(y => y.isActive) || years[0];
+    const activeTahunLabel = activeYearCfg?.labelMasehi?.trim() || getDefaultAcademicYear(settings);
+    const activeSemLabel = activeYearCfg?.semesterAktif || 'Ganjil';
+    const rawHijri = activeYearCfg?.labelHijriah?.trim() || '';
+    const activeHijriLabel = rawHijri ? (/\bH$/i.test(rawHijri) ? rawHijri : `${rawHijri} H`) : '1447/1448 H';
+
     const previewLines = titleText
-        .replace(/\$SEMESTER/gi, 'Ganjil')
-        .replace(/\$TAHUN_AJARAN/gi, '2024/2025')
-        .replace(/\$TAHUN_AJAR/gi, '2024/2025')
+        .replace(/\$SEMESTER/gi, activeSemLabel)
+        .replace(/\$TAHUN_AJAR_HIJRIAH/gi, activeHijriLabel)
+        .replace(/\$TAHUN_AJARAN/gi, activeTahunLabel)
+        .replace(/\$TAHUN_AJAR/gi, activeTahunLabel)
         .replace(/\$ROMBEL/gi, 'Kelas 1-A')
         .replace(/\$KELAS/gi, '1-A')
         .replace(/\$NAMA_PONPES/gi, settings.namaPonpes || 'PONDOK PESANTREN')
-        .replace(/\$TAHUN_HIJRIYAH/gi, '1445-1446 H')
+        .replace(/\$TAHUN_HIJRIYAH/gi, activeHijriLabel)
         .split('\n')
         .map(l => l.trim())
         .filter(Boolean);

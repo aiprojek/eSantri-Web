@@ -4,7 +4,8 @@ import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, DigitalAsset } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
 import { DYNAMIC_TAG_CATEGORIES, isMediaTag, getMediaTagImageSrc, resolveRaporText, RaporResolveContext } from '../../utils/raporPlaceholderResolver';
-import { RAPOR_FORMULA_SUGGESTIONS } from '../../utils/raporFormulaUtils';
+import { RAPOR_FORMULA_SUGGESTIONS, applyCellTextTransform } from '../../utils/raporFormulaUtils';
+import { getAcademicYearsFromSettings, getDefaultAcademicYear } from '../../utils/academicYear';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { RaporExcelPasteModal } from './modals/RaporExcelPasteModal';
@@ -225,7 +226,10 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                                                 const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
                                                 const isLogo = typeof cell.value === 'string' && (cell.value.includes('LOGO') || cell.value === '$LOGO');
                                                 const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
-                                                const { content, isMedia } = renderPreviewCell(cell);
+                                                const { content: rawContent, isMedia } = renderPreviewCell(cell);
+                                                const content = (!isMedia && (typeof rawContent === 'string' || typeof rawContent === 'number') && cell.textTransform && cell.textTransform !== 'none')
+                                                    ? applyCellTextTransform(String(rawContent), cell.textTransform)
+                                                    : rawContent;
 
                                                 const effectiveFontSize = cell.fontSize || 11;
                                                 const hAlign = cell.align || 'center';
@@ -367,6 +371,10 @@ export const TabDesainRapor: React.FC = () => {
     const [templates, setTemplates] = useState<RaporTemplate[]>(settings.raporTemplates || []);
     const [activeTemplate, setActiveTemplate] = useState<RaporTemplate | null>(null);
     const [isEditing, setIsEditing] = useState(false);
+
+    useEffect(() => {
+        setTemplates(settings.raporTemplates || []);
+    }, [settings.raporTemplates]);
     
     // Grid Selection & Zoom & Preview State
     const [selectedCells, setSelectedCells] = useState<{r: number, c: number}[]>([]);
@@ -826,22 +834,24 @@ export const TabDesainRapor: React.FC = () => {
     };
 
     const handleDeleteTemplate = (tplId: string) => {
-        showConfirmation('Hapus Template?', 'Template ini akan dihapus permanen.', () => {
-            const updated = templates.filter(t => t.id !== tplId);
-            saveTemplatesToSettings(updated);
+        showConfirmation('Hapus Template?', 'Template ini akan dihapus permanen.', async () => {
+            const currentList = settings.raporTemplates || templates;
+            const updated = currentList.filter(t => t.id !== tplId);
+            await saveTemplatesToSettings(updated);
             showToast('Template dihapus.', 'success');
         }, { confirmColor: 'red' });
     };
     
-    const handleDuplicateTemplate = (tplId: string) => {
-        const original = templates.find(t => t.id === tplId);
+    const handleDuplicateTemplate = async (tplId: string) => {
+        const currentList = settings.raporTemplates || templates;
+        const original = currentList.find(t => t.id === tplId);
         if (!original) return;
         const newTemplate: RaporTemplate = JSON.parse(JSON.stringify(original));
         newTemplate.id = 'tpl_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
         newTemplate.name = `${original.name} (Salinan)`;
         newTemplate.lastModified = new Date().toISOString();
-        const updated = [...templates, newTemplate];
-        saveTemplatesToSettings(updated);
+        const updated = [...currentList, newTemplate];
+        await saveTemplatesToSettings(updated);
         showToast('Template berhasil disalin.', 'success');
     };
 
@@ -1067,7 +1077,7 @@ export const TabDesainRapor: React.FC = () => {
         });
     };
 
-    const handleSaveActiveTemplate = (shouldClose: boolean = false) => {
+    const handleSaveActiveTemplate = async (shouldClose: boolean = false) => {
         if (!activeTemplate || !activeTemplate.name.trim()) {
             showToast('Nama template wajib diisi.', 'error');
             return;
@@ -1099,15 +1109,17 @@ export const TabDesainRapor: React.FC = () => {
             return;
         }
 
-        const existingIdx = templates.findIndex(t => t.id === finalTemplate.id);
-        let updated;
+        const currentList = settings.raporTemplates || templates;
+        const savedTemplate = { ...finalTemplate, lastModified: new Date().toISOString() };
+        const existingIdx = currentList.findIndex(t => t.id === finalTemplate.id);
+        let updated: RaporTemplate[];
         if (existingIdx >= 0) {
-            updated = [...templates];
-            updated[existingIdx] = { ...finalTemplate, lastModified: new Date().toISOString() };
+            updated = [...currentList];
+            updated[existingIdx] = savedTemplate;
         } else {
-            updated = [...templates, { ...finalTemplate, lastModified: new Date().toISOString() }];
+            updated = [...currentList, savedTemplate];
         }
-        saveTemplatesToSettings(updated);
+        await saveTemplatesToSettings(updated);
         setIsDirty(false);
 
         if (shouldClose) {
@@ -1115,7 +1127,7 @@ export const TabDesainRapor: React.FC = () => {
             setActiveTemplate(null);
             showToast('Template multi-sheet berhasil disimpan.', 'success');
         } else {
-            setActiveTemplate(finalTemplate);
+            setActiveTemplate(savedTemplate);
             showToast('Desain template tersimpan! Anda dapat terus mengedit.', 'success');
         }
     };
@@ -1899,6 +1911,7 @@ export const TabDesainRapor: React.FC = () => {
             align: activeCellData.align,
             verticalAlign: activeCellData.verticalAlign,
             textWrap: activeCellData.textWrap,
+            textTransform: activeCellData.textTransform,
             backgroundColor: activeCellData.backgroundColor,
             color: activeCellData.color
         });
@@ -2067,6 +2080,7 @@ export const TabDesainRapor: React.FC = () => {
                         align: copiedFormat.align,
                         verticalAlign: copiedFormat.verticalAlign,
                         textWrap: copiedFormat.textWrap,
+                        textTransform: copiedFormat.textTransform,
                         backgroundColor: copiedFormat.backgroundColor,
                         color: copiedFormat.color
                     };
@@ -3033,12 +3047,14 @@ export const TabDesainRapor: React.FC = () => {
     };
 
     const getSimulatedValue = (cell: GridCell) => {
-        if (cell.type === 'label') return cell.value;
+        const formatText = (str: string) => applyCellTextTransform(str, cell.textTransform);
+
+        if (cell.type === 'label') return formatText(cell.value || '');
         if (cell.type === 'input') return <span className="text-blue-500 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key || 'NILAI'}]</span>;
         if (cell.type === 'formula') return <span className="text-yellow-700 italic text-[10px] font-mono bg-yellow-50 px-1 rounded border border-yellow-100">{cell.value || '[Rumus]'}</span>;
         if (cell.type === 'dropdown') {
             const firstOpt = cell.options && cell.options.length > 0 ? cell.options[0] : (cell.key || 'Pilihan');
-            return <span className="text-orange-700 italic text-[10px] font-mono bg-orange-50 px-1 rounded border border-orange-200">[▼ {firstOpt}]</span>;
+            return <span className="text-orange-700 italic text-[10px] font-mono bg-orange-50 px-1 rounded border border-orange-200">[▼ {formatText(firstOpt)}]</span>;
         }
         if (cell.type === 'data') {
             const val = cell.value?.trim() || '';
@@ -3070,15 +3086,46 @@ export const TabDesainRapor: React.FC = () => {
                 return <span className="text-rose-500 italic text-[10px] font-mono bg-rose-50 px-1 rounded border border-rose-100">[{val}]</span>;
             }
 
+            // Live values from active settings for Tahun Ajaran, Semester, & Identitas Pondok
+            const upperVal = val.toUpperCase();
+            const years = getAcademicYearsFromSettings(settings);
+            const activeYearObj = years.find(y => y.isActive) || years[0];
+            const liveTahunAjar = activeYearObj?.labelMasehi?.trim() || getDefaultAcademicYear(settings);
+            const liveSemester = activeYearObj?.semesterAktif || 'Ganjil';
+
+            if (upperVal === '$TAHUN_AJAR' || upperVal === '$TAHUN_AJARAN' || upperVal === '$TAPEL' || upperVal === '$TAHUN_PELAJARAN') {
+                return formatText(liveTahunAjar);
+            }
+            if (upperVal === '$TAHUN_AJAR_HIJRIAH' || upperVal === '$TAHUN_AJARAN_HIJRIAH') {
+                const hj = activeYearObj?.labelHijriah?.trim();
+                return formatText(hj ? (/\bH$/i.test(hj) ? hj : `${hj} H`) : '1447/1448 H');
+            }
+            if (upperVal === '$TAHUN_AJAR_LENGKAP') {
+                const hj = activeYearObj?.labelHijriah?.trim();
+                return formatText(activeYearObj?.hijriEnabled && hj ? `${/\bH$/i.test(hj) ? hj : `${hj} H`} / ${liveTahunAjar} M` : liveTahunAjar);
+            }
+            if (upperVal === '$SEMESTER') {
+                return formatText(liveSemester);
+            }
+            if (upperVal === '$SEMESTER_ANGKA') {
+                return formatText(liveSemester === 'Genap' ? '2' : '1');
+            }
+            if (upperVal === '$NAMA_PONPES' && settings.namaPonpes) {
+                return formatText(settings.namaPonpes);
+            }
+            if (upperVal === '$NAMA_YAYASAN' && settings.namaYayasan) {
+                return formatText(settings.namaYayasan);
+            }
+
             // Find matching example in dynamic tag list
             for (const cat of DYNAMIC_TAG_CATEGORIES) {
-                const found = cat.tags.find(t => t.tag === val);
-                if (found) return found.example;
+                const found = cat.tags.find(t => t.tag === upperVal);
+                if (found) return formatText(found.example);
             }
-            if (val.includes('$MAPEL')) return 'Pendidikan Agama Islam';
-            return val || '[Data]';
+            if (upperVal.includes('$MAPEL')) return formatText('Pendidikan Agama Islam');
+            return formatText(val || '[Data]');
         }
-        return cell.value;
+        return formatText(cell.value || '');
     };
 
     const handleToolbarWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -3777,6 +3824,30 @@ export const TabDesainRapor: React.FC = () => {
                                 I
                             </button>
 
+                            {/* Text Case / Format Huruf (UPPERCASE, lowercase, Title Case, Sentence case) */}
+                            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0" title="Format Huruf (UPPERCASE / lowercase / Title Case / Kalimat)">
+                                {([
+                                    { id: 'uppercase', label: 'AA', title: 'HURUF BESAR SEMUA (UPPERCASE)' },
+                                    { id: 'lowercase', label: 'aa', title: 'huruf kecil semua (lowercase)' },
+                                    { id: 'capitalize', label: 'Aa', title: 'Kapital Setiap Kata / Judul (Title Case)' },
+                                    { id: 'sentence', label: 'Ab.', title: 'Kapital Awal Kalimat (Sentence case)' }
+                                ] as const).map((item) => {
+                                    const active = activeCellData?.textTransform === item.id;
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            disabled={selectedCells.length === 0}
+                                            onClick={() => handleBulkUpdateCells({ textTransform: active ? 'none' : item.id })}
+                                            className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-colors disabled:opacity-40 ${active ? 'bg-violet-600 text-white shadow-2xs' : 'text-slate-700 hover:bg-white'}`}
+                                            title={active ? `${item.title} (Klik lagi untuk kembali Normal)` : item.title}
+                                        >
+                                            {item.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
                             {/* Horizontal Align */}
                             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                                 {(['left', 'center', 'right'] as const).map((al) => {
@@ -3957,6 +4028,38 @@ export const TabDesainRapor: React.FC = () => {
                                 title="Miringkan Teks (Italic)"
                             >
                                 I
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ textTransform: 'uppercase' })}
+                                className="px-2 py-1 bg-violet-500/30 hover:bg-violet-500/50 text-violet-100 border border-violet-400/30 rounded-lg text-[11px] font-bold shrink-0"
+                                title="HURUF BESAR SEMUA (UPPERCASE)"
+                            >
+                                AA
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ textTransform: 'lowercase' })}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-bold shrink-0"
+                                title="huruf kecil semua (lowercase)"
+                            >
+                                aa
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ textTransform: 'capitalize' })}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-bold shrink-0"
+                                title="Kapital Setiap Kata / Judul (Title Case)"
+                            >
+                                Aa
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleBulkUpdateCells({ textTransform: 'none' })}
+                                className="px-2 py-1 bg-white/10 hover:bg-white/20 text-slate-300 rounded-lg text-[11px] font-semibold shrink-0"
+                                title="Format Huruf Normal (Sesuai Asli)"
+                            >
+                                Normal
                             </button>
                             <button
                                 type="button"
@@ -4919,6 +5022,9 @@ export const TabDesainRapor: React.FC = () => {
                                             <li><code>=IF($A&gt;=75, "Tuntas", "Remidi")</code> : Logika IF</li>
                                             <li><code>=MAX($A, $B)</code> / <code>=MIN($A, $B)</code> : Nilai maks / min</li>
                                             <li><code>=RANK($TOTAL, "rombel")</code> : Peringkat per Rombel</li>
+                                            <li><code>=UPPER($NAMA)</code> / <code>=LOWER($NAMA)</code> / <code>=PROPER($NAMA)</code> : Format HURUF BESAR / kecil / Judul</li>
+                                            <li><code>=TAHUN_AJAR()</code> / <code>=$TAHUN_AJAR</code> : Tahun Ajaran Aktif</li>
+                                            <li><code>=SEMESTER()</code> / <code>=$SEMESTER</code> : Semester Aktif</li>
                                         </ul>
                                     </details>
                                 </div>
@@ -5188,6 +5294,33 @@ export const TabDesainRapor: React.FC = () => {
                                         >
                                             <i className="bi bi-type-italic"></i>
                                         </button>
+                                    </div>
+                                </div>
+
+                                {/* Format Huruf / Text Case */}
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Format Huruf (Case):</span>
+                                    <div className="grid grid-cols-5 gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
+                                        {([
+                                            { id: 'none', label: 'Normal', tip: 'Sesuai teks asli tanpa ubahan kapitalisasi' },
+                                            { id: 'uppercase', label: 'AA', tip: 'HURUF BESAR SEMUA (UPPERCASE)' },
+                                            { id: 'lowercase', label: 'aa', tip: 'huruf kecil semua (lowercase)' },
+                                            { id: 'capitalize', label: 'Aa', tip: 'Kapital Setiap Kata / Judul (Title Case)' },
+                                            { id: 'sentence', label: 'Ab.', tip: 'Kapital Awal Kalimat (Sentence case)' }
+                                        ] as const).map(opt => {
+                                            const isCur = (activeCellData.textTransform || 'none') === opt.id;
+                                            return (
+                                                <button
+                                                    key={opt.id}
+                                                    type="button"
+                                                    onClick={() => updateActiveCell({ textTransform: opt.id })}
+                                                    className={`py-1 px-1 rounded text-[11px] font-bold transition-colors flex items-center justify-center ${isCur ? 'bg-violet-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}`}
+                                                    title={opt.tip}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
 
@@ -5768,7 +5901,8 @@ export const TabDesainRapor: React.FC = () => {
                         sheetObj.cells.forEach(row => {
                             row.forEach(c => {
                                 if (!c.hidden && c.type === 'formula' && c.key && c.value) {
-                                    baseExtraVars[c.key] = resolveRaporText(c.value, baseResolveContext);
+                                    const rawExpr = c.value.trim().startsWith('=') ? c.value : `=${c.value.trim()}`;
+                                    baseExtraVars[c.key] = resolveRaporText(rawExpr, baseResolveContext);
                                 }
                             });
                         });
@@ -6009,6 +6143,37 @@ export const TabDesainRapor: React.FC = () => {
                         <span className="flex items-center gap-2"><i className="bi bi-clipboard text-slate-500"></i> Tempel (Paste)</span>
                         <span className="text-[10px] text-slate-400 font-mono">Ctrl+V</span>
                     </button>
+
+                    <div className="my-1 border-t border-slate-100"></div>
+
+                    <div className="px-3 py-1.5 flex items-center justify-between gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-500">Format Huruf:</span>
+                        <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                            {([
+                                { id: 'none', label: 'Asli', title: 'Normal / Asli' },
+                                { id: 'uppercase', label: 'AA', title: 'HURUF BESAR' },
+                                { id: 'lowercase', label: 'aa', title: 'huruf kecil' },
+                                { id: 'capitalize', label: 'Aa', title: 'Judul (Title Case)' }
+                            ] as const).map(item => {
+                                const isCur = (activeCellData?.textTransform || 'none') === item.id;
+                                return (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        disabled={!canWrite || selectedCells.length === 0}
+                                        onClick={() => {
+                                            handleBulkUpdateCells({ textTransform: item.id });
+                                            setContextMenuPos(null);
+                                        }}
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors disabled:opacity-40 ${isCur ? 'bg-violet-600 text-white' : 'text-slate-700 hover:bg-white'}`}
+                                        title={item.title}
+                                    >
+                                        {item.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
 
                     <div className="my-1 border-t border-slate-100"></div>
 

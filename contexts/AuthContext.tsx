@@ -82,93 +82,56 @@ const writeStoredSession = (user: User) => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
-    const settingsList = useLiveQuery(() => db.settings.toArray(), []) || [];
-    const settings = settingsList[0];
+    const settingsList = useLiveQuery(() => db.settings.toArray(), []);
+    const usersList = useLiveQuery(() => db.users.toArray(), []);
+    const settings = settingsList?.[0];
 
-    // Sync Current User with Multi-User Mode
+    // Sync Current User with Multi-User Mode & Users table without resetting isAuthReady after hydration
     useEffect(() => {
-        if (!settings) return;
+        if (settingsList === undefined || usersList === undefined) return;
 
-        let isActive = true;
-
-        const syncCurrentUser = async () => {
-            setIsAuthReady(false);
-
-            if (!settings.multiUserMode) {
-                localStorage.removeItem(AUTH_STORAGE_KEY);
-                if (isActive) {
-                    setCurrentUser(VIRTUAL_ADMIN);
-                    setIsAuthReady(true);
-                }
-                return;
-            }
-
-            const storedSession = readStoredSession();
-            if (!storedSession) {
-                if (isActive) {
-                    setCurrentUser(null);
-                    setIsAuthReady(true);
-                }
-                return;
-            }
-
-            const user = await db.users.get(storedSession.userId);
-            const isValidSession = !!user && user.username === storedSession.username;
-
-            if (!isActive) return;
-
-            if (isValidSession) {
-                setCurrentUser(user);
-                writeStoredSession(user);
-            } else {
-                setCurrentUser(null);
-                localStorage.removeItem(AUTH_STORAGE_KEY);
-            }
-
+        if (!settings || !settings.multiUserMode) {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            setCurrentUser(prev => (prev?.id === 0 ? prev : VIRTUAL_ADMIN));
             setIsAuthReady(true);
-        };
+            return;
+        }
 
-        syncCurrentUser();
+        const storedSession = readStoredSession();
+        if (!storedSession) {
+            setCurrentUser(null);
+            setIsAuthReady(true);
+            return;
+        }
 
-        return () => {
-            isActive = false;
-        };
-    }, [settings?.multiUserMode, settings?.lastModified]);
+        const user = usersList.find(u => u.id === storedSession.userId);
+        const isValidSession = !!user && user.username === storedSession.username;
 
-    useEffect(() => {
-        if (!settings?.multiUserMode || !currentUser || currentUser.id === 0) return;
+        if (isValidSession && user) {
+            setCurrentUser(prev => {
+                if (prev && JSON.stringify(prev) === JSON.stringify(user)) {
+                    return prev;
+                }
+                return user;
+            });
+        } else {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            setCurrentUser(null);
+        }
 
-        let isActive = true;
-        const refreshCurrentUser = async () => {
-            const latestUser = await db.users.get(currentUser.id);
-            if (!isActive) return;
-
-            if (!latestUser || latestUser.username !== currentUser.username) {
-                setCurrentUser(null);
-                localStorage.removeItem(AUTH_STORAGE_KEY);
-                return;
-            }
-
-            setCurrentUser(latestUser);
-            writeStoredSession(latestUser);
-        };
-
-        refreshCurrentUser();
-        return () => {
-            isActive = false;
-        };
-    }, [currentUser?.id, settings?.multiUserMode]);
+        setIsAuthReady(true);
+    }, [settingsList === undefined, usersList === undefined, settings?.multiUserMode, usersList]);
 
     const login = (user: User) => {
-        setCurrentUser(user);
         if (settings?.multiUserMode) {
             writeStoredSession(user);
         }
+        setCurrentUser(user);
     };
     
     const logout = () => {
-        setCurrentUser(null);
         localStorage.removeItem(AUTH_STORAGE_KEY);
+        setCurrentUser(null);
     };
 
     return (

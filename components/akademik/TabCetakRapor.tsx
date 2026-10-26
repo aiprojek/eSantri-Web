@@ -9,6 +9,7 @@ import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { getRaporRecordsByPeriod } from '../../services/academicQueries';
 import { resolveRaporText, isMediaTag, getMediaTagImageSrc, templateHasBuiltInBiodata } from '../../utils/raporPlaceholderResolver';
+import { applyCellTextTransform } from '../../utils/raporFormulaUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { buildRombelLegerData, StudentLegerRow } from '../../services/raporCalculationService';
@@ -41,6 +42,8 @@ interface DynamicRaporPreviewProps {
     digitalAssets?: DigitalAsset[];
     tanggalRapor?: string;
     tempatRapor?: string;
+    tahunAjaran?: string;
+    semester?: 'Ganjil' | 'Genap';
     calculation?: {
         totalNilai?: number;
         rataRata?: number;
@@ -211,12 +214,15 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         const extraVars: Record<string, any> = { ...(resolveContext?.extraVars || {}), ...customData };
         const ctx = { ...resolveContext, extraVars };
         if (sheet.cells) {
-            for (const row of sheet.cells) {
-                for (const cell of row) {
-                    if (!cell || cell.hidden) continue;
-                    if (cell.type === 'formula' && cell.key && cell.value) {
-                        const val = resolveRaporText(cell.value, ctx);
-                        extraVars[cell.key] = val;
+            for (let pass = 0; pass < 2; pass++) {
+                for (const row of sheet.cells) {
+                    for (const cell of row) {
+                        if (!cell || cell.hidden) continue;
+                        if (cell.type === 'formula' && cell.key && cell.value) {
+                            const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
+                            const val = resolveRaporText(rawExpr, ctx);
+                            extraVars[cell.key] = val;
+                        }
                     }
                 }
             }
@@ -362,15 +368,24 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                                                     renderedContent = resolveRaporText(cell.value, sheetResolveContext);
                                                 }
                                             } else if (cell.type === 'formula') {
-                                                renderedContent = (cell.key && customData[cell.key] !== undefined && customData[cell.key] !== '')
-                                                    ? customData[cell.key]
-                                                    : resolveRaporText(cell.value, sheetResolveContext);
+                                                if (cell.value && cell.value.trim() !== '') {
+                                                    const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
+                                                    renderedContent = resolveRaporText(rawExpr, sheetResolveContext);
+                                                } else if (cell.key && customData[cell.key] !== undefined && customData[cell.key] !== '') {
+                                                    renderedContent = customData[cell.key];
+                                                } else {
+                                                    renderedContent = '-';
+                                                }
                                             } else if ((cell.type === 'input' || cell.type === 'dropdown') && cell.key) {
                                                 renderedContent = (customData[cell.key] !== undefined && customData[cell.key] !== '')
                                                     ? customData[cell.key]
                                                     : resolveRaporText(cell.value, sheetResolveContext);
                                             } else {
                                                 renderedContent = resolveRaporText(cell.value, sheetResolveContext);
+                                            }
+
+                                            if (!isMediaElement && (typeof renderedContent === 'string' || typeof renderedContent === 'number') && cell.textTransform && cell.textTransform !== 'none') {
+                                                renderedContent = applyCellTextTransform(String(renderedContent), cell.textTransform);
                                             }
 
                                             const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
@@ -516,6 +531,8 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     digitalAssets = [],
     tanggalRapor,
     tempatRapor,
+    tahunAjaran,
+    semester,
     calculation,
     paperSize = 'A4',
     showKop = true,
@@ -550,6 +567,8 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
         record,
         digitalAssets,
         targetDate: effectiveDate,
+        tahunAjaran,
+        semester,
         calculation
     };
 
@@ -1998,6 +2017,8 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         digitalAssets={digitalAssets}
                                         tanggalRapor={tanggalRapor}
                                         tempatRapor={tempatRapor}
+                                        tahunAjaran={filterTahun}
+                                        semester={filterSemester}
                                         calculation={currentPreviewCalculation}
                                         paperSize={paperSize}
                                         showKop={showKop}
@@ -2145,6 +2166,8 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                                 digitalAssets={digitalAssets}
                                                 tanggalRapor={tanggalRapor}
                                                 tempatRapor={tempatRapor}
+                                                tahunAjaran={filterTahun}
+                                                semester={filterSemester}
                                                 calculation={item.calculation}
                                                 paperSize={paperSize}
                                                 showKop={showKop}

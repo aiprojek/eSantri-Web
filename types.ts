@@ -658,6 +658,7 @@ export interface GridCell {
     fontSize?: number;
     verticalAlign?: 'top' | 'middle' | 'bottom';
     textWrap?: 'wrap' | 'float' | 'clip';
+    textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize' | 'sentence';
 }
 
 export interface PortalContact {

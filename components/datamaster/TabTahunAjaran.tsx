@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AcademicYearConfig, PondokSettings } from '../../types';
-import { getAcademicYearsFromSettings } from '../../utils/academicYear';
+import { deriveHijriAcademicYearRaw, getAcademicYearsFromSettings } from '../../utils/academicYear';
 
 interface TabTahunAjaranProps {
     localSettings: PondokSettings;
@@ -18,9 +18,10 @@ const hijriahMonths = [
     'Rajab', 'Sya\'ban', 'Ramadhan', 'Syawwal', 'Dzulqa\'dah', 'Dzulhijjah'
 ];
 
-const createAcademicYear = (): AcademicYearConfig => {
+const createAcademicYear = (hijriAdjustment: number = 0): AcademicYearConfig => {
     const now = new Date();
     const startYear = now.getFullYear();
+    const derivedHijri = deriveHijriAcademicYearRaw(startYear, startYear + 1, 7, 6, hijriAdjustment);
     return {
         id: `ta-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         labelMasehi: `${startYear}/${startYear + 1}`,
@@ -31,9 +32,9 @@ const createAcademicYear = (): AcademicYearConfig => {
         hijriEnabled: false,
         labelHijriah: '',
         hijriStartMonth: 1,
-        hijriStartYear: 1447,
+        hijriStartYear: derivedHijri.startHijri,
         hijriEndMonth: 12,
-        hijriEndYear: 1448,
+        hijriEndYear: derivedHijri.endHijri,
         isActive: false,
     };
 };
@@ -41,12 +42,12 @@ const createAcademicYear = (): AcademicYearConfig => {
 export const TabTahunAjaran: React.FC<TabTahunAjaranProps> = ({ localSettings, handleInputChange, canWrite }) => {
     const configuredYears = useMemo(() => getAcademicYearsFromSettings(localSettings), [localSettings]);
 
-    const [draft, setDraft] = useState<AcademicYearConfig>(createAcademicYear());
+    const [draft, setDraft] = useState<AcademicYearConfig>(() => createAcademicYear(localSettings.hijriAdjustment || 0));
     const [editingId, setEditingId] = useState<string | null>(null);
     const [openMobileId, setOpenMobileId] = useState<string | null>(null);
 
     const resetDraft = () => {
-        setDraft(createAcademicYear());
+        setDraft(createAcademicYear(localSettings.hijriAdjustment || 0));
         setEditingId(null);
     };
 
@@ -58,10 +59,25 @@ export const TabTahunAjaran: React.FC<TabTahunAjaranProps> = ({ localSettings, h
         const cleanedMasehi = draft.labelMasehi.trim();
         if (!cleanedMasehi) return;
 
+        const yearParts = cleanedMasehi.match(/(\d{4})\D+(\d{4})/);
+        const sYear = yearParts ? Number(yearParts[1]) : draft.masehiStartYear;
+        const eYear = yearParts ? Number(yearParts[2]) : draft.masehiEndYear;
+        const derivedHijri = deriveHijriAcademicYearRaw(
+            sYear,
+            eYear,
+            draft.masehiStartMonth || 7,
+            draft.masehiEndMonth || 6,
+            localSettings.hijriAdjustment || 0
+        );
+
         const nextPayload = {
             ...draft,
             labelMasehi: cleanedMasehi,
-            labelHijriah: draft.hijriEnabled ? (draft.labelHijriah || '').trim() : '',
+            labelHijriah: draft.hijriEnabled
+                ? ((draft.labelHijriah || '').trim() || derivedHijri.raw)
+                : '',
+            hijriStartYear: draft.hijriStartYear || derivedHijri.startHijri,
+            hijriEndYear: draft.hijriEndYear || derivedHijri.endHijri,
         };
 
         if (editingId) {
@@ -278,7 +294,34 @@ export const TabTahunAjaran: React.FC<TabTahunAjaranProps> = ({ localSettings, h
                     </div>
                     <div className="flex items-end">
                         <label className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm w-full">
-                            <input type="checkbox" checked={!!draft.hijriEnabled} onChange={(e) => setDraft((prev) => ({ ...prev, hijriEnabled: e.target.checked }))} disabled={!canWrite} />
+                            <input
+                                type="checkbox"
+                                checked={!!draft.hijriEnabled}
+                                onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setDraft((prev) => {
+                                        if (!checked) return { ...prev, hijriEnabled: false };
+                                        const yearParts = prev.labelMasehi.trim().match(/(\d{4})\D+(\d{4})/);
+                                        const sYear = yearParts ? Number(yearParts[1]) : prev.masehiStartYear;
+                                        const eYear = yearParts ? Number(yearParts[2]) : prev.masehiEndYear;
+                                        const derived = deriveHijriAcademicYearRaw(
+                                            sYear,
+                                            eYear,
+                                            prev.masehiStartMonth || 7,
+                                            prev.masehiEndMonth || 6,
+                                            localSettings.hijriAdjustment || 0
+                                        );
+                                        return {
+                                            ...prev,
+                                            hijriEnabled: true,
+                                            labelHijriah: (prev.labelHijriah || '').trim() || derived.raw,
+                                            hijriStartYear: prev.hijriStartYear || derived.startHijri,
+                                            hijriEndYear: prev.hijriEndYear || derived.endHijri,
+                                        };
+                                    });
+                                }}
+                                disabled={!canWrite}
+                            />
                             <span>Aktifkan tampilan Hijriah</span>
                         </label>
                     </div>

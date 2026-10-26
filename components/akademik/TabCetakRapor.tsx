@@ -212,7 +212,7 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
     // Evaluasi berantai untuk sel rumus yang juga diberi kode variabel ($KEY) agar bisa direferensikan oleh rumus lain (misal =TERBILANG($SUBTOTAL))
     const sheetResolveContext = useMemo(() => {
         const extraVars: Record<string, any> = { ...(resolveContext?.extraVars || {}), ...customData };
-        const ctx = { ...resolveContext, extraVars };
+        const ctx = { ...resolveContext, extraVars, sheetCells: sheet.cells };
         if (sheet.cells) {
             for (let pass = 0; pass < 2; pass++) {
                 for (const row of sheet.cells) {
@@ -220,7 +220,7 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                         if (!cell || cell.hidden) continue;
                         if (cell.type === 'formula' && cell.key && cell.value) {
                             const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
-                            const val = resolveRaporText(rawExpr, ctx);
+                            const val = resolveRaporText(rawExpr, { ...ctx, currentCellCoord: { r: cell.row, c: cell.col } });
                             extraVars[cell.key] = val;
                         }
                     }
@@ -344,33 +344,32 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                                             let renderedContent: React.ReactNode = cell.value;
                                             let isMediaElement = false;
 
-                                            if (cell.type === 'data') {
-                                                if (isMediaTag(cell.value)) {
-                                                    isMediaElement = true;
-                                                    const imgSrc = getMediaTagImageSrc(cell.value, sheetResolveContext);
-                                                    if (imgSrc) {
-                                                        const isStempel = cell.value.includes('STEMPEL');
-                                                        const isTtd = cell.value.includes('TTD');
-                                                        renderedContent = (
-                                                            <div className="flex items-center justify-center p-0.5 w-full h-full">
-                                                                <img
-                                                                    src={imgSrc}
-                                                                    alt={cell.value}
-                                                                    onLoad={triggerMeasure}
-                                                                    className={`object-contain ${isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    } else {
-                                                        renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
-                                                    }
+                                            if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(cell.value)) {
+                                                isMediaElement = true;
+                                                const imgSrc = getMediaTagImageSrc(cell.value, sheetResolveContext);
+                                                const upperCellVal = (cell.value || '').toUpperCase();
+                                                if (imgSrc) {
+                                                    const isStempel = upperCellVal.includes('STEMPEL');
+                                                    const isTtd = upperCellVal.includes('TTD');
+                                                    renderedContent = (
+                                                        <div className="flex items-center justify-center p-0.5 w-full h-full">
+                                                            <img
+                                                                src={imgSrc}
+                                                                alt={cell.value}
+                                                                onLoad={triggerMeasure}
+                                                                className={`object-contain ${isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
+                                                            />
+                                                        </div>
+                                                    );
                                                 } else {
-                                                    renderedContent = resolveRaporText(cell.value, sheetResolveContext);
+                                                    renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
                                                 }
+                                            } else if (cell.type === 'data') {
+                                                renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: cIdx } });
                                             } else if (cell.type === 'formula') {
                                                 if (cell.value && cell.value.trim() !== '') {
                                                     const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
-                                                    renderedContent = resolveRaporText(rawExpr, sheetResolveContext);
+                                                    renderedContent = resolveRaporText(rawExpr, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: cIdx } });
                                                 } else if (cell.key && customData[cell.key] !== undefined && customData[cell.key] !== '') {
                                                     renderedContent = customData[cell.key];
                                                 } else {
@@ -379,9 +378,9 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                                             } else if ((cell.type === 'input' || cell.type === 'dropdown') && cell.key) {
                                                 renderedContent = (customData[cell.key] !== undefined && customData[cell.key] !== '')
                                                     ? customData[cell.key]
-                                                    : resolveRaporText(cell.value, sheetResolveContext);
+                                                    : resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: cIdx } });
                                             } else {
-                                                renderedContent = resolveRaporText(cell.value, sheetResolveContext);
+                                                renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: cIdx } });
                                             }
 
                                             if (!isMediaElement && (typeof renderedContent === 'string' || typeof renderedContent === 'number') && cell.textTransform && cell.textTransform !== 'none') {

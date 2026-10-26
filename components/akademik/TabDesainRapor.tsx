@@ -3,9 +3,19 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, DigitalAsset } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
-import { DYNAMIC_TAG_CATEGORIES, isMediaTag, getMediaTagImageSrc, resolveRaporText, RaporResolveContext } from '../../utils/raporPlaceholderResolver';
-import { RAPOR_FORMULA_SUGGESTIONS, applyCellTextTransform } from '../../utils/raporFormulaUtils';
-import { getAcademicYearsFromSettings, getDefaultAcademicYear } from '../../utils/academicYear';
+import {
+    DYNAMIC_TAG_CATEGORIES,
+    isMediaTag,
+    getMediaTagImageSrc,
+    resolveRaporText,
+    RaporResolveContext,
+    resolveWaliKelasTeacher,
+    resolveMudirMarhalahTeacher,
+    resolveMudirAamInfo,
+    formatTeacherNip
+} from '../../utils/raporPlaceholderResolver';
+import { RAPOR_FORMULA_SUGGESTIONS, applyCellTextTransform, isFormulaReadyForCellPick, autoCloseFormulaParens, extractFormulaReferencedCoords } from '../../utils/raporFormulaUtils';
+import { resolveAcademicYearLabels } from '../../utils/academicYear';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { RaporExcelPasteModal } from './modals/RaporExcelPasteModal';
@@ -411,6 +421,25 @@ export const TabDesainRapor: React.FC = () => {
         selectedIndex: number;
     } | null>(null);
     const fxInputRef = useRef<HTMLInputElement | null>(null);
+    const sidebarFormulaInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Excel-style Formula Point & Drag Selection State
+    const [activeFormulaSource, setActiveFormulaSource] = useState<'inline' | 'fx' | 'sidebar' | null>(null);
+    const activeFormulaSourceRef = useRef<'inline' | 'fx' | 'sidebar' | null>(null);
+    activeFormulaSourceRef.current = activeFormulaSource;
+    const formulaPickedSpanRef = useRef<{
+        source: 'inline' | 'fx' | 'sidebar';
+        start: number;
+        end: number;
+        wasEmptyCellFormula?: boolean;
+    } | null>(null);
+    const formulaDragAnchorRef = useRef<{
+        r: number;
+        c: number;
+        source: 'inline' | 'fx' | 'sidebar';
+    } | null>(null);
+    const isFormulaSelectingRef = useRef(false);
+    const [formulaDragPreview, setFormulaDragPreview] = useState<{ r1: number; c1: number; r2: number; c2: number } | null>(null);
 
     // Inline Cell Editing State (Excel-style click & type directly inside cell)
     const [editingCell, setEditingCell] = useState<{ r: number; c: number; draft: string } | null>(null);
@@ -1529,6 +1558,10 @@ export const TabDesainRapor: React.FC = () => {
         if (!cell) return;
         const draft = initialOverride !== undefined ? initialOverride : getEditableCellString(cell);
         setSelectedCells([{ r: master.r, c: master.c }]);
+        formulaPickedSpanRef.current = null;
+        formulaInputHistoryPushedRef.current = false;
+        setActiveFormulaSource('inline');
+        activeFormulaSourceRef.current = 'inline';
         const next = { r: master.r, c: master.c, draft };
         editingCellRef.current = next;
         setEditingCell(next);
@@ -1539,10 +1572,19 @@ export const TabDesainRapor: React.FC = () => {
         if (!current) return;
         editingCellRef.current = null;
         setEditingCell(null);
+        formulaPickedSpanRef.current = null;
+        formulaDragAnchorRef.current = null;
+        isFormulaSelectingRef.current = false;
+        setFormulaDragPreview(null);
+        if (activeFormulaSourceRef.current === 'inline') {
+            setActiveFormulaSource(null);
+            activeFormulaSourceRef.current = null;
+        }
 
         let latestTpl = activeTemplate;
         if (activeTemplate && canWrite) {
-            const { updatedTpl, changed } = applySmartCellTextCommit(activeTemplate, current.r, current.c, current.draft);
+            const finalDraft = autoCloseFormulaParens(current.draft);
+            const { updatedTpl, changed } = applySmartCellTextCommit(activeTemplate, current.r, current.c, finalDraft);
             if (changed) {
                 pushToHistory(activeTemplate);
                 setActiveTemplate(updatedTpl);
@@ -1561,6 +1603,14 @@ export const TabDesainRapor: React.FC = () => {
     const cancelInlineEdit = () => {
         editingCellRef.current = null;
         setEditingCell(null);
+        formulaPickedSpanRef.current = null;
+        formulaDragAnchorRef.current = null;
+        isFormulaSelectingRef.current = false;
+        setFormulaDragPreview(null);
+        if (activeFormulaSourceRef.current === 'inline') {
+            setActiveFormulaSource(null);
+            activeFormulaSourceRef.current = null;
+        }
         setAutocompleteState(null);
         requestAnimationFrame(() => {
             scrollContainerRef.current?.focus({ preventScroll: true });
@@ -1691,6 +1741,7 @@ export const TabDesainRapor: React.FC = () => {
     const applyAutocompleteOption = (opt: AutocompleteOption) => {
         if (!autocompleteState || !activeTemplate) return;
         const { source, replaceStart, replaceEnd } = autocompleteState;
+        formulaPickedSpanRef.current = null;
 
         if (source === 'inline' && editingCellRef.current) {
             const cur = editingCellRef.current;
@@ -2037,13 +2088,381 @@ export const TabDesainRapor: React.FC = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isEditing, isDesignPreviewOpen, isExcelPasteModalOpen, isKurikulumGeneratorOpen, isFormatPainterActive, internalClipboard, undoStack, redoStack, activeTemplate, selectedCells, canWrite]);
 
+    // --- EXCEL-STYLE FORMULA POINT & DRAG SELECTION ENGINE ---
+    const getFormulaEditSession = (): {
+        source: 'inline' | 'fx' | 'sidebar';
+        text: string;
+        ownerR: number;
+        ownerC: number;
+        inputEl: HTMLInputElement | HTMLTextAreaElement | null;
+        isFormulaCellType: boolean;
+    } | null => {
+        if (!activeTemplate || !canWrite) return null;
+        if (editingCellRef.current) {
+            const { r, c, draft } = editingCellRef.current;
+            const ownerCell = activeTemplate.cells[r]?.[c];
+            return {
+                source: 'inline',
+                text: draft,
+                ownerR: r,
+                ownerC: c,
+                inputEl: inlineEditorRef.current,
+                isFormulaCellType: ownerCell?.type === 'formula'
+            };
+        }
+        const src = activeFormulaSourceRef.current;
+        if (src === 'fx' && activeCellData) {
+            return {
+                source: 'fx',
+                text: getEditableCellString(activeCellData),
+                ownerR: activeCellData.row,
+                ownerC: activeCellData.col,
+                inputEl: fxInputRef.current,
+                isFormulaCellType: activeCellData.type === 'formula'
+            };
+        }
+        if (src === 'sidebar' && activeCellData) {
+            return {
+                source: 'sidebar',
+                text: activeCellData.value || '',
+                ownerR: activeCellData.row,
+                ownerC: activeCellData.col,
+                inputEl: sidebarFormulaInputRef.current,
+                isFormulaCellType: activeCellData.type === 'formula'
+            };
+        }
+        return null;
+    };
+
+    const buildFormulaRefToken = (r1: number, c1: number, r2: number, c2: number): string => {
+        if (!activeTemplate) return '';
+        const m1 = findMasterCell(activeTemplate, r1, c1);
+        const m2 = findMasterCell(activeTemplate, r2, c2);
+        if (m1.r === m2.r && m1.c === m2.c) {
+            const targetCell = activeTemplate.cells[m1.r]?.[m1.c];
+            if (targetCell && !targetCell.hidden && targetCell.key && (targetCell.type === 'input' || targetCell.type === 'dropdown')) {
+                return `$${targetCell.key}`;
+            }
+            return `${getExcelColName(m1.c)}${m1.r + 1}`;
+        }
+        const topR = Math.min(m1.r, m2.r);
+        const botR = Math.max(m1.r, m2.r);
+        const leftC = Math.min(m1.c, m2.c);
+        const rightC = Math.max(m1.c, m2.c);
+        return `${getExcelColName(leftC)}${topR + 1}:${getExcelColName(rightC)}${botR + 1}`;
+    };
+
+    const applyFormulaTextUpdate = (
+        source: 'inline' | 'fx' | 'sidebar',
+        ownerR: number,
+        ownerC: number,
+        nextText: string,
+        nextCaretPos: number
+    ) => {
+        if (!activeTemplate) return;
+        if (source === 'inline' && editingCellRef.current) {
+            const nextState = { ...editingCellRef.current, draft: nextText };
+            editingCellRef.current = nextState;
+            setEditingCell(nextState);
+            requestAnimationFrame(() => {
+                if (inlineEditorRef.current) {
+                    inlineEditorRef.current.focus({ preventScroll: true });
+                    inlineEditorRef.current.setSelectionRange(nextCaretPos, nextCaretPos);
+                }
+            });
+            return;
+        }
+
+        if (!formulaInputHistoryPushedRef.current) {
+            pushToHistory(activeTemplate);
+            formulaInputHistoryPushedRef.current = true;
+        }
+
+        if (source === 'sidebar') {
+            const newCells = activeTemplate.cells.map((rowArr, rIdx) =>
+                rIdx === ownerR
+                    ? rowArr.map((cellObj, cIdx) => (cIdx === ownerC ? { ...cellObj, type: 'formula' as RaporColumnType, value: nextText } : cellObj))
+                    : rowArr
+            );
+            setActiveTemplate(syncCurrentSheetToTemplate({ ...activeTemplate, cells: newCells }, activeSheetId));
+            requestAnimationFrame(() => {
+                if (sidebarFormulaInputRef.current) {
+                    sidebarFormulaInputRef.current.focus({ preventScroll: true });
+                    sidebarFormulaInputRef.current.setSelectionRange(nextCaretPos, nextCaretPos);
+                }
+            });
+            return;
+        }
+
+        // source === 'fx'
+        const { updatedTpl, changed } = applySmartCellTextCommit(activeTemplate, ownerR, ownerC, nextText);
+        if (changed) {
+            setActiveTemplate(updatedTpl);
+        }
+        requestAnimationFrame(() => {
+            if (fxInputRef.current) {
+                fxInputRef.current.focus({ preventScroll: true });
+                fxInputRef.current.setSelectionRange(nextCaretPos, nextCaretPos);
+            }
+        });
+    };
+
+    const updateFormulaPickedReference = (r1: number, c1: number, r2: number, c2: number) => {
+        const session = getFormulaEditSession();
+        if (!session || !activeTemplate) return;
+
+        const m1 = findMasterCell(activeTemplate, r1, c1);
+        const m2 = findMasterCell(activeTemplate, r2, c2);
+        const isMulti = m1.r !== m2.r || m1.c !== m2.c;
+        const token = buildFormulaRefToken(r1, c1, r2, c2);
+        if (!token) return;
+
+        const curSpan = formulaPickedSpanRef.current;
+        let nextText = session.text;
+        let nextSpanStart = 0;
+        let nextSpanEnd = 0;
+        let wasEmptyCell = false;
+
+        if (curSpan && curSpan.source === session.source) {
+            if (curSpan.wasEmptyCellFormula) {
+                nextText = isMulti ? `=SUM(${token})` : `=${token}`;
+                nextSpanStart = 0;
+                nextSpanEnd = nextText.length;
+                wasEmptyCell = true;
+            } else {
+                nextText = session.text.slice(0, curSpan.start) + token + session.text.slice(curSpan.end);
+                nextSpanStart = curSpan.start;
+                nextSpanEnd = curSpan.start + token.length;
+            }
+        } else if (session.text.trim() === '' && session.isFormulaCellType) {
+            nextText = isMulti ? `=SUM(${token})` : `=${token}`;
+            nextSpanStart = 0;
+            nextSpanEnd = nextText.length;
+            wasEmptyCell = true;
+        } else {
+            const insStart = session.inputEl?.selectionStart ?? session.text.length;
+            const insEnd = session.inputEl?.selectionEnd ?? insStart;
+            nextText = session.text.slice(0, insStart) + token + session.text.slice(insEnd);
+            nextSpanStart = insStart;
+            nextSpanEnd = insStart + token.length;
+        }
+
+        formulaPickedSpanRef.current = {
+            source: session.source,
+            start: nextSpanStart,
+            end: nextSpanEnd,
+            wasEmptyCellFormula: wasEmptyCell
+        };
+        setFormulaDragPreview({
+            r1: Math.min(m1.r, m2.r),
+            c1: Math.min(m1.c, m2.c),
+            r2: Math.max(m1.r, m2.r),
+            c2: Math.max(m1.c, m2.c)
+        });
+        setAutocompleteState(null);
+        applyFormulaTextUpdate(session.source, session.ownerR, session.ownerC, nextText, nextSpanEnd);
+    };
+
+    const tryStartFormulaCellPick = (r: number, c: number, appendComma: boolean): boolean => {
+        const session = getFormulaEditSession();
+        if (!session || !activeTemplate) return false;
+
+        const clickedMaster = findMasterCell(activeTemplate, r, c);
+        if (clickedMaster.r === session.ownerR && clickedMaster.c === session.ownerC) {
+            return false;
+        }
+
+        const existingSpan = formulaPickedSpanRef.current;
+        const hasActiveSpan = Boolean(existingSpan && existingSpan.source === session.source);
+        if (!hasActiveSpan) {
+            const caret = session.inputEl?.selectionStart ?? session.text.length;
+            if (!isFormulaReadyForCellPick(session.text.slice(0, caret), session.text, session.isFormulaCellType)) {
+                return false;
+            }
+        }
+
+        isFormulaSelectingRef.current = true;
+        if (appendComma && existingSpan && existingSpan.source === session.source && !existingSpan.wasEmptyCellFormula) {
+            const withComma = session.text.slice(0, existingSpan.end) + ', ' + session.text.slice(existingSpan.end);
+            const commaPos = existingSpan.end + 2;
+            applyFormulaTextUpdate(session.source, session.ownerR, session.ownerC, withComma, commaPos);
+            formulaPickedSpanRef.current = {
+                source: session.source,
+                start: commaPos,
+                end: commaPos
+            };
+        }
+
+        formulaDragAnchorRef.current = { r, c, source: session.source };
+        updateFormulaPickedReference(r, c, r, c);
+        return true;
+    };
+
+    const finishFormulaPointMode = () => {
+        const session = getFormulaEditSession();
+        formulaPickedSpanRef.current = null;
+        formulaDragAnchorRef.current = null;
+        isFormulaSelectingRef.current = false;
+        setFormulaDragPreview(null);
+
+        if (!session || !activeTemplate) {
+            setActiveFormulaSource(null);
+            activeFormulaSourceRef.current = null;
+            return;
+        }
+
+        if (session.source === 'inline') {
+            commitInlineEdit({ dr: 1, dc: 0 });
+            return;
+        }
+
+        const closedText = autoCloseFormulaParens(session.text);
+        if (closedText !== session.text) {
+            applyFormulaTextUpdate(session.source, session.ownerR, session.ownerC, closedText, closedText.length);
+        }
+        setActiveFormulaSource(null);
+        activeFormulaSourceRef.current = null;
+        requestAnimationFrame(() => {
+            scrollContainerRef.current?.focus({ preventScroll: true });
+        });
+    };
+
+    // Global mouseup safety when dragging formula range and releasing outside table
+    useEffect(() => {
+        const onGlobalMouseUp = () => {
+            if (formulaDragAnchorRef.current) {
+                formulaDragAnchorRef.current = null;
+                setFormulaDragPreview(null);
+                setTimeout(() => {
+                    isFormulaSelectingRef.current = false;
+                }, 80);
+            }
+        };
+        window.addEventListener('mouseup', onGlobalMouseUp);
+        return () => window.removeEventListener('mouseup', onGlobalMouseUp);
+    }, []);
+
+    // Quick 1-Click AutoSum / Rerata when user blocks multiple cells first (just like Excel AutoSum Σ)
+    const handleQuickRangeFormula = (fnName: 'SUM' | 'RATA2' | 'MAX' | 'MIN') => {
+        if (!activeTemplate || !canWrite || selectedCells.length < 2) return;
+        pushToHistory(activeTemplate);
+
+        const rMin = Math.min(...selectedCells.map(s => s.r));
+        const rMax = Math.max(...selectedCells.map(s => s.r));
+        const cMin = Math.min(...selectedCells.map(s => s.c));
+        const cMax = Math.max(...selectedCells.map(s => s.c));
+
+        const isHorizontalRow = rMin === rMax && cMax > cMin;
+        let calcRMax = rMax;
+        let calcCMax = cMax;
+        let destR = isHorizontalRow ? rMin : rMax + 1;
+        let destC = isHorizontalRow ? cMax + 1 : cMin;
+
+        // Jika sel paling ujung bawah/kanan yang ikut diblok masih kosong (seperti kebiasaan di Excel blok nilai + 1 sel kosong di bawahnya), taruh hasil di sel kosong tersebut
+        if (!isHorizontalRow && rMax > rMin) {
+            const bottomCell = activeTemplate.cells[rMax]?.[cMin];
+            const isBottomEmpty = bottomCell && !bottomCell.hidden && bottomCell.type === 'label' && !(bottomCell.value || '').trim() && !bottomCell.key;
+            if (isBottomEmpty) {
+                calcRMax = rMax - 1;
+                destR = rMax;
+            }
+        } else if (isHorizontalRow && cMax > cMin) {
+            const rightCell = activeTemplate.cells[rMin]?.[cMax];
+            const isRightEmpty = rightCell && !rightCell.hidden && rightCell.type === 'label' && !(rightCell.value || '').trim() && !rightCell.key;
+            if (isRightEmpty) {
+                calcCMax = cMax - 1;
+                destC = cMax;
+            }
+        }
+
+        const rangeStr = calcRMax === rMin && calcCMax === cMin
+            ? buildFormulaRefToken(rMin, cMin, rMin, cMin)
+            : `${getExcelColName(cMin)}${rMin + 1}:${getExcelColName(calcCMax)}${calcRMax + 1}`;
+        const formulaExpr = `=${fnName}(${rangeStr})`;
+
+        const newCells = activeTemplate.cells.map(row => row.map(cell => ({ ...cell })));
+        let nextRowCount = activeTemplate.rowCount;
+        let nextColCount = activeTemplate.colCount;
+
+        if (destR >= nextRowCount) {
+            const addedRow: GridCell[] = [];
+            for (let cc = 0; cc < nextColCount; cc++) {
+                addedRow.push({ ...createEmptyCell(nextRowCount, cc), width: getColWidth(cc) });
+            }
+            newCells.push(addedRow);
+            nextRowCount++;
+        }
+        if (destC >= nextColCount) {
+            newCells.forEach((rowArr, rr) => {
+                rowArr.push({ ...createEmptyCell(rr, nextColCount), height: getRowHeight(rr) });
+            });
+            nextColCount++;
+        }
+
+        const destMaster = findMasterCell({ ...activeTemplate, cells: newCells, rowCount: nextRowCount, colCount: nextColCount }, destR, destC);
+        const existingDest = newCells[destMaster.r][destMaster.c];
+        newCells[destMaster.r][destMaster.c] = {
+            ...existingDest,
+            type: 'formula',
+            value: formulaExpr,
+            bold: true,
+            align: existingDest.align || 'center'
+        };
+
+        const updated = syncCurrentSheetToTemplate(
+            { ...activeTemplate, rowCount: nextRowCount, colCount: nextColCount, cells: newCells },
+            activeSheetId
+        );
+        setActiveTemplate(updated);
+        setSelectedCells([{ r: destMaster.r, c: destMaster.c }]);
+        showToast(
+            `Rumus ${formulaExpr} ditempatkan di sel ${getExcelColName(destMaster.c)}${destMaster.r + 1}!`,
+            'success'
+        );
+    };
+
+    const currentFormulaTextForHighlight = useMemo(() => {
+        if (editingCell) return editingCell.draft;
+        if ((activeFormulaSource === 'fx' || activeFormulaSource === 'sidebar') && activeCellData) {
+            return getEditableCellString(activeCellData);
+        }
+        return '';
+    }, [editingCell, activeFormulaSource, activeCellData]);
+
+    const formulaReferencedCoords = useMemo(() => {
+        return extractFormulaReferencedCoords(currentFormulaTextForHighlight, activeTemplate?.cells);
+    }, [currentFormulaTextForHighlight, activeTemplate?.cells]);
+
+    const isFormulaPointModeBannerVisible = useMemo(() => {
+        if (!canWrite || !activeTemplate) return false;
+        const isEditingAnyFormulaInput = Boolean(editingCell) || activeFormulaSource === 'fx' || activeFormulaSource === 'sidebar';
+        if (!isEditingAnyFormulaInput) return false;
+        const isTypeFormula = editingCell
+            ? activeTemplate.cells[editingCell.r]?.[editingCell.c]?.type === 'formula'
+            : activeCellData?.type === 'formula';
+        if (formulaPickedSpanRef.current) return true;
+        return isFormulaReadyForCellPick(currentFormulaTextForHighlight, currentFormulaTextForHighlight, Boolean(isTypeFormula));
+    }, [canWrite, activeTemplate, editingCell, activeFormulaSource, activeCellData, currentFormulaTextForHighlight]);
+
     // --- GRID OPERATIONS ---
-    const handleMouseDown = (r: number, c: number) => {
+    const handleMouseDown = (r: number, c: number, e?: React.MouseEvent) => {
+        // Jika sedang dalam Mode Pilih Sel Rumus ala Excel, klik/seret akan memasukkan koordinat/rentang sel ke rumus!
+        if (tryStartFormulaCellPick(r, c, Boolean(e?.ctrlKey || e?.metaKey))) {
+            e?.preventDefault();
+            e?.stopPropagation();
+            return;
+        }
+
         if (editingCellRef.current) {
             if (editingCellRef.current.r === r && editingCellRef.current.c === c) {
                 return;
             }
             commitInlineEdit();
+        }
+        formulaPickedSpanRef.current = null;
+        if (activeFormulaSourceRef.current) {
+            setActiveFormulaSource(null);
+            activeFormulaSourceRef.current = null;
         }
         setAutocompleteState(null);
         wasAlreadySingleSelectedRef.current =
@@ -2058,6 +2477,10 @@ export const TabDesainRapor: React.FC = () => {
         });
     };
     const handleMouseEnter = (r: number, c: number) => {
+        if (formulaDragAnchorRef.current) {
+            updateFormulaPickedReference(formulaDragAnchorRef.current.r, formulaDragAnchorRef.current.c, r, c);
+            return;
+        }
         if (!isDragging || !dragStart) return;
         const rMin = Math.min(dragStart.r, r); const rMax = Math.max(dragStart.r, r);
         const cMin = Math.min(dragStart.c, c); const cMax = Math.max(dragStart.c, c);
@@ -2066,6 +2489,14 @@ export const TabDesainRapor: React.FC = () => {
         setSelectedCells(newSelection);
     };
     const handleMouseUp = () => {
+        if (formulaDragAnchorRef.current) {
+            formulaDragAnchorRef.current = null;
+            setFormulaDragPreview(null);
+            setTimeout(() => {
+                isFormulaSelectingRef.current = false;
+            }, 80);
+            return;
+        }
         if (isDragging && isFormatPainterActive && copiedFormat && activeTemplate && selectedCells.length > 0 && canWrite) {
             pushToHistory(activeTemplate);
             const newCells = activeTemplate.cells.map(row => row.map(c => ({ ...c })));
@@ -3046,8 +3477,81 @@ export const TabDesainRapor: React.FC = () => {
         setActiveTemplate(updatedTpl);
     };
 
+    const getTemplateSimulatedHierarchy = () => {
+        const rombels = settings.rombel || [];
+        const kelases = settings.kelas || [];
+        const jenjangs = settings.jenjang || [];
+
+        let simRombel = activeTemplate?.rombelId ? rombels.find(r => Number(r.id) === Number(activeTemplate.rombelId)) : undefined;
+        let simKelas = activeTemplate?.kelasId ? kelases.find(k => Number(k.id) === Number(activeTemplate.kelasId)) : undefined;
+        let simJenjang = activeTemplate?.jenjangId ? jenjangs.find(j => Number(j.id) === Number(activeTemplate.jenjangId)) : undefined;
+
+        if (simRombel && !simKelas) {
+            simKelas = kelases.find(k => Number(k.id) === Number(simRombel!.kelasId));
+        }
+        if (simKelas && !simJenjang) {
+            simJenjang = jenjangs.find(j => Number(j.id) === Number(simKelas!.jenjangId));
+        }
+        if (!simJenjang) {
+            simJenjang = jenjangs.find(j => j.mudirId) || jenjangs[0];
+        }
+        if (!simKelas && simJenjang) {
+            simKelas = kelases.find(k => Number(k.jenjangId) === Number(simJenjang!.id)) || kelases[0];
+        }
+        if (!simRombel) {
+            if (simKelas) {
+                simRombel = rombels.find(r => Number(r.kelasId) === Number(simKelas!.id) && r.waliKelasId)
+                    || rombels.find(r => Number(r.kelasId) === Number(simKelas!.id));
+            }
+            if (!simRombel) {
+                simRombel = rombels.find(r => r.waliKelasId) || rombels[0];
+            }
+        }
+        return { simRombel, simKelas, simJenjang };
+    };
+
     const getSimulatedValue = (cell: GridCell) => {
         const formatText = (str: string) => applyCellTextTransform(str, cell.textTransform);
+        const val = cell.value?.trim() || '';
+
+        if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(val)) {
+            const { simRombel, simKelas, simJenjang } = getTemplateSimulatedHierarchy();
+            const simulatedContext = {
+                settings,
+                digitalAssets,
+                santri: {
+                    id: 1,
+                    namaLengkap: 'Ahmad Fauzan',
+                    nis: '202401001',
+                    nisn: '0081234567',
+                    rombelId: simRombel?.id || 1,
+                    kelasId: simKelas?.id || 1,
+                    jenjangId: simJenjang?.id || 1,
+                    status: 'Aktif'
+                } as any,
+                targetDate: new Date()
+            };
+            const imgSrc = getMediaTagImageSrc(val, simulatedContext);
+            const upperMedia = val.toUpperCase();
+            if (imgSrc) {
+                const isStempel = upperMedia.includes('STEMPEL');
+                const isTtd = upperMedia.includes('TTD');
+                return (
+                    <div className="flex items-center justify-center p-0.5">
+                        <img 
+                            src={imgSrc} 
+                            alt={val} 
+                            className={`object-contain ${isStempel ? 'max-h-12 max-w-[80px] opacity-90' : isTtd ? 'max-h-10 max-w-[100px]' : 'max-h-10 max-w-[80px]'}`} 
+                        />
+                    </div>
+                );
+            }
+            if (upperMedia === '$STEMPEL_PONPES' || upperMedia === '$STEMPEL') return <span className="text-rose-600 font-bold text-[10px] bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-patch-check-fill"></i> Stempel Ponpes</span>;
+            if (upperMedia === '$LOGO_PONPES' || upperMedia === '$LOGO') return <span className="text-teal-700 font-bold text-[10px] bg-teal-50 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image"></i> Logo Ponpes</span>;
+            if (upperMedia === '$LOGO_YAYASAN') return <span className="text-indigo-700 font-bold text-[10px] bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image-fill"></i> Logo Yayasan</span>;
+            if (upperMedia.includes('TTD')) return <span className="text-purple-600 font-bold text-[10px] bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-pen-fill"></i> {val.replace('$', '')}</span>;
+            return <span className="text-rose-500 italic text-[10px] font-mono bg-rose-50 px-1 rounded border border-rose-100">[{val}]</span>;
+        }
 
         if (cell.type === 'label') return formatText(cell.value || '');
         if (cell.type === 'input') return <span className="text-blue-500 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key || 'NILAI'}]</span>;
@@ -3057,64 +3561,76 @@ export const TabDesainRapor: React.FC = () => {
             return <span className="text-orange-700 italic text-[10px] font-mono bg-orange-50 px-1 rounded border border-orange-200">[▼ {formatText(firstOpt)}]</span>;
         }
         if (cell.type === 'data') {
-            const val = cell.value?.trim() || '';
-            if (isMediaTag(val)) {
-                const simulatedContext = {
-                    settings,
-                    digitalAssets,
-                    santri: { id: 1, namaLengkap: 'Ahmad Fauzan', nis: '202401001', nisn: '0081234567', rombelId: 1, kelasId: 1, jenjangId: 1, status: 'Aktif' } as any,
-                    targetDate: new Date()
-                };
-                const imgSrc = getMediaTagImageSrc(val, simulatedContext);
-                if (imgSrc) {
-                    const isStempel = val.includes('STEMPEL');
-                    const isTtd = val.includes('TTD');
-                    return (
-                        <div className="flex items-center justify-center p-0.5">
-                            <img 
-                                src={imgSrc} 
-                                alt={val} 
-                                className={`object-contain ${isStempel ? 'max-h-12 max-w-[80px] opacity-90' : isTtd ? 'max-h-10 max-w-[100px]' : 'max-h-10 max-w-[80px]'}`} 
-                            />
-                        </div>
-                    );
-                }
-                if (val === '$STEMPEL_PONPES') return <span className="text-rose-600 font-bold text-[10px] bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-patch-check-fill"></i> Stempel Ponpes</span>;
-                if (val === '$LOGO_PONPES') return <span className="text-teal-700 font-bold text-[10px] bg-teal-50 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image"></i> Logo Ponpes</span>;
-                if (val === '$LOGO_YAYASAN') return <span className="text-indigo-700 font-bold text-[10px] bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image-fill"></i> Logo Yayasan</span>;
-                if (val.includes('TTD')) return <span className="text-purple-600 font-bold text-[10px] bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-pen-fill"></i> {val.replace('$', '')}</span>;
-                return <span className="text-rose-500 italic text-[10px] font-mono bg-rose-50 px-1 rounded border border-rose-100">[{val}]</span>;
-            }
-
-            // Live values from active settings for Tahun Ajaran, Semester, & Identitas Pondok
+            // Live values from active settings for Tahun Ajaran, Semester, Pejabat & Identitas Pondok
             const upperVal = val.toUpperCase();
-            const years = getAcademicYearsFromSettings(settings);
-            const activeYearObj = years.find(y => y.isActive) || years[0];
-            const liveTahunAjar = activeYearObj?.labelMasehi?.trim() || getDefaultAcademicYear(settings);
-            const liveSemester = activeYearObj?.semesterAktif || 'Ganjil';
+            const ay = resolveAcademicYearLabels(settings);
+            const { simRombel, simKelas, simJenjang } = getTemplateSimulatedHierarchy();
 
             if (upperVal === '$TAHUN_AJAR' || upperVal === '$TAHUN_AJARAN' || upperVal === '$TAPEL' || upperVal === '$TAHUN_PELAJARAN') {
-                return formatText(liveTahunAjar);
+                return formatText(ay.otomatis);
             }
-            if (upperVal === '$TAHUN_AJAR_HIJRIAH' || upperVal === '$TAHUN_AJARAN_HIJRIAH') {
-                const hj = activeYearObj?.labelHijriah?.trim();
-                return formatText(hj ? (/\bH$/i.test(hj) ? hj : `${hj} H`) : '1447/1448 H');
+            if (upperVal === '$TAHUN_AJAR_MASEHI' || upperVal === '$TAHUN_AJARAN_MASEHI' || upperVal === '$TAPEL_MASEHI') {
+                return formatText(ay.masehi);
             }
-            if (upperVal === '$TAHUN_AJAR_LENGKAP') {
-                const hj = activeYearObj?.labelHijriah?.trim();
-                return formatText(activeYearObj?.hijriEnabled && hj ? `${/\bH$/i.test(hj) ? hj : `${hj} H`} / ${liveTahunAjar} M` : liveTahunAjar);
+            if (upperVal === '$TAHUN_AJAR_HIJRIAH' || upperVal === '$TAHUN_AJARAN_HIJRIAH' || upperVal === '$TAHUN_AJAR_HIJRIYAH' || upperVal === '$TAPEL_HIJRIAH') {
+                return formatText(ay.hijriah);
+            }
+            if (upperVal === '$TAHUN_AJAR_GABUNGAN' || upperVal === '$TAHUN_AJARAN_GABUNGAN' || upperVal === '$TAHUN_AJAR_LENGKAP' || upperVal === '$TAPEL_GABUNGAN') {
+                return formatText(ay.gabungan);
             }
             if (upperVal === '$SEMESTER') {
-                return formatText(liveSemester);
+                return formatText(ay.semester);
             }
             if (upperVal === '$SEMESTER_ANGKA') {
-                return formatText(liveSemester === 'Genap' ? '2' : '1');
+                return formatText(ay.semester === 'Genap' ? '2' : '1');
             }
             if (upperVal === '$NAMA_PONPES' && settings.namaPonpes) {
                 return formatText(settings.namaPonpes);
             }
             if (upperVal === '$NAMA_YAYASAN' && settings.namaYayasan) {
                 return formatText(settings.namaYayasan);
+            }
+            if ((upperVal === '$JENJANG' || upperVal === '$MARHALAH') && simJenjang?.nama) {
+                return formatText(simJenjang.nama);
+            }
+            if (upperVal === '$KELAS' && simKelas?.nama) {
+                return formatText(simKelas.nama);
+            }
+            if (upperVal === '$ROMBEL' && simRombel?.nama) {
+                return formatText(simRombel.nama);
+            }
+            if (upperVal === '$NAMA_WALI_KELAS' || upperVal === '$WALI_KELAS' || upperVal === '$WALIKELAS') {
+                const wali = resolveWaliKelasTeacher(simRombel, settings);
+                if (wali?.nama) return formatText(wali.nama);
+            }
+            if (upperVal === '$NIP_WALI_KELAS' || upperVal === '$NIY_WALI_KELAS') {
+                const wali = resolveWaliKelasTeacher(simRombel, settings);
+                const nip = formatTeacherNip(wali);
+                if (nip !== '-') return formatText(nip);
+            }
+            if (
+                upperVal === '$NAMA_MUDIR_MARHALAH' ||
+                upperVal === '$MUDIR_MARHALAH' ||
+                upperVal === '$KEPALA_MARHALAH' ||
+                upperVal === '$NAMA_KEPALA_MARHALAH' ||
+                upperVal === '$MUDIR_JENJANG' ||
+                upperVal === '$NAMA_MUDIR_JENJANG'
+            ) {
+                const mm = resolveMudirMarhalahTeacher(simJenjang, settings);
+                if (mm?.nama) return formatText(mm.nama);
+            }
+            if (upperVal === '$NIP_MUDIR_MARHALAH' || upperVal === '$NIY_MUDIR_MARHALAH' || upperVal === '$NIP_KEPALA_MARHALAH') {
+                const mm = resolveMudirMarhalahTeacher(simJenjang, settings);
+                const nip = formatTeacherNip(mm);
+                if (nip !== '-') return formatText(nip);
+            }
+            if (upperVal === '$NAMA_MUDIR' || upperVal === '$NAMA_PIMPINAN' || upperVal === '$NAMA_KEPALA_SEKOLAH' || upperVal === '$MUDIR') {
+                const mudirInfo = resolveMudirAamInfo(settings);
+                if (mudirInfo.nama && mudirInfo.nama !== 'K.H. Pimpinan Pesantren') return formatText(mudirInfo.nama);
+            }
+            if (upperVal === '$NIP_MUDIR' || upperVal === '$NIY_MUDIR') {
+                const mudirInfo = resolveMudirAamInfo(settings);
+                if (mudirInfo.nip !== '-') return formatText(mudirInfo.nip);
             }
 
             // Find matching example in dynamic tag list
@@ -3717,16 +4233,37 @@ export const TabDesainRapor: React.FC = () => {
                             }
                             onFocus={() => {
                                 formulaInputHistoryPushedRef.current = false;
+                                formulaPickedSpanRef.current = null;
+                                setActiveFormulaSource('fx');
+                                activeFormulaSourceRef.current = 'fx';
+                            }}
+                            onClick={() => {
+                                formulaPickedSpanRef.current = null;
                             }}
                             onBlur={() => {
                                 setTimeout(() => {
+                                    if (isFormulaSelectingRef.current) return;
                                     setAutocompleteState(prev => (prev?.source === 'fx' ? null : prev));
+                                    if (activeFormulaSourceRef.current === 'fx' && document.activeElement !== fxInputRef.current) {
+                                        if (activeTemplate && activeCellData && canWrite) {
+                                            const curStr = getEditableCellString(activeCellData);
+                                            const closedStr = autoCloseFormulaParens(curStr);
+                                            if (closedStr !== curStr) {
+                                                const { updatedTpl, changed } = applySmartCellTextCommit(activeTemplate, activeCellData.row, activeCellData.col, closedStr);
+                                                if (changed) setActiveTemplate(updatedTpl);
+                                            }
+                                        }
+                                        formulaPickedSpanRef.current = null;
+                                        setActiveFormulaSource(null);
+                                        activeFormulaSourceRef.current = null;
+                                    }
                                 }, 150);
                             }}
                             onChange={(e) => {
                                 if (!activeTemplate || !activeCellData || !canWrite) return;
                                 const val = e.target.value;
                                 const caret = e.target.selectionStart ?? val.length;
+                                formulaPickedSpanRef.current = null;
                                 detectAutocompleteTrigger(val, caret, 'fx');
                                 if (editingCellRef.current && editingCellRef.current.r === activeCellData.row && editingCellRef.current.c === activeCellData.col) {
                                     const next = { ...editingCellRef.current, draft: val };
@@ -3767,13 +4304,29 @@ export const TabDesainRapor: React.FC = () => {
                                         return;
                                     }
                                 }
-                                if (e.key === 'Enter' && activeCellData) {
+                                if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                                    formulaPickedSpanRef.current = null;
+                                }
+                                if (e.key === 'Enter' && activeCellData && activeTemplate) {
                                     e.preventDefault();
-                                    moveSelectionFrom(activeCellData.row, activeCellData.col, 1, 0);
+                                    const curStr = getEditableCellString(activeCellData);
+                                    const closedStr = autoCloseFormulaParens(curStr);
+                                    let latestTpl = activeTemplate;
+                                    if (closedStr !== curStr) {
+                                        const { updatedTpl, changed } = applySmartCellTextCommit(activeTemplate, activeCellData.row, activeCellData.col, closedStr);
+                                        if (changed) {
+                                            setActiveTemplate(updatedTpl);
+                                            latestTpl = updatedTpl;
+                                        }
+                                    }
+                                    formulaPickedSpanRef.current = null;
+                                    setActiveFormulaSource(null);
+                                    activeFormulaSourceRef.current = null;
+                                    moveSelectionFrom(activeCellData.row, activeCellData.col, 1, 0, latestTpl);
                                     scrollContainerRef.current?.focus({ preventScroll: true });
                                 }
                             }}
-                            placeholder={activeCellData ? 'Ketik = untuk Rumus atau $ untuk Tag Dinamis (Cth: =TERBILANG($MTK))' : 'Klik sel pada tabel lalu langsung ketik seperti di Excel...'}
+                            placeholder={activeCellData ? 'Ketik =SUM( atau =RATA2( lalu blok sel di tabel seperti Excel...' : 'Klik sel pada tabel lalu langsung ketik seperti di Excel...'}
                             className="w-full px-2.5 py-1 text-xs text-slate-800 rounded-r-lg focus:outline-none disabled:bg-slate-50"
                         />
                     </div>
@@ -3965,6 +4518,33 @@ export const TabDesainRapor: React.FC = () => {
                     </div>
                 )}
 
+                {/* EXCEL FORMULA POINT-AND-SELECT ACTIVE BANNER */}
+                {isFormulaPointModeBannerVisible && (
+                    <div className="bg-emerald-950 text-emerald-50 px-3 py-1.5 border-b border-emerald-700 flex items-center justify-between gap-2 text-xs shrink-0 z-30">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className="bg-emerald-400 text-emerald-950 font-black px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider shrink-0 flex items-center gap-1">
+                                <i className="bi bi-bounding-box-circles"></i>
+                                Pilih Sel Rumus
+                            </span>
+                            <span className="text-[11px] text-emerald-100 truncate">
+                                Klik atau seret (blok) sel nilai di tabel untuk memasukkannya otomatis ke rumus <span className="hidden md:inline text-emerald-300">• Tahan Ctrl+Klik untuk tambah rentang lain</span>
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                finishFormulaPointMode();
+                            }}
+                            className="px-2.5 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black rounded-lg text-[11px] shrink-0 flex items-center gap-1 transition-colors"
+                            title="Tutup kurung otomatis & simpan rumus (Enter)"
+                        >
+                            <i className="bi bi-check2-circle"></i>
+                            <span>Selesai</span>
+                        </button>
+                    </div>
+                )}
+
                 {/* MULTI-CELL SELECTION TOOLBAR: Docked to Viewport Width & Horizontally Scrollable */}
                 {selectedCells.length > 1 && (
                     <div
@@ -3975,12 +4555,34 @@ export const TabDesainRapor: React.FC = () => {
                             <span className="bg-teal-400 text-slate-950 font-black px-2 py-0.5 rounded-lg text-xs font-mono whitespace-nowrap">
                                 {selectedCells.length} Sel Terpilih
                             </span>
-                            <span className="text-xs text-slate-300 font-semibold whitespace-nowrap hidden sm:inline">
-                                Format Rentang:
-                            </span>
                         </div>
 
                         <div className="flex flex-nowrap items-center gap-1.5 shrink-0 pr-2">
+                            {/* Quick Excel AutoSum / Rerata on Selected Range */}
+                            {canWrite && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleQuickRangeFormula('SUM')}
+                                        className="px-2 py-1 bg-emerald-500/25 hover:bg-emerald-500/45 text-emerald-200 border border-emerald-400/40 rounded-lg text-xs font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors"
+                                        title="AutoSum seperti Excel: Taruh rumus =SUM(...) otomatis di bawah/kanan sel yang diblok"
+                                    >
+                                        <span className="font-serif font-black">Σ</span>
+                                        <span>Jumlah (SUM)</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleQuickRangeFormula('RATA2')}
+                                        className="px-2 py-1 bg-amber-500/25 hover:bg-amber-500/45 text-amber-200 border border-amber-400/40 rounded-lg text-xs font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors"
+                                        title="Taruh rumus =RATA2(...) otomatis di bawah/kanan sel yang diblok"
+                                    >
+                                        <span className="font-mono font-black">x̄</span>
+                                        <span>Rerata</span>
+                                    </button>
+                                    <div className="h-4 w-px bg-slate-700 shrink-0"></div>
+                                </>
+                            )}
+
                             {/* Borders */}
                             <button
                                 type="button"
@@ -4315,13 +4917,22 @@ export const TabDesainRapor: React.FC = () => {
                                                 const isSelected = selectedCells.some(s => s.r === rIdx && s.c === cIdx);
                                                 const isActive = selectedCells.length === 1 && selectedCells[0].r === rIdx && selectedCells[0].c === cIdx;
                                                 const isEditingThisCell = Boolean(editingCell && editingCell.r === rIdx && editingCell.c === cIdx);
+                                                const isFormulaRef = formulaReferencedCoords.has(`${rIdx}:${cIdx}`);
+                                                const isLiveDragRef = Boolean(
+                                                    formulaDragPreview &&
+                                                    rIdx >= formulaDragPreview.r1 &&
+                                                    rIdx <= formulaDragPreview.r2 &&
+                                                    cIdx >= formulaDragPreview.c1 &&
+                                                    cIdx <= formulaDragPreview.c2
+                                                );
                                                 const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
                                                 let cellClass = `relative transition-colors ${showGridlines ? 'border border-dashed border-gray-300' : 'border border-transparent'} `;
                                                 if (borders.top) cellClass += "!border-t !border-t-black !border-solid ";
                                                 if (borders.right) cellClass += "!border-r !border-r-black !border-solid ";
                                                 if (borders.bottom) cellClass += "!border-b !border-b-black !border-solid ";
                                                 if (borders.left) cellClass += "!border-l !border-l-black !border-solid ";
-                                                if (isSelected) cellClass += "bg-blue-100/80 ";
+                                                if (isLiveDragRef || isFormulaRef) cellClass += "bg-emerald-100/80 ring-2 ring-inset ring-emerald-500 ";
+                                                else if (isSelected) cellClass += "bg-blue-100/80 ";
                                                 if (isActive && !isEditingThisCell) cellClass += "ring-2 ring-blue-500 ";
 
                                                 const cellColSpan = cell.colSpan || 1;
@@ -4353,12 +4964,42 @@ export const TabDesainRapor: React.FC = () => {
                                                 return (
                                                     <td 
                                                         key={cell.id} 
+                                                        data-grid-rc={`${rIdx}:${cIdx}`}
                                                         colSpan={cellColSpan} 
                                                         rowSpan={cellRowSpan} 
                                                         className={cellClass} 
-                                                        onMouseDown={() => handleMouseDown(rIdx, cIdx)} 
+                                                        onMouseDown={(e) => handleMouseDown(rIdx, cIdx, e)} 
                                                         onMouseEnter={() => handleMouseEnter(rIdx, cIdx)}
+                                                        onTouchStart={(e) => {
+                                                            if (e.touches.length === 1 && tryStartFormulaCellPick(rIdx, cIdx, false)) {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                            }
+                                                        }}
+                                                        onTouchMove={(e) => {
+                                                            if (!formulaDragAnchorRef.current || e.touches.length !== 1) return;
+                                                            e.preventDefault();
+                                                            const touch = e.touches[0];
+                                                            const el = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('td[data-grid-rc]');
+                                                            const rcAttr = el?.getAttribute('data-grid-rc');
+                                                            if (rcAttr) {
+                                                                const [tr, tc] = rcAttr.split(':').map(Number);
+                                                                if (!isNaN(tr) && !isNaN(tc)) {
+                                                                    updateFormulaPickedReference(formulaDragAnchorRef.current.r, formulaDragAnchorRef.current.c, tr, tc);
+                                                                }
+                                                            }
+                                                        }}
+                                                        onTouchEnd={() => {
+                                                            if (formulaDragAnchorRef.current) {
+                                                                formulaDragAnchorRef.current = null;
+                                                                setFormulaDragPreview(null);
+                                                                setTimeout(() => {
+                                                                    isFormulaSelectingRef.current = false;
+                                                                }, 80);
+                                                            }
+                                                        }}
                                                         onClick={() => {
+                                                            if (isFormulaSelectingRef.current) return;
                                                             if (wasAlreadySingleSelectedRef.current && selectedCells.length === 1 && !editingCellRef.current && canWrite) {
                                                                 startInlineEdit(rIdx, cIdx);
                                                             }
@@ -4383,7 +5024,7 @@ export const TabDesainRapor: React.FC = () => {
                                                             verticalAlign: vAlign,
                                                             fontWeight: cell.bold ? 'bold' : 'normal',
                                                             fontStyle: cell.italic ? 'italic' : undefined,
-                                                            backgroundColor: !isSelected && cell.backgroundColor ? cell.backgroundColor : undefined,
+                                                            backgroundColor: !isSelected && !isLiveDragRef && !isFormulaRef && cell.backgroundColor ? cell.backgroundColor : undefined,
                                                             color: cell.color || undefined,
                                                             fontSize: `${effectiveFontSize}px`,
                                                             overflow: (isEditingThisCell || isFloat) ? 'visible' : 'hidden',
@@ -4397,6 +5038,7 @@ export const TabDesainRapor: React.FC = () => {
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
                                                                     const caret = e.target.selectionStart ?? val.length;
+                                                                    formulaPickedSpanRef.current = null;
                                                                     detectAutocompleteTrigger(val, caret, 'inline');
                                                                     setEditingCell(prev => {
                                                                         const next = prev ? { ...prev, draft: val } : null;
@@ -4404,12 +5046,21 @@ export const TabDesainRapor: React.FC = () => {
                                                                         return next;
                                                                     });
                                                                 }}
-                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                                onMouseDown={(e) => {
+                                                                    e.stopPropagation();
+                                                                    formulaPickedSpanRef.current = null;
+                                                                }}
                                                                 onClick={(e) => e.stopPropagation()}
                                                                 onDoubleClick={(e) => e.stopPropagation()}
-                                                                onBlur={() => commitInlineEdit()}
+                                                                onBlur={() => {
+                                                                    if (isFormulaSelectingRef.current) return;
+                                                                    commitInlineEdit();
+                                                                }}
                                                                 onKeyDown={(e) => {
                                                                     e.stopPropagation();
+                                                                    if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                                                                        formulaPickedSpanRef.current = null;
+                                                                    }
                                                                     if (autocompleteState?.source === 'inline' && filteredAutocompleteOptions.length > 0) {
                                                                         if (e.key === 'ArrowDown') {
                                                                             e.preventDefault();
@@ -4960,15 +5611,79 @@ export const TabDesainRapor: React.FC = () => {
                         )}
                          {activeCellData.type === 'formula' && (
                             <div className="space-y-2">
-                                <div>
-                                    <label className="block text-xs font-bold mb-1 text-yellow-700">Rumus</label>
+                                <div className="space-y-1.5">
+                                    <label className="block text-xs font-bold text-yellow-700">Rumus</label>
                                     <input 
+                                        ref={sidebarFormulaInputRef}
                                         type="text" 
                                         value={activeCellData.value} 
-                                        onChange={e => updateActiveCell({ value: e.target.value })} 
-                                        className="w-full border rounded p-2 text-sm font-mono" 
-                                        placeholder="= RATA2($A, $B)"
+                                        onFocus={() => {
+                                            formulaInputHistoryPushedRef.current = false;
+                                            formulaPickedSpanRef.current = null;
+                                            setActiveFormulaSource('sidebar');
+                                            activeFormulaSourceRef.current = 'sidebar';
+                                        }}
+                                        onClick={() => {
+                                            formulaPickedSpanRef.current = null;
+                                        }}
+                                        onBlur={() => {
+                                            setTimeout(() => {
+                                                if (isFormulaSelectingRef.current) return;
+                                                if (activeFormulaSourceRef.current === 'sidebar' && document.activeElement !== sidebarFormulaInputRef.current) {
+                                                    const closedVal = autoCloseFormulaParens(activeCellData.value || '');
+                                                    if (closedVal !== (activeCellData.value || '')) {
+                                                        updateActiveCell({ value: closedVal });
+                                                    }
+                                                    formulaPickedSpanRef.current = null;
+                                                    setActiveFormulaSource(null);
+                                                    activeFormulaSourceRef.current = null;
+                                                }
+                                            }, 150);
+                                        }}
+                                        onChange={e => {
+                                            formulaPickedSpanRef.current = null;
+                                            updateActiveCell({ value: e.target.value });
+                                        }} 
+                                        onKeyDown={e => {
+                                            if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                                                formulaPickedSpanRef.current = null;
+                                            }
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                finishFormulaPointMode();
+                                            }
+                                        }}
+                                        className="w-full border rounded p-2 text-sm font-mono focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none" 
+                                        placeholder="=SUM(D6:D15) atau =RATA2(D6:D15)"
                                     />
+                                    <div className="flex flex-wrap gap-1">
+                                        {(['=SUM(', '=RATA2(', '=TERBILANG(', '=PREDIKAT('] as const).map(starter => (
+                                            <button
+                                                key={starter}
+                                                type="button"
+                                                onClick={() => {
+                                                    formulaPickedSpanRef.current = null;
+                                                    updateActiveCell({ value: starter });
+                                                    setActiveFormulaSource('sidebar');
+                                                    activeFormulaSourceRef.current = 'sidebar';
+                                                    requestAnimationFrame(() => {
+                                                        if (sidebarFormulaInputRef.current) {
+                                                            sidebarFormulaInputRef.current.focus({ preventScroll: true });
+                                                            sidebarFormulaInputRef.current.setSelectionRange(starter.length, starter.length);
+                                                        }
+                                                    });
+                                                }}
+                                                className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[10px] font-mono font-bold transition-colors"
+                                                title={`Mulai rumus ${starter}...) lalu langsung blok sel nilai di tabel`}
+                                            >
+                                                + {starter}...)
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-emerald-700 bg-emerald-50/80 border border-emerald-200 rounded px-2 py-1 leading-snug">
+                                        <i className="bi bi-cursor-fill mr-1"></i>
+                                        <strong>Seperti Excel:</strong> Setelah mengetik <code>=SUM(</code> atau <code>=RATA2(</code>, langsung klik atau seret (blok) sel nilai di tabel!
+                                    </p>
                                 </div>
                                 
                                 {/* Formula Guide & Helpers */}
@@ -5011,20 +5726,26 @@ export const TabDesainRapor: React.FC = () => {
                                     </div>
 
                                     <details className="cursor-pointer group">
-                                        <summary className="font-semibold text-yellow-700 hover:underline">Lihat Daftar Rumus</summary>
+                                        <summary className="font-semibold text-yellow-700 hover:underline">Lihat Daftar Rumus &amp; Kode Pejabat</summary>
                                         <ul className="mt-1 space-y-1 text-[10px] text-gray-600 pl-2 border-l-2 border-yellow-300">
-                                            <li><code>=RATA2($A, $B)</code> : Rata-rata nilai</li>
-                                            <li><code>=SUM($A, $B)</code> : Penjumlahan nilai</li>
-                                            <li><code>=TERBILANG($A)</code> : Angka ke huruf Indonesia</li>
-                                            <li><code>=ARAB($A)</code> : Angka ke Arab-Timur (٨٨)</li>
-                                            <li><code>=PREDIKAT($A, "pesantren")</code> : Mumtaz / Jayyid Jiddan</li>
-                                            <li><code>=PREDIKAT($A, "huruf")</code> : Predikat A / B / C / D</li>
-                                            <li><code>=IF($A&gt;=75, "Tuntas", "Remidi")</code> : Logika IF</li>
-                                            <li><code>=MAX($A, $B)</code> / <code>=MIN($A, $B)</code> : Nilai maks / min</li>
-                                            <li><code>=RANK($TOTAL, "rombel")</code> : Peringkat per Rombel</li>
+                                            <li><code>=SUM(D6:D15)</code> : Jumlahkan blok sel (bisa seret/blok langsung di tabel)</li>
+                                            <li><code>=RATA2(D6:D15)</code> : Rata-rata blok sel (atau <code>=RATA2($A, $B)</code>)</li>
+                                            <li><code>=TERBILANG(D6)</code> : Angka ke huruf Indonesia</li>
+                                            <li><code>=ARAB(D6)</code> : Angka ke Arab-Timur (٨٨)</li>
+                                            <li><code>=PREDIKAT(D6, "pesantren")</code> : Mumtaz / Jayyid Jiddan</li>
+                                            <li><code>=PREDIKAT(D6, "huruf")</code> : Predikat A / B / C / D</li>
+                                            <li><code>=IF(D6&gt;=75, "Tuntas", "Remidi")</code> : Logika syarat IF</li>
+                                            <li><code>=MAX(D6:D15)</code> / <code>=MIN(D6:D15)</code> : Nilai tertinggi / terendah</li>
+                                            <li><code>=RANK($TOTAL_NILAI, "rombel")</code> : Peringkat kelas otomatis</li>
+                                            <li><code>=CONCAT("Semester ", $SEMESTER)</code> : Gabung teks (spasi dalam kutip terjaga)</li>
+                                            <li><code>=CONCAT_SPASI("Kelas", $KELAS)</code> : Gabung teks otomatis dipisah spasi</li>
+                                            <li><code>="Marhalah " &amp; $JENJANG</code> : Operator gabung teks <code>&amp;</code></li>
                                             <li><code>=UPPER($NAMA)</code> / <code>=LOWER($NAMA)</code> / <code>=PROPER($NAMA)</code> : Format HURUF BESAR / kecil / Judul</li>
-                                            <li><code>=TAHUN_AJAR()</code> / <code>=$TAHUN_AJAR</code> : Tahun Ajaran Aktif</li>
-                                            <li><code>=SEMESTER()</code> / <code>=$SEMESTER</code> : Semester Aktif</li>
+                                            <li><code>=TAHUN_AJAR()</code> / <code>=TAHUN_AJAR_MASEHI()</code> / <code>=TAHUN_AJAR_HIJRIAH()</code> / <code>=TAHUN_AJAR_GABUNGAN()</code> : Tahun Ajaran</li>
+                                            <li><code>=SEMESTER()</code> / <code>$SEMESTER</code> : Semester Aktif</li>
+                                            <li><code>$NAMA_WALI_KELAS</code>, <code>$NIP_WALI_KELAS</code>, <code>$TTD_WALI_KELAS</code> : Wali Kelas</li>
+                                            <li><code>$NAMA_MUDIR_MARHALAH</code>, <code>$NIP_MUDIR_MARHALAH</code>, <code>$TTD_MUDIR_MARHALAH</code> : Mudir Marhalah</li>
+                                            <li><code>$NAMA_MUDIR</code>, <code>$NIP_MUDIR</code>, <code>$TTD_MUDIR</code> : Mudir Aam / Pimpinan</li>
                                         </ul>
                                     </details>
                                 </div>
@@ -5816,6 +6537,7 @@ export const TabDesainRapor: React.FC = () => {
                     }
                 }
 
+                const { simRombel, simKelas, simJenjang } = getTemplateSimulatedHierarchy();
                 const previewSantriObj = selectedRealSantri || ({
                     id: 1,
                     namaLengkap: 'Ahmad Fauzan',
@@ -5825,9 +6547,9 @@ export const TabDesainRapor: React.FC = () => {
                     tanggalLahir: '2010-05-14',
                     namaAyah: 'H. Abdullah',
                     namaIbu: 'Hj. Siti Aminah',
-                    rombelId: activeTemplate.rombelId || settings.rombel?.[0]?.id || 1,
-                    kelasId: activeTemplate.kelasId || settings.kelas?.[0]?.id || 1,
-                    jenjangId: activeTemplate.jenjangId || settings.jenjang?.[0]?.id || 1,
+                    rombelId: simRombel?.id || 1,
+                    kelasId: simKelas?.id || 1,
+                    jenjangId: simJenjang?.id || 1,
                     status: 'Aktif'
                 } as any);
 
@@ -5895,14 +6617,18 @@ export const TabDesainRapor: React.FC = () => {
                     }
                 };
 
-                // Multi-pass chained evaluation so formula cells with keys feed into downstream formulas (e.g. =TERBILANG($TOTAL))
+                // Multi-pass chained evaluation so formula cells (with keys or cell coordinates) feed into downstream formulas
                 for (let pass = 0; pass < 2; pass++) {
                     activeSheets.forEach(sheetObj => {
                         sheetObj.cells.forEach(row => {
                             row.forEach(c => {
                                 if (!c.hidden && c.type === 'formula' && c.key && c.value) {
                                     const rawExpr = c.value.trim().startsWith('=') ? c.value : `=${c.value.trim()}`;
-                                    baseExtraVars[c.key] = resolveRaporText(rawExpr, baseResolveContext);
+                                    baseExtraVars[c.key] = resolveRaporText(rawExpr, {
+                                        ...baseResolveContext,
+                                        sheetCells: sheetObj.cells,
+                                        currentCellCoord: { r: c.row, c: c.col }
+                                    });
                                 }
                             });
                         });
@@ -5988,12 +6714,13 @@ export const TabDesainRapor: React.FC = () => {
                                     .filter(sh => previewSheetId === 'all' || previewSheetId === sh.id)
                                     .map((sh, sIdx) => {
                                         const renderPreviewCell = (cell: GridCell): { content: React.ReactNode; isMedia: boolean } => {
-                                            if (cell.type === 'data' && isMediaTag(cell.value || '')) {
+                                            if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(cell.value || '')) {
                                                 const imgSrc = getMediaTagImageSrc(cell.value?.trim() || '', baseResolveContext);
                                                 if (imgSrc) {
                                                     const val = cell.value?.trim() || '';
-                                                    const isStempel = val.includes('STEMPEL');
-                                                    const isTtd = val.includes('TTD');
+                                                    const upperMedia = val.toUpperCase();
+                                                    const isStempel = upperMedia.includes('STEMPEL');
+                                                    const isTtd = upperMedia.includes('TTD');
                                                     return {
                                                         content: (
                                                             <div className="flex items-center justify-center p-0.5">
@@ -6022,7 +6749,14 @@ export const TabDesainRapor: React.FC = () => {
                                                 const rawExpr = cell.type === 'formula' && !cell.value.trim().startsWith('=')
                                                     ? `=${cell.value.trim()}`
                                                     : cell.value;
-                                                return { content: resolveRaporText(rawExpr, baseResolveContext), isMedia: false };
+                                                return {
+                                                    content: resolveRaporText(rawExpr, {
+                                                        ...baseResolveContext,
+                                                        sheetCells: sh.cells,
+                                                        currentCellCoord: { r: cell.row, c: cell.col }
+                                                    }),
+                                                    isMedia: false
+                                                };
                                             }
                                             return { content: getSimulatedValue(cell), isMedia: false };
                                         };

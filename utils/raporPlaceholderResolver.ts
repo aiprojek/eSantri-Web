@@ -1,10 +1,10 @@
 import React from 'react';
-import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTemplate } from '../types';
+import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTemplate, TenagaPengajar, Rombel, Jenjang, Kelas } from '../types';
 import { formatDate, getHijriDate, formatTanggalDokumen } from './formatters';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
-import { evaluateRaporFormula, isRaporFormulaExpression } from './raporFormulaUtils';
-import { getAcademicYearsFromSettings, getDefaultAcademicYear } from './academicYear';
+import { evaluateRaporFormula, isRaporFormulaExpression, parseExcelCellCoord, parseExcelRangeCoord } from './raporFormulaUtils';
+import { resolveAcademicYearLabels } from './academicYear';
 
 export interface DynamicTagItem {
     tag: string;
@@ -63,9 +63,10 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         tags: [
             { tag: '$SEMESTER', label: 'Semester (Teks)', description: 'Ganjil atau Genap (otomatis dari periode aktif)', example: 'Ganjil' },
             { tag: '$SEMESTER_ANGKA', label: 'Semester (Angka)', description: '1 atau 2', example: '1' },
-            { tag: '$TAHUN_AJAR', label: 'Tahun Ajaran Aktif', description: 'Tahun pelajaran aktif dari Data Master', example: '2026/2027' },
-            { tag: '$TAHUN_AJAR_HIJRIAH', label: 'Tahun Ajaran Hijriah', description: 'Tahun pelajaran Hijriah dari pengaturan Tahun Ajaran', example: '1447/1448 H' },
-            { tag: '$TAHUN_AJAR_LENGKAP', label: 'Tahun Ajaran Hijriah / Masehi', description: 'Gabungan Tahun Ajaran Hijriah & Masehi bila diaktifkan', example: '1447/1448 H / 2026/2027 M' },
+            { tag: '$TAHUN_AJAR', label: 'Tahun Ajaran (Sesuai Master)', description: 'Otomatis Masehi, atau Gabungan bila tampilan Hijriah aktif di Data Master', example: '2026/2027' },
+            { tag: '$TAHUN_AJAR_MASEHI', label: 'Tahun Ajaran Masehi', description: 'Khusus tahun ajaran Masehi aktif', example: '2026/2027' },
+            { tag: '$TAHUN_AJAR_HIJRIAH', label: 'Tahun Ajaran Hijriah', description: 'Khusus tahun ajaran Hijriah (dari Data Master atau otomatis terkonversi)', example: '1448/1449 H' },
+            { tag: '$TAHUN_AJAR_GABUNGAN', label: 'Tahun Ajaran Hijriah & Masehi', description: 'Gabungan Tahun Ajaran Hijriah dan Masehi', example: '1448/1449 H / 2026/2027 M' },
             { tag: '$JENJANG', label: 'Jenjang / Marhalah', description: 'Nama marhalah pendidikan', example: 'Tsanawiyyah' },
             { tag: '$KELAS', label: 'Tingkat Kelas', description: 'Nama kelas', example: 'Kelas 7' },
             { tag: '$ROMBEL', label: 'Rombongan Belajar', description: 'Nama rombel santri', example: '7A Ula' },
@@ -119,11 +120,13 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         icon: 'bi-person-check-fill',
         color: 'text-purple-600 bg-purple-50 border-purple-200',
         tags: [
-            { tag: '$NAMA_WALI_KELAS', label: 'Nama Wali Kelas', description: 'Nama pengajar wali kelas', example: 'Ust. Muhammad Rizki, S.Pd.' },
-            { tag: '$NIP_WALI_KELAS', label: 'NIP/NIY Wali Kelas', description: 'Nomor identitas wali kelas', example: '198501012010011002' },
-            { tag: '$NAMA_MUDIR', label: 'Nama Mudir / Pimpinan', description: 'Nama Pimpinan / Mudir Aam', example: 'K.H. Ahmad Dahlan, Lc.' },
-            { tag: '$NIP_MUDIR', label: 'NIP/NIY Mudir', description: 'Nomor induk pimpinan pondok', example: '197001011995031001' },
-            { tag: '$NAMA_KEPALA_SEKOLAH', label: 'Nama Kepala Madrasah', description: 'Nama kepala madrasah / sekolah', example: 'Ust. Ahmad Dahlan, M.Pd.' },
+            { tag: '$NAMA_WALI_KELAS', label: 'Nama Wali Kelas', description: 'Nama ustadz/ustadzah wali kelas rombel santri', example: 'Ust. Muhammad Rizki, S.Pd.' },
+            { tag: '$NIP_WALI_KELAS', label: 'NIP / NIY Wali Kelas', description: 'Nomor induk kepegawaian wali kelas', example: '198501012010011002' },
+            { tag: '$NAMA_MUDIR_MARHALAH', label: 'Nama Mudir Marhalah', description: 'Nama Mudir Marhalah / Kepala Jenjang santri', example: 'Ust. H. Abdul Hakim, Lc., M.A.' },
+            { tag: '$NIP_MUDIR_MARHALAH', label: 'NIP / NIY Mudir Marhalah', description: 'Nomor induk kepegawaian Mudir Marhalah', example: '197805122005011003' },
+            { tag: '$NAMA_MUDIR', label: 'Nama Mudir Aam / Pimpinan', description: 'Nama Pimpinan Pondok / Mudir Aam', example: 'K.H. Ahmad Dahlan, Lc.' },
+            { tag: '$NIP_MUDIR', label: 'NIP / NIY Mudir Aam', description: 'Nomor induk pimpinan pondok', example: '197001011995031001' },
+            { tag: '$NAMA_KEPALA_SEKOLAH', label: 'Nama Kepala Madrasah', description: 'Alias nama kepala madrasah / pimpinan', example: 'Ust. Ahmad Dahlan, M.Pd.' },
         ]
     },
     {
@@ -198,8 +201,9 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
             { tag: '$LOGO_PONPES', label: 'Logo Pondok Pesantren', description: 'Gambar logo resmi pondok', example: '[Gambar Logo Ponpes]', isMedia: true },
             { tag: '$LOGO_YAYASAN', label: 'Logo Yayasan', description: 'Gambar logo yayasan', example: '[Gambar Logo Yayasan]', isMedia: true },
             { tag: '$STEMPEL_PONPES', label: 'Stempel Resmi Pondok', description: 'Cap stempel lembaga', example: '[Gambar Stempel Ponpes]', isMedia: true },
-            { tag: '$TTD_WALI_KELAS', label: 'Tanda Tangan Wali Kelas', description: 'TTD digital wali kelas', example: '[TTD Wali Kelas]', isMedia: true },
-            { tag: '$TTD_MUDIR', label: 'Tanda Tangan Mudir / Pimpinan', description: 'TTD digital mudir aam', example: '[TTD Mudir]', isMedia: true },
+            { tag: '$TTD_WALI_KELAS', label: 'Tanda Tangan Wali Kelas', description: 'TTD digital wali kelas rombel', example: '[TTD Wali Kelas]', isMedia: true },
+            { tag: '$TTD_MUDIR_MARHALAH', label: 'Tanda Tangan Mudir Marhalah', description: 'TTD digital Mudir Marhalah / Kepala Jenjang', example: '[TTD Mudir Marhalah]', isMedia: true },
+            { tag: '$TTD_MUDIR', label: 'Tanda Tangan Mudir Aam / Pimpinan', description: 'TTD digital Mudir Aam / Pimpinan Pondok', example: '[TTD Mudir]', isMedia: true },
         ]
     }
 ];
@@ -220,15 +224,164 @@ export interface RaporResolveContext {
     extraVars?: Record<string, any>;
     tahunAjaran?: string;
     semester?: 'Ganjil' | 'Genap';
+    sheetCells?: GridCell[][];
+    currentCellCoord?: { r: number; c: number };
+    evaluatingCells?: Set<string>;
 }
+
+export const formatTeacherNip = (teacher?: TenagaPengajar | null): string => {
+    if (!teacher) return '-';
+    return teacher.nip?.trim() || teacher.kodeGuru?.trim() || '-';
+};
+
+export const resolveSantriAcademicHierarchy = (
+    santri?: Santri | null,
+    settings?: PondokSettings | null
+): { rombel?: Rombel; kelas?: Kelas; jenjang?: Jenjang } => {
+    if (!settings) return {};
+    const rombel = santri?.rombelId !== undefined && santri?.rombelId !== null
+        ? settings.rombel.find(r => Number(r.id) === Number(santri.rombelId))
+        : undefined;
+    const targetKelasId = santri?.kelasId || rombel?.kelasId;
+    const kelas = targetKelasId !== undefined && targetKelasId !== null
+        ? settings.kelas.find(k => Number(k.id) === Number(targetKelasId))
+        : undefined;
+    const targetJenjangId = santri?.jenjangId || kelas?.jenjangId;
+    const jenjang = targetJenjangId !== undefined && targetJenjangId !== null
+        ? settings.jenjang.find(j => Number(j.id) === Number(targetJenjangId))
+        : undefined;
+    return { rombel, kelas, jenjang };
+};
+
+export const resolveWaliKelasTeacher = (
+    rombel?: Rombel | null,
+    settings?: PondokSettings | null
+): TenagaPengajar | undefined => {
+    if (!rombel || !settings?.tenagaPengajar) return undefined;
+
+    // 1. Utama: rombel.waliKelasId (ID TenagaPengajar dari Data Master > Struktur Pendidikan / Tenaga Pendidik)
+    if (rombel.waliKelasId !== undefined && rombel.waliKelasId !== null) {
+        const direct = settings.tenagaPengajar.find(tp => Number(tp.id) === Number(rombel.waliKelasId));
+        if (direct) return direct;
+    }
+
+    // 2. Fallback: riwayatJabatan aktif "Wali Kelas" untuk rombel terkait
+    const fromRiwayat = settings.tenagaPengajar.find(tp =>
+        Array.isArray(tp.riwayatJabatan) &&
+        tp.riwayatJabatan.some(rj =>
+            !rj.tanggalSelesai &&
+            (rj.jabatan || '').toLowerCase().includes('wali kelas') &&
+            rj.rombelId !== undefined &&
+            Number(rj.rombelId) === Number(rombel.id)
+        )
+    );
+    if (fromRiwayat) return fromRiwayat;
+
+    // 3. Fallback lama: waliKelasUserId jika kebetulan disamakan dengan ID pengajar
+    if (rombel.waliKelasUserId !== undefined && rombel.waliKelasUserId !== null) {
+        return settings.tenagaPengajar.find(tp => Number(tp.id) === Number(rombel.waliKelasUserId));
+    }
+
+    return undefined;
+};
+
+export const resolveMudirMarhalahTeacher = (
+    jenjang?: Jenjang | null,
+    settings?: PondokSettings | null
+): TenagaPengajar | undefined => {
+    if (!settings?.tenagaPengajar) return undefined;
+
+    // 1. Utama: jenjang.mudirId (Mudir Marhalah pada Data Master > Struktur Pendidikan)
+    if (jenjang?.mudirId !== undefined && jenjang?.mudirId !== null) {
+        const direct = settings.tenagaPengajar.find(tp => Number(tp.id) === Number(jenjang.mudirId));
+        if (direct) return direct;
+    }
+
+    // 2. Fallback: riwayatJabatan aktif "Mudir Marhalah" / "Kepala Marhalah"
+    const jenjangNameLower = (jenjang?.nama || '').trim().toLowerCase();
+    if (jenjangNameLower) {
+        const matchedWithKet = settings.tenagaPengajar.find(tp =>
+            Array.isArray(tp.riwayatJabatan) &&
+            tp.riwayatJabatan.some(rj => {
+                if (rj.tanggalSelesai) return false;
+                const jbt = (rj.jabatan || '').toLowerCase();
+                const ket = (rj.keterangan || '').toLowerCase();
+                return (jbt.includes('mudir marhalah') || jbt.includes('kepala marhalah') || jbt.includes('kepala jenjang')) &&
+                    ket.includes(jenjangNameLower);
+            })
+        );
+        if (matchedWithKet) return matchedWithKet;
+    }
+
+    return settings.tenagaPengajar.find(tp =>
+        Array.isArray(tp.riwayatJabatan) &&
+        tp.riwayatJabatan.some(rj => {
+            if (rj.tanggalSelesai) return false;
+            const jbt = (rj.jabatan || '').toLowerCase();
+            return jbt.includes('mudir marhalah') || jbt.includes('kepala marhalah');
+        })
+    );
+};
+
+export const resolveMudirAamInfo = (
+    settings?: PondokSettings | null
+): { teacher?: TenagaPengajar; nama: string; nip: string } => {
+    if (!settings) {
+        return { nama: 'K.H. Pimpinan Pesantren', nip: '-' };
+    }
+    if (settings.mudirAamId !== undefined && settings.mudirAamId !== null) {
+        const mudir = settings.tenagaPengajar?.find(tp => Number(tp.id) === Number(settings.mudirAamId));
+        if (mudir) {
+            return {
+                teacher: mudir,
+                nama: mudir.nama,
+                nip: formatTeacherNip(mudir)
+            };
+        }
+    }
+    if (settings.namaMudir && settings.namaMudir.trim() !== '') {
+        const matchedByName = settings.tenagaPengajar?.find(
+            tp => tp.nama.trim().toLowerCase() === settings.namaMudir!.trim().toLowerCase()
+        );
+        return {
+            teacher: matchedByName,
+            nama: settings.namaMudir.trim(),
+            nip: formatTeacherNip(matchedByName)
+        };
+    }
+    return { nama: 'K.H. Pimpinan Pesantren', nip: '-' };
+};
+
+const normalizeMediaTag = (raw: string): string => {
+    const trimmed = (raw || '').trim();
+    if (!trimmed) return '';
+    // Pertahankan case ID aset untuk $ASSET_<id>
+    if (/^\$ASSET_/i.test(trimmed)) {
+        return `$ASSET_${trimmed.slice(7)}`;
+    }
+    const u = trimmed.replace(/^\{+|\}+$/g, '').replace(/^\[+|\]+$/g, '').replace(/^\$/, '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (u === 'LOGO_PONPES' || u === 'LOGO') return '$LOGO_PONPES';
+    if (u === 'LOGO_YAYASAN') return '$LOGO_YAYASAN';
+    if (u === 'STEMPEL_PONPES' || u === 'STEMPEL') return '$STEMPEL_PONPES';
+    if (u === 'TTD_WALI_KELAS' || u === 'TTD_WALIKELAS' || u === 'TTD_WALI') return '$TTD_WALI_KELAS';
+    if (u === 'TTD_MUDIR_MARHALAH' || u === 'TTD_MUDIRMARHALAH' || u === 'TTD_KEPALA_MARHALAH' || u === 'TTD_MUDIR_JENJANG' || u === 'TTD_KEPALA_JENJANG') {
+        return '$TTD_MUDIR_MARHALAH';
+    }
+    if (u === 'TTD_MUDIR' || u === 'TTD_MUDIR_AAM' || u === 'TTD_PIMPINAN' || u === 'TTD_KEPALA_SEKOLAH' || u === 'TTD_KEPALA_MADRASAH') {
+        return '$TTD_MUDIR';
+    }
+    return trimmed.startsWith('$') ? `$${u}` : '';
+};
 
 export const isMediaTag = (value: string): boolean => {
     if (!value) return false;
-    const v = value.trim();
+    const v = normalizeMediaTag(value);
+    if (!v) return false;
     return v === '$LOGO_PONPES' ||
            v === '$LOGO_YAYASAN' ||
            v === '$STEMPEL_PONPES' ||
            v === '$TTD_WALI_KELAS' ||
+           v === '$TTD_MUDIR_MARHALAH' ||
            v === '$TTD_MUDIR' ||
            v.startsWith('$TTD_PENGAJAR') ||
            v.startsWith('$STEMPEL_') ||
@@ -237,7 +390,14 @@ export const isMediaTag = (value: string): boolean => {
 
 export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): string | null => {
     const { settings, santri, digitalAssets = [] } = context;
-    const t = tag.trim();
+    const t = normalizeMediaTag(tag);
+    if (!t) return null;
+
+    const findTtdByOwnerName = (name?: string | null) => {
+        if (!name || !name.trim()) return undefined;
+        const target = name.trim().toLowerCase();
+        return digitalAssets.find(a => a.type === 'ttd' && (a.namaPemilik || '').trim().toLowerCase() === target);
+    };
 
     if (t === '$LOGO_PONPES') {
         return settings?.logoPonpesUrl || null;
@@ -251,38 +411,53 @@ export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): 
         return stempelAsset?.base64Image || null;
     }
     if (t === '$TTD_WALI_KELAS') {
-        if (santri && settings) {
-            const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-            if (rombel?.waliKelasUserId) {
-                const teacher = settings.tenagaPengajar.find(tp => tp.id === rombel.waliKelasUserId);
-                if (teacher) {
-                    const teacherAsset = digitalAssets.find(a => a.type === 'ttd' && a.namaPemilik === teacher.nama);
-                    if (teacherAsset?.base64Image) return teacherAsset.base64Image;
-                }
+        if (settings) {
+            const { rombel } = resolveSantriAcademicHierarchy(santri, settings);
+            const teacher = resolveWaliKelasTeacher(rombel || settings.rombel?.[0], settings);
+            if (teacher) {
+                const teacherAsset = findTtdByOwnerName(teacher.nama);
+                if (teacherAsset?.base64Image) return teacherAsset.base64Image;
             }
         }
-        const anyWaliAsset = digitalAssets.find(a => a.type === 'ttd' && a.jabatan?.toLowerCase().includes('wali'));
+        const anyWaliAsset = digitalAssets.find(a => a.type === 'ttd' && (a.jabatan || '').toLowerCase().includes('wali'));
         return anyWaliAsset?.base64Image || null;
     }
-    if (t === '$TTD_MUDIR') {
-        if (settings?.mudirAamId) {
-            const mudir = settings.tenagaPengajar.find(tp => tp.id === settings.mudirAamId);
-            if (mudir) {
-                const mudirAsset = digitalAssets.find(a => a.type === 'ttd' && (a.namaPemilik === mudir.nama || a.jabatan?.toLowerCase().includes('mudir') || a.jabatan?.toLowerCase().includes('pimpinan')));
-                if (mudirAsset?.base64Image) return mudirAsset.base64Image;
+    if (t === '$TTD_MUDIR_MARHALAH') {
+        if (settings) {
+            const { jenjang } = resolveSantriAcademicHierarchy(santri, settings);
+            const mudirMarhalah = resolveMudirMarhalahTeacher(jenjang || settings.jenjang?.[0], settings);
+            if (mudirMarhalah) {
+                const mmAsset = findTtdByOwnerName(mudirMarhalah.nama);
+                if (mmAsset?.base64Image) return mmAsset.base64Image;
             }
         }
-        const mudirAsset = digitalAssets.find(a => a.type === 'ttd' && (a.jabatan?.toLowerCase().includes('mudir') || a.jabatan?.toLowerCase().includes('pimpinan') || a.jabatan?.toLowerCase().includes('pengasuh')));
+        const fallbackMmAsset = digitalAssets.find(a => {
+            if (a.type !== 'ttd') return false;
+            const jbt = (a.jabatan || '').toLowerCase();
+            return jbt.includes('marhalah') || jbt.includes('jenjang');
+        });
+        return fallbackMmAsset?.base64Image || null;
+    }
+    if (t === '$TTD_MUDIR') {
+        const mudirInfo = resolveMudirAamInfo(settings);
+        const byOwner = findTtdByOwnerName(mudirInfo.teacher?.nama || mudirInfo.nama);
+        if (byOwner?.base64Image) return byOwner.base64Image;
+
+        const mudirAsset = digitalAssets.find(a => {
+            if (a.type !== 'ttd') return false;
+            const jbt = (a.jabatan || '').toLowerCase();
+            return (jbt.includes('mudir') && !jbt.includes('marhalah')) || jbt.includes('pimpinan') || jbt.includes('pengasuh');
+        }) || digitalAssets.find(a => a.type === 'ttd' && (a.jabatan || '').toLowerCase().includes('mudir'));
         return mudirAsset?.base64Image || null;
     }
     if (t.startsWith('$TTD_PENGAJAR')) {
         // e.g. $TTD_PENGAJAR:12 or $TTD_PENGAJAR_12 or $TTD_PENGAJAR
-        const match = t.match(/[:_](\d+)/);
+        const match = tag.trim().match(/[:_](\d+)/);
         if (match && settings) {
             const teacherId = parseInt(match[1], 10);
-            const teacher = settings.tenagaPengajar.find(tp => tp.id === teacherId);
+            const teacher = settings.tenagaPengajar.find(tp => Number(tp.id) === teacherId);
             if (teacher) {
-                const teacherAsset = digitalAssets.find(a => a.type === 'ttd' && a.namaPemilik === teacher.nama);
+                const teacherAsset = findTtdByOwnerName(teacher.nama);
                 if (teacherAsset?.base64Image) return teacherAsset.base64Image;
             }
         }
@@ -341,8 +516,71 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         if (u === 'TOTAL_NILAI' || u === 'TOTAL' || u === 'JUMLAH' || u === 'TOTALNILAI') return '$TOTAL_NILAI';
         if (u === 'RATA_RATA' || u === 'RATA' || u === 'RATARATA' || u === 'RATA2') return '$RATA_RATA';
         if (u === 'PREDIKAT') return '$PREDIKAT_RATA_RATA';
-        if (u === 'WALI_KELAS' || u === 'NAMA_WALI_KELAS' || u === 'WALIKELAS') return '$NAMA_WALI_KELAS';
-        if (u === 'MUDIR' || u === 'PIMPINAN' || u === 'KEPALA_SEKOLAH' || u === 'KEPALASEKOLAH') return '$NAMA_MUDIR';
+        if (u === 'WALI_KELAS' || u === 'NAMA_WALI_KELAS' || u === 'WALIKELAS' || u === 'NAMAWALIKELAS') return '$NAMA_WALI_KELAS';
+        if (u === 'NIP_WALI_KELAS' || u === 'NIY_WALI_KELAS' || u === 'NIP_WALIKELAS' || u === 'NIY_WALIKELAS') return '$NIP_WALI_KELAS';
+        if (u === 'TTD_WALI_KELAS' || u === 'TTD_WALIKELAS' || u === 'TTD_WALI') return '$TTD_WALI_KELAS';
+        if (
+            u === 'MUDIR_MARHALAH' ||
+            u === 'NAMA_MUDIR_MARHALAH' ||
+            u === 'MUDIRMARHALAH' ||
+            u === 'NAMAMUDIRMARHALAH' ||
+            u === 'KEPALA_MARHALAH' ||
+            u === 'NAMA_KEPALA_MARHALAH' ||
+            u === 'MUDIR_JENJANG' ||
+            u === 'NAMA_MUDIR_JENJANG' ||
+            u === 'KEPALA_JENJANG' ||
+            u === 'NAMA_KEPALA_JENJANG'
+        ) {
+            return '$NAMA_MUDIR_MARHALAH';
+        }
+        if (
+            u === 'NIP_MUDIR_MARHALAH' ||
+            u === 'NIY_MUDIR_MARHALAH' ||
+            u === 'NIP_MUDIRMARHALAH' ||
+            u === 'NIP_KEPALA_MARHALAH' ||
+            u === 'NIY_KEPALA_MARHALAH' ||
+            u === 'NIP_MUDIR_JENJANG' ||
+            u === 'NIP_KEPALA_JENJANG'
+        ) {
+            return '$NIP_MUDIR_MARHALAH';
+        }
+        if (
+            u === 'TTD_MUDIR_MARHALAH' ||
+            u === 'TTD_MUDIRMARHALAH' ||
+            u === 'TTD_KEPALA_MARHALAH' ||
+            u === 'TTD_MUDIR_JENJANG' ||
+            u === 'TTD_KEPALA_JENJANG'
+        ) {
+            return '$TTD_MUDIR_MARHALAH';
+        }
+        if (
+            u === 'MUDIR' ||
+            u === 'MUDIR_AAM' ||
+            u === 'NAMA_MUDIR' ||
+            u === 'NAMA_MUDIR_AAM' ||
+            u === 'PIMPINAN' ||
+            u === 'NAMA_PIMPINAN' ||
+            u === 'KEPALA_SEKOLAH' ||
+            u === 'KEPALASEKOLAH' ||
+            u === 'KEPALA_MADRASAH' ||
+            u === 'NAMA_KEPALA_MADRASAH'
+        ) {
+            return '$NAMA_MUDIR';
+        }
+        if (
+            u === 'NIP_MUDIR' ||
+            u === 'NIY_MUDIR' ||
+            u === 'NIP_MUDIR_AAM' ||
+            u === 'NIY_MUDIR_AAM' ||
+            u === 'NIP_PIMPINAN' ||
+            u === 'NIP_KEPALA_SEKOLAH' ||
+            u === 'NIP_KEPALA_MADRASAH'
+        ) {
+            return '$NIP_MUDIR';
+        }
+        if (u === 'TTD_MUDIR' || u === 'TTD_MUDIR_AAM' || u === 'TTD_PIMPINAN' || u === 'TTD_KEPALA_SEKOLAH' || u === 'TTD_KEPALA_MADRASAH') {
+            return '$TTD_MUDIR';
+        }
         if (u === 'TANGGAL_RAPOR' || u === 'TANGGAL' || u === 'TANGGALRAPOR') return '$TANGGAL_DOKUMEN';
         if (u === 'TEMPAT_RAPOR' || u === 'KOTA' || u === 'TEMPATRAPOR') return '$TEMPAT_RAPOR';
         if (u === 'SEMESTER' || u === 'SEMESTER_AKTIF') return '$SEMESTER';
@@ -358,11 +596,14 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         ) {
             return '$TAHUN_AJARAN';
         }
-        if (u === 'TAHUN_AJAR_HIJRIAH' || u === 'TAHUN_AJARAN_HIJRIAH' || u === 'TAHUN_HIJRIYAH') {
+        if (u === 'TAHUN_AJAR_MASEHI' || u === 'TAHUN_AJARAN_MASEHI' || u === 'TAPEL_MASEHI') {
+            return '$TAHUN_AJAR_MASEHI';
+        }
+        if (u === 'TAHUN_AJAR_HIJRIAH' || u === 'TAHUN_AJARAN_HIJRIAH' || u === 'TAHUN_AJAR_HIJRIYAH' || u === 'TAHUN_AJARAN_HIJRIYAH' || u === 'TAHUN_HIJRIYAH' || u === 'TAPEL_HIJRIAH') {
             return '$TAHUN_AJAR_HIJRIAH';
         }
-        if (u === 'TAHUN_AJAR_LENGKAP' || u === 'TAHUN_AJARAN_LENGKAP') {
-            return '$TAHUN_AJAR_LENGKAP';
+        if (u === 'TAHUN_AJAR_GABUNGAN' || u === 'TAHUN_AJARAN_GABUNGAN' || u === 'TAHUN_AJAR_LENGKAP' || u === 'TAHUN_AJARAN_LENGKAP' || u === 'TAPEL_GABUNGAN') {
+            return '$TAHUN_AJAR_GABUNGAN';
         }
         if (u === 'CATATAN_WALI' || u === 'CATATAN' || u === 'CATATANWALIKELAS' || u === 'CATATAN_WALI_KELAS') return '$CATATAN_WALI_KELAS';
         return `$${u}`;
@@ -411,45 +652,34 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
 
     // Settings & Academic
     if (settings) {
+        const { rombel, kelas, jenjang } = resolveSantriAcademicHierarchy(santri, settings);
         if (santri) {
-            const jenjang = settings.jenjang.find(j => j.id === santri.jenjangId);
-            const kelas = settings.kelas.find(k => k.id === santri.kelasId);
-            const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-            const halaqah = (settings.kelompokHalaqah || []).find(h => h.id === santri.halaqahId);
+            const halaqah = (settings.kelompokHalaqah || []).find(h => Number(h.id) === Number(santri.halaqahId));
             setToken('$JENJANG', jenjang?.nama || '');
             setToken('$MARHALAH', jenjang?.nama || '');
             setToken('$KELAS', kelas?.nama || '');
             setToken('$ROMBEL', rombel?.nama || '');
             setToken('$HALAQAH', halaqah?.nama || '-');
-
-            // Wali Kelas
-            let waliName = '-';
-            let waliNip = '-';
-            if (rombel?.waliKelasUserId) {
-                const teacher = settings.tenagaPengajar.find(tp => tp.id === rombel.waliKelasUserId);
-                if (teacher) {
-                    waliName = teacher.nama;
-                    waliNip = teacher.kodeGuru || teacher.telepon || '-';
-                }
-            }
-            setToken('$NAMA_WALI_KELAS', waliName);
-            setToken('$NIP_WALI_KELAS', waliNip);
         }
 
-        // Mudir / Pimpinan
-        let mudirName = 'K.H. Pimpinan Pesantren';
-        let mudirNip = '-';
-        if (settings.mudirAamId) {
-            const mudir = settings.tenagaPengajar.find(tp => tp.id === settings.mudirAamId);
-            if (mudir) {
-                mudirName = mudir.nama;
-                mudirNip = mudir.kodeGuru || mudir.telepon || '-';
-            }
-        }
-        setToken('$NAMA_MUDIR', mudirName);
-        setToken('$NAMA_PIMPINAN', mudirName);
-        setToken('$NAMA_KEPALA_SEKOLAH', mudirName);
-        setToken('$NIP_MUDIR', mudirNip);
+        // Wali Kelas (memprioritaskan rombel.waliKelasId lalu riwayatJabatan aktif)
+        const targetRombel = rombel || (!santri ? settings.rombel?.[0] : undefined);
+        const waliTeacher = resolveWaliKelasTeacher(targetRombel, settings);
+        setToken('$NAMA_WALI_KELAS', waliTeacher?.nama || '-');
+        setToken('$NIP_WALI_KELAS', formatTeacherNip(waliTeacher));
+
+        // Mudir Marhalah / Kepala Jenjang (memprioritaskan jenjang.mudirId lalu riwayatJabatan aktif)
+        const targetJenjang = jenjang || (!santri ? settings.jenjang?.[0] : undefined);
+        const mudirMarhalahTeacher = resolveMudirMarhalahTeacher(targetJenjang, settings);
+        setToken('$NAMA_MUDIR_MARHALAH', mudirMarhalahTeacher?.nama || '-');
+        setToken('$NIP_MUDIR_MARHALAH', formatTeacherNip(mudirMarhalahTeacher));
+
+        // Mudir Aam / Pimpinan Pondok
+        const mudirAam = resolveMudirAamInfo(settings);
+        setToken('$NAMA_MUDIR', mudirAam.nama);
+        setToken('$NAMA_PIMPINAN', mudirAam.nama);
+        setToken('$NAMA_KEPALA_SEKOLAH', mudirAam.nama);
+        setToken('$NIP_MUDIR', mudirAam.nip);
 
         // Identitas Lembaga
         setToken('$NAMA_PONPES', settings.namaPonpes || '');
@@ -473,46 +703,25 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         }
     }
 
-    // Period / Record (terhubung langsung ke Tahun Ajaran Aktif di Data Master settings.academicYears)
-    const academicYears = getAcademicYearsFromSettings(settings);
-    const activeYearCfg = academicYears.find(y => y.isActive) || academicYears[0];
-    const legacyTahunAktif = (settings as any)?.tahunAjaranAktif;
-    const legacySemesterAktif = (settings as any)?.semesterAktif;
-
-    const tahunAjarAktif = (
-        context.tahunAjaran?.trim() ||
-        record?.tahunAjaran?.trim() ||
-        activeYearCfg?.labelMasehi?.trim() ||
-        (typeof legacyTahunAktif === 'string' ? legacyTahunAktif.trim() : '') ||
-        getDefaultAcademicYear(settings) ||
-        '-'
+    // Period / Record (terhubung ke Tahun Ajaran Aktif Masehi, Hijriah, & Gabungan di Data Master)
+    const yearInfo = resolveAcademicYearLabels(
+        settings,
+        context.tahunAjaran?.trim() || record?.tahunAjaran?.trim() || null,
+        context.semester || record?.semester || null
     );
-    const matchedYearCfg = academicYears.find(y => y.labelMasehi?.trim() === tahunAjarAktif) || activeYearCfg;
-    const rawHijriLabel = matchedYearCfg?.labelHijriah?.trim() || '';
-    const tahunAjarHijriah = rawHijriLabel
-        ? (/\bH$/i.test(rawHijriLabel) ? rawHijriLabel : `${rawHijriLabel} H`)
-        : '-';
-    const tahunAjarLengkap = (matchedYearCfg?.hijriEnabled && rawHijriLabel)
-        ? `${tahunAjarHijriah} / ${tahunAjarAktif} M`
-        : tahunAjarAktif;
-
-    const sem: 'Ganjil' | 'Genap' = (
-        context.semester ||
-        record?.semester ||
-        matchedYearCfg?.semesterAktif ||
-        (legacySemesterAktif === 'Genap' ? 'Genap' : legacySemesterAktif === 'Ganjil' ? 'Ganjil' : undefined) ||
-        'Ganjil'
-    );
+    const sem = yearInfo.semester;
 
     setToken('$SEMESTER_ANGKA', sem === 'Genap' ? '2' : '1');
     setToken('$SEMESTER', sem);
-    setToken('$TAHUN_AJARAN', tahunAjarAktif);
-    setToken('$TAHUN_AJAR', tahunAjarAktif);
-    setToken('$TAHUNAJAR', tahunAjarAktif);
-    setToken('$TAHUNAJARAN', tahunAjarAktif);
-    setToken('$TAHUN_PELAJARAN', tahunAjarAktif);
-    setToken('$TAHUN_AJAR_HIJRIAH', tahunAjarHijriah);
-    setToken('$TAHUN_AJAR_LENGKAP', tahunAjarLengkap);
+    setToken('$TAHUN_AJARAN', yearInfo.otomatis);
+    setToken('$TAHUN_AJAR', yearInfo.otomatis);
+    setToken('$TAHUNAJAR', yearInfo.otomatis);
+    setToken('$TAHUNAJARAN', yearInfo.otomatis);
+    setToken('$TAHUN_PELAJARAN', yearInfo.otomatis);
+    setToken('$TAHUN_AJAR_MASEHI', yearInfo.masehi);
+    setToken('$TAHUN_AJAR_HIJRIAH', yearInfo.hijriah);
+    setToken('$TAHUN_AJAR_GABUNGAN', yearInfo.gabungan);
+    setToken('$TAHUN_AJAR_LENGKAP', yearInfo.gabungan);
 
     // Presensi & Catatan Wali
     let customObj: Record<string, any> = {};
@@ -698,8 +907,89 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     const isFormula = isRaporFormulaExpression(res);
     const PURE_NUMBER_REGEX = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
-    // Substitusi token $TAG dengan pemindai sadar-kutip agar nilai teks seperti "2026/2027" atau "Ust. Rizki, S.Pd."
-    // tidak pernah dibagi secara matematis menjadi "1" atau terpecah komanya saat berada di dalam rumus (=...)
+    // Helper resolusi sel koordinat Excel (misal D6 atau rentang D6:D15) bila konteks tabel lembar tersedia
+    const sheetCells = context.sheetCells;
+    const sheetRowCount = sheetCells?.length || 0;
+    const sheetColCount = sheetCells?.[0]?.length || 0;
+
+    const findMasterCoord = (r: number, c: number): { r: number; c: number } => {
+        if (!sheetCells) return { r, c };
+        const target = sheetCells[r]?.[c];
+        if (!target || !target.hidden) return { r, c };
+        for (let mr = r; mr >= 0; mr--) {
+            for (let mc = c; mc >= 0; mc--) {
+                const cand = sheetCells[mr]?.[mc];
+                if (cand && !cand.hidden) {
+                    const rSpan = cand.rowSpan || 1;
+                    const cSpan = cand.colSpan || 1;
+                    if (r >= mr && r < mr + rSpan && c >= mc && c < mc + cSpan) {
+                        return { r: mr, c: mc };
+                    }
+                }
+            }
+        }
+        return { r, c };
+    };
+
+    const activeEvalSet = new Set<string>(context.evaluatingCells || []);
+    if (context.currentCellCoord) {
+        const masterCur = findMasterCoord(context.currentCellCoord.r, context.currentCellCoord.c);
+        activeEvalSet.add(`${masterCur.r}:${masterCur.c}`);
+    }
+
+    const formatScalarForFormula = (rawVal: string): string => {
+        const strVal = rawVal ?? '';
+        const trimmedVal = strVal.trim();
+        if (strVal === '' || trimmedVal === '-') return '""';
+        if (trimmedVal !== '' && PURE_NUMBER_REGEX.test(trimmedVal)) return trimmedVal;
+        const escaped = strVal.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        return `"${escaped}"`;
+    };
+
+    const resolveGridCellScalar = (r: number, c: number): string => {
+        if (!sheetCells) return '';
+        const master = findMasterCoord(r, c);
+        const coordKey = `${master.r}:${master.c}`;
+        if (activeEvalSet.has(coordKey)) return '';
+        const cell = sheetCells[master.r]?.[master.c];
+        if (!cell) return '';
+
+        const nextEvalSet = new Set(activeEvalSet);
+        nextEvalSet.add(coordKey);
+        const childCtx: RaporResolveContext = {
+            ...context,
+            currentCellCoord: master,
+            evaluatingCells: nextEvalSet
+        };
+
+        if ((cell.type === 'input' || cell.type === 'dropdown') && cell.key) {
+            const kToken = `$${cell.key.trim().toUpperCase().replace(/[\s-]+/g, '_')}`;
+            const foundVal = tokenMap.get(kToken);
+            if (foundVal !== undefined && foundVal !== '') return foundVal;
+            return cell.value ? resolveRaporText(cell.value, childCtx) : '';
+        }
+        if (cell.type === 'formula') {
+            if (cell.value && cell.value.trim() !== '') {
+                const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
+                return resolveRaporText(rawExpr, childCtx);
+            }
+            if (cell.key) {
+                const kToken = `$${cell.key.trim().toUpperCase().replace(/[\s-]+/g, '_')}`;
+                return tokenMap.get(kToken) || '';
+            }
+            return '';
+        }
+        if (cell.type === 'data') {
+            if (isMediaTag(cell.value || '')) return '';
+            return cell.value ? resolveRaporText(cell.value, childCtx) : '';
+        }
+        if (cell.value && (cell.value.includes('$') || cell.value.trim().startsWith('='))) {
+            return resolveRaporText(cell.value, childCtx);
+        }
+        return cell.value ?? '';
+    };
+
+    // Substitusi token $TAG serta koordinat/rentang sel Excel (misal D6:D15 atau D6) dengan pemindai sadar-kutip
     let substituted = '';
     let inQuote: '"' | "'" | null = null;
     let idx = 0;
@@ -739,6 +1029,36 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
             continue;
         }
 
+        // Ekspansi rentang sel Excel (contoh: D6:D15 atau $D$6:$D$15) saat di dalam rumus
+        if (isFormula && sheetCells && sheetRowCount > 0 && (idx === 0 || !/[A-Za-z0-9_]/.test(res[idx - 1]))) {
+            const rangeMatch = res.slice(idx).match(/^(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2}\s*:\s*\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_])/);
+            if (rangeMatch) {
+                const rng = parseExcelRangeCoord(rangeMatch[1]);
+                if (rng) {
+                    const rStart = Math.max(0, rng.rMin);
+                    const rEnd = Math.min(sheetRowCount - 1, rng.rMax);
+                    const cStart = Math.max(0, rng.cMin);
+                    const cEnd = Math.min(sheetColCount - 1, rng.cMax);
+                    const seenMasters = new Set<string>();
+                    const expandedVals: string[] = [];
+
+                    for (let rr = rStart; rr <= rEnd; rr++) {
+                        for (let cc = cStart; cc <= cEnd; cc++) {
+                            const master = findMasterCoord(rr, cc);
+                            const mKey = `${master.r}:${master.c}`;
+                            if (seenMasters.has(mKey) || activeEvalSet.has(mKey)) continue;
+                            seenMasters.add(mKey);
+                            expandedVals.push(formatScalarForFormula(resolveGridCellScalar(master.r, master.c)));
+                        }
+                    }
+
+                    substituted += expandedVals.length > 0 ? expandedVals.join(', ') : '""';
+                    idx += rangeMatch[1].length;
+                    continue;
+                }
+            }
+        }
+
         if (ch === '$') {
             const m = res.slice(idx).match(/^\$([A-Z0-9_]+)/);
             if (m) {
@@ -755,17 +1075,44 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
                     continue;
                 }
             }
+            // Koordinat absolut Excel $D$6
+            if (isFormula && sheetCells && sheetRowCount > 0) {
+                const absMatch = res.slice(idx).match(/^(\$[A-Za-z]{1,2}\$[1-9]\d{0,2})(?![A-Za-z0-9_(])/);
+                if (absMatch) {
+                    const coord = parseExcelCellCoord(absMatch[1], false);
+                    if (coord && coord.r >= 0 && coord.r < sheetRowCount && coord.c >= 0 && coord.c < sheetColCount) {
+                        substituted += formatScalarForFormula(resolveGridCellScalar(coord.r, coord.c));
+                        idx += absMatch[1].length;
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // Koordinat sel tunggal Excel tanpa '$' (contoh: D6, C16) di dalam rumus
+        if (isFormula && sheetCells && sheetRowCount > 0 && /[A-Za-z]/.test(ch) && (idx === 0 || !/[A-Za-z0-9_$]/.test(res[idx - 1]))) {
+            const singleMatch = res.slice(idx).match(/^([A-Za-z]{1,2}[1-9]\d{0,2})(?![A-Za-z0-9_(])/);
+            if (singleMatch) {
+                const coord = parseExcelCellCoord(singleMatch[1], false);
+                if (coord && coord.r >= 0 && coord.r < sheetRowCount && coord.c >= 0 && coord.c < sheetColCount) {
+                    substituted += formatScalarForFormula(resolveGridCellScalar(coord.r, coord.c));
+                    idx += singleMatch[1].length;
+                    continue;
+                }
+            }
         }
 
         substituted += ch;
         idx++;
     }
 
-    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =IF, =PREDIKAT, =TERBILANG, =ARAB, =UPPER, =LOWER, =PROPER, =TAHUN_AJAR, =SEMESTER, &)
+    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =IF, =PREDIKAT, =TERBILANG, =ARAB, =UPPER, =LOWER, =PROPER, =TAHUN_AJAR_*, =SEMESTER, &)
     return evaluateRaporFormula(substituted, {
         rank: rankVal,
-        tahunAjaran: tahunAjarAktif,
-        tahunAjaranHijriah: tahunAjarHijriah,
+        tahunAjaran: yearInfo.otomatis,
+        tahunAjaranMasehi: yearInfo.masehi,
+        tahunAjaranHijriah: yearInfo.hijriah,
+        tahunAjaranGabungan: yearInfo.gabungan,
         semester: sem
     });
 };

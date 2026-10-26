@@ -48,6 +48,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                 kategoriStaf: item.kategoriStaf || 'Tata Usaha (TU)',
             } : {
                 nama: '',
+                nip: '',
                 telepon: '',
                 email: '',
                 status: 'Aktif',
@@ -184,6 +185,7 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
         const teacherToSave: TenagaPengajar = {
             id: item?.id || Date.now(),
             nama: teacher.nama || '',
+            nip: teacher.nip?.trim() || undefined,
             telepon: teacher.telepon,
             email: teacher.email,
             status: teacher.status || 'Aktif',
@@ -196,7 +198,8 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
             jamMasuk: isNonPendidik ? [] : (teacher.jamMasuk || []),
             availableRombelIds: isNonPendidik ? [] : (teacher.availableRombelIds || []),
             availableKelasIds: isNonPendidik ? [] : (teacher.availableKelasIds || []),
-            kompetensiMapelIds: isNonPendidik ? [] : (teacher.kompetensiMapelIds || [])
+            kompetensiMapelIds: isNonPendidik ? [] : (teacher.kompetensiMapelIds || []),
+            configGaji: item?.configGaji
         };
         onSave(teacherToSave);
     }
@@ -323,13 +326,23 @@ export const TeacherModal: React.FC<TeacherModalProps> = ({ isOpen, onClose, onS
                                 placeholder={isNonPendidik ? "Contoh: Bpk. Bambang Sugiono" : "Contoh: Ust. Ahmad, S.Pd.I"} 
                             />
                         </div>
+                        <div>
+                            <label className="block mb-1 text-sm font-medium text-gray-700">NIP / NIY (Opsional)</label>
+                            <input
+                                type="text"
+                                value={teacher.nip || ''}
+                                onChange={(e) => handleTeacherChange('nip', e.target.value)}
+                                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5"
+                                placeholder="Nomor Induk (Tampil di Rapor/SK)"
+                            />
+                        </div>
                         {!isNonPendidik && (
                             <div>
                                 <label className="block mb-1 text-sm font-medium text-gray-700">Kode Guru (Opsional)</label>
                                 <input type="text" value={teacher.kodeGuru || ''} onChange={(e) => handleTeacherChange('kodeGuru', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: AH, 01, dll (Untuk Jadwal)" />
                             </div>
                         )}
-                        <div className={isNonPendidik ? "md:col-span-2" : ""}>
+                        <div className={!isNonPendidik ? "md:col-span-2" : ""}>
                             <label className="block mb-1 text-sm font-medium text-gray-700">No. Telepon/WA</label>
                             <input type="tel" value={teacher.telepon || ''} onChange={(e) => handleTeacherChange('telepon', e.target.value)} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5" placeholder="Contoh: 08123456789" />
                         </div>

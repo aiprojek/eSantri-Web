@@ -130,6 +130,7 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
             const teacherData: TenagaPengajar = {
                 id: teacherId,
                 nama: item.nama,
+                nip: item.nip?.trim() || undefined,
                 telepon: item.telepon,
                 email: item.email,
                 status: 'Aktif',
@@ -145,6 +146,7 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                     teacherList[idx] = { 
                         ...teacherList[idx], 
                         nama: item.nama, 
+                        nip: item.nip !== undefined ? (String(item.nip).trim() || undefined) : teacherList[idx].nip,
                         telepon: item.telepon, 
                         email: item.email,
                         jenisPegawai: jenisPegawaiVal,
@@ -214,6 +216,7 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
             return {
                 id: t.id,
                 nama: t.nama,
+                nip: t.nip || '',
                 jenisPegawai: t.jenisPegawai === 'kependidikan' ? 'Kependidikan (Staf)' : 'Pendidik (Guru)',
                 telepon: t.telepon || '',
                 email: t.email || '',
@@ -242,6 +245,7 @@ export const TabTenagaPendidik: React.FC<TabTenagaPendidikProps> = ({ localSetti
                 return {
                     'No': idx + 1,
                     'Nama Lengkap': t.nama,
+                    'NIP / NIY': t.nip || '-',
                     'Kode Guru': t.kodeGuru || '-',
                     'Kategori': isKependidikan ? 'Tenaga Kependidikan' : 'Tenaga Pendidik',
                     'Jabatan / Tugas': status.jabatan || (t.kategoriStaf || '-'),

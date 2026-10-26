@@ -219,15 +219,15 @@ export const raporPanduan: PanduanSectionData = {
 
                         <div className="p-3 bg-white rounded-xl border border-indigo-200 shadow-2xs space-y-1.5">
                             <strong className="text-indigo-900 flex items-center gap-1.5 font-bold">
-                                <i className="bi bi-grid-3x3 text-indigo-600"></i> Seleksi Rentang Multi-Sel &amp; Pita Format
+                                <i className="bi bi-grid-3x3 text-indigo-600"></i> Seleksi Multi-Sel, Format Huruf &amp; AutoSum
                             </strong>
                             <p className="text-gray-600 leading-relaxed">
-                                Klik dan seret (drag) mouse atau tekan <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Shift + Klik</kbd> untuk memilih beberapa kotak sel sekaligus. Pita aksi melayang (*floating ribbon*) akan muncul otomatis untuk:
+                                Klik dan seret (drag) mouse atau tekan <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Shift + Klik</kbd> untuk memilih banyak sel sekaligus. Pita aksi melayang (<em>floating ribbon</em>) menyediakan:
                             </p>
                             <ul className="list-disc pl-4 space-y-1 text-gray-600">
-                                <li><strong>Border Massal:</strong> Border Semua, Border Luar Saja, atau Hapus Border dalam 1 klik.</li>
-                                <li><strong>Format Teks:</strong> Tebal (Bold), Miring (Italic), Rata Kiri/Tengah/Kanan, dan Warna Latar.</li>
-                                <li><strong>Merge / Unmerge:</strong> Menggabungkan atau memisahkan blok sel terseleksi secara instan.</li>
+                                <li><strong>Blok Sel ke Formula ala Excel:</strong> Saat mengetik rumus (misal <code>=SUM(</code> atau <code>=RATA2(</code>), langsung klik atau seret blok sel di tabel untuk menyisipkan rentang <code>D6:D15</code> secara otomatis.</li>
+                                <li><strong>Tombol Cepat <code>Σ Jumlah</code> &amp; <code>x̄ Rerata</code>:</strong> Blok deretan sel nilai lalu klik <strong>Σ Jumlah</strong> atau <strong>x̄ Rerata</strong> untuk membuat rumus otomatis di sel bawah/kanan.</li>
+                                <li><strong>Format Huruf Instan (<code>AA</code> / <code>aa</code> / <code>Aa</code> / <code>Ab.</code>):</strong> Ubah teks menjadi HURUF BESAR, huruf kecil, Kapital Tiap Kata, atau Kapital Awal Kalimat dalam 1 klik.</li>
                             </ul>
                         </div>
                     </div>
@@ -284,7 +284,189 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '4. Generate Formulir Guru & Input Desentralisasi',
+            title: '4. Referensi Lengkap Rumus Formula & Kode Pemanggil Dinamis ($TAG)',
+            color: 'purple',
+            content: (
+                <div className="space-y-4 text-sm">
+                    <p className="text-gray-700 leading-relaxed">
+                        Gunakan rumus diawali tanda <code>=</code> (pada sel bertipe <strong>Rumus / Formula</strong> maupun teks biasa) dan kode variabel diawali tanda <code>$</code> (pada sel <strong>Data Dinamis</strong> atau di dalam kalimat/rumus) untuk mengotomatiskan seluruh isi rapor:
+                    </p>
+
+                    {/* A. Rumus Hitung Nilai & Blok Sel Excel */}
+                    <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200 space-y-2 text-xs">
+                        <strong className="text-amber-950 flex items-center gap-1.5 font-bold">
+                            <i className="bi bi-calculator-fill text-amber-600"></i> A. Rumus Perhitungan Nilai, Predikat &amp; Konversi Angka (Mendukung Blok Sel ala Excel)
+                        </strong>
+                        <p className="text-gray-600 text-[11px]">
+                            Anda dapat memanggil nilai menggunakan <strong>rentang koordinat sel</strong> (cukup klik/seret sel saat mengetik rumus, contoh <code>D6:D15</code>) maupun menggunakan <strong>kode variabel mapel</strong> (contoh <code>$NAHWU, $SHARAF</code>):
+                        </p>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-[11px] bg-white rounded-lg border border-amber-200 overflow-hidden">
+                                <thead className="bg-amber-100/80 text-amber-950">
+                                    <tr>
+                                        <th className="text-left p-2 font-bold border-b border-amber-200">Contoh Penulisan Rumus</th>
+                                        <th className="text-left p-2 font-bold border-b border-amber-200">Fungsi &amp; Hasil Otomatis</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-amber-100 text-gray-700">
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=SUM(D6:D15)</td>
+                                        <td className="p-2">Menjumlahkan seluruh nilai pada blok sel <code>D6</code> sampai <code>D15</code> (alias: <code>=JUMLAH(...)</code>, <code>=TOTAL(...)</code>).</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=RATA2(D6:D15)</td>
+                                        <td className="p-2">Menghitung nilai rata-rata dari blok sel atau daftar variabel (alias: <code>=AVERAGE(...)</code>, <code>=RERATA(...)</code>).</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=MAX(D6:D15) / =MIN(D6:D15)</td>
+                                        <td className="p-2">Mengambil nilai tertinggi (<code>MAX</code>) atau terendah (<code>MIN</code>) dari blok sel nilai.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=ROUND(D16, 1)</td>
+                                        <td className="p-2">Membulatkan angka desimal (contoh <code>1</code> angka di belakang koma, atau <code>0</code> untuk bilangan bulat).</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=PREDIKAT(D6, &quot;huruf&quot;)</td>
+                                        <td className="p-2">Konversi nilai ke predikat: <code>&quot;huruf&quot;</code> (A–E), <code>&quot;pesantren&quot;</code> (Mumtaz–Rasib), <code>&quot;arab_script&quot;</code> (ممتاز), atau <code>&quot;deskripsi&quot;</code> (Sangat Baik–Perlu Bimbingan).</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=TERBILANG(D6)</td>
+                                        <td className="p-2">Mengubah angka menjadi huruf Bahasa Indonesia (contoh: <code>85</code> &rarr; <em>Delapan Puluh Lima</em>).</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=ARAB(D6)</td>
+                                        <td className="p-2">Mengubah angka Latin menjadi angka Arab Timur (contoh: <code>85</code> &rarr; <code>٨٥</code>).</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=IF(D6&gt;=75, &quot;Tuntas&quot;, &quot;Remidi&quot;)</td>
+                                        <td className="p-2">Logika perbandingan syarat (mendukung <code>&gt;=</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>=</code>, <code>&lt;&gt;</code>; alias: <code>=JIKA(...)</code>).</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=RANK($TOTAL_NILAI, &quot;rombel&quot;)</td>
+                                        <td className="p-2">Menampilkan peringkat santri di dalam rombel secara otomatis.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* B. Rumus Teks, Spasi & Tahun Ajaran */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-2">
+                            <strong className="text-indigo-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-fonts text-indigo-600"></i> B. Rumus Gabung Teks (Spasi Terjaga) &amp; Format Huruf
+                            </strong>
+                            <ul className="space-y-1.5 text-[11px] text-gray-700">
+                                <li>
+                                    <code className="text-indigo-900 font-bold">=CONCAT(&quot;Semester &quot;, $SEMESTER, &quot; T.A. &quot;, TAHUN_AJAR())</code>
+                                    <p className="text-gray-600">Menggabungkan teks &amp; rumus/variabel. Spasi di dalam tanda kutip (termasuk <code>&quot; &quot;</code>) dipertahankan utuh agar kata tidak menyambung.</p>
+                                </li>
+                                <li>
+                                    <code className="text-indigo-900 font-bold">=CONCAT_SPASI(&quot;Kelas&quot;, $KELAS, $ROMBEL)</code>
+                                    <p className="text-gray-600">Menggabungkan beberapa teks/variabel dan otomatis menyisipkan 1 spasi rapi di antara kata.</p>
+                                </li>
+                                <li>
+                                    <code className="text-indigo-900 font-bold">=&quot;Marhalah &quot; &amp; $JENJANG</code>
+                                    <p className="text-gray-600">Alternatif penggabungan cepat menggunakan operator <code>&amp;</code> seperti di Excel.</p>
+                                </li>
+                                <li>
+                                    <code className="text-indigo-900 font-bold">=UPPER($NAMA)</code> / <code className="text-indigo-900 font-bold">=LOWER(...)</code> / <code className="text-indigo-900 font-bold">=PROPER(...)</code> / <code className="text-indigo-900 font-bold">=SENTENCE(...)</code>
+                                    <p className="text-gray-600">Mengubah hasil teks menjadi HURUF BESAR, huruf kecil, Kapital Tiap Kata, atau Kapital Awal Kalimat.</p>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div className="p-3.5 bg-teal-50/70 rounded-xl border border-teal-200 space-y-2">
+                            <strong className="text-teal-950 flex items-center gap-1.5 font-bold">
+                                <i className="bi bi-calendar-range text-teal-600"></i> C. Tahun Ajaran (Masehi, Hijriah &amp; Gabungan) &amp; Semester
+                            </strong>
+                            <ul className="space-y-1.5 text-[11px] text-gray-700">
+                                <li>
+                                    <code className="text-teal-900 font-bold">=TAHUN_AJAR()</code> atau <code className="text-teal-900 font-bold">$TAHUN_AJAR</code>
+                                    <p className="text-gray-600">Otomatis mengikuti pengaturan Tahun Ajaran Aktif di Data Master (Masehi atau Gabungan bila opsi Hijriah aktif).</p>
+                                </li>
+                                <li>
+                                    <code className="text-teal-900 font-bold">=TAHUN_AJAR_MASEHI()</code> atau <code className="text-teal-900 font-bold">$TAHUN_AJAR_MASEHI</code>
+                                    <p className="text-gray-600">Khusus Masehi (<code>2026/2027</code>). Gunakan <code>=TAHUN_AJAR_MASEHI(&quot;m&quot;)</code> untuk akhiran <code>M</code> atau <code>&quot;arab&quot;</code> untuk angka Arab.</p>
+                                </li>
+                                <li>
+                                    <code className="text-teal-900 font-bold">=TAHUN_AJAR_HIJRIAH()</code> atau <code className="text-teal-900 font-bold">$TAHUN_AJAR_HIJRIAH</code>
+                                    <p className="text-gray-600">Khusus Hijriah (<code>1448/1449 H</code>). Gunakan argumen <code>&quot;polos&quot;</code> (tanpa H) atau <code>&quot;arab&quot;</code> (<code>١٤٤٨/١٤٤٩ هـ</code>).</p>
+                                </li>
+                                <li>
+                                    <code className="text-teal-900 font-bold">=TAHUN_AJAR_GABUNGAN()</code> atau <code className="text-teal-900 font-bold">$TAHUN_AJAR_GABUNGAN</code>
+                                    <p className="text-gray-600">Gabungan Hijriah &amp; Masehi (<code>1448/1449 H / 2026/2027 M</code>), atau <code>&quot;masehi_dulu&quot;</code> untuk Masehi di depan.</p>
+                                </li>
+                                <li>
+                                    <code className="text-teal-900 font-bold">=SEMESTER()</code> / <code className="text-teal-900 font-bold">=SEMESTER(&quot;angka&quot;)</code> / <code className="text-teal-900 font-bold">=SEMESTER(&quot;romawi&quot;)</code>
+                                    <p className="text-gray-600">Menampilkan semester aktif dalam bentuk teks (<code>Ganjil</code>/<code>Genap</code>), angka (<code>1</code>/<code>2</code>), atau Romawi (<code>I</code>/<code>II</code>).</p>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    {/* D. Kode Pemanggil Pejabat, TTD, Santri & Pondok */}
+                    <div className="p-3.5 bg-purple-50/70 rounded-xl border border-purple-200 space-y-2.5 text-xs">
+                        <strong className="text-purple-950 flex items-center gap-1.5 font-bold">
+                            <i className="bi bi-person-check-fill text-purple-600"></i> D. Kode Pemanggil Pejabat (Wali Kelas, Mudir Marhalah, Mudir Aam), TTD &amp; Biodata
+                        </strong>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-purple-200 space-y-1">
+                                <strong className="text-purple-900 block">1. Wali Kelas Rombel</strong>
+                                <div className="font-mono text-[10px] text-purple-800 space-y-0.5">
+                                    <div>$NAMA_WALI_KELAS</div>
+                                    <div>$NIP_WALI_KELAS</div>
+                                    <div>$TTD_WALI_KELAS</div>
+                                </div>
+                                <p className="text-gray-500 text-[10px]">Diambil otomatis dari Wali Kelas yang dipilih pada <strong>Data Master &gt; Struktur Pendidikan &gt; Rombel</strong>.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-purple-200 space-y-1">
+                                <strong className="text-purple-900 block">2. Mudir Marhalah (Jenjang)</strong>
+                                <div className="font-mono text-[10px] text-purple-800 space-y-0.5">
+                                    <div>$NAMA_MUDIR_MARHALAH</div>
+                                    <div>$NIP_MUDIR_MARHALAH</div>
+                                    <div>$TTD_MUDIR_MARHALAH</div>
+                                </div>
+                                <p className="text-gray-500 text-[10px]">Diambil otomatis dari Mudir Marhalah pada <strong>Data Master &gt; Struktur Pendidikan &gt; Jenjang</strong>.</p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-purple-200 space-y-1">
+                                <strong className="text-purple-900 block">3. Mudir Aam / Pimpinan</strong>
+                                <div className="font-mono text-[10px] text-purple-800 space-y-0.5">
+                                    <div>$NAMA_MUDIR</div>
+                                    <div>$NIP_MUDIR</div>
+                                    <div>$TTD_MUDIR</div>
+                                </div>
+                                <p className="text-gray-500 text-[10px]">Diambil dari Pimpinan Pondok pada <strong>Pengaturan &gt; Umum</strong> beserta Stempel <code>$STEMPEL_PONPES</code>.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                            <div className="p-2.5 bg-white rounded-lg border border-gray-200">
+                                <strong className="text-gray-800 block mb-0.5">Biodata Santri, Kelas &amp; Kehadiran</strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    <code>$NAMA</code>, <code>$NIS</code>, <code>$NISN</code>, <code>$TTL</code>, <code>$JENIS_KELAMIN</code>, <code>$NAMA_AYAH</code>, <code>$NAMA_IBU</code>, <code>$NAMA_WALI</code>, <code>$JENJANG</code>, <code>$KELAS</code>, <code>$ROMBEL</code>, <code>$HALAQAH</code>, <code>$SAKIT</code>, <code>$IZIN</code>, <code>$ALPHA</code>, <code>$TOTAL_ABSEN</code>, <code>$CATATAN_WALI_KELAS</code>, <code>$KEPUTUSAN</code>.
+                                </p>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-gray-200">
+                                <strong className="text-gray-800 block mb-0.5">Identitas Lembaga, Logo &amp; Titimangsa</strong>
+                                <p className="text-gray-600 leading-relaxed">
+                                    <code>$NAMA_PONPES</code>, <code>$NAMA_YAYASAN</code>, <code>$ALAMAT_PONPES</code>, <code>$NSPP</code>, <code>$NPSN</code>, <code>$LOGO_PONPES</code>, <code>$LOGO_YAYASAN</code>, <code>$KOTA_TANGGAL_DOKUMEN</code>, <code>$TANGGAL_DOKUMEN</code>, <code>$KOTA_TANGGAL_HIJRIAH_MASEHI</code>.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white/90 border border-purple-200 rounded-lg p-2.5 text-[11px] text-gray-700 flex items-start gap-2">
+                            <i className="bi bi-lightbulb-fill text-amber-500 text-sm shrink-0 mt-0.5"></i>
+                            <div>
+                                <strong>Tips Mengisi NIP/NIY &amp; TTD Digital:</strong> Buka <strong>Data Master &gt; Tenaga Pendidik</strong> untuk mengisi kolom <strong>NIP / NIY</strong> masing-masing ustadz/pejabat. Untuk menampilkan gambar tanda tangan otomatis (<code>$TTD_WALI_KELAS</code>, <code>$TTD_MUDIR_MARHALAH</code>, <code>$TTD_MUDIR</code>), unggah scan tanda tangan PNG transparan di menu <strong>Pengaturan &gt; Aset Digital</strong> dengan <em>Nama Pemilik</em> yang sama persis dengan nama pengajar terkait.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )
+        },
+        {
+            title: '5. Generate Formulir Guru & Input Desentralisasi',
             color: 'teal',
             content: (
                 <div className="space-y-3 text-sm">
@@ -315,7 +497,7 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '5. Input Nilai Langsung & Leger Nilai (Desktop & Mobile)',
+            title: '6. Input Nilai Langsung & Leger Nilai (Desktop & Mobile)',
             color: 'green',
             content: (
                 <div className="space-y-3 text-sm">
@@ -350,7 +532,7 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '6. Review Data & Filter Multi-Kriteria Lanjutan',
+            title: '7. Review Data & Filter Multi-Kriteria Lanjutan',
             color: 'cyan',
             content: (
                 <div className="space-y-3 text-sm">
@@ -380,7 +562,7 @@ export const raporPanduan: PanduanSectionData = {
             )
         },
         {
-            title: '7. Pengesahan Nilai, Tata Letak Cetak & Distribusi WhatsApp',
+            title: '8. Pengesahan Nilai, Tata Letak Cetak & Distribusi WhatsApp',
             color: 'orange',
             content: (
                 <div className="space-y-4 text-sm">

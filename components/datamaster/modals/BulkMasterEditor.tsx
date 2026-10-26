@@ -51,6 +51,7 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
             case 'pendidik':
                 return [
                     { field: 'nama', label: 'Nama (Wajib)', required: true, type: 'text', placeholder: 'Nama Ustadz/Ustadzah/Staf...' },
+                    { field: 'nip', label: 'NIP / NIY', type: 'text', placeholder: 'Opsional (Rapor/SK)...' },
                     { field: 'jenisPegawai', label: 'Kategori', type: 'select', options: ['Pendidik (Guru)', 'Kependidikan (Staf)'] },
                     { field: 'jabatan', label: 'Jabatan / Tugas', type: 'select', options: ['Guru Mapel', 'Wali Kelas', 'Pengajar', 'Tata Usaha (TU)', 'Keuangan / Kasir', 'Bimbingan Konseling (BK)', 'Pengasuhan / Asrama', 'Keamanan / Satpam', 'Perpustakaan', 'Kesehatan / UKS', 'Staff'] },
                     { field: 'kelasId', label: 'Kelas (Wali)', type: 'select-kelas' },
@@ -110,7 +111,7 @@ export const BulkMasterEditor: React.FC<BulkMasterEditorProps> = ({
     const createEmptyRow = useCallback((index: number) => {
         const base = { tempId: Date.now() + Math.floor(Math.random() * 10000) + index, nama: '' };
         switch (mode) {
-            case 'pendidik': return { ...base, jenisPegawai: 'Pendidik (Guru)', jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0], telepon: '', email: '', kelasId: '', rombelId: '' };
+            case 'pendidik': return { ...base, nip: '', jenisPegawai: 'Pendidik (Guru)', jabatan: '', tanggalMulai: new Date().toISOString().split('T')[0], telepon: '', email: '', kelasId: '', rombelId: '' };
             case 'jenjang': return { ...base, kode: '', mudirId: '' };
             case 'kelas': return { ...base, jenjangId: settings.jenjang[0]?.id || '' };
             case 'rombel': return { ...base, kelasId: settings.kelas[0]?.id || '', waliKelasId: '' };

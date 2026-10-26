@@ -14,16 +14,16 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         token: '=SUM',
         insertText: '=SUM(',
         label: 'Penjumlahan Nilai (SUM)',
-        syntax: '=SUM($A, $B, ...)',
-        description: 'Menjumlahkan beberapa variabel nilai sekaligus',
+        syntax: '=SUM(D6:D15)',
+        description: 'Ketik lalu blok/seret sel nilai di tabel (misal D6:D15 atau $A, $B)',
         category: 'formula'
     },
     {
         token: '=RATA2',
         insertText: '=RATA2(',
         label: 'Rata-rata Nilai (RATA2)',
-        syntax: '=RATA2($A, $B, ...)',
-        description: 'Menghitung nilai rata-rata otomatis (2 desimal maks)',
+        syntax: '=RATA2(D6:D15)',
+        description: 'Ketik lalu blok/seret sel nilai di tabel untuk rata-rata otomatis',
         category: 'formula'
     },
     {
@@ -62,16 +62,16 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         token: '=MAX',
         insertText: '=MAX(',
         label: 'Nilai Tertinggi (MAX)',
-        syntax: '=MAX($A, $B, ...)',
-        description: 'Mengambil nilai paling tinggi dari daftar variabel',
+        syntax: '=MAX(D6:D15)',
+        description: 'Mengambil nilai tertinggi dari blok sel atau daftar variabel',
         category: 'formula'
     },
     {
         token: '=MIN',
         insertText: '=MIN(',
         label: 'Nilai Terendah (MIN)',
-        syntax: '=MIN($A, $B, ...)',
-        description: 'Mengambil nilai paling rendah dari daftar variabel',
+        syntax: '=MIN(D6:D15)',
+        description: 'Mengambil nilai terendah dari blok sel atau daftar variabel',
         category: 'formula'
     },
     {
@@ -85,9 +85,17 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
     {
         token: '=CONCAT',
         insertText: '=CONCAT(',
-        label: 'Gabung Teks & Variabel',
-        syntax: '=CONCAT("Marhalah ", $JENJANG)',
-        description: 'Menggabungkan teks statis dengan variabel dinamis',
+        label: 'Gabung Teks & Variabel (CONCAT)',
+        syntax: '=CONCAT("Semester ", $SEMESTER)',
+        description: 'Menggabungkan kata & variabel dengan tetap menjaga spasi di dalam tanda kutip (" ")',
+        category: 'formula'
+    },
+    {
+        token: '=CONCAT_SPASI',
+        insertText: '=CONCAT_SPASI(',
+        label: 'Gabung Otomatis Berspasi',
+        syntax: '=CONCAT_SPASI("Marhalah", $JENJANG)',
+        description: 'Menggabungkan beberapa teks/variabel dan otomatis memberi 1 spasi antar kata',
         category: 'formula'
     },
     {
@@ -117,9 +125,33 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
     {
         token: '=TAHUN_AJAR',
         insertText: '=TAHUN_AJAR()',
-        label: 'Tahun Ajaran Aktif',
+        label: 'Tahun Ajaran (Sesuai Master)',
         syntax: '=TAHUN_AJAR()',
-        description: 'Memanggil tahun ajaran aktif dari Data Master (misal 2026/2027)',
+        description: 'Otomatis Masehi atau Gabungan jika tampilan Hijriah diaktifkan di Data Master',
+        category: 'formula'
+    },
+    {
+        token: '=TAHUN_AJAR_MASEHI',
+        insertText: '=TAHUN_AJAR_MASEHI()',
+        label: 'Tahun Ajaran Masehi',
+        syntax: '=TAHUN_AJAR_MASEHI()',
+        description: 'Menampilkan tahun ajaran Masehi aktif (misal 2026/2027)',
+        category: 'formula'
+    },
+    {
+        token: '=TAHUN_AJAR_HIJRIAH',
+        insertText: '=TAHUN_AJAR_HIJRIAH()',
+        label: 'Tahun Ajaran Hijriah',
+        syntax: '=TAHUN_AJAR_HIJRIAH()',
+        description: 'Menampilkan tahun ajaran Hijriah aktif (misal 1448/1449 H)',
+        category: 'formula'
+    },
+    {
+        token: '=TAHUN_AJAR_GABUNGAN',
+        insertText: '=TAHUN_AJAR_GABUNGAN()',
+        label: 'Tahun Ajaran Hijriah & Masehi',
+        syntax: '=TAHUN_AJAR_GABUNGAN()',
+        description: 'Menampilkan gabungan Hijriah & Masehi (misal 1448/1449 H / 2026/2027 M)',
         category: 'formula'
     },
     {
@@ -136,8 +168,10 @@ export type TextTransformMode = 'none' | 'uppercase' | 'lowercase' | 'capitalize
 
 export interface FormulaEvalMeta {
     rank?: number;
-    tahunAjaran?: string;
-    tahunAjaranHijriah?: string;
+    tahunAjaran?: string;          // otomatis (mengikuti hijriEnabled di Data Master)
+    tahunAjaranMasehi?: string;    // khusus Masehi (misal "2026/2027")
+    tahunAjaranHijriah?: string;   // khusus Hijriah (misal "1448/1449 H")
+    tahunAjaranGabungan?: string;  // khusus Gabungan (misal "1448/1449 H / 2026/2027 M")
     semester?: string;
 }
 
@@ -376,7 +410,20 @@ function unquote(str: string): string {
             ? inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\')
             : inner.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
     }
-    return t;
+    // Pertahankan spasi asli pada string yang sudah dievaluasi/di-unquote sebelumnya (misal "Semester " atau " ")
+    return str;
+}
+
+function joinTextArgsSmart(evalArgs: string[]): string {
+    const parts = evalArgs.map(unquote);
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0];
+    return parts.reduce((acc, part, idx) => {
+        if (idx === 0) return part;
+        if (!acc) return part;
+        if (!part) return acc;
+        return (/\s$/.test(acc) || /^\s/.test(part)) ? (acc + part) : `${acc} ${part}`;
+    }, '');
 }
 
 function parseNumericValues(evaluatedArgs: string[]): number[] {
@@ -591,35 +638,84 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
             if (fnName === 'CONCAT' || fnName === 'CONCATENATE' || fnName === 'GABUNG') {
                 return evalArgs.map(unquote).join('');
             }
+            if (fnName === 'CONCAT_SPASI' || fnName === 'GABUNG_SPASI' || fnName === 'TEXTJOIN_SPASI') {
+                return evalArgs.map(a => unquote(a).trim()).filter(Boolean).join(' ');
+            }
             if (fnName === 'UPPER' || fnName === 'BESAR' || fnName === 'KAPITAL') {
-                return evalArgs.map(unquote).join(' ').toUpperCase();
+                return joinTextArgsSmart(evalArgs).toUpperCase();
             }
             if (fnName === 'LOWER' || fnName === 'KECIL') {
-                return evalArgs.map(unquote).join(' ').toLowerCase();
+                return joinTextArgsSmart(evalArgs).toLowerCase();
             }
             if (fnName === 'PROPER' || fnName === 'JUDUL' || fnName === 'TITLE' || fnName === 'CAPITALIZE') {
-                return toTitleCase(evalArgs.map(unquote).join(' '));
+                return toTitleCase(joinTextArgsSmart(evalArgs));
             }
             if (fnName === 'SENTENCE' || fnName === 'KALIMAT') {
-                return toSentenceCase(evalArgs.map(unquote).join(' '));
+                return toSentenceCase(joinTextArgsSmart(evalArgs));
             }
             if (fnName === 'TRIM') {
-                return evalArgs.map(unquote).join(' ').replace(/\s+/g, ' ').trim();
+                return joinTextArgsSmart(evalArgs).replace(/\s+/g, ' ').trim();
             }
             if (fnName === 'TAHUN_AJAR' || fnName === 'TAHUN_AJARAN' || fnName === 'TAHUNAJAR' || fnName === 'TAHUNAJARAN' || fnName === 'TAPEL' || fnName === 'TAHUN_PELAJARAN') {
                 const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim().toLowerCase() : '';
-                if (modeArg === 'hijriah' || modeArg === 'hijri') {
-                    return meta?.tahunAjaranHijriah || '-';
+                const masehiVal = meta?.tahunAjaranMasehi || meta?.tahunAjaran || '-';
+                const hijriVal = meta?.tahunAjaranHijriah || '-';
+                const gabunganVal = meta?.tahunAjaranGabungan || (hijriVal !== '-' ? `${hijriVal} / ${masehiVal} M` : masehiVal);
+
+                if (modeArg === 'masehi' || modeArg === 'm') {
+                    return modeArg === 'm' && masehiVal !== '-' && !/\bM$/i.test(masehiVal) ? `${masehiVal} M` : masehiVal;
                 }
-                if (modeArg === 'lengkap' || modeArg === 'gabungan') {
-                    const h = meta?.tahunAjaranHijriah;
-                    const m = meta?.tahunAjaran || '-';
-                    return h && h !== '-' ? `${h} / ${m} M` : m;
+                if (modeArg === 'hijriah' || modeArg === 'hijriyah' || modeArg === 'hijri' || modeArg === 'h') {
+                    return hijriVal;
                 }
-                return meta?.tahunAjaran || '-';
+                if (modeArg === 'lengkap' || modeArg === 'gabungan' || modeArg === 'hijriah_masehi' || modeArg === 'hm') {
+                    return gabunganVal;
+                }
+                if (modeArg === 'masehi_hijriah' || modeArg === 'mh' || modeArg === 'masehi_dulu') {
+                    const mWithSuffix = masehiVal !== '-' && !/\bM$/i.test(masehiVal) ? `${masehiVal} M` : masehiVal;
+                    return hijriVal !== '-' ? `${mWithSuffix} / ${hijriVal}` : masehiVal;
+                }
+                return meta?.tahunAjaran || masehiVal;
             }
-            if (fnName === 'TAHUN_AJAR_HIJRIAH' || fnName === 'TAHUN_AJARAN_HIJRIAH') {
-                return meta?.tahunAjaranHijriah || '-';
+            if (fnName === 'TAHUN_AJAR_MASEHI' || fnName === 'TAHUN_AJARAN_MASEHI' || fnName === 'TAPEL_MASEHI') {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim().toLowerCase() : '';
+                const masehiVal = meta?.tahunAjaranMasehi || meta?.tahunAjaran || '-';
+                if (masehiVal === '-') return '-';
+                if (modeArg === 'm' || modeArg === 'lengkap') {
+                    return /\bM$/i.test(masehiVal) ? masehiVal : `${masehiVal} M`;
+                }
+                if (modeArg === 'arab') {
+                    return `${angkaKeArab(masehiVal.replace(/\s*M$/i, ''))} م`;
+                }
+                return masehiVal;
+            }
+            if (fnName === 'TAHUN_AJAR_HIJRIAH' || fnName === 'TAHUN_AJARAN_HIJRIAH' || fnName === 'TAHUN_AJAR_HIJRIYAH' || fnName === 'TAHUN_AJARAN_HIJRIYAH' || fnName === 'TAPEL_HIJRIAH') {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim().toLowerCase() : '';
+                const hijriVal = meta?.tahunAjaranHijriah || '-';
+                if (hijriVal === '-') return '-';
+                if (modeArg === 'angka' || modeArg === 'tanpa_h' || modeArg === 'polos') {
+                    return hijriVal.replace(/\s*H$/i, '').trim();
+                }
+                if (modeArg === 'arab') {
+                    return `${angkaKeArab(hijriVal.replace(/\s*H$/i, '').trim())} هـ`;
+                }
+                return hijriVal;
+            }
+            if (fnName === 'TAHUN_AJAR_GABUNGAN' || fnName === 'TAHUN_AJAR_LENGKAP' || fnName === 'TAHUN_AJARAN_GABUNGAN' || fnName === 'TAHUN_AJARAN_LENGKAP' || fnName === 'TAPEL_GABUNGAN') {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim().toLowerCase() : '';
+                const masehiVal = meta?.tahunAjaranMasehi || meta?.tahunAjaran || '-';
+                const hijriVal = meta?.tahunAjaranHijriah || '-';
+                const gabunganVal = meta?.tahunAjaranGabungan || (hijriVal !== '-' ? `${hijriVal} / ${masehiVal} M` : masehiVal);
+                if (modeArg === 'masehi_dulu' || modeArg === 'masehi_hijriah' || modeArg === 'mh') {
+                    const mWithSuffix = masehiVal !== '-' && !/\bM$/i.test(masehiVal) ? `${masehiVal} M` : masehiVal;
+                    return hijriVal !== '-' ? `${mWithSuffix} / ${hijriVal}` : masehiVal;
+                }
+                if (modeArg === 'arab') {
+                    const hClean = hijriVal.replace(/\s*H$/i, '').trim();
+                    const mClean = masehiVal.replace(/\s*M$/i, '').trim();
+                    return `${angkaKeArab(hClean)} هـ / ${angkaKeArab(mClean)} م`;
+                }
+                return gabunganVal;
             }
             if (fnName === 'SEMESTER') {
                 const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim().toLowerCase() : '';
@@ -689,7 +785,7 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
     return unquote(trimmed);
 }
 
-const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|SEMESTER|SEMESTER_ANGKA)\s*\([\s\S]*\)$/i;
+const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA)\s*\([\s\S]*\)$/i;
 
 /**
  * Mengecek apakah string teks sel merupakan ekspresi rumus rapor
@@ -723,8 +819,47 @@ export function evaluateRaporFormula(resolvedText: string, rankOrMeta?: number |
         return resolvedText;
     }
 
-    // Jika masih ada variabel $BELUM_DIISI yang tersisa di dalam rumus, anggap kosong ("") agar tidak merusak perhitungan SUM/RATA2
-    const sanitizedBody = body.replace(/\$[A-Z0-9_]+/gi, '""');
+    // Jika masih ada variabel $BELUM_DIISI yang tersisa di dalam rumus, bersihkan secara sadar-kutip agar tidak merusak string literal atau SUM/RATA2
+    let sanitizedBody = '';
+    let inQ: '"' | "'" | null = null;
+    let idx = 0;
+    while (idx < body.length) {
+        const ch = body[idx];
+        if (inQ) {
+            if (ch === inQ && body[idx - 1] !== '\\') {
+                inQ = null;
+                sanitizedBody += ch;
+                idx++;
+                continue;
+            }
+            if (ch === '$') {
+                const m = body.slice(idx).match(/^\$[A-Za-z0-9_]+/);
+                if (m) {
+                    idx += m[0].length;
+                    continue;
+                }
+            }
+            sanitizedBody += ch;
+            idx++;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            inQ = ch;
+            sanitizedBody += ch;
+            idx++;
+            continue;
+        }
+        if (ch === '$') {
+            const m = body.slice(idx).match(/^\$[A-Za-z0-9_]+/);
+            if (m) {
+                sanitizedBody += '""';
+                idx += m[0].length;
+                continue;
+            }
+        }
+        sanitizedBody += ch;
+        idx++;
+    }
     return evaluateFormulaNode(sanitizedBody, meta);
 }
 
@@ -759,4 +894,233 @@ export function generateSubjectKeyFromName(
     }
     usedKeys.add(candidate);
     return candidate;
+}
+
+/**
+ * Konversi indeks kolom 0-based menjadi huruf kolom Excel (0 -> A, 25 -> Z, 26 -> AA)
+ */
+export function colIndexToExcelLetters(colIndex: number): string {
+    let name = '';
+    let num = colIndex;
+    while (num >= 0) {
+        name = String.fromCharCode((num % 26) + 65) + name;
+        num = Math.floor(num / 26) - 1;
+    }
+    return name;
+}
+
+/**
+ * Konversi huruf kolom Excel (A, B, ..., Z, AA) menjadi indeks kolom 0-based
+ */
+export function excelLettersToColIndex(letters: string): number {
+    const clean = letters.trim().toUpperCase();
+    if (!/^[A-Z]{1,3}$/.test(clean)) return -1;
+    let idx = 0;
+    for (let i = 0; i < clean.length; i++) {
+        idx = idx * 26 + (clean.charCodeAt(i) - 64);
+    }
+    return idx - 1;
+}
+
+/**
+ * Format koordinat baris & kolom 0-based ke alamat Excel (misal r=5, c=3 -> "D6")
+ */
+export function formatExcelCellCoord(r: number, c: number): string {
+    return `${colIndexToExcelLetters(c)}${r + 1}`;
+}
+
+/**
+ * Mem-parsing koordinat sel tunggal Excel seperti "D6" atau "$D$6" menjadi { r, c } 0-based.
+ * Secara bawaan menolak awalan satu '$' tanpa '$' kedua (seperti "$UH1" atau "$A1") agar tidak bentrok dengan kode variabel input ($KEY).
+ */
+export function parseExcelCellCoord(
+    token: string,
+    allowSingleLeadingDollar: boolean = false
+): { r: number; c: number } | null {
+    const t = token.trim();
+    const match = allowSingleLeadingDollar
+        ? t.match(/^\$?([A-Za-z]{1,2})\$?([1-9]\d{0,2})$/)
+        : t.match(/^(?:\$([A-Za-z]{1,2})\$([1-9]\d{0,2})|([A-Za-z]{1,2})([1-9]\d{0,2}))$/);
+    if (!match) return null;
+    const colLetters = (match[1] || match[3] || '').toUpperCase();
+    const rowStr = match[2] || match[4] || '';
+    const c = excelLettersToColIndex(colLetters);
+    const r = parseInt(rowStr, 10) - 1;
+    if (c < 0 || r < 0) return null;
+    return { r, c };
+}
+
+/**
+ * Mem-parsing rentang sel Excel seperti "D6:D15" atau "$D$6:$D$15" menjadi batas baris & kolom 0-based
+ */
+export function parseExcelRangeCoord(
+    token: string
+): { rMin: number; rMax: number; cMin: number; cMax: number } | null {
+    const parts = token.trim().split(/\s*:\s*/);
+    if (parts.length !== 2) return null;
+    const start = parseExcelCellCoord(parts[0], true);
+    const end = parseExcelCellCoord(parts[1], true);
+    if (!start || !end) return null;
+    return {
+        rMin: Math.min(start.r, end.r),
+        rMax: Math.max(start.r, end.r),
+        cMin: Math.min(start.c, end.c),
+        cMax: Math.max(start.c, end.c)
+    };
+}
+
+/**
+ * Mengecek apakah posisi kursor di dalam rumus sedang siap menerima klik/blok sel dari tabel (seperti Point Mode di Excel)
+ */
+export function isFormulaReadyForCellPick(
+    textBeforeCaret: string,
+    fullText: string,
+    isFormulaCellType: boolean = false
+): boolean {
+    const trimmedFull = fullText.trimStart();
+    const startsAsFormula = trimmedFull.startsWith('=') || isFormulaCellType;
+    if (!startsAsFormula) return false;
+
+    // Pastikan kursor tidak sedang berada di dalam tanda kutip teks ("..." atau '...')
+    let inQuote: '"' | "'" | null = null;
+    for (let i = 0; i < textBeforeCaret.length; i++) {
+        const ch = textBeforeCaret[i];
+        if (inQuote) {
+            if (ch === inQuote && textBeforeCaret[i - 1] !== '\\') inQuote = null;
+        } else if (ch === '"' || ch === "'") {
+            inQuote = ch;
+        }
+    }
+    if (inQuote) return false;
+
+    const trimmedBefore = textBeforeCaret.trimEnd();
+    if (!trimmedBefore) {
+        return isFormulaCellType && fullText.trim() === '';
+    }
+
+    const lastCh = trimmedBefore[trimmedBefore.length - 1];
+    return ['=', '(', ',', ';', '+', '-', '*', '/', '&', '>', '<'].includes(lastCh);
+}
+
+/**
+ * Menutup kurung buka '(' yang belum ditutup pada akhir penulisan rumus (misal '=SUM(D6:D15' -> '=SUM(D6:D15)')
+ */
+export function autoCloseFormulaParens(draft: string): string {
+    const trimmed = draft.trim();
+    if (!trimmed) return draft;
+    if (!trimmed.startsWith('=') && !isRaporFormulaExpression(trimmed)) return draft;
+
+    let openCount = 0;
+    let inQuote: '"' | "'" | null = null;
+    for (let i = 0; i < draft.length; i++) {
+        const ch = draft[i];
+        if (inQuote) {
+            if (ch === inQuote && draft[i - 1] !== '\\') inQuote = null;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            inQuote = ch;
+            continue;
+        }
+        if (ch === '(') openCount++;
+        else if (ch === ')') openCount = Math.max(0, openCount - 1);
+    }
+
+    if (openCount > 0) {
+        return draft.trimEnd() + ')'.repeat(openCount);
+    }
+    return draft;
+}
+
+/**
+ * Mengekstrak daftar koordinat sel ("r:c") yang sedang direferensikan di dalam rumus (baik rentang D6:D15, sel tunggal D6, maupun $KEY)
+ * untuk memberikan highlight warna bergaris putus-putus ala Excel pada kanvas desainer.
+ */
+export function extractFormulaReferencedCoords(
+    formulaText: string,
+    sheetCells?: { key?: string; hidden?: boolean; row: number; col: number }[][]
+): Set<string> {
+    const result = new Set<string>();
+    if (!formulaText || !sheetCells || sheetCells.length === 0) return result;
+    const trimmed = formulaText.trim();
+    if (!trimmed.startsWith('=') && !isRaporFormulaExpression(trimmed)) return result;
+
+    const rowCount = sheetCells.length;
+    const colCount = sheetCells[0]?.length || 0;
+
+    // Peta $KEY -> koordinat sel pada sheet aktif
+    const keyMap = new Map<string, { r: number; c: number }[]>();
+    for (let r = 0; r < rowCount; r++) {
+        const row = sheetCells[r] || [];
+        for (let c = 0; c < row.length; c++) {
+            const cell = row[c];
+            if (cell && !cell.hidden && cell.key) {
+                const k = `$${cell.key.trim().toUpperCase()}`;
+                const arr = keyMap.get(k) || [];
+                arr.push({ r, c });
+                keyMap.set(k, arr);
+            }
+        }
+    }
+
+    // Buang bagian string dalam tanda kutip agar tidak salah mendeteksi teks biasa
+    let stripped = '';
+    let inQuote: '"' | "'" | null = null;
+    for (let i = 0; i < trimmed.length; i++) {
+        const ch = trimmed[i];
+        if (inQuote) {
+            if (ch === inQuote && trimmed[i - 1] !== '\\') inQuote = null;
+            stripped += ' ';
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            inQuote = ch;
+            stripped += ' ';
+            continue;
+        }
+        stripped += ch;
+    }
+
+    // 1. Rentang Excel seperti D6:D15
+    const rangeRegex = /(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2}\s*:\s*\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_])/g;
+    stripped = stripped.replace(rangeRegex, (full) => {
+        const rng = parseExcelRangeCoord(full);
+        if (rng) {
+            const rEnd = Math.min(rowCount - 1, rng.rMax);
+            const cEnd = Math.min(colCount - 1, rng.cMax);
+            for (let r = Math.max(0, rng.rMin); r <= rEnd; r++) {
+                for (let c = Math.max(0, rng.cMin); c <= cEnd; c++) {
+                    result.add(`${r}:${c}`);
+                }
+            }
+        }
+        return ' '.repeat(full.length);
+    });
+
+    // 2. Variabel $KEY pada sheet
+    const tagRegex = /\$[A-Za-z0-9_]+/g;
+    stripped = stripped.replace(tagRegex, (tok) => {
+        const coords = keyMap.get(tok.toUpperCase());
+        if (coords) {
+            coords.forEach(({ r, c }) => result.add(`${r}:${c}`));
+            return ' '.repeat(tok.length);
+        }
+        // Biarkan format $C$6 diproses pada tahap koordinat tunggal
+        if (/^\$[A-Za-z]{1,2}\$[1-9]\d{0,2}$/.test(tok)) {
+            return tok;
+        }
+        return ' '.repeat(tok.length);
+    });
+
+    // 3. Koordinat sel tunggal seperti D6 atau $D$6 (bukan nama fungsi yang diikuti '(')
+    const singleRegex = /(?:^|[^A-Za-z0-9_$])(\$[A-Za-z]{1,2}\$[1-9]\d{0,2}|[A-Za-z]{1,2}[1-9]\d{0,2})(?![A-Za-z0-9_(])/g;
+    let m: RegExpExecArray | null;
+    while ((m = singleRegex.exec(stripped)) !== null) {
+        const coord = parseExcelCellCoord(m[1], false);
+        if (coord && coord.r >= 0 && coord.r < rowCount && coord.c >= 0 && coord.c < colCount) {
+            result.add(`${coord.r}:${coord.c}`);
+        }
+    }
+
+    return result;
 }

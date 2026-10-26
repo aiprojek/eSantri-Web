@@ -50,7 +50,10 @@ interface DynamicRaporPreviewProps {
         ranking?: number;
         totalSantri?: number;
         predikat?: string;
+        classAverages?: Record<string, number>;
+        classOverallAverage?: number;
     };
+    cohortRecords?: RaporRecord[];
     paperSize?: 'A4' | 'F4';
     showKop?: boolean;
     marginMode?: 'normal' | 'narrow' | 'none';
@@ -533,6 +536,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     tahunAjaran,
     semester,
     calculation,
+    cohortRecords,
     paperSize = 'A4',
     showKop = true,
     marginMode = 'normal',
@@ -568,7 +572,8 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
         targetDate: effectiveDate,
         tahunAjaran,
         semester,
-        calculation
+        calculation,
+        cohortRecords
     };
 
     const hasBuiltInBiodata = useMemo(() => templateHasBuiltInBiodata(template), [template]);
@@ -689,12 +694,17 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     // Records and Leger Calculations Map
     const [periodRecordsMap, setPeriodRecordsMap] = useState<Map<number, RaporRecord>>(new Map());
     const [studentLegerMap, setStudentLegerMap] = useState<Map<number, StudentLegerRow>>(new Map());
+    const [rombelCohortMetaMap, setRombelCohortMetaMap] = useState<Map<number, {
+        classAverages: Record<string, number>;
+        classOverallAverage: number;
+        rombelRecords: RaporRecord[];
+    }>>(new Map());
 
     // Preview and Batch Modals
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [previewSantriIndex, setPreviewSantriIndex] = useState<number>(0);
     const [isBatchPrinting, setIsBatchPrinting] = useState(false);
-    const [batchData, setBatchData] = useState<{ santri: Santri; record: RaporRecord | null; calculation?: any }[]>([]);
+    const [batchData, setBatchData] = useState<{ santri: Santri; record: RaporRecord | null; calculation?: any; cohortRecords?: RaporRecord[] }[]>([]);
     const [isTitleModalOpen, setIsTitleModalOpen] = useState(false);
 
     // WhatsApp Distribution Modal
@@ -862,6 +872,11 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     useEffect(() => {
         const calculateRombelData = () => {
             const newMap = new Map<number, StudentLegerRow>();
+            const newCohortMetaMap = new Map<number, {
+                classAverages: Record<string, number>;
+                classOverallAverage: number;
+                rombelRecords: RaporRecord[];
+            }>();
             const studentsByRombel = new Map<number, Santri[]>();
 
             baseSantriList.forEach(s => {
@@ -895,12 +910,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                     records: rombelRecords
                 });
 
+                newCohortMetaMap.set(rId, {
+                    classAverages: rombelData.classAverages,
+                    classOverallAverage: rombelData.classAverage,
+                    rombelRecords
+                });
+
                 rombelData.students.forEach(row => {
                     newMap.set(row.santri.id, row);
                 });
             });
 
             setStudentLegerMap(newMap);
+            setRombelCohortMetaMap(newCohortMetaMap);
         };
 
         calculateRombelData();
@@ -1010,14 +1032,20 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const currentPreviewSantri = filteredSantriList[previewSantriIndex] || null;
     const currentPreviewRecord = currentPreviewSantri ? periodRecordsMap.get(currentPreviewSantri.id) || null : null;
     const currentPreviewRow = currentPreviewSantri ? studentLegerMap.get(currentPreviewSantri.id) : null;
+    const currentPreviewCohortMeta = currentPreviewSantri ? rombelCohortMetaMap.get(currentPreviewSantri.rombelId) : undefined;
     const currentPreviewEffectiveRank = getEffectiveRanking(currentPreviewRow?.ranking, rankingDisplayLimit);
     const currentPreviewCalculation = currentPreviewRow ? {
         totalNilai: currentPreviewRow.totalNilai,
         rataRata: currentPreviewRow.rataRata,
         ranking: currentPreviewEffectiveRank,
         totalSantri: currentPreviewEffectiveRank ? (baseSantriList.filter(s => s.rombelId === currentPreviewSantri?.rombelId).length || 1) : undefined,
-        predikat: currentPreviewRow.predikat.predikat
-    } : undefined;
+        predikat: currentPreviewRow.predikat.predikat,
+        classAverages: currentPreviewCohortMeta?.classAverages,
+        classOverallAverage: currentPreviewCohortMeta?.classOverallAverage
+    } : (currentPreviewCohortMeta ? {
+        classAverages: currentPreviewCohortMeta.classAverages,
+        classOverallAverage: currentPreviewCohortMeta.classOverallAverage
+    } : undefined);
 
     const handlePrevStudent = () => {
         if (previewSantriIndex > 0) {
@@ -1057,6 +1085,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const buildBatchData = (targetSantri: Santri[], limit: RankingDisplayLimit) => {
         return targetSantri.map(santri => {
             const row = studentLegerMap.get(santri.id);
+            const cohortMeta = rombelCohortMetaMap.get(santri.rombelId);
             const rombelTotal = baseSantriList.filter(s => s.rombelId === santri.rombelId).length;
             const effectiveRank = getEffectiveRanking(row?.ranking, limit);
             const calculation = row ? {
@@ -1064,13 +1093,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                 rataRata: row.rataRata,
                 ranking: effectiveRank,
                 totalSantri: effectiveRank ? rombelTotal : undefined,
-                predikat: row.predikat.predikat
-            } : undefined;
+                predikat: row.predikat.predikat,
+                classAverages: cohortMeta?.classAverages,
+                classOverallAverage: cohortMeta?.classOverallAverage
+            } : (cohortMeta ? {
+                classAverages: cohortMeta.classAverages,
+                classOverallAverage: cohortMeta.classOverallAverage
+            } : undefined);
 
             return {
                 santri,
                 record: periodRecordsMap.get(santri.id) || null,
-                calculation
+                calculation,
+                cohortRecords: cohortMeta?.rombelRecords
             };
         });
     };
@@ -2019,6 +2054,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         tahunAjaran={filterTahun}
                                         semester={filterSemester}
                                         calculation={currentPreviewCalculation}
+                                        cohortRecords={currentPreviewCohortMeta?.rombelRecords}
                                         paperSize={paperSize}
                                         showKop={showKop}
                                         marginMode={marginMode}
@@ -2168,6 +2204,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                                 tahunAjaran={filterTahun}
                                                 semester={filterSemester}
                                                 calculation={item.calculation}
+                                                cohortRecords={item.cohortRecords}
                                                 paperSize={paperSize}
                                                 showKop={showKop}
                                                 marginMode={marginMode}

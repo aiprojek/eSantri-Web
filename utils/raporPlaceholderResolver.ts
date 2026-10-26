@@ -3,7 +3,14 @@ import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTempl
 import { formatDate, getHijriDate, formatTanggalDokumen } from './formatters';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
-import { evaluateRaporFormula, isRaporFormulaExpression, parseExcelCellCoord, parseExcelRangeCoord } from './raporFormulaUtils';
+import {
+    evaluateRaporFormula,
+    isRaporFormulaExpression,
+    parseExcelCellCoord,
+    parseExcelRangeCoord,
+    splitTopLevelArgs,
+    normalizeSubjectKeyForAvg
+} from './raporFormulaUtils';
 import { resolveAcademicYearLabels } from './academicYear';
 
 export interface DynamicTagItem {
@@ -108,6 +115,7 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         tags: [
             { tag: '$TOTAL_NILAI', label: 'Total Akumulasi Nilai', description: 'Jumlah total seluruh nilai mapel santri', example: '850' },
             { tag: '$RATA_RATA', label: 'Nilai Rata-Rata', description: 'Rata-rata seluruh nilai mapel santri', example: '85.50' },
+            { tag: '$RATA_RATA_KELAS', label: 'Rata-Rata Umum Kelas', description: 'Rata-rata nilai gabungan seluruh santri di rombel', example: '83.45' },
             { tag: '$PREDIKAT_RATA_RATA', label: 'Predikat Rata-Rata', description: 'Predikat hasil belajar (Mumtaz/Jayyid Jiddan/dll)', example: 'Jayyid Jiddan' },
             { tag: '$PERINGKAT', label: 'Peringkat / Ranking', description: 'Peringkat santri di rombel', example: '3' },
             { tag: '$RANKING', label: 'Ranking Kelas (Alias)', description: 'Peringkat santri di rombel', example: '3' },
@@ -220,7 +228,12 @@ export interface RaporResolveContext {
         ranking?: number;
         totalSantri?: number;
         predikat?: string;
+        classAverages?: Record<string, number>;
+        classOverallAverage?: number;
+        isSimulated?: boolean;
     };
+    cohortRecords?: RaporRecord[];
+    evaluatingClassAvg?: boolean;
     extraVars?: Record<string, any>;
     tahunAjaran?: string;
     semester?: 'Ganjil' | 'Genap';
@@ -799,12 +812,78 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         }
     }
 
+    // Siapkan peta rata-rata kelas per mata pelajaran (dari calculation.classAverages maupun cohortRecords bila tersedia)
+    const effectiveClassAverages: Record<string, number> = {};
+    if (context.calculation?.classAverages) {
+        for (const [k, v] of Object.entries(context.calculation.classAverages)) {
+            if (typeof v === 'number' && isFinite(v)) {
+                effectiveClassAverages[normalizeSubjectKeyForAvg(k)] = v;
+            }
+        }
+    }
+    if (context.cohortRecords && context.cohortRecords.length > 0 && Object.keys(effectiveClassAverages).length === 0) {
+        const cohortAccum = new Map<string, { sum: number; count: number }>();
+        for (const cRec of context.cohortRecords) {
+            if (!cRec?.customData) continue;
+            let cObj: Record<string, any> = {};
+            try {
+                cObj = typeof cRec.customData === 'string' ? JSON.parse(cRec.customData) : cRec.customData;
+            } catch {
+                cObj = {};
+            }
+            for (const [rk, rv] of Object.entries(cObj)) {
+                if (!rk || rv === undefined || rv === null) continue;
+                const sv = String(rv).trim();
+                if (sv === '' || sv === '-') continue;
+                const num = Number(sv.replace(',', '.'));
+                if (isNaN(num) || !isFinite(num)) continue;
+                const nk = normalizeSubjectKeyForAvg(rk);
+                if (!nk) continue;
+                const entry = cohortAccum.get(nk) || { sum: 0, count: 0 };
+                entry.sum += num;
+                entry.count += 1;
+                cohortAccum.set(nk, entry);
+            }
+        }
+        for (const [nk, st] of cohortAccum.entries()) {
+            if (st.count > 0) {
+                effectiveClassAverages[nk] = Math.round((st.sum / st.count) * 100) / 100;
+            }
+        }
+    }
+
+    let effectiveClassOverallAvg = context.calculation?.classOverallAverage;
+    if ((effectiveClassOverallAvg === undefined || effectiveClassOverallAvg <= 0) && Object.keys(effectiveClassAverages).length > 0) {
+        const nonGradeSetForAvg = new Set(['sakit', 'izin', 'alpha', 'alpa', 'total_absen', 's', 'i', 'a']);
+        const subjectAvgVals = Object.entries(effectiveClassAverages)
+            .filter(([k, v]) => !nonGradeSetForAvg.has(k.toLowerCase()) && v > 0 && v <= 100)
+            .map(([, v]) => v);
+        if (subjectAvgVals.length > 0) {
+            effectiveClassOverallAvg = Math.round((subjectAvgVals.reduce((a, b) => a + b, 0) / subjectAvgVals.length) * 100) / 100;
+        }
+    }
+
+    const formattedClassOverall = effectiveClassOverallAvg !== undefined && effectiveClassOverallAvg > 0
+        ? Number(effectiveClassOverallAvg.toFixed(2)).toString()
+        : '-';
+
     setToken('$TOTAL_NILAI', totalScore !== undefined && totalScore > 0 ? String(totalScore) : '-');
     setToken('$RATA_RATA', avgScore !== undefined && avgScore > 0 ? avgScore.toFixed(2) : '-');
+    setToken('$RATA_RATA_KELAS', formattedClassOverall);
+    setToken('$RERATA_KELAS', formattedClassOverall);
+    setToken('$RATA2_KELAS', formattedClassOverall);
     setToken('$PREDIKAT_RATA_RATA', predikatStr || '-');
     setToken('$PERINGKAT', rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
     setToken('$RANKING', rankVal !== undefined && rankVal > 0 ? String(rankVal) : '-');
     setToken('$TOTAL_SANTRI', totalSantriVal !== undefined && totalSantriVal > 0 ? String(totalSantriVal) : '-');
+
+    // Daftarkan juga tag per mapel seperti $RATA2_KELAS_FIQIH, $RERATA_KELAS_FIQIH, dan $NRK_FIQIH untuk sel bertipe Data Dinamis
+    for (const [normKey, avgNum] of Object.entries(effectiveClassAverages)) {
+        const cleanAvgStr = Number(avgNum.toFixed(2)).toString();
+        setToken(`$RATA2_KELAS_${normKey}`, cleanAvgStr);
+        setToken(`$RERATA_KELAS_${normKey}`, cleanAvgStr);
+        setToken(`$NRK_${normKey}`, cleanAvgStr);
+    }
 
     // Kurikulum Merdeka & Deskripsi Capaian Pembelajaran (CP/TP)
     const customCpTertinggi = findCustomVal('DESKRIPSI_CAPAIAN_TERTINGGI', 'CP_TERTINGGI', 'CAPAIAN_TERTINGGI', 'DESKRIPSI_TERTINGGI');
@@ -907,10 +986,23 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     const isFormula = isRaporFormulaExpression(res);
     const PURE_NUMBER_REGEX = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
-    // Helper resolusi sel koordinat Excel (misal D6 atau rentang D6:D15) bila konteks tabel lembar tersedia
+    // Helper resolusi sel koordinat Excel (misal D6, $D$6, $D6, D$6 atau rentang D6:D15) bila konteks tabel lembar tersedia
     const sheetCells = context.sheetCells;
     const sheetRowCount = sheetCells?.length || 0;
     const sheetColCount = sheetCells?.[0]?.length || 0;
+    const definedSheetKeys = new Set<string>();
+    if (sheetCells) {
+        for (let r = 0; r < sheetRowCount; r++) {
+            const row = sheetCells[r] || [];
+            for (let c = 0; c < row.length; c++) {
+                const cell = row[c];
+                if (cell && !cell.hidden && cell.key) {
+                    const uk = cell.key.trim().toUpperCase().replace(/[\s-]+/g, '_');
+                    if (uk) definedSheetKeys.add(`$${uk}`);
+                }
+            }
+        }
+    }
 
     const findMasterCoord = (r: number, c: number): { r: number; c: number } => {
         if (!sheetCells) return { r, c };
@@ -989,21 +1081,242 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         return cell.value ?? '';
     };
 
+    // Pra-pemrosesan argumen fungsi RATA2_KELAS / RERATA_KELAS / RATA_KELAS / NRK / AVG_KELAS
+    // agar argumen sel (misal D6) maupun variabel ($FIQIH) dipetakan ke kunci mapel / rerata rombel, bukan nilai individu santri
+    const resolveCellToClassAvgArg = (r: number, c: number): string => {
+        if (!sheetCells) return '"__EMPTY__"';
+        const master = findMasterCoord(r, c);
+        const cell = sheetCells[master.r]?.[master.c];
+        if (!cell) return '"__EMPTY__"';
+
+        if ((cell.type === 'input' || cell.type === 'dropdown') && cell.key) {
+            const nk = normalizeSubjectKeyForAvg(cell.key);
+            return `"${nk}"`;
+        }
+
+        if (cell.type === 'formula') {
+            if (cell.key) {
+                const nk = normalizeSubjectKeyForAvg(cell.key);
+                if (effectiveClassAverages[nk] !== undefined) {
+                    return `"${nk}"`;
+                }
+            }
+            if (cell.value && cell.value.trim() !== '' && !context.evaluatingClassAvg) {
+                const rawFormulaExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
+                if (context.cohortRecords && context.cohortRecords.length > 0) {
+                    const cohortNums: number[] = [];
+                    for (const cRec of context.cohortRecords) {
+                        const evalStr = resolveRaporText(rawFormulaExpr, {
+                            ...context,
+                            record: cRec,
+                            extraVars: undefined,
+                            evaluatingClassAvg: true,
+                            currentCellCoord: master,
+                            evaluatingCells: new Set([`${master.r}:${master.c}`])
+                        });
+                        const cleaned = evalStr.trim().replace(',', '.');
+                        if (cleaned !== '' && cleaned !== '-') {
+                            const n = Number(cleaned);
+                            if (!isNaN(n) && isFinite(n)) cohortNums.push(n);
+                        }
+                    }
+                    if (cohortNums.length > 0) {
+                        const meanVal = Math.round((cohortNums.reduce((a, b) => a + b, 0) / cohortNums.length) * 100) / 100;
+                        return `"__VAL__:${meanVal}"`;
+                    }
+                } else if (context.calculation?.isSimulated) {
+                    const simEval = resolveRaporText(rawFormulaExpr, {
+                        ...context,
+                        evaluatingClassAvg: true,
+                        currentCellCoord: master,
+                        evaluatingCells: new Set([`${master.r}:${master.c}`])
+                    });
+                    const simNum = Number(simEval.trim().replace(',', '.'));
+                    if (!isNaN(simNum) && isFinite(simNum)) {
+                        const offset = ((master.r * 3 + master.c) % 5) * 0.7 + 1.2;
+                        const simAvg = Math.max(60, Math.min(98, Number((simNum - offset).toFixed(1))));
+                        return `"__VAL__:${simAvg}"`;
+                    }
+                }
+            }
+            return '"__EMPTY__"';
+        }
+
+        if (cell.type === 'data' && cell.value) {
+            const tv = cell.value.trim();
+            const tagM = tv.match(/^\$([A-Za-z0-9_]+)$/);
+            if (tagM) {
+                const nk = normalizeSubjectKeyForAvg(tagM[1]);
+                return `"${nk}"`;
+            }
+        }
+
+        return '"__EMPTY__"';
+    };
+
+    const resolveSingleClassAvgTarget = (rawArg: string): string[] => {
+        const t = rawArg.trim();
+        if (!t) return [];
+
+        // 1. Rentang sel Excel (contoh: D6:D15)
+        if (sheetCells && sheetRowCount > 0) {
+            const rng = parseExcelRangeCoord(t);
+            if (rng) {
+                const rStart = Math.max(0, rng.rMin);
+                const rEnd = Math.min(sheetRowCount - 1, rng.rMax);
+                const cStart = Math.max(0, rng.cMin);
+                const cEnd = Math.min(sheetColCount - 1, rng.cMax);
+                const seen = new Set<string>();
+                const out: string[] = [];
+                for (let rr = rStart; rr <= rEnd; rr++) {
+                    for (let cc = cStart; cc <= cEnd; cc++) {
+                        const m = findMasterCoord(rr, cc);
+                        const mk = `${m.r}:${m.c}`;
+                        if (seen.has(mk)) continue;
+                        seen.add(mk);
+                        out.push(resolveCellToClassAvgArg(m.r, m.c));
+                    }
+                }
+                return out.length > 0 ? out : ['"__EMPTY__"'];
+            }
+        }
+
+        // 2. Koordinat sel tunggal Excel (contoh: D6, $D$6, atau D$6)
+        if (sheetCells && sheetRowCount > 0) {
+            const coord = parseExcelCellCoord(t, false);
+            if (coord && coord.r >= 0 && coord.r < sheetRowCount && coord.c >= 0 && coord.c < sheetColCount) {
+                return [resolveCellToClassAvgArg(coord.r, coord.c)];
+            }
+        }
+
+        // 3. Variabel $KODE_MAPEL (contoh: $FIQIH) atau koordinat kolom-terkunci $D6
+        const dollarMatch = t.match(/^\$([A-Za-z0-9_]+)$/);
+        if (dollarMatch) {
+            const nk = normalizeSubjectKeyForAvg(dollarMatch[1]);
+            if (effectiveClassAverages[nk] !== undefined) {
+                return [`"${nk}"`];
+            }
+            if (sheetCells) {
+                for (let rr = 0; rr < sheetCells.length; rr++) {
+                    const row = sheetCells[rr] || [];
+                    for (let cc = 0; cc < row.length; cc++) {
+                        const cand = row[cc];
+                        if (cand && !cand.hidden && cand.key && normalizeSubjectKeyForAvg(cand.key) === nk) {
+                            return [resolveCellToClassAvgArg(rr, cc)];
+                        }
+                    }
+                }
+                // Jika bukan $KEY mapel di sheet, cek apakah koordinat kolom-terkunci seperti $D6
+                if (sheetRowCount > 0) {
+                    const colLocked = parseExcelCellCoord(t, true);
+                    if (colLocked && colLocked.r >= 0 && colLocked.r < sheetRowCount && colLocked.c >= 0 && colLocked.c < sheetColCount) {
+                        return [resolveCellToClassAvgArg(colLocked.r, colLocked.c)];
+                    }
+                }
+            }
+            return [`"${nk}"`];
+        }
+
+        // 4. Teks kutip ("FIQIH") atau identifier polos (FIQIH)
+        const stripped = (t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))
+            ? t.slice(1, -1)
+            : t;
+        const escaped = stripped.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        return [`"${escaped}"`];
+    };
+
+    const preprocessClassAvgFormulaCalls = (exprStr: string): string => {
+        let out = '';
+        let i = 0;
+        let q: '"' | "'" | null = null;
+        while (i < exprStr.length) {
+            const c = exprStr[i];
+            if (q) {
+                if (c === q && exprStr[i - 1] !== '\\') q = null;
+                out += c;
+                i++;
+                continue;
+            }
+            if (c === '"' || c === "'") {
+                q = c;
+                out += c;
+                i++;
+                continue;
+            }
+            if (/[A-Za-z]/.test(c) && (i === 0 || !/[A-Za-z0-9_$]/.test(exprStr[i - 1]))) {
+                const fnStartMatch = exprStr.slice(i).match(/^(RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS)(\s*)\(/i);
+                if (fnStartMatch) {
+                    const fnCallPrefix = fnStartMatch[0]; // misal "RATA2_KELAS("
+                    const openParenIdx = i + fnCallPrefix.length - 1;
+                    let depth = 0;
+                    let innerQ: '"' | "'" | null = null;
+                    let closeParenIdx = -1;
+                    for (let j = openParenIdx; j < exprStr.length; j++) {
+                        const jc = exprStr[j];
+                        if (innerQ) {
+                            if (jc === innerQ && exprStr[j - 1] !== '\\') innerQ = null;
+                            continue;
+                        }
+                        if (jc === '"' || jc === "'") {
+                            innerQ = jc;
+                            continue;
+                        }
+                        if (jc === '(') depth++;
+                        else if (jc === ')') {
+                            depth--;
+                            if (depth === 0) {
+                                closeParenIdx = j;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (closeParenIdx !== -1) {
+                        const rawInner = exprStr.slice(openParenIdx + 1, closeParenIdx);
+                        if (rawInner.trim() === '') {
+                            out += `${fnStartMatch[1]}()`;
+                        } else {
+                            const topArgs = splitTopLevelArgs(rawInner);
+                            let targetList = topArgs;
+                            let digitsArgSuffix = '';
+                            if (topArgs.length === 2 && /^[0-4]$/.test(topArgs[1].trim())) {
+                                targetList = [topArgs[0]];
+                                digitsArgSuffix = `, ${topArgs[1].trim()}`;
+                            }
+                            const rewrittenTargets: string[] = [];
+                            for (const ta of targetList) {
+                                rewrittenTargets.push(...resolveSingleClassAvgTarget(ta));
+                            }
+                            out += `${fnStartMatch[1]}(${rewrittenTargets.join(', ')}${digitsArgSuffix})`;
+                        }
+                        i = closeParenIdx + 1;
+                        continue;
+                    }
+                }
+            }
+            out += c;
+            i++;
+        }
+        return out;
+    };
+
+    const preparedRes = isFormula ? preprocessClassAvgFormulaCalls(res) : res;
+
     // Substitusi token $TAG serta koordinat/rentang sel Excel (misal D6:D15 atau D6) dengan pemindai sadar-kutip
     let substituted = '';
     let inQuote: '"' | "'" | null = null;
     let idx = 0;
-    while (idx < res.length) {
-        const ch = res[idx];
+    while (idx < preparedRes.length) {
+        const ch = preparedRes[idx];
         if (inQuote) {
-            if (ch === inQuote && res[idx - 1] !== '\\') {
+            if (ch === inQuote && preparedRes[idx - 1] !== '\\') {
                 inQuote = null;
                 substituted += ch;
                 idx++;
                 continue;
             }
             if (ch === '$') {
-                const m = res.slice(idx).match(/^\$([A-Z0-9_]+)/);
+                const m = preparedRes.slice(idx).match(/^\$([A-Z0-9_]+)/);
                 if (m) {
                     const tok = `$${m[1]}`;
                     const found = tokenMap.get(tok);
@@ -1030,8 +1343,8 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         }
 
         // Ekspansi rentang sel Excel (contoh: D6:D15 atau $D$6:$D$15) saat di dalam rumus
-        if (isFormula && sheetCells && sheetRowCount > 0 && (idx === 0 || !/[A-Za-z0-9_]/.test(res[idx - 1]))) {
-            const rangeMatch = res.slice(idx).match(/^(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2}\s*:\s*\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_])/);
+        if (isFormula && sheetCells && sheetRowCount > 0 && (idx === 0 || !/[A-Za-z0-9_]/.test(preparedRes[idx - 1]))) {
+            const rangeMatch = preparedRes.slice(idx).match(/^(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2}\s*:\s*\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_])/);
             if (rangeMatch) {
                 const rng = parseExcelRangeCoord(rangeMatch[1]);
                 if (rng) {
@@ -1060,24 +1373,9 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         }
 
         if (ch === '$') {
-            const m = res.slice(idx).match(/^\$([A-Z0-9_]+)/);
-            if (m) {
-                const tok = `$${m[1]}`;
-                const found = tokenMap.get(tok);
-                if (found !== undefined) {
-                    if (isFormula && !PURE_NUMBER_REGEX.test(found.trim())) {
-                        const escaped = found.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                        substituted += `"${escaped}"`;
-                    } else {
-                        substituted += found;
-                    }
-                    idx += tok.length;
-                    continue;
-                }
-            }
-            // Koordinat absolut Excel $D$6
+            // Koordinat absolut penuh Excel $D$6 selalu diproses terlebih dahulu (dua '$')
             if (isFormula && sheetCells && sheetRowCount > 0) {
-                const absMatch = res.slice(idx).match(/^(\$[A-Za-z]{1,2}\$[1-9]\d{0,2})(?![A-Za-z0-9_(])/);
+                const absMatch = preparedRes.slice(idx).match(/^(\$[A-Za-z]{1,2}\$[1-9]\d{0,2})(?![A-Za-z0-9_(])/);
                 if (absMatch) {
                     const coord = parseExcelCellCoord(absMatch[1], false);
                     if (coord && coord.r >= 0 && coord.r < sheetRowCount && coord.c >= 0 && coord.c < sheetColCount) {
@@ -1087,11 +1385,46 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
                     }
                 }
             }
+
+            const m = preparedRes.slice(idx).match(/^\$([A-Za-z0-9_]+)/);
+            if (m) {
+                const rawTok = `$${m[1]}`;
+                const upperTok = rawTok.toUpperCase();
+                const found = tokenMap.get(upperTok);
+                if (found !== undefined) {
+                    if (isFormula && !PURE_NUMBER_REGEX.test(found.trim())) {
+                        const escaped = found.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                        substituted += `"${escaped}"`;
+                    } else {
+                        substituted += found;
+                    }
+                    idx += rawTok.length;
+                    continue;
+                }
+                // Jika merupakan $KEY variabel input pada sheet namun nilainya masih kosong
+                if (definedSheetKeys.has(upperTok)) {
+                    substituted += isFormula ? '""' : '';
+                    idx += rawTok.length;
+                    continue;
+                }
+                // Koordinat kolom-terkunci Excel $D6 (ketika bukan $TAG maupun $KEY)
+                if (isFormula && sheetCells && sheetRowCount > 0) {
+                    const colLockedMatch = preparedRes.slice(idx).match(/^(\$[A-Za-z]{1,2}[1-9]\d{0,2})(?![A-Za-z0-9_(])/);
+                    if (colLockedMatch) {
+                        const coord = parseExcelCellCoord(colLockedMatch[1], true);
+                        if (coord && coord.r >= 0 && coord.r < sheetRowCount && coord.c >= 0 && coord.c < sheetColCount) {
+                            substituted += formatScalarForFormula(resolveGridCellScalar(coord.r, coord.c));
+                            idx += colLockedMatch[1].length;
+                            continue;
+                        }
+                    }
+                }
+            }
         }
 
-        // Koordinat sel tunggal Excel tanpa '$' (contoh: D6, C16) di dalam rumus
-        if (isFormula && sheetCells && sheetRowCount > 0 && /[A-Za-z]/.test(ch) && (idx === 0 || !/[A-Za-z0-9_$]/.test(res[idx - 1]))) {
-            const singleMatch = res.slice(idx).match(/^([A-Za-z]{1,2}[1-9]\d{0,2})(?![A-Za-z0-9_(])/);
+        // Koordinat sel tunggal Excel tanpa '$' di depan (contoh: D6 atau D$6) di dalam rumus
+        if (isFormula && sheetCells && sheetRowCount > 0 && /[A-Za-z]/.test(ch) && (idx === 0 || !/[A-Za-z0-9_$]/.test(preparedRes[idx - 1]))) {
+            const singleMatch = preparedRes.slice(idx).match(/^([A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_(])/);
             if (singleMatch) {
                 const coord = parseExcelCellCoord(singleMatch[1], false);
                 if (coord && coord.r >= 0 && coord.r < sheetRowCount && coord.c >= 0 && coord.c < sheetColCount) {
@@ -1106,13 +1439,15 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         idx++;
     }
 
-    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =IF, =PREDIKAT, =TERBILANG, =ARAB, =UPPER, =LOWER, =PROPER, =TAHUN_AJAR_*, =SEMESTER, &)
+    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =RATA2_KELAS, =IF, =PREDIKAT, =TERBILANG, =ARAB, =UPPER, =LOWER, =PROPER, =TAHUN_AJAR_*, =SEMESTER, &)
     return evaluateRaporFormula(substituted, {
         rank: rankVal,
         tahunAjaran: yearInfo.otomatis,
         tahunAjaranMasehi: yearInfo.masehi,
         tahunAjaranHijriah: yearInfo.hijriah,
         tahunAjaranGabungan: yearInfo.gabungan,
-        semester: sem
+        semester: sem,
+        classAverages: effectiveClassAverages,
+        classOverallAverage: effectiveClassOverallAvg
     });
 };

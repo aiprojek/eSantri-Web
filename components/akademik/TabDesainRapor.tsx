@@ -14,8 +14,22 @@ import {
     resolveMudirAamInfo,
     formatTeacherNip
 } from '../../utils/raporPlaceholderResolver';
-import { RAPOR_FORMULA_SUGGESTIONS, applyCellTextTransform, isFormulaReadyForCellPick, autoCloseFormulaParens, extractFormulaReferencedCoords } from '../../utils/raporFormulaUtils';
+import {
+    RAPOR_FORMULA_SUGGESTIONS,
+    applyCellTextTransform,
+    isFormulaReadyForCellPick,
+    autoCloseFormulaParens,
+    extractFormulaReferencedCoords,
+    normalizeSubjectKeyForAvg,
+    shiftFormulaReferences,
+    cycleFormulaReferenceLockAtCaret,
+    computeSeriesStringAtOffset,
+    computeAutoFillNextInputKey,
+    AutoFillMode,
+    AutoFillDirection
+} from '../../utils/raporFormulaUtils';
 import { resolveAcademicYearLabels } from '../../utils/academicYear';
+import { computeClassAveragesFromRecords } from '../../services/raporCalculationService';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { RaporExcelPasteModal } from './modals/RaporExcelPasteModal';
@@ -440,6 +454,30 @@ export const TabDesainRapor: React.FC = () => {
     } | null>(null);
     const isFormulaSelectingRef = useRef(false);
     const [formulaDragPreview, setFormulaDragPreview] = useState<{ r1: number; c1: number; r2: number; c2: number } | null>(null);
+
+    // Excel-style AutoFill / Fill Handle & Post-Fill Mode Switcher State
+    const [fillDragState, setFillDragState] = useState<{
+        sourceBounds: { rMin: number; rMax: number; cMin: number; cMax: number };
+        targetBounds: { rMin: number; rMax: number; cMin: number; cMax: number } | null;
+        direction: AutoFillDirection | null;
+        forceIncrement: boolean;
+    } | null>(null);
+    const fillDragStateRef = useRef<{
+        sourceBounds: { rMin: number; rMax: number; cMin: number; cMax: number };
+        targetBounds: { rMin: number; rMax: number; cMin: number; cMax: number } | null;
+        direction: AutoFillDirection | null;
+        forceIncrement: boolean;
+    } | null>(null);
+    fillDragStateRef.current = fillDragState;
+
+    const [lastAutoFillSession, setLastAutoFillSession] = useState<{
+        snapshotTemplate: RaporTemplate;
+        sheetId: string;
+        sourceBounds: { rMin: number; rMax: number; cMin: number; cMax: number };
+        targetBounds: { rMin: number; rMax: number; cMin: number; cMax: number };
+        direction: AutoFillDirection;
+        mode: AutoFillMode;
+    } | null>(null);
 
     // Inline Cell Editing State (Excel-style click & type directly inside cell)
     const [editingCell, setEditingCell] = useState<{ r: number; c: number; draft: string } | null>(null);
@@ -984,6 +1022,7 @@ export const TabDesainRapor: React.FC = () => {
 
         setActiveSheetId(targetSheetId);
         setSelectedCells([]);
+        setLastAutoFillSession(null);
         setActiveTemplate({
             ...synced,
             activeSheetId: targetSheetId,
@@ -1344,12 +1383,15 @@ export const TabDesainRapor: React.FC = () => {
     };
 
     // --- UNDO / REDO HISTORY & GRID OPERATIONS ---
-    const pushToHistory = (tpl: RaporTemplate) => {
+    const pushToHistory = (tpl: RaporTemplate, keepAutoFillSession = false) => {
         try {
             const snapshot = JSON.parse(JSON.stringify(tpl));
             setUndoStack(prev => [...prev.slice(-24), snapshot]);
             setRedoStack([]);
             setIsDirty(true);
+            if (!keepAutoFillSession) {
+                setLastAutoFillSession(null);
+            }
         } catch {
             // fallback
         }
@@ -1361,6 +1403,7 @@ export const TabDesainRapor: React.FC = () => {
         setUndoStack(u => u.slice(0, -1));
         setRedoStack(r => [...r.slice(-24), JSON.parse(JSON.stringify(activeTemplate))]);
         setActiveTemplate(prev);
+        setLastAutoFillSession(null);
         showToast('Undo: Berhasil membatalkan aksi terakhir.', 'info');
     };
 
@@ -1370,6 +1413,7 @@ export const TabDesainRapor: React.FC = () => {
         setRedoStack(r => r.slice(0, -1));
         setUndoStack(u => [...u.slice(-24), JSON.parse(JSON.stringify(activeTemplate))]);
         setActiveTemplate(next);
+        setLastAutoFillSession(null);
         showToast('Redo: Berhasil mengulangi aksi.', 'info');
     };
 
@@ -2043,6 +2087,20 @@ export const TabDesainRapor: React.FC = () => {
                 }
                 return;
             }
+            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd' && canWrite) {
+                if (selectedCells.length > 0) {
+                    e.preventDefault();
+                    handleFillDownShortcut();
+                }
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r' && canWrite) {
+                if (selectedCells.length > 0) {
+                    e.preventDefault();
+                    handleFillRightShortcut();
+                }
+                return;
+            }
 
             if (!activeTemplate || selectedCells.length === 0) return;
             const primary = selectedCells[0];
@@ -2086,7 +2144,7 @@ export const TabDesainRapor: React.FC = () => {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, isDesignPreviewOpen, isExcelPasteModalOpen, isKurikulumGeneratorOpen, isFormatPainterActive, internalClipboard, undoStack, redoStack, activeTemplate, selectedCells, canWrite]);
+    }, [isEditing, isDesignPreviewOpen, isExcelPasteModalOpen, isKurikulumGeneratorOpen, isFormatPainterActive, internalClipboard, undoStack, redoStack, activeTemplate, activeSheetId, selectedCells, canWrite]);
 
     // --- EXCEL-STYLE FORMULA POINT & DRAG SELECTION ENGINE ---
     const getFormulaEditSession = (): {
@@ -2444,6 +2502,667 @@ export const TabDesainRapor: React.FC = () => {
         return isFormulaReadyForCellPick(currentFormulaTextForHighlight, currentFormulaTextForHighlight, Boolean(isTypeFormula));
     }, [canWrite, activeTemplate, editingCell, activeFormulaSource, activeCellData, currentFormulaTextForHighlight]);
 
+    // Siklus penguncian referensi '$' ala F4 di Excel (D6 -> $D$6 -> D$6 -> $D6 -> D6)
+    const handleCycleFormulaLock = (): boolean => {
+        const session = getFormulaEditSession();
+        if (!session || !activeTemplate) return false;
+        const trimmed = session.text.trimStart();
+        if (!trimmed.startsWith('=') && !session.isFormulaCellType) return false;
+
+        const selStart = session.inputEl?.selectionStart ?? session.text.length;
+        const selEnd = session.inputEl?.selectionEnd ?? selStart;
+        const cycled = cycleFormulaReferenceLockAtCaret(
+            session.text,
+            selStart,
+            selEnd,
+            activeTemplate.cells
+        );
+        if (!cycled) {
+            showToast('Arahkan kursor pada alamat sel (misal D6 atau D6:D15) lalu tekan F4 untuk mengunci $.', 'info');
+            return false;
+        }
+
+        if (formulaPickedSpanRef.current && formulaPickedSpanRef.current.source === session.source) {
+            formulaPickedSpanRef.current = {
+                ...formulaPickedSpanRef.current,
+                start: cycled.selStart,
+                end: cycled.selEnd
+            };
+        }
+
+        if (session.source === 'inline' && editingCellRef.current) {
+            const nextState = { ...editingCellRef.current, draft: cycled.nextText };
+            editingCellRef.current = nextState;
+            setEditingCell(nextState);
+            requestAnimationFrame(() => {
+                if (inlineEditorRef.current) {
+                    inlineEditorRef.current.focus({ preventScroll: true });
+                    inlineEditorRef.current.setSelectionRange(cycled.selStart, cycled.selEnd);
+                }
+            });
+            return true;
+        }
+
+        applyFormulaTextUpdate(session.source, session.ownerR, session.ownerC, cycled.nextText, cycled.selEnd);
+        requestAnimationFrame(() => {
+            const el = session.source === 'sidebar' ? sidebarFormulaInputRef.current : fxInputRef.current;
+            if (el) {
+                el.focus({ preventScroll: true });
+                el.setSelectionRange(cycled.selStart, cycled.selEnd);
+            }
+        });
+        return true;
+    };
+
+    // --- EXCEL-STYLE AUTOFILL, FILL SERIES & FORMULA DRAG-FILL ENGINE ---
+    const selectionBounds = useMemo(() => {
+        if (!activeTemplate || selectedCells.length === 0) return null;
+        let rMin = Infinity;
+        let rMax = -Infinity;
+        let cMin = Infinity;
+        let cMax = -Infinity;
+        for (const s of selectedCells) {
+            const master = findMasterCell(activeTemplate, s.r, s.c);
+            const mc = activeTemplate.cells[master.r]?.[master.c];
+            const rSpan = mc?.rowSpan || 1;
+            const cSpan = mc?.colSpan || 1;
+            rMin = Math.min(rMin, master.r);
+            cMin = Math.min(cMin, master.c);
+            rMax = Math.max(rMax, master.r + rSpan - 1);
+            cMax = Math.max(cMax, master.c + cSpan - 1);
+        }
+        if (!isFinite(rMin)) return null;
+        return { rMin, rMax, cMin, cMax };
+    }, [activeTemplate, selectedCells]);
+
+    const computeFillTargetFromHover = (
+        srcBounds: { rMin: number; rMax: number; cMin: number; cMax: number },
+        hoverR: number,
+        hoverC: number
+    ): { targetBounds: { rMin: number; rMax: number; cMin: number; cMax: number } | null; direction: AutoFillDirection | null } => {
+        if (!activeTemplate) return { targetBounds: null, direction: null };
+        const master = findMasterCell(activeTemplate, hoverR, hoverC);
+        const mc = activeTemplate.cells[master.r]?.[master.c];
+        const hR1 = Math.min(hoverR, master.r);
+        const hC1 = Math.min(hoverC, master.c);
+        const hR2 = Math.max(hoverR, master.r + (mc?.rowSpan || 1) - 1);
+        const hC2 = Math.max(hoverC, master.c + (mc?.colSpan || 1) - 1);
+
+        const distDown = hR2 > srcBounds.rMax ? hR2 - srcBounds.rMax : 0;
+        const distUp = hR1 < srcBounds.rMin ? srcBounds.rMin - hR1 : 0;
+        const distRight = hC2 > srcBounds.cMax ? hC2 - srcBounds.cMax : 0;
+        const distLeft = hC1 < srcBounds.cMin ? srcBounds.cMin - hC1 : 0;
+
+        const maxVert = Math.max(distDown, distUp);
+        const maxHoriz = Math.max(distRight, distLeft);
+        if (maxVert === 0 && maxHoriz === 0) {
+            return { targetBounds: null, direction: null };
+        }
+
+        if (maxVert >= maxHoriz) {
+            if (distDown >= distUp) {
+                return {
+                    direction: 'down',
+                    targetBounds: { rMin: srcBounds.rMax + 1, rMax: hR2, cMin: srcBounds.cMin, cMax: srcBounds.cMax }
+                };
+            }
+            return {
+                direction: 'up',
+                targetBounds: { rMin: hR1, rMax: srcBounds.rMin - 1, cMin: srcBounds.cMin, cMax: srcBounds.cMax }
+            };
+        }
+
+        if (distRight >= distLeft) {
+            return {
+                direction: 'right',
+                targetBounds: { rMin: srcBounds.rMin, rMax: srcBounds.rMax, cMin: srcBounds.cMax + 1, cMax: hC2 }
+            };
+        }
+        return {
+            direction: 'left',
+            targetBounds: { rMin: srcBounds.rMin, rMax: srcBounds.rMax, cMin: hC1, cMax: srcBounds.cMin - 1 }
+        };
+    };
+
+    const hasColumnNumberingHeader = (tpl: RaporTemplate, colIdx: number, aboveRow: number): boolean => {
+        const headerTokens = new Set(['NO', 'NO.', 'NOMOR', 'URUT', 'NO URUT', 'NO. URUT', '#', 'الرقم']);
+        for (let r = aboveRow - 1; r >= Math.max(0, aboveRow - 4); r--) {
+            const master = findMasterCell(tpl, r, colIdx);
+            const txt = (tpl.cells[master.r]?.[master.c]?.value || '').trim().toUpperCase();
+            if (!txt) continue;
+            if (headerTokens.has(txt)) return true;
+        }
+        return false;
+    };
+
+    const executeAutoFillOnTemplate = (
+        baseTpl: RaporTemplate,
+        srcBounds: { rMin: number; rMax: number; cMin: number; cMax: number },
+        tgtBounds: { rMin: number; rMax: number; cMin: number; cMax: number },
+        direction: AutoFillDirection,
+        mode: AutoFillMode,
+        curSheetId?: string
+    ): { updatedTpl: RaporTemplate; unionSelection: { r: number; c: number }[]; summaryLabel: string } => {
+        const newGrid: GridCell[][] = baseTpl.cells.map((rowArr, r) =>
+            rowArr.map((cell, c) => ({
+                ...JSON.parse(JSON.stringify(cell)),
+                row: r,
+                col: c
+            }))
+        );
+
+        const srcH = srcBounds.rMax - srcBounds.rMin + 1;
+        const srcW = srcBounds.cMax - srcBounds.cMin + 1;
+
+        // Jika bukan mode 'format', lepaskan merge lama pada area tujuan yang bertabrakan sebagian dengan batas area tujuan
+        if (mode !== 'format') {
+            for (let mr = 0; mr < newGrid.length; mr++) {
+                for (let mc = 0; mc < (newGrid[mr]?.length || 0); mc++) {
+                    const cell = newGrid[mr][mc];
+                    if (!cell || cell.hidden) continue;
+                    const rs = cell.rowSpan || 1;
+                    const cs = cell.colSpan || 1;
+                    if (rs === 1 && cs === 1) continue;
+                    const mRMax = mr + rs - 1;
+                    const mCMax = mc + cs - 1;
+                    const overlapsTarget =
+                        mr <= tgtBounds.rMax &&
+                        mRMax >= tgtBounds.rMin &&
+                        mc <= tgtBounds.cMax &&
+                        mCMax >= tgtBounds.cMin;
+                    if (overlapsTarget) {
+                        newGrid[mr][mc] = { ...newGrid[mr][mc], rowSpan: 1, colSpan: 1 };
+                        for (let rr = mr; rr <= mRMax; rr++) {
+                            for (let cc = mc; cc <= mCMax; cc++) {
+                                if (rr === mr && cc === mc) continue;
+                                if (newGrid[rr]?.[cc]) {
+                                    newGrid[rr][cc] = {
+                                        ...newGrid[rr][cc],
+                                        hidden: false,
+                                        rowSpan: 1,
+                                        colSpan: 1
+                                    };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Kumpulkan semua $KEY yang sudah terpakai di seluruh lembar (kecuali area target yang akan ditimpa)
+        const usedKeysUpper = new Set<string>();
+        const targetSheetKey = curSheetId || activeSheetId || baseTpl.activeSheetId || '';
+        const syncedForKeys = syncCurrentSheetToTemplate(baseTpl, targetSheetKey);
+        (syncedForKeys.sheets || []).forEach(sh => {
+            const isCur = sh.id === targetSheetKey;
+            const refCells = isCur ? newGrid : sh.cells;
+            refCells.forEach((rowArr, r) => {
+                rowArr.forEach((cell, c) => {
+                    if (
+                        isCur &&
+                        mode !== 'format' &&
+                        r >= tgtBounds.rMin &&
+                        r <= tgtBounds.rMax &&
+                        c >= tgtBounds.cMin &&
+                        c <= tgtBounds.cMax
+                    ) {
+                        return;
+                    }
+                    if (cell.key && !cell.hidden) {
+                        usedKeysUpper.add(cell.key.trim().toUpperCase());
+                    }
+                });
+            });
+        });
+
+        const isVertical = direction === 'down' || direction === 'up';
+        const coveredByNewMerge = new Set<string>();
+
+        for (let destR = tgtBounds.rMin; destR <= tgtBounds.rMax; destR++) {
+            for (let destC = tgtBounds.cMin; destC <= tgtBounds.cMax; destC++) {
+                if (!newGrid[destR]?.[destC]) continue;
+                if (coveredByNewMerge.has(`${destR}:${destC}`)) continue;
+
+                const offsetTop = destR - srcBounds.rMin;
+                const offsetLeft = destC - srcBounds.cMin;
+                const localR = ((offsetTop % srcH) + srcH) % srcH;
+                const localC = ((offsetLeft % srcW) + srcW) % srcW;
+                const srcR = srcBounds.rMin + localR;
+                const srcC = srcBounds.cMin + localC;
+                const srcCell = baseTpl.cells[srcR]?.[srcC] || createEmptyCell(srcR, srcC);
+                const existingDest = newGrid[destR][destC];
+
+                // Mode 'format': salin gaya saja tanpa menyentuh isi / rumus / key sel tujuan
+                if (mode === 'format') {
+                    const srcMaster = findMasterCell(baseTpl, srcR, srcC);
+                    const fmtSrc = baseTpl.cells[srcMaster.r]?.[srcMaster.c] || srcCell;
+                    if (!existingDest.hidden) {
+                        newGrid[destR][destC] = {
+                            ...existingDest,
+                            borders: fmtSrc.borders ? { ...fmtSrc.borders } : existingDest.borders,
+                            bold: fmtSrc.bold,
+                            italic: fmtSrc.italic,
+                            fontSize: fmtSrc.fontSize,
+                            align: fmtSrc.align,
+                            verticalAlign: fmtSrc.verticalAlign,
+                            textWrap: fmtSrc.textWrap,
+                            textTransform: fmtSrc.textTransform,
+                            backgroundColor: fmtSrc.backgroundColor,
+                            color: fmtSrc.color
+                        };
+                    }
+                    continue;
+                }
+
+                // Jika sel sumber bagian dari merge internal yang utuh di dalam blok sumber, lewati bila sudah ditandai hidden
+                if (srcCell.hidden) {
+                    continue;
+                }
+
+                const deltaR = destR - srcR;
+                const deltaC = destC - srcC;
+
+                let nextType: RaporColumnType = srcCell.type;
+                let nextValue = srcCell.value || '';
+                let nextKey = srcCell.key;
+                const nextOptions = srcCell.options ? [...srcCell.options] : undefined;
+
+                const isFormulaExpr = srcCell.type === 'formula' || nextValue.trim().startsWith('=');
+
+                if (isFormulaExpr) {
+                    if (mode === 'copy') {
+                        // Salin rumus mentah persis tanpa menggeser koordinat
+                        nextValue = srcCell.value || '';
+                    } else {
+                        const rawFormula = nextValue.trim().startsWith('=') ? nextValue : `=${nextValue.trim()}`;
+                        nextValue = shiftFormulaReferences(rawFormula, deltaR, deltaC, {
+                            sheetCells: baseTpl.cells
+                        });
+                    }
+                    nextType = 'formula';
+                    if (nextKey) {
+                        nextKey = computeAutoFillNextInputKey([nextKey], isVertical ? offsetTop : offsetLeft, usedKeysUpper, mode);
+                    }
+                } else if (srcCell.type === 'input' || srcCell.type === 'dropdown') {
+                    const sliceKeys: (string | undefined)[] = [];
+                    if (isVertical) {
+                        for (let rr = srcBounds.rMin; rr <= srcBounds.rMax; rr++) {
+                            sliceKeys.push(baseTpl.cells[rr]?.[srcC]?.key);
+                        }
+                    } else {
+                        for (let cc = srcBounds.cMin; cc <= srcBounds.cMax; cc++) {
+                            sliceKeys.push(baseTpl.cells[srcR]?.[cc]?.key);
+                        }
+                    }
+                    nextKey = computeAutoFillNextInputKey(
+                        sliceKeys,
+                        isVertical ? offsetTop : offsetLeft,
+                        usedKeysUpper,
+                        mode
+                    );
+                } else if (srcCell.type === 'label' && (mode === 'series' || mode === 'increment')) {
+                    const sliceVals: string[] = [];
+                    let canBuild1DSlice = true;
+                    if (isVertical) {
+                        for (let rr = srcBounds.rMin; rr <= srcBounds.rMax; rr++) {
+                            const sc = baseTpl.cells[rr]?.[srcC];
+                            if (!sc || sc.hidden || sc.type !== 'label') {
+                                canBuild1DSlice = false;
+                                break;
+                            }
+                            sliceVals.push(sc.value || '');
+                        }
+                    } else {
+                        for (let cc = srcBounds.cMin; cc <= srcBounds.cMax; cc++) {
+                            const sc = baseTpl.cells[srcR]?.[cc];
+                            if (!sc || sc.hidden || sc.type !== 'label') {
+                                canBuild1DSlice = false;
+                                break;
+                            }
+                            sliceVals.push(sc.value || '');
+                        }
+                    }
+
+                    if (canBuild1DSlice && sliceVals.length > 0) {
+                        const hasHeaderHint = isVertical ? hasColumnNumberingHeader(baseTpl, destC, srcBounds.rMin) : false;
+                        nextValue = computeSeriesStringAtOffset(sliceVals, isVertical ? offsetTop : offsetLeft, {
+                            forceSingleNumberIncrement: mode === 'increment',
+                            hasNumberingHeaderHint: hasHeaderHint
+                        });
+                    }
+                }
+
+                // Replikasi merge internal jika sel sumber punya rowSpan/colSpan yang muat utuh dalam blok sumber & blok target
+                const rawRSpan = srcCell.rowSpan || 1;
+                const rawCSpan = srcCell.colSpan || 1;
+                const fitsSource = srcR + rawRSpan - 1 <= srcBounds.rMax && srcC + rawCSpan - 1 <= srcBounds.cMax;
+                const fitsTarget = destR + rawRSpan - 1 <= tgtBounds.rMax && destC + rawCSpan - 1 <= tgtBounds.cMax;
+                const finalRSpan = fitsSource && fitsTarget ? rawRSpan : 1;
+                const finalCSpan = fitsSource && fitsTarget ? rawCSpan : 1;
+
+                newGrid[destR][destC] = {
+                    ...JSON.parse(JSON.stringify(srcCell)),
+                    id: existingDest.id || `cell_${Date.now()}_${destR}_${destC}_${Math.random().toString(36).slice(2, 6)}`,
+                    row: destR,
+                    col: destC,
+                    type: nextType,
+                    value: nextValue,
+                    key: nextKey,
+                    options: nextOptions,
+                    rowSpan: finalRSpan,
+                    colSpan: finalCSpan,
+                    hidden: false,
+                    width: existingDest.width,
+                    height: existingDest.height
+                };
+
+                if (finalRSpan > 1 || finalCSpan > 1) {
+                    for (let rr = destR; rr < destR + finalRSpan; rr++) {
+                        for (let cc = destC; cc < destC + finalCSpan; cc++) {
+                            if (rr === destR && cc === destC) continue;
+                            coveredByNewMerge.add(`${rr}:${cc}`);
+                            if (newGrid[rr]?.[cc]) {
+                                newGrid[rr][cc] = {
+                                    ...createEmptyCell(rr, cc),
+                                    id: newGrid[rr][cc].id,
+                                    hidden: true,
+                                    width: newGrid[rr][cc].width,
+                                    height: newGrid[rr][cc].height
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        const unionRMin = Math.min(srcBounds.rMin, tgtBounds.rMin);
+        const unionRMax = Math.max(srcBounds.rMax, tgtBounds.rMax);
+        const unionCMin = Math.min(srcBounds.cMin, tgtBounds.cMin);
+        const unionCMax = Math.max(srcBounds.cMax, tgtBounds.cMax);
+        const unionSelection: { r: number; c: number }[] = [];
+        for (let r = unionRMin; r <= unionRMax; r++) {
+            for (let c = unionCMin; c <= unionCMax; c++) {
+                unionSelection.push({ r, c });
+            }
+        }
+
+        const sampleDestCell =
+            direction === 'up' || direction === 'left'
+                ? newGrid[tgtBounds.rMin]?.[tgtBounds.cMin]
+                : newGrid[tgtBounds.rMax]?.[tgtBounds.cMax];
+        const summaryLabel = sampleDestCell
+            ? sampleDestCell.type === 'input' && sampleDestCell.key
+                ? `$${sampleDestCell.key}`
+                : sampleDestCell.value || ''
+            : '';
+
+        const updatedTpl = syncCurrentSheetToTemplate(
+            { ...baseTpl, cells: newGrid },
+            targetSheetKey
+        );
+        return { updatedTpl, unionSelection, summaryLabel };
+    };
+
+    const commitAutoFillAction = (
+        srcBounds: { rMin: number; rMax: number; cMin: number; cMax: number },
+        tgtBounds: { rMin: number; rMax: number; cMin: number; cMax: number },
+        direction: AutoFillDirection,
+        mode: AutoFillMode
+    ) => {
+        if (!activeTemplate || !canWrite) return;
+        const snapshot = JSON.parse(JSON.stringify(activeTemplate)) as RaporTemplate;
+        const curSheet = activeSheetId || activeTemplate.activeSheetId || '';
+        pushToHistory(activeTemplate, true);
+
+        const { updatedTpl, unionSelection } = executeAutoFillOnTemplate(
+            activeTemplate,
+            srcBounds,
+            tgtBounds,
+            direction,
+            mode,
+            curSheet
+        );
+        setActiveTemplate(updatedTpl);
+        setSelectedCells(unionSelection);
+        setLastAutoFillSession({
+            snapshotTemplate: snapshot,
+            sheetId: curSheet,
+            sourceBounds: srcBounds,
+            targetBounds: tgtBounds,
+            direction,
+            mode
+        });
+    };
+
+    const handleReapplyAutoFillMode = (nextMode: AutoFillMode) => {
+        if (!lastAutoFillSession || !canWrite) return;
+        const { snapshotTemplate, sheetId, sourceBounds, targetBounds, direction } = lastAutoFillSession;
+        const { updatedTpl, unionSelection } = executeAutoFillOnTemplate(
+            snapshotTemplate,
+            sourceBounds,
+            targetBounds,
+            direction,
+            nextMode,
+            sheetId
+        );
+        setActiveTemplate(updatedTpl);
+        setSelectedCells(unionSelection);
+        setLastAutoFillSession(prev => (prev ? { ...prev, mode: nextMode } : null));
+    };
+
+    // Ctrl+D (Fill Down seperti Excel)
+    const handleFillDownShortcut = () => {
+        if (!activeTemplate || !canWrite || !selectionBounds) return;
+        const { rMin, rMax, cMin, cMax } = selectionBounds;
+        // Jika hanya 1 baris dipilih, ambil sumber dari baris tepat di atasnya
+        if (rMin === rMax) {
+            if (rMin === 0) {
+                showToast('Blok baris sumber beserta baris bawahnya, atau pilih baris di bawah baris sumber untuk Ctrl+D.', 'info');
+                return;
+            }
+            const aboveMaster = findMasterCell(activeTemplate, rMin - 1, cMin);
+            const srcBounds = { rMin: aboveMaster.r, rMax: rMin - 1, cMin, cMax };
+            const tgtBounds = { rMin, rMax, cMin, cMax };
+            commitAutoFillAction(srcBounds, tgtBounds, 'down', 'series');
+            return;
+        }
+        // Multi-baris: baris teratas pada seleksi mengisi baris-baris di bawahnya
+        let topRowEnd = rMin;
+        for (let c = cMin; c <= cMax; c++) {
+            const m = findMasterCell(activeTemplate, rMin, c);
+            const rs = activeTemplate.cells[m.r]?.[m.c]?.rowSpan || 1;
+            topRowEnd = Math.max(topRowEnd, m.r + rs - 1);
+        }
+        if (topRowEnd >= rMax) return;
+        commitAutoFillAction(
+            { rMin, rMax: topRowEnd, cMin, cMax },
+            { rMin: topRowEnd + 1, rMax, cMin, cMax },
+            'down',
+            'series'
+        );
+    };
+
+    // Ctrl+R (Fill Right seperti Excel)
+    const handleFillRightShortcut = () => {
+        if (!activeTemplate || !canWrite || !selectionBounds) return;
+        const { rMin, rMax, cMin, cMax } = selectionBounds;
+        if (cMin === cMax) {
+            if (cMin === 0) {
+                showToast('Blok kolom sumber beserta kolom kanannya, atau pilih kolom di kanan sel sumber untuk Ctrl+R.', 'info');
+                return;
+            }
+            const leftMaster = findMasterCell(activeTemplate, rMin, cMin - 1);
+            const srcBounds = { rMin, rMax, cMin: leftMaster.c, cMax: cMin - 1 };
+            const tgtBounds = { rMin, rMax, cMin, cMax };
+            commitAutoFillAction(srcBounds, tgtBounds, 'right', 'series');
+            return;
+        }
+        let leftColEnd = cMin;
+        for (let r = rMin; r <= rMax; r++) {
+            const m = findMasterCell(activeTemplate, r, cMin);
+            const cs = activeTemplate.cells[m.r]?.[m.c]?.colSpan || 1;
+            leftColEnd = Math.max(leftColEnd, m.c + cs - 1);
+        }
+        if (leftColEnd >= cMax) return;
+        commitAutoFillAction(
+            { rMin, rMax, cMin, cMax: leftColEnd },
+            { rMin, rMax, cMin: leftColEnd + 1, cMax },
+            'right',
+            'series'
+        );
+    };
+
+    // Klik Ganda pada Fill Handle: otomatis isi ke bawah mengikuti panjang baris terisi di kolom sebelah kiri/kanan (persis Excel)
+    const handleDoubleClickFillHandle = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!activeTemplate || !canWrite || !selectionBounds) return;
+        const { rMin, rMax, cMin, cMax } = selectionBounds;
+        if (rMax >= activeTemplate.rowCount - 1) return;
+
+        const isCellPopulated = (r: number, c: number): boolean => {
+            if (c < 0 || c >= activeTemplate.colCount) return false;
+            const m = findMasterCell(activeTemplate, r, c);
+            const cl = activeTemplate.cells[m.r]?.[m.c];
+            if (!cl) return false;
+            // Berhenti jika baris merupakan sel merge lebar yang melintasi banyak kolom (misal baris "JUMLAH" / "RATA-RATA")
+            if ((cl.colSpan || 1) > 1 && m.c < cMin && m.c + (cl.colSpan || 1) - 1 >= cMin) {
+                return false;
+            }
+            return Boolean((cl.value && cl.value.trim() !== '') || (cl.key && cl.key.trim() !== ''));
+        };
+
+        // Cari kolom tetangga terdekat yang terisi pada baris rMax + 1
+        const candidateCols: number[] = [];
+        for (let cc = cMin - 1; cc >= 0; cc--) candidateCols.push(cc);
+        for (let cc = cMax + 1; cc < activeTemplate.colCount; cc++) candidateCols.push(cc);
+
+        const refCol = candidateCols.find(cc => isCellPopulated(rMax, cc) && isCellPopulated(rMax + 1, cc));
+        if (refCol === undefined) {
+            showToast('Tarik titik sudut (Fill Handle) ke bawah atau kanan untuk melanjutkan seri / rumus.', 'info');
+            return;
+        }
+
+        const startType = activeTemplate.cells[findMasterCell(activeTemplate, rMax, refCol).r]?.[findMasterCell(activeTemplate, rMax, refCol).c]?.type;
+        let lastRow = rMax;
+        for (let rr = rMax + 1; rr < activeTemplate.rowCount; rr++) {
+            if (!isCellPopulated(rr, refCol)) break;
+            const curM = findMasterCell(activeTemplate, rr, refCol);
+            const curCell = activeTemplate.cells[curM.r]?.[curM.c];
+            // Jika kolom referensi adalah daftar input mapel, berhenti tepat sebelum baris rekap rumus (misal =SUM)
+            if ((startType === 'input' || startType === 'dropdown') && curCell?.type === 'formula') {
+                break;
+            }
+            lastRow = rr;
+        }
+
+        if (lastRow <= rMax) return;
+        commitAutoFillAction(
+            selectionBounds,
+            { rMin: rMax + 1, rMax: lastRow, cMin, cMax },
+            'down',
+            'series'
+        );
+    };
+
+    const handleStartFillHandleDrag = (e: React.MouseEvent | React.TouchEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!canWrite || !activeTemplate || !selectionBounds) return;
+        if (editingCellRef.current) {
+            commitInlineEdit();
+        }
+        const forceInc = 'ctrlKey' in e ? Boolean(e.ctrlKey || e.altKey) : false;
+        const initial = {
+            sourceBounds: selectionBounds,
+            targetBounds: null,
+            direction: null,
+            forceIncrement: forceInc
+        };
+        fillDragStateRef.current = initial;
+        setFillDragState(initial);
+    };
+
+    // Global mousemove / touchmove / mouseup / touchend listener untuk Fill Handle Drag
+    useEffect(() => {
+        if (!fillDragState) return;
+
+        const updateFromPoint = (clientX: number, clientY: number, ctrlOrAlt: boolean) => {
+            const cur = fillDragStateRef.current;
+            if (!cur) return;
+            const el = document.elementFromPoint(clientX, clientY)?.closest('td[data-grid-rc]');
+            const rcAttr = el?.getAttribute('data-grid-rc');
+            if (!rcAttr) return;
+            const [hr, hc] = rcAttr.split(':').map(Number);
+            if (isNaN(hr) || isNaN(hc)) return;
+            const { targetBounds, direction } = computeFillTargetFromHover(cur.sourceBounds, hr, hc);
+            const next = {
+                ...cur,
+                targetBounds,
+                direction,
+                forceIncrement: ctrlOrAlt
+            };
+            fillDragStateRef.current = next;
+            setFillDragState(next);
+        };
+
+        const onMove = (ev: MouseEvent) => {
+            updateFromPoint(ev.clientX, ev.clientY, Boolean(ev.ctrlKey || ev.altKey));
+        };
+        const onTouchMoveGlobal = (ev: TouchEvent) => {
+            if (ev.touches.length !== 1) return;
+            ev.preventDefault();
+            updateFromPoint(ev.touches[0].clientX, ev.touches[0].clientY, false);
+        };
+        const onFinish = (ev: MouseEvent | TouchEvent) => {
+            const cur = fillDragStateRef.current;
+            fillDragStateRef.current = null;
+            setFillDragState(null);
+            if (cur && cur.targetBounds && cur.direction) {
+                const forceInc = 'ctrlKey' in ev ? Boolean(ev.ctrlKey || ev.altKey) : cur.forceIncrement;
+                commitAutoFillAction(
+                    cur.sourceBounds,
+                    cur.targetBounds,
+                    cur.direction,
+                    forceInc ? 'increment' : 'series'
+                );
+            }
+        };
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('touchmove', onTouchMoveGlobal, { passive: false });
+        window.addEventListener('mouseup', onFinish);
+        window.addEventListener('touchend', onFinish);
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('touchmove', onTouchMoveGlobal);
+            window.removeEventListener('mouseup', onFinish);
+            window.removeEventListener('touchend', onFinish);
+        };
+    }, [Boolean(fillDragState), activeTemplate, activeSheetId, canWrite]);
+
+    const fillDragLivePreviewBadge = useMemo(() => {
+        if (!fillDragState?.targetBounds || !fillDragState.direction || !activeTemplate) return null;
+        const { sourceBounds, targetBounds, direction, forceIncrement } = fillDragState;
+        const rangeLabel = `${getExcelColName(targetBounds.cMin)}${targetBounds.rMin + 1}:${getExcelColName(targetBounds.cMax)}${targetBounds.rMax + 1}`;
+        const dirLabel =
+            direction === 'down' ? 'Bawah' : direction === 'up' ? 'Atas' : direction === 'right' ? 'Kanan' : 'Kiri';
+        const previewRes = executeAutoFillOnTemplate(
+            activeTemplate,
+            sourceBounds,
+            targetBounds,
+            direction,
+            forceIncrement ? 'increment' : 'series'
+        );
+        return {
+            dirLabel,
+            rangeLabel,
+            sample: previewRes.summaryLabel
+        };
+    }, [fillDragState, activeTemplate]);
+
     // --- GRID OPERATIONS ---
     const handleMouseDown = (r: number, c: number, e?: React.MouseEvent) => {
         // Jika sedang dalam Mode Pilih Sel Rumus ala Excel, klik/seret akan memasukkan koordinat/rentang sel ke rumus!
@@ -2477,6 +3196,14 @@ export const TabDesainRapor: React.FC = () => {
         });
     };
     const handleMouseEnter = (r: number, c: number) => {
+        if (fillDragStateRef.current) {
+            const cur = fillDragStateRef.current;
+            const { targetBounds, direction } = computeFillTargetFromHover(cur.sourceBounds, r, c);
+            const next = { ...cur, targetBounds, direction };
+            fillDragStateRef.current = next;
+            setFillDragState(next);
+            return;
+        }
         if (formulaDragAnchorRef.current) {
             updateFormulaPickedReference(formulaDragAnchorRef.current.r, formulaDragAnchorRef.current.c, r, c);
             return;
@@ -4304,6 +5031,11 @@ export const TabDesainRapor: React.FC = () => {
                                         return;
                                     }
                                 }
+                                if (e.key === 'F4') {
+                                    e.preventDefault();
+                                    handleCycleFormulaLock();
+                                    return;
+                                }
                                 if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
                                     formulaPickedSpanRef.current = null;
                                 }
@@ -4527,20 +5259,78 @@ export const TabDesainRapor: React.FC = () => {
                                 Pilih Sel Rumus
                             </span>
                             <span className="text-[11px] text-emerald-100 truncate">
-                                Klik atau seret (blok) sel nilai di tabel untuk memasukkannya otomatis ke rumus <span className="hidden md:inline text-emerald-300">• Tahan Ctrl+Klik untuk tambah rentang lain</span>
+                                Klik/blok sel nilai untuk masuk ke rumus <span className="hidden md:inline text-emerald-300">• Tekan <strong>F4</strong> untuk kunci <code>$D$6 / D$6 / $D6</code> • Ctrl+Klik tambah rentang</span>
                             </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    handleCycleFormulaLock();
+                                }}
+                                className="px-2 py-0.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 border border-emerald-500/60 font-mono font-bold rounded-lg text-[11px] flex items-center gap-1 transition-colors"
+                                title="Siklus kunci referensi $ seperti tombol F4 di Excel: D6 → $D$6 → D$6 → $D6 → D6"
+                            >
+                                <i className="bi bi-lock-fill text-amber-300 text-[10px]"></i>
+                                <span>$ Kunci (F4)</span>
+                            </button>
+                            <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    finishFormulaPointMode();
+                                }}
+                                className="px-2.5 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black rounded-lg text-[11px] flex items-center gap-1 transition-colors"
+                                title="Tutup kurung otomatis & simpan rumus (Enter)"
+                            >
+                                <i className="bi bi-check2-circle"></i>
+                                <span>Selesai</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* POST-AUTOFILL OPTIONS BAR (Seperti tombol kecil AutoFill Options di Excel seusai tarik sel) */}
+                {lastAutoFillSession && canWrite && (
+                    <div className="bg-teal-950 text-teal-50 px-3 py-1.5 border-b border-teal-700 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 z-30">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="bg-teal-400 text-teal-950 font-black px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider flex items-center gap-1">
+                                <i className="bi bi-magic"></i>
+                                Opsi AutoFill
+                            </span>
+                            <span className="text-[11px] text-teal-200 mr-1 hidden sm:inline">Mode isian tarik sel:</span>
+                            {([
+                                { id: 'series', label: 'Seri & Lanjut Rumus', tip: 'Geser referensi rumus otomatis (kecuali dikunci $) & lanjutkan seri (1,2,3 / Senin,Selasa / UH 1,UH 2)' },
+                                { id: 'increment', label: 'Urutkan Angka (+1)', tip: 'Paksa satu angka tunggal ikut bertambah +1 (misal 75 → 76, 77)' },
+                                { id: 'copy', label: 'Salin Persis', tip: 'Salin isi/rumus persis apa adanya tanpa seri dan tanpa menggeser koordinat' },
+                                { id: 'format', label: 'Format Saja', tip: 'Salin garis border, warna, perataan, dan huruf saja tanpa mengubah nilai sel' }
+                            ] as const).map(opt => {
+                                const isCur = lastAutoFillSession.mode === opt.id;
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => handleReapplyAutoFillMode(opt.id)}
+                                        className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-colors border ${
+                                            isCur
+                                                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-2xs'
+                                                : 'bg-teal-900/80 hover:bg-teal-800 text-teal-100 border-teal-700'
+                                        }`}
+                                        title={opt.tip}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
                         </div>
                         <button
                             type="button"
-                            onMouseDown={(e) => {
-                                e.preventDefault();
-                                finishFormulaPointMode();
-                            }}
-                            className="px-2.5 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black rounded-lg text-[11px] shrink-0 flex items-center gap-1 transition-colors"
-                            title="Tutup kurung otomatis & simpan rumus (Enter)"
+                            onClick={() => setLastAutoFillSession(null)}
+                            className="text-teal-300 hover:text-white px-1.5 py-0.5 rounded text-[11px]"
+                            title="Tutup bilah opsi AutoFill"
                         >
-                            <i className="bi bi-check2-circle"></i>
-                            <span>Selesai</span>
+                            <i className="bi bi-x-lg"></i>
                         </button>
                     </div>
                 )}
@@ -4558,7 +5348,7 @@ export const TabDesainRapor: React.FC = () => {
                         </div>
 
                         <div className="flex flex-nowrap items-center gap-1.5 shrink-0 pr-2">
-                            {/* Quick Excel AutoSum / Rerata on Selected Range */}
+                            {/* Quick Excel AutoSum / Rerata & Fill Down/Right on Selected Range */}
                             {canWrite && (
                                 <>
                                     <button
@@ -4579,6 +5369,28 @@ export const TabDesainRapor: React.FC = () => {
                                         <span className="font-mono font-black">x̄</span>
                                         <span>Rerata</span>
                                     </button>
+                                    {selectionBounds && selectionBounds.rMax > selectionBounds.rMin && (
+                                        <button
+                                            type="button"
+                                            onClick={handleFillDownShortcut}
+                                            className="px-2 py-1 bg-sky-500/25 hover:bg-sky-500/45 text-sky-200 border border-sky-400/40 rounded-lg text-xs font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors"
+                                            title="Isi ke Bawah (Ctrl+D): Lanjutkan rumus / seri dari baris teratas ke seluruh baris yang diblok"
+                                        >
+                                            <i className="bi bi-arrow-down-square"></i>
+                                            <span>Isi Bawah</span>
+                                        </button>
+                                    )}
+                                    {selectionBounds && selectionBounds.cMax > selectionBounds.cMin && (
+                                        <button
+                                            type="button"
+                                            onClick={handleFillRightShortcut}
+                                            className="px-2 py-1 bg-sky-500/25 hover:bg-sky-500/45 text-sky-200 border border-sky-400/40 rounded-lg text-xs font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors"
+                                            title="Isi ke Kanan (Ctrl+R): Lanjutkan rumus / seri dari kolom paling kiri ke seluruh kolom yang diblok"
+                                        >
+                                            <i className="bi bi-arrow-right-square"></i>
+                                            <span>Isi Kanan</span>
+                                        </button>
+                                    )}
                                     <div className="h-4 w-px bg-slate-700 shrink-0"></div>
                                 </>
                             )}
@@ -4781,6 +5593,17 @@ export const TabDesainRapor: React.FC = () => {
                             <span>Tinggi Baris <strong>{resizingRow.rowIdx + 1}</strong>: <span className="text-teal-300 text-sm font-black">{resizingRow.currentHeight}px</span></span>
                         </div>
                     )}
+                    {fillDragLivePreviewBadge && (
+                        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[100] bg-slate-900/95 backdrop-blur text-white text-xs font-mono font-bold px-4 py-2 rounded-full shadow-2xl pointer-events-none flex items-center gap-2.5 border border-emerald-400">
+                            <i className="bi bi-plus-square-dotted text-emerald-400 text-sm"></i>
+                            <span>
+                                AutoFill ke <strong>{fillDragLivePreviewBadge.dirLabel}</strong> (<span className="text-emerald-300">{fillDragLivePreviewBadge.rangeLabel}</span>)
+                                {fillDragLivePreviewBadge.sample && (
+                                    <span className="ml-2 text-amber-300">→ {fillDragLivePreviewBadge.sample.slice(0, 38)}</span>
+                                )}
+                            </span>
+                        </div>
+                    )}
 
                     <div
                         className="inline-block transition-all duration-150 origin-top-left pb-32 pr-32"
@@ -4925,16 +5748,6 @@ export const TabDesainRapor: React.FC = () => {
                                                     cIdx >= formulaDragPreview.c1 &&
                                                     cIdx <= formulaDragPreview.c2
                                                 );
-                                                const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
-                                                let cellClass = `relative transition-colors ${showGridlines ? 'border border-dashed border-gray-300' : 'border border-transparent'} `;
-                                                if (borders.top) cellClass += "!border-t !border-t-black !border-solid ";
-                                                if (borders.right) cellClass += "!border-r !border-r-black !border-solid ";
-                                                if (borders.bottom) cellClass += "!border-b !border-b-black !border-solid ";
-                                                if (borders.left) cellClass += "!border-l !border-l-black !border-solid ";
-                                                if (isLiveDragRef || isFormulaRef) cellClass += "bg-emerald-100/80 ring-2 ring-inset ring-emerald-500 ";
-                                                else if (isSelected) cellClass += "bg-blue-100/80 ";
-                                                if (isActive && !isEditingThisCell) cellClass += "ring-2 ring-blue-500 ";
-
                                                 const cellColSpan = cell.colSpan || 1;
                                                 let cellWidthPx = getColWidth(cIdx);
                                                 if (cellColSpan > 1) {
@@ -4952,6 +5765,35 @@ export const TabDesainRapor: React.FC = () => {
                                                         cellHeightPx += getRowHeight(rIdx + i);
                                                     }
                                                 }
+
+                                                const isFillTargetPreview = Boolean(
+                                                    fillDragState?.targetBounds &&
+                                                    rIdx <= fillDragState.targetBounds.rMax &&
+                                                    rIdx + cellRowSpan - 1 >= fillDragState.targetBounds.rMin &&
+                                                    cIdx <= fillDragState.targetBounds.cMax &&
+                                                    cIdx + cellColSpan - 1 >= fillDragState.targetBounds.cMin
+                                                );
+
+                                                const isFillHandleHost = Boolean(
+                                                    canWrite &&
+                                                    !editingCell &&
+                                                    !isFormulaPointModeBannerVisible &&
+                                                    !isFormatPainterActive &&
+                                                    selectionBounds &&
+                                                    rIdx + cellRowSpan - 1 === selectionBounds.rMax &&
+                                                    cIdx + cellColSpan - 1 === selectionBounds.cMax
+                                                );
+
+                                                const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
+                                                let cellClass = `relative transition-colors ${showGridlines ? 'border border-dashed border-gray-300' : 'border border-transparent'} `;
+                                                if (borders.top) cellClass += "!border-t !border-t-black !border-solid ";
+                                                if (borders.right) cellClass += "!border-r !border-r-black !border-solid ";
+                                                if (borders.bottom) cellClass += "!border-b !border-b-black !border-solid ";
+                                                if (borders.left) cellClass += "!border-l !border-l-black !border-solid ";
+                                                if (isFillTargetPreview) cellClass += "bg-teal-100/80 ring-2 ring-inset ring-teal-600 ";
+                                                else if (isLiveDragRef || isFormulaRef) cellClass += "bg-emerald-100/80 ring-2 ring-inset ring-emerald-500 ";
+                                                else if (isSelected) cellClass += "bg-blue-100/80 ";
+                                                if (isActive && !isEditingThisCell) cellClass += "ring-2 ring-blue-500 ";
 
                                                 const effectiveFontSize = cell.fontSize || 11;
                                                 const hAlign = cell.align || 'center';
@@ -5024,11 +5866,11 @@ export const TabDesainRapor: React.FC = () => {
                                                             verticalAlign: vAlign,
                                                             fontWeight: cell.bold ? 'bold' : 'normal',
                                                             fontStyle: cell.italic ? 'italic' : undefined,
-                                                            backgroundColor: !isSelected && !isLiveDragRef && !isFormulaRef && cell.backgroundColor ? cell.backgroundColor : undefined,
+                                                            backgroundColor: !isSelected && !isFillTargetPreview && !isLiveDragRef && !isFormulaRef && cell.backgroundColor ? cell.backgroundColor : undefined,
                                                             color: cell.color || undefined,
                                                             fontSize: `${effectiveFontSize}px`,
-                                                            overflow: (isEditingThisCell || isFloat) ? 'visible' : 'hidden',
-                                                            zIndex: isEditingThisCell ? 40 : isActive ? 25 : isFloat ? 15 : undefined
+                                                            overflow: (isEditingThisCell || isFloat || isFillHandleHost || isActive) ? 'visible' : 'hidden',
+                                                            zIndex: isEditingThisCell ? 40 : isFillHandleHost ? 28 : isActive ? 25 : isFloat ? 15 : undefined
                                                         }}
                                                     >
                                                         {isEditingThisCell && editingCell ? (
@@ -5204,20 +6046,32 @@ export const TabDesainRapor: React.FC = () => {
                                                         {isActive && !isEditingThisCell && (
                                                             <>
                                                                 <div
-                                                                    className="absolute -right-2 top-0 bottom-0 w-4 cursor-col-resize z-30 hover:bg-teal-500/60 transition-colors touch-none"
+                                                                    className="absolute -right-2 top-0 bottom-2.5 w-4 cursor-col-resize z-30 hover:bg-teal-500/60 transition-colors touch-none"
                                                                     title="Tahan & seret ke kanan/kiri untuk mengubah lebar kolom"
                                                                     onMouseDown={(e) => handleStartColResize(e, cIdx + (cellColSpan - 1))}
                                                                     onTouchStart={(e) => handleStartColResizeTouch(e, cIdx + (cellColSpan - 1))}
                                                                     onClick={(e) => e.stopPropagation()}
                                                                 />
                                                                 <div
-                                                                    className="absolute left-0 right-0 -bottom-2 h-4 cursor-row-resize z-30 hover:bg-teal-500/60 transition-colors touch-none"
+                                                                    className="absolute left-0 right-2.5 -bottom-2 h-4 cursor-row-resize z-30 hover:bg-teal-500/60 transition-colors touch-none"
                                                                     title="Tahan & seret ke atas/bawah untuk mengubah tinggi baris"
                                                                     onMouseDown={(e) => handleStartRowResize(e, rIdx + (cellRowSpan - 1))}
                                                                     onTouchStart={(e) => handleStartRowResizeTouch(e, rIdx + (cellRowSpan - 1))}
                                                                     onClick={(e) => e.stopPropagation()}
                                                                 />
                                                             </>
+                                                        )}
+
+                                                        {/* Excel-style Corner Fill Handle (Drag to Fill Series / Shift Formulas, Double-Click to AutoFill Down) */}
+                                                        {isFillHandleHost && (
+                                                            <div
+                                                                onMouseDown={handleStartFillHandleDrag}
+                                                                onTouchStart={handleStartFillHandleDrag}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                onDoubleClick={handleDoubleClickFillHandle}
+                                                                title="Fill Handle (Seperti Excel): Seret ke bawah/samping untuk melanjutkan seri atau rumus • Klik ganda untuk isi otomatis ke bawah • Tahan Ctrl saat menyeret untuk paksa urut angka +1"
+                                                                className="absolute -right-[5px] -bottom-[5px] w-[10px] h-[10px] bg-blue-600 hover:bg-teal-600 hover:scale-125 border-[1.5px] border-white shadow-sm cursor-crosshair z-40 transition-transform touch-none"
+                                                            />
                                                         )}
                                                     </td>
                                                 );
@@ -5645,6 +6499,11 @@ export const TabDesainRapor: React.FC = () => {
                                             updateActiveCell({ value: e.target.value });
                                         }} 
                                         onKeyDown={e => {
+                                            if (e.key === 'F4') {
+                                                e.preventDefault();
+                                                handleCycleFormulaLock();
+                                                return;
+                                            }
                                             if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
                                                 formulaPickedSpanRef.current = null;
                                             }
@@ -5657,7 +6516,7 @@ export const TabDesainRapor: React.FC = () => {
                                         placeholder="=SUM(D6:D15) atau =RATA2(D6:D15)"
                                     />
                                     <div className="flex flex-wrap gap-1">
-                                        {(['=SUM(', '=RATA2(', '=TERBILANG(', '=PREDIKAT('] as const).map(starter => (
+                                        {(['=SUM(', '=RATA2(', '=RATA2_KELAS(', '=TERBILANG(', '=PREDIKAT('] as const).map(starter => (
                                             <button
                                                 key={starter}
                                                 type="button"
@@ -5679,10 +6538,23 @@ export const TabDesainRapor: React.FC = () => {
                                                 + {starter}...)
                                             </button>
                                         ))}
+                                        <button
+                                            type="button"
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                setActiveFormulaSource('sidebar');
+                                                activeFormulaSourceRef.current = 'sidebar';
+                                                handleCycleFormulaLock();
+                                            }}
+                                            className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-[10px] font-mono font-bold transition-colors"
+                                            title="Kunci / lepas simbol $ pada koordinat sel di kursor (sama seperti tombol F4 di Excel: D6 → $D$6 → D$6 → $D6)"
+                                        >
+                                            🔒 Kunci $ (F4)
+                                        </button>
                                     </div>
                                     <p className="text-[10px] text-emerald-700 bg-emerald-50/80 border border-emerald-200 rounded px-2 py-1 leading-snug">
                                         <i className="bi bi-cursor-fill mr-1"></i>
-                                        <strong>Seperti Excel:</strong> Setelah mengetik <code>=SUM(</code> atau <code>=RATA2(</code>, langsung klik atau seret (blok) sel nilai di tabel!
+                                        <strong>Seperti Excel:</strong> Blok sel di tabel untuk menyisipkan rentang, tekan <strong>F4</strong> untuk mengunci <code>$D$6 / D$6 / $D6</code>, lalu tarik titik sudut sel ke bawah/samping untuk melanjutkan rumus!
                                     </p>
                                 </div>
                                 
@@ -5729,7 +6601,9 @@ export const TabDesainRapor: React.FC = () => {
                                         <summary className="font-semibold text-yellow-700 hover:underline">Lihat Daftar Rumus &amp; Kode Pejabat</summary>
                                         <ul className="mt-1 space-y-1 text-[10px] text-gray-600 pl-2 border-l-2 border-yellow-300">
                                             <li><code>=SUM(D6:D15)</code> : Jumlahkan blok sel (bisa seret/blok langsung di tabel)</li>
-                                            <li><code>=RATA2(D6:D15)</code> : Rata-rata blok sel (atau <code>=RATA2($A, $B)</code>)</li>
+                                            <li><code>=RATA2(D6:D15)</code> : Rata-rata blok sel santri (atau <code>=RATA2($A, $B)</code>)</li>
+                                            <li><code>=RATA2_KELAS(D6)</code> : Rerata kelas suatu mapel (klik sel mapel / <code>$KODE</code>; alias <code>=RERATA_KELAS</code>, <code>=NRK</code>)</li>
+                                            <li><code>=RATA2_KELAS()</code> / <code>$RATA_RATA_KELAS</code> : Rata-rata umum seluruh kelas/rombel</li>
                                             <li><code>=TERBILANG(D6)</code> : Angka ke huruf Indonesia</li>
                                             <li><code>=ARAB(D6)</code> : Angka ke Arab-Timur (٨٨)</li>
                                             <li><code>=PREDIKAT(D6, "pesantren")</code> : Mumtaz / Jayyid Jiddan</li>
@@ -6584,6 +7458,46 @@ export const TabDesainRapor: React.FC = () => {
                     });
                 });
 
+                // Compute cohort class averages per mapel (real rombel records when available, plus realistic simulation fallback)
+                const rombelSantriIds = new Set(
+                    santriList
+                        .filter(s => s.status === 'Aktif' && s.rombelId === previewSantriObj.rombelId)
+                        .map(s => s.id)
+                );
+                const previewCohortRecords = selectedRealSantri
+                    ? raporRecords.filter(r => {
+                        if (!rombelSantriIds.has(r.santriId)) return false;
+                        if (activeRecord?.tahunAjaran && r.tahunAjaran !== activeRecord.tahunAjaran) return false;
+                        if (activeRecord?.semester && r.semester !== activeRecord.semester) return false;
+                        return true;
+                    })
+                    : [];
+
+                const {
+                    classAverages: realClassAverages,
+                    classOverallAverage: realClassOverallAvg
+                } = computeClassAveragesFromRecords(previewCohortRecords, activeTemplate);
+
+                const previewClassAverages: Record<string, number> = { ...realClassAverages };
+                const isSimulationFallback = !selectedRealSantri || previewFallbackDummyGrades;
+                if (isSimulationFallback) {
+                    const sampleClassAvgs = [82.4, 84.8, 81.5, 78.6, 85.2, 80.9, 83.7, 86.1];
+                    let simAvgIdx = 0;
+                    activeSheets.forEach(sheetObj => {
+                        sheetObj.cells.forEach(row => {
+                            row.forEach(c => {
+                                if (c.hidden || !c.key || c.type !== 'input') return;
+                                const ku = normalizeSubjectKeyForAvg(c.key);
+                                if (ku.includes('CATATAN') || ku.includes('KEPUTUSAN')) return;
+                                if (previewClassAverages[ku] === undefined) {
+                                    previewClassAverages[ku] = sampleClassAvgs[simAvgIdx % sampleClassAvgs.length];
+                                    simAvgIdx++;
+                                }
+                            });
+                        });
+                    });
+                }
+
                 // Compute numeric summary from baseExtraVars for $TOTAL_NILAI & $RATA_RATA
                 const numericInputs: number[] = [];
                 activeSheets.forEach(sheetObj => {
@@ -6600,12 +7514,19 @@ export const TabDesainRapor: React.FC = () => {
                 });
                 const sumVal = numericInputs.reduce((a, b) => a + b, 0);
                 const avgVal = numericInputs.length > 0 ? Number((sumVal / numericInputs.length).toFixed(1)) : 88;
+                const classAvgVals = Object.values(previewClassAverages).filter(v => typeof v === 'number' && v > 0 && v <= 100);
+                const computedClassOverallAvg = realClassOverallAvg > 0
+                    ? realClassOverallAvg
+                    : (classAvgVals.length > 0
+                        ? Number((classAvgVals.reduce((a, b) => a + b, 0) / classAvgVals.length).toFixed(2))
+                        : (isSimulationFallback ? 83.15 : 0));
 
                 const baseResolveContext: RaporResolveContext = {
                     settings,
                     digitalAssets,
                     santri: previewSantriObj,
                     record: activeRecord,
+                    cohortRecords: previewCohortRecords,
                     targetDate: new Date(),
                     extraVars: baseExtraVars,
                     calculation: {
@@ -6613,7 +7534,10 @@ export const TabDesainRapor: React.FC = () => {
                         rataRata: avgVal,
                         ranking: 1,
                         totalSantri: Math.max(1, effectiveSantriOptions.length || 28),
-                        predikat: avgVal >= 90 ? 'A' : avgVal >= 80 ? 'B' : 'C'
+                        predikat: avgVal >= 90 ? 'A' : avgVal >= 80 ? 'B' : 'C',
+                        classAverages: previewClassAverages,
+                        classOverallAverage: computedClassOverallAvg,
+                        isSimulated: isSimulationFallback
                     }
                 };
 
@@ -6876,6 +7800,32 @@ export const TabDesainRapor: React.FC = () => {
                     >
                         <span className="flex items-center gap-2"><i className="bi bi-clipboard text-slate-500"></i> Tempel (Paste)</span>
                         <span className="text-[10px] text-slate-400 font-mono">Ctrl+V</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleFillDownShortcut();
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite || selectedCells.length === 0}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center justify-between disabled:opacity-40"
+                    >
+                        <span className="flex items-center gap-2"><i className="bi bi-arrow-down-square text-teal-600"></i> Isi ke Bawah (Fill Down)</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Ctrl+D</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            handleFillRightShortcut();
+                            setContextMenuPos(null);
+                        }}
+                        disabled={!canWrite || selectedCells.length === 0}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 flex items-center justify-between disabled:opacity-40"
+                    >
+                        <span className="flex items-center gap-2"><i className="bi bi-arrow-right-square text-teal-600"></i> Isi ke Kanan (Fill Right)</span>
+                        <span className="text-[10px] text-slate-400 font-mono">Ctrl+R</span>
                     </button>
 
                     <div className="my-1 border-t border-slate-100"></div>

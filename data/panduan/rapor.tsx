@@ -232,6 +232,34 @@ export const raporPanduan: PanduanSectionData = {
                         </div>
                     </div>
 
+                    {/* Fill Series, AutoFill & Kunci Referensi Rumus ($) */}
+                    <div className="p-3.5 bg-teal-50/70 rounded-xl border border-teal-200 space-y-2 text-xs">
+                        <strong className="text-teal-950 flex items-center gap-1.5 font-bold">
+                            <i className="bi bi-plus-square-dotted text-teal-600"></i> Fill Series (Deret Otomatis), Tarik Rumus &amp; Kunci Referensi Sel (<code>$</code> / <code>F4</code>)
+                        </strong>
+                        <p className="text-gray-700 leading-relaxed">
+                            Pilih satu atau beberapa sel, lalu arahkan kursor ke <strong>kotak kecil di pojok kanan bawah seleksi (Fill Handle)</strong> hingga berubah menjadi tanda tambah (<code>+</code>). Seret ke bawah, atas, kanan, atau kiri — atau <strong>klik ganda (double-click)</strong> kotak tersebut untuk mengisi otomatis sampai baris terakhir tabel:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-teal-200 space-y-1">
+                                <strong className="text-teal-900 block">1. Lanjut Deret (Fill Series) Pintar</strong>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
+                                    <li><strong>Nomor &amp; Pola Angka:</strong> Blok <code>1</code> &amp; <code>2</code> (atau angka <code>1</code> pada kolom Nomor) lalu tarik untuk menghasilkan <code>3, 4, 5...</code> (termasuk angka Arab <code>١, ٢, ٣...</code>). Angka tunggal seperti KKM <code>75</code> otomatis disalin tetap <code>75</code> (tahan <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Ctrl</kbd> saat menarik jika ingin diurutkan <code>76, 77...</code>).</li>
+                                    <li><strong>Teks Bernomor &amp; Kode Input:</strong> <code>UH 1</code> &rarr; <code>UH 2, UH 3</code>, <code>1.</code> &rarr; <code>2., 3.</code>, serta kunci nilai <code>$UH1</code> &rarr; <code>$UH2</code>.</li>
+                                    <li><strong>Kalender Pesantren &amp; Umum:</strong> Nama Hari (<code>Senin</code>–<code>Minggu</code> / <code>Ahad</code>–<code>Sabtu</code>), Bulan Masehi (<code>Januari</code>–<code>Desember</code>), dan Bulan Hijriah (<code>Muharram</code>–<code>Dzulhijjah</code>).</li>
+                                </ul>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-lg border border-teal-200 space-y-1">
+                                <strong className="text-teal-900 block">2. Tarik Rumus &amp; Kunci Komponen <code>$</code> (Tombol <code>F4</code>)</strong>
+                                <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
+                                    <li><strong>Relatif Otomatis:</strong> Menarik <code>=RATA2_KELAS(D6)</code> atau <code>=PREDIKAT(D6, C6)</code> ke bawah otomatis menjadi <code>D7</code>, <code>D8</code>, dst. (termasuk menggeser kode input <code>$MAPEL</code> baris berikutnya).</li>
+                                    <li><strong>Kunci Absolut &amp; Campuran (<code>$</code>):</strong> Tekan <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">F4</kbd> atau klik tombol <strong>$ Kunci (F4)</strong> saat mengedit rumus untuk memutar kunci: <code>D6</code> &rarr; <code>$D$6</code> (kunci penuh) &rarr; <code>D$6</code> (kunci baris) &rarr; <code>$D6</code> (kunci kolom). Contoh rasio kumulatif: <code>=SUM($D$6:D6)</code>.</li>
+                                    <li><strong>Pintasan &amp; Opsi Pasca-Tarik:</strong> Gunakan <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Ctrl + D</kbd> (Isi Bawah), <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded font-mono text-[10px]">Ctrl + R</kbd> (Isi Kanan), atau pilih mode pada bilah <strong>Opsi AutoFill</strong> (<em>Seri &amp; Lanjut Rumus</em>, <em>Urutkan Angka</em>, <em>Salin Persis</em>, <em>Format Saja</em>).</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Page Break Guide & Dynamic Repeater */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                         <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-1.5">
@@ -298,7 +326,7 @@ export const raporPanduan: PanduanSectionData = {
                             <i className="bi bi-calculator-fill text-amber-600"></i> A. Rumus Perhitungan Nilai, Predikat &amp; Konversi Angka (Mendukung Blok Sel ala Excel)
                         </strong>
                         <p className="text-gray-600 text-[11px]">
-                            Anda dapat memanggil nilai menggunakan <strong>rentang koordinat sel</strong> (cukup klik/seret sel saat mengetik rumus, contoh <code>D6:D15</code>) maupun menggunakan <strong>kode variabel mapel</strong> (contoh <code>$NAHWU, $SHARAF</code>):
+                            Anda dapat memanggil nilai menggunakan <strong>rentang koordinat sel</strong> (cukup klik/seret sel saat mengetik rumus, contoh <code>D6:D15</code>) maupun menggunakan <strong>kode variabel mapel</strong> (contoh <code>$NAHWU, $SHARAF</code>). Saat rumus ditarik ke bawah/samping (<em>AutoFill</em>), koordinat akan menyesuaikan otomatis kecuali dikunci dengan tanda <code>$</code> menggunakan tombol <kbd className="px-1 py-0.5 bg-white border border-amber-300 rounded font-mono text-[10px]">F4</kbd> (<code>$D$6</code> kunci baris &amp; kolom, <code>D$6</code> kunci baris, <code>$D6</code> kunci kolom):
                         </p>
                         <div className="overflow-x-auto">
                             <table className="w-full text-[11px] bg-white rounded-lg border border-amber-200 overflow-hidden">
@@ -315,7 +343,13 @@ export const raporPanduan: PanduanSectionData = {
                                     </tr>
                                     <tr>
                                         <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=RATA2(D6:D15)</td>
-                                        <td className="p-2">Menghitung nilai rata-rata dari blok sel atau daftar variabel (alias: <code>=AVERAGE(...)</code>, <code>=RERATA(...)</code>).</td>
+                                        <td className="p-2">Menghitung nilai rata-rata santri dari blok sel atau daftar variabel (alias: <code>=AVERAGE(...)</code>, <code>=RERATA(...)</code>).</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=RATA2_KELAS(D6)</td>
+                                        <td className="p-2">
+                                            Menghitung <strong>rerata kelas untuk suatu mata pelajaran</strong> dari seluruh santri di rombel. Cukup klik sel nilai mapel (misal <code>D6</code>) atau tulis kode variabelnya <code>=RATA2_KELAS($FIQIH)</code>. Mendukung jumlah desimal opsional (<code>=RATA2_KELAS(D6, 1)</code>), pemanggilan tanpa argumen <code>=RATA2_KELAS()</code> / <code>$RATA_RATA_KELAS</code> untuk rata-rata umum kelas, serta alias <code>=RERATA_KELAS(...)</code> dan <code>=NRK(...)</code>.
+                                        </td>
                                     </tr>
                                     <tr>
                                         <td className="p-2 font-mono text-amber-900 whitespace-nowrap">=MAX(D6:D15) / =MIN(D6:D15)</td>

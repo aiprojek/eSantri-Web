@@ -27,6 +27,22 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         category: 'formula'
     },
     {
+        token: '=RATA2_KELAS',
+        insertText: '=RATA2_KELAS(',
+        label: 'Rerata Kelas Mapel (RATA2_KELAS)',
+        syntax: '=RATA2_KELAS(D6)',
+        description: 'Rata-rata kelas untuk suatu mapel (klik sel nilai mapel misal D6 atau ketik $KODE_MAPEL)',
+        category: 'formula'
+    },
+    {
+        token: '=RERATA_KELAS',
+        insertText: '=RERATA_KELAS(',
+        label: 'Rerata Kelas Mapel (RERATA_KELAS / NRK)',
+        syntax: '=RERATA_KELAS($KODE_MAPEL)',
+        description: 'Alias RATA2_KELAS — klik sel nilai mapel atau ketik $KODE_MAPEL (alias singkat: =NRK)',
+        category: 'formula'
+    },
+    {
         token: '=PREDIKAT',
         insertText: '=PREDIKAT(',
         label: 'Predikat Huruf / Arab-Latin',
@@ -173,6 +189,15 @@ export interface FormulaEvalMeta {
     tahunAjaranHijriah?: string;   // khusus Hijriah (misal "1448/1449 H")
     tahunAjaranGabungan?: string;  // khusus Gabungan (misal "1448/1449 H / 2026/2027 M")
     semester?: string;
+    classAverages?: Record<string, number>; // rata-rata kelas per kunci mapel (misal { FIQIH: 84.35 })
+    classOverallAverage?: number;           // rata-rata umum seluruh mapel di kelas/rombel
+}
+
+/**
+ * Normalisasi kunci variabel mata pelajaran untuk pencocokan rata-rata kelas secara konsisten
+ */
+export function normalizeSubjectKeyForAvg(rawKey: string): string {
+    return rawKey.trim().replace(/^\$/, '').toUpperCase().replace(/[\s-]+/g, '_');
 }
 
 /**
@@ -345,7 +370,7 @@ export function nilaiKePredikatOtomatis(nilaiInput: number | string, mode: strin
  * Memecah argumen fungsi tingkat atas dengan menghormati tanda kutip dan kurung bersarang.
  * Mendukung pemisah koma (,) maupun titik koma (;) seperti Excel regional Indonesia.
  */
-function splitTopLevelArgs(argsStr: string): string[] {
+export function splitTopLevelArgs(argsStr: string): string[] {
     const result: string[] = [];
     let current = '';
     let depth = 0;
@@ -741,6 +766,94 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
                 if (nums.length === 0) return '-';
                 return formatNumberClean(nums.reduce((a, b) => a + b, 0) / nums.length);
             }
+            if (
+                fnName === 'RATA2_KELAS' ||
+                fnName === 'RERATA_KELAS' ||
+                fnName === 'RATA_KELAS' ||
+                fnName === 'NRK' ||
+                fnName === 'AVG_KELAS'
+            ) {
+                const avgLookup = new Map<string, number>();
+                if (meta?.classAverages) {
+                    for (const [k, v] of Object.entries(meta.classAverages)) {
+                        if (typeof v === 'number' && isFinite(v)) {
+                            avgLookup.set(normalizeSubjectKeyForAvg(k), v);
+                            const alnumKey = k.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                            if (alnumKey && !avgLookup.has(alnumKey)) {
+                                avgLookup.set(alnumKey, v);
+                            }
+                        }
+                    }
+                }
+
+                // Pemanggilan tanpa argumen: =RATA2_KELAS() -> rata-rata umum kelas
+                const nonEmptyArgs = evalArgs.filter(a => unquote(a).trim() !== '');
+                if (nonEmptyArgs.length === 0) {
+                    if (typeof meta?.classOverallAverage === 'number' && isFinite(meta.classOverallAverage) && meta.classOverallAverage > 0) {
+                        return formatNumberClean(meta.classOverallAverage);
+                    }
+                    return '-';
+                }
+
+                // Cek apakah argumen ke-2 adalah jumlah digit desimal (0 s/d 4), misal =RATA2_KELAS(D6, 1)
+                let explicitDigits: number | undefined;
+                let targetArgs = evalArgs;
+                if (evalArgs.length === 2) {
+                    const secondTrimmed = unquote(evalArgs[1]).trim();
+                    if (/^[0-4]$/.test(secondTrimmed)) {
+                        explicitDigits = parseInt(secondTrimmed, 10);
+                        targetArgs = [evalArgs[0]];
+                    }
+                }
+
+                const collected: number[] = [];
+                for (const item of targetArgs) {
+                    const clean = unquote(item).trim();
+                    if (!clean || clean === '-' || clean === '__EMPTY__') continue;
+
+                    if (clean.startsWith('__VAL__:')) {
+                        const preNum = Number(clean.slice(8));
+                        if (!isNaN(preNum) && isFinite(preNum)) {
+                            collected.push(preNum);
+                        }
+                        continue;
+                    }
+
+                    const normKey = normalizeSubjectKeyForAvg(clean);
+                    if (
+                        normKey === '__OVERALL__' ||
+                        normKey === 'RATA_RATA' ||
+                        normKey === 'RERATA' ||
+                        normKey === 'TOTAL_NILAI' ||
+                        normKey === 'RATA_RATA_KELAS' ||
+                        normKey === 'RERATA_KELAS'
+                    ) {
+                        if (typeof meta?.classOverallAverage === 'number' && isFinite(meta.classOverallAverage) && meta.classOverallAverage > 0) {
+                            collected.push(meta.classOverallAverage);
+                        }
+                        continue;
+                    }
+
+                    const directMatch = avgLookup.get(normKey);
+                    if (directMatch !== undefined) {
+                        collected.push(directMatch);
+                        continue;
+                    }
+
+                    const looseKey = clean.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                    const looseMatch = looseKey ? avgLookup.get(looseKey) : undefined;
+                    if (looseMatch !== undefined) {
+                        collected.push(looseMatch);
+                    }
+                }
+
+                if (collected.length === 0) return '-';
+                const meanVal = collected.reduce((a, b) => a + b, 0) / collected.length;
+                if (explicitDigits !== undefined) {
+                    return Number(meanVal.toFixed(explicitDigits)).toString();
+                }
+                return formatNumberClean(meanVal);
+            }
             if (fnName === 'MAX') {
                 const nums = parseNumericValues(evalArgs);
                 if (nums.length === 0) return '-';
@@ -785,7 +898,7 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
     return unquote(trimmed);
 }
 
-const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA)\s*\([\s\S]*\)$/i;
+const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA)\s*\([\s\S]*\)$/i;
 
 /**
  * Mengecek apakah string teks sel merupakan ekspresi rumus rapor
@@ -930,8 +1043,9 @@ export function formatExcelCellCoord(r: number, c: number): string {
 }
 
 /**
- * Mem-parsing koordinat sel tunggal Excel seperti "D6" atau "$D$6" menjadi { r, c } 0-based.
- * Secara bawaan menolak awalan satu '$' tanpa '$' kedua (seperti "$UH1" atau "$A1") agar tidak bentrok dengan kode variabel input ($KEY).
+ * Mem-parsing koordinat sel tunggal Excel seperti "D6", "$D$6", "D$6", atau (bila diizinkan) "$D6" menjadi { r, c } 0-based.
+ * Secara bawaan menolak awalan satu '$' tanpa '$' kedua (seperti "$UH1") agar tidak bentrok dengan kode variabel input ($KEY),
+ * kecuali allowSingleLeadingDollar = true. Format "D$6" selalu diizinkan karena variabel $KEY tidak pernah diawali huruf sebelum '$'.
  */
 export function parseExcelCellCoord(
     token: string,
@@ -940,7 +1054,7 @@ export function parseExcelCellCoord(
     const t = token.trim();
     const match = allowSingleLeadingDollar
         ? t.match(/^\$?([A-Za-z]{1,2})\$?([1-9]\d{0,2})$/)
-        : t.match(/^(?:\$([A-Za-z]{1,2})\$([1-9]\d{0,2})|([A-Za-z]{1,2})([1-9]\d{0,2}))$/);
+        : t.match(/^(?:\$([A-Za-z]{1,2})\$([1-9]\d{0,2})|([A-Za-z]{1,2})\$?([1-9]\d{0,2}))$/);
     if (!match) return null;
     const colLetters = (match[1] || match[3] || '').toUpperCase();
     const rowStr = match[2] || match[4] || '';
@@ -950,8 +1064,43 @@ export function parseExcelCellCoord(
     return { r, c };
 }
 
+export interface ParsedExcelRefWithLocks {
+    r: number;
+    c: number;
+    lockCol: boolean;
+    lockRow: boolean;
+}
+
 /**
- * Mem-parsing rentang sel Excel seperti "D6:D15" atau "$D$6:$D$15" menjadi batas baris & kolom 0-based
+ * Mem-parsing koordinat sel Excel beserta status kunci '$' pada kolom dan baris (D6, $D$6, D$6, $D6).
+ */
+export function parseExcelRefWithLocks(
+    token: string,
+    allowSingleLeadingDollar: boolean = true
+): ParsedExcelRefWithLocks | null {
+    const t = token.trim();
+    const m = t.match(/^(\$?)([A-Za-z]{1,2})(\$?)([1-9]\d{0,2})$/);
+    if (!m) return null;
+    const lockCol = m[1] === '$';
+    const lockRow = m[3] === '$';
+    if (lockCol && !lockRow && !allowSingleLeadingDollar) return null;
+    const c = excelLettersToColIndex(m[2].toUpperCase());
+    const r = parseInt(m[4], 10) - 1;
+    if (c < 0 || r < 0) return null;
+    return { r, c, lockCol, lockRow };
+}
+
+/**
+ * Memformat objek koordinat ber-lock menjadi string alamat Excel (misal $D$6, $D6, D$6, atau D6)
+ */
+export function formatExcelRefWithLocks(ref: ParsedExcelRefWithLocks): string {
+    const colStr = colIndexToExcelLetters(Math.max(0, ref.c));
+    const rowNum = Math.max(0, ref.r) + 1;
+    return `${ref.lockCol ? '$' : ''}${colStr}${ref.lockRow ? '$' : ''}${rowNum}`;
+}
+
+/**
+ * Mem-parsing rentang sel Excel seperti "D6:D15", "$D$6:$D$15", "$D6:$D15", atau "D$6:D$15" menjadi batas baris & kolom 0-based
  */
 export function parseExcelRangeCoord(
     token: string
@@ -1033,7 +1182,7 @@ export function autoCloseFormulaParens(draft: string): string {
 }
 
 /**
- * Mengekstrak daftar koordinat sel ("r:c") yang sedang direferensikan di dalam rumus (baik rentang D6:D15, sel tunggal D6, maupun $KEY)
+ * Mengekstrak daftar koordinat sel ("r:c") yang sedang direferensikan di dalam rumus (baik rentang D6:D15, sel tunggal D6/$D$6/$D6/D$6, maupun $KEY)
  * untuk memberikan highlight warna bergaris putus-putus ala Excel pada kanvas desainer.
  */
 export function extractFormulaReferencedCoords(
@@ -1081,7 +1230,7 @@ export function extractFormulaReferencedCoords(
         stripped += ch;
     }
 
-    // 1. Rentang Excel seperti D6:D15
+    // 1. Rentang Excel seperti D6:D15, $D$6:$D$15, $D6:$D15, D$6:D$15
     const rangeRegex = /(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2}\s*:\s*\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_])/g;
     stripped = stripped.replace(rangeRegex, (full) => {
         const rng = parseExcelRangeCoord(full);
@@ -1097,7 +1246,7 @@ export function extractFormulaReferencedCoords(
         return ' '.repeat(full.length);
     });
 
-    // 2. Variabel $KEY pada sheet
+    // 2. Variabel $KEY pada sheet (prioritas di atas $D6 agar $UH1 tidak dianggap kolom UH)
     const tagRegex = /\$[A-Za-z0-9_]+/g;
     stripped = stripped.replace(tagRegex, (tok) => {
         const coords = keyMap.get(tok.toUpperCase());
@@ -1105,18 +1254,18 @@ export function extractFormulaReferencedCoords(
             coords.forEach(({ r, c }) => result.add(`${r}:${c}`));
             return ' '.repeat(tok.length);
         }
-        // Biarkan format $C$6 diproses pada tahap koordinat tunggal
-        if (/^\$[A-Za-z]{1,2}\$[1-9]\d{0,2}$/.test(tok)) {
+        // Biarkan format $C$6 atau $C6 diproses pada tahap koordinat tunggal jika berada dalam batas lembar
+        if (/^\$[A-Za-z]{1,2}\$?[1-9]\d{0,2}$/.test(tok)) {
             return tok;
         }
         return ' '.repeat(tok.length);
     });
 
-    // 3. Koordinat sel tunggal seperti D6 atau $D$6 (bukan nama fungsi yang diikuti '(')
-    const singleRegex = /(?:^|[^A-Za-z0-9_$])(\$[A-Za-z]{1,2}\$[1-9]\d{0,2}|[A-Za-z]{1,2}[1-9]\d{0,2})(?![A-Za-z0-9_(])/g;
+    // 3. Koordinat sel tunggal seperti D6, $D$6, $D6, atau D$6 (bukan nama fungsi yang diikuti '(')
+    const singleRegex = /(?:^|[^A-Za-z0-9_$])(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_(])/g;
     let m: RegExpExecArray | null;
     while ((m = singleRegex.exec(stripped)) !== null) {
-        const coord = parseExcelCellCoord(m[1], false);
+        const coord = parseExcelCellCoord(m[1], true);
         if (coord && coord.r >= 0 && coord.r < rowCount && coord.c >= 0 && coord.c < colCount) {
             result.add(`${coord.r}:${coord.c}`);
         }
@@ -1124,3 +1273,630 @@ export function extractFormulaReferencedCoords(
 
     return result;
 }
+
+/**
+ * Menggeser referensi sel dan rentang di dalam rumus secara proporsional seperti Excel saat ditarik (AutoFill / Fill Handle / Ctrl+D / Ctrl+R).
+ * Menghormati penguncian '$':
+ * - D6   -> geser kolom & baris
+ * - $D$6 -> kolom & baris dikunci tetap
+ * - $D6  -> kolom dikunci tetap, baris ikut bergeser
+ * - D$6  -> kolom ikut bergeser, baris dikunci tetap
+ * - $KEY -> jika merujuk ke sel input/dropdown tunggal pada sheet dan sel hasil geser (r+deltaR, c+deltaC) memiliki key sejenis,
+ *           otomatis menyesuaikan ke $KEY_BARU (kecuali diawali $$KEY atau sel target tidak punya key).
+ */
+export function shiftFormulaReferences(
+    formula: string,
+    deltaR: number,
+    deltaC: number,
+    options?: {
+        sheetCells?: { key?: string; type?: string; hidden?: boolean; row: number; col: number }[][];
+    }
+): string {
+    if (!formula || (deltaR === 0 && deltaC === 0)) return formula;
+    const sheetCells = options?.sheetCells;
+    const sheetRowCount = sheetCells?.length || 0;
+    const sheetColCount = sheetCells?.[0]?.length || 0;
+    const maxColForSingleDollarCoord = sheetColCount > 0 ? Math.max(sheetColCount + 10, 52) : 52;
+
+    // Peta $KEY tunggal pada sheet untuk mendukung geser otomatis rumus berbasis $KEY (misal =TERBILANG($FIQIH) -> =TERBILANG($NAHWU))
+    const keyCoordMap = new Map<string, { r: number; c: number; type?: string; count: number }>();
+    if (sheetCells) {
+        for (let r = 0; r < sheetRowCount; r++) {
+            const row = sheetCells[r] || [];
+            for (let c = 0; c < row.length; c++) {
+                const cell = row[c];
+                if (cell && !cell.hidden && cell.key) {
+                    const upper = cell.key.trim().toUpperCase();
+                    if (!upper) continue;
+                    const existing = keyCoordMap.get(upper);
+                    if (existing) {
+                        existing.count += 1;
+                    } else {
+                        keyCoordMap.set(upper, { r, c, type: cell.type, count: 1 });
+                    }
+                }
+            }
+        }
+    }
+
+    const shiftSingleCoord = (ref: ParsedExcelRefWithLocks): string => {
+        const nextR = ref.lockRow ? ref.r : Math.max(0, ref.r + deltaR);
+        const nextC = ref.lockCol ? ref.c : Math.max(0, ref.c + deltaC);
+        return formatExcelRefWithLocks({
+            r: nextR,
+            c: nextC,
+            lockCol: ref.lockCol,
+            lockRow: ref.lockRow
+        });
+    };
+
+    let out = '';
+    let inQuote: '"' | "'" | null = null;
+    let idx = 0;
+
+    while (idx < formula.length) {
+        const ch = formula[idx];
+        if (inQuote) {
+            if (ch === inQuote && formula[idx - 1] !== '\\') {
+                inQuote = null;
+            }
+            out += ch;
+            idx++;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            inQuote = ch;
+            out += ch;
+            idx++;
+            continue;
+        }
+
+        const prevCh = idx > 0 ? formula[idx - 1] : '';
+        const isTokenBoundary = idx === 0 || !/[A-Za-z0-9_$]/.test(prevCh);
+
+        if (isTokenBoundary) {
+            const rest = formula.slice(idx);
+
+            // 1. Rentang sel Excel: D6:D15, $D$6:$D$15, $D$6:D6, $D6:F$6, dll.
+            const rangeMatch = rest.match(/^(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(\s*:\s*)(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_])/);
+            if (rangeMatch) {
+                const ref1 = parseExcelRefWithLocks(rangeMatch[1], true);
+                const ref2 = parseExcelRefWithLocks(rangeMatch[3], true);
+                if (ref1 && ref2) {
+                    out += `${shiftSingleCoord(ref1)}${rangeMatch[2]}${shiftSingleCoord(ref2)}`;
+                    idx += rangeMatch[0].length;
+                    continue;
+                }
+            }
+
+            // 2. Escape $$KEY -> dikunci tetap (dipertahankan sebagai $KEY atau $$KEY? Simpan $KEY pada hasil)
+            const lockedVarMatch = rest.match(/^\$\$([A-Za-z0-9_]+)/);
+            if (lockedVarMatch) {
+                out += `$${lockedVarMatch[1]}`;
+                idx += lockedVarMatch[0].length;
+                continue;
+            }
+
+            // 3. Token diawali '$': cek apakah $KEY pada sheet, atau koordinat $D$6 / $D6
+            if (ch === '$') {
+                // 3a. Koordinat absolut penuh $D$6 (selalu tidak ambigu karena memiliki dua '$')
+                const fullLockMatch = rest.match(/^(\$[A-Za-z]{1,2}\$[1-9]\d{0,2})(?![A-Za-z0-9_]|\s*\()/);
+                if (fullLockMatch) {
+                    const ref = parseExcelRefWithLocks(fullLockMatch[1], true);
+                    if (ref) {
+                        out += shiftSingleCoord(ref);
+                        idx += fullLockMatch[1].length;
+                        continue;
+                    }
+                }
+
+                // 3b. Variabel $KEY pada sheet atau Tag Sistem
+                const varMatch = rest.match(/^\$([A-Za-z0-9_]+)(?!\s*\()/);
+                if (varMatch) {
+                    const rawVarName = varMatch[1];
+                    const upperVar = rawVarName.toUpperCase();
+                    const keyInfo = keyCoordMap.get(upperVar);
+                    if (keyInfo) {
+                        // Jika variabel unik di sheet dan sel pada posisi geser (r+deltaR, c+deltaC) punya key input/dropdown, geser ke key target!
+                        if (
+                            keyInfo.count === 1 &&
+                            sheetCells &&
+                            (keyInfo.type === 'input' || keyInfo.type === 'dropdown')
+                        ) {
+                            const targetR = keyInfo.r + deltaR;
+                            const targetC = keyInfo.c + deltaC;
+                            const targetCell = sheetCells[targetR]?.[targetC];
+                            if (
+                                targetCell &&
+                                !targetCell.hidden &&
+                                targetCell.key &&
+                                targetCell.key.trim() !== '' &&
+                                (targetCell.type === 'input' || targetCell.type === 'dropdown')
+                            ) {
+                                out += `$${targetCell.key.trim()}`;
+                                idx += varMatch[0].length;
+                                continue;
+                            }
+                        }
+                        // Jika tidak ada pasangan geser (misal sel KKM / Total di bawah), biarkan $KEY tetap utuh
+                        out += varMatch[0];
+                        idx += varMatch[0].length;
+                        continue;
+                    }
+
+                    // 3c. Bukan $KEY yang terdaftar di sheet: cek apakah koordinat kolom-terkunci $D6
+                    const colLockRef = parseExcelRefWithLocks(`$${rawVarName}`, true);
+                    if (colLockRef && colLockRef.c < maxColForSingleDollarCoord) {
+                        out += shiftSingleCoord(colLockRef);
+                        idx += varMatch[0].length;
+                        continue;
+                    }
+
+                    // Tag sistem seperti $SEMESTER, $NAMA, $RATA_RATA_KELAS -> tetap utuh
+                    out += varMatch[0];
+                    idx += varMatch[0].length;
+                    continue;
+                }
+            }
+
+            // 4. Koordinat sel tanpa '$' di awal: D6 (relatif penuh) atau D$6 (baris dikunci)
+            if (/[A-Za-z]/.test(ch)) {
+                const relMatch = rest.match(/^([A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_]|\s*\()/);
+                if (relMatch) {
+                    const ref = parseExcelRefWithLocks(relMatch[1], false);
+                    if (ref && ref.c < maxColForSingleDollarCoord) {
+                        out += shiftSingleCoord(ref);
+                        idx += relMatch[1].length;
+                        continue;
+                    }
+                }
+            }
+        }
+
+        out += ch;
+        idx++;
+    }
+
+    return out;
+}
+
+/**
+ * Siklus penguncian referensi '$' ala tombol F4 di Microsoft Excel pada posisi kursor aktif:
+ * Urutan: D6 -> $D$6 -> D$6 -> $D6 -> D6 (berlaku juga pada rentang D6:D15 -> $D$6:$D$15 -> D$6:D$15 -> $D6:$D15 -> D6:D15).
+ * Jika kursor berada pada variabel $KEY yang merujuk ke sel di sheet (misal $FIQIH di D6), F4 akan mengubahnya ke alamat terkunci $D$6.
+ */
+export function cycleFormulaReferenceLockAtCaret(
+    text: string,
+    caretStart: number,
+    caretEnd: number,
+    sheetCells?: { key?: string; hidden?: boolean; row: number; col: number }[][]
+): { nextText: string; selStart: number; selEnd: number; tokenAfter: string } | null {
+    if (!text) return null;
+
+    const nextLockState = (ref: ParsedExcelRefWithLocks): ParsedExcelRefWithLocks => {
+        if (!ref.lockCol && !ref.lockRow) return { ...ref, lockCol: true, lockRow: true };   // D6 -> $D$6
+        if (ref.lockCol && ref.lockRow) return { ...ref, lockCol: false, lockRow: true };    // $D$6 -> D$6
+        if (!ref.lockCol && ref.lockRow) return { ...ref, lockCol: true, lockRow: false };   // D$6 -> $D6
+        return { ...ref, lockCol: false, lockRow: false };                                    // $D6 -> D6
+    };
+
+    const s = Math.max(0, Math.min(caretStart, caretEnd));
+    const e = Math.max(0, Math.max(caretStart, caretEnd));
+
+    // Kumpulkan span token yang berada di luar tanda kutip
+    interface TokenCandidate {
+        start: number;
+        end: number;
+        raw: string;
+        kind: 'range' | 'coord' | 'var';
+        part1?: string;
+        sep?: string;
+        part2?: string;
+    }
+
+    const candidates: TokenCandidate[] = [];
+    let inQuote: '"' | "'" | null = null;
+    let i = 0;
+    while (i < text.length) {
+        const ch = text[i];
+        if (inQuote) {
+            if (ch === inQuote && text[i - 1] !== '\\') inQuote = null;
+            i++;
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            inQuote = ch;
+            i++;
+            continue;
+        }
+
+        const prevCh = i > 0 ? text[i - 1] : '';
+        if (i === 0 || !/[A-Za-z0-9_$]/.test(prevCh)) {
+            const rest = text.slice(i);
+            const rngM = rest.match(/^(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(\s*:\s*)(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_])/);
+            if (rngM) {
+                candidates.push({
+                    start: i,
+                    end: i + rngM[0].length,
+                    raw: rngM[0],
+                    kind: 'range',
+                    part1: rngM[1],
+                    sep: rngM[2],
+                    part2: rngM[3]
+                });
+                i += rngM[0].length;
+                continue;
+            }
+
+            const coordM = rest.match(/^(\$?[A-Za-z]{1,2}\$?[1-9]\d{0,2})(?![A-Za-z0-9_]|\s*\()/);
+            if (coordM && parseExcelRefWithLocks(coordM[1], true)) {
+                // Pastikan bukan $KEY di sheet terlebih dahulu
+                let isDefinedSheetVar = false;
+                if (coordM[1].startsWith('$') && !coordM[1].slice(1).includes('$') && sheetCells) {
+                    const keyLookup = coordM[1].slice(1).toUpperCase();
+                    for (let rr = 0; rr < sheetCells.length && !isDefinedSheetVar; rr++) {
+                        for (let cc = 0; cc < (sheetCells[rr]?.length || 0); cc++) {
+                            const cl = sheetCells[rr][cc];
+                            if (cl && !cl.hidden && cl.key?.trim().toUpperCase() === keyLookup) {
+                                isDefinedSheetVar = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!isDefinedSheetVar) {
+                    candidates.push({
+                        start: i,
+                        end: i + coordM[1].length,
+                        raw: coordM[1],
+                        kind: 'coord'
+                    });
+                    i += coordM[1].length;
+                    continue;
+                }
+            }
+
+            if (ch === '$') {
+                const varM = rest.match(/^\$([A-Za-z0-9_]+)(?!\s*\()/);
+                if (varM) {
+                    candidates.push({
+                        start: i,
+                        end: i + varM[0].length,
+                        raw: varM[0],
+                        kind: 'var'
+                    });
+                    i += varM[0].length;
+                    continue;
+                }
+            }
+        }
+        i++;
+    }
+
+    // Cari kandidat yang bersentuhan dengan posisi kursor [s, e] (atau kandidat terakhir jika kursor tepat di ujung kurung tutup ')')
+    let hit = candidates.find(c => (s === e ? s >= c.start && s <= c.end : s < c.end && e > c.start));
+    if (!hit && s === e && text[s - 1] === ')') {
+        hit = candidates.find(c => c.end === s - 1);
+    }
+    if (!hit && candidates.length === 1) {
+        hit = candidates[0];
+    }
+    if (!hit) return null;
+
+    let replacement = '';
+    if (hit.kind === 'range' && hit.part1 && hit.part2 && hit.sep !== undefined) {
+        const r1 = parseExcelRefWithLocks(hit.part1, true);
+        const r2 = parseExcelRefWithLocks(hit.part2, true);
+        if (!r1 || !r2) return null;
+        const p1End = hit.start + hit.part1.length;
+        // Jika kursor tunggal berada khusus di dalam koordinat pertama sebelum ':', kunci bagian pertama saja (mendukung pola $D$6:D6)
+        if (s === e && s > hit.start && s < p1End) {
+            const n1 = formatExcelRefWithLocks(nextLockState(r1));
+            replacement = `${n1}${hit.sep}${hit.part2}`;
+        } else {
+            const n1 = formatExcelRefWithLocks(nextLockState(r1));
+            const n2 = formatExcelRefWithLocks(
+                r1.lockCol === r2.lockCol && r1.lockRow === r2.lockRow
+                    ? nextLockState(r2)
+                    : { ...r2, lockCol: nextLockState(r1).lockCol, lockRow: nextLockState(r1).lockRow }
+            );
+            replacement = `${n1}${hit.sep}${n2}`;
+        }
+    } else if (hit.kind === 'coord') {
+        const ref = parseExcelRefWithLocks(hit.raw, true);
+        if (!ref) return null;
+        replacement = formatExcelRefWithLocks(nextLockState(ref));
+    } else if (hit.kind === 'var' && sheetCells) {
+        const keyName = hit.raw.slice(1).toUpperCase();
+        let foundCoord: { r: number; c: number } | null = null;
+        for (let rr = 0; rr < sheetCells.length && !foundCoord; rr++) {
+            for (let cc = 0; cc < (sheetCells[rr]?.length || 0); cc++) {
+                const cl = sheetCells[rr][cc];
+                if (cl && !cl.hidden && cl.key?.trim().toUpperCase() === keyName) {
+                    foundCoord = { r: rr, c: cc };
+                    break;
+                }
+            }
+        }
+        if (!foundCoord) return null;
+        replacement = formatExcelRefWithLocks({
+            r: foundCoord.r,
+            c: foundCoord.c,
+            lockCol: true,
+            lockRow: true
+        });
+    } else {
+        return null;
+    }
+
+    const nextText = text.slice(0, hit.start) + replacement + text.slice(hit.end);
+    return {
+        nextText,
+        selStart: hit.start,
+        selEnd: hit.start + replacement.length,
+        tokenAfter: replacement
+    };
+}
+
+// ============================================================================
+// EXCEL-STYLE FILL SERIES & AUTOFILL ENGINE
+// ============================================================================
+
+export type AutoFillMode = 'series' | 'increment' | 'copy' | 'format';
+export type AutoFillDirection = 'down' | 'up' | 'right' | 'left';
+
+const CALENDAR_SERIES_LISTS: string[][] = [
+    ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'],
+    ['Ahad', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'],
+    ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
+    ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'],
+    ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'],
+    ['Muharram', 'Shafar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', "Sya'ban", 'Ramadhan', 'Syawal', "Dzulqa'dah", 'Dzulhijjah']
+];
+
+const ARABIC_DIGITS_STR = '٠١٢٣٤٥٦٧٨٩';
+
+function parseEasternArabicInteger(str: string): { num: number; padLen: number } | null {
+    const t = str.trim();
+    if (!/^[٠-٩]+$/.test(t)) return null;
+    let ascii = '';
+    for (let i = 0; i < t.length; i++) {
+        const idx = ARABIC_DIGITS_STR.indexOf(t[i]);
+        if (idx < 0) return null;
+        ascii += String(idx);
+    }
+    const num = parseInt(ascii, 10);
+    if (isNaN(num)) return null;
+    return { num, padLen: t.length > 1 && t.startsWith('٠') ? t.length : 0 };
+}
+
+function formatEasternArabicInteger(num: number, padLen: number = 0): string {
+    const safe = Math.max(0, Math.round(num));
+    const raw = padLen > 0 ? String(safe).padStart(padLen, '0') : String(safe);
+    return raw.replace(/\d/g, d => ARABIC_DIGITS_STR[Number(d)]);
+}
+
+function applyDetectedCasing(sample: string, target: string): string {
+    if (!sample) return target;
+    if (sample === sample.toUpperCase() && sample !== sample.toLowerCase()) {
+        return target.toUpperCase();
+    }
+    if (sample === sample.toLowerCase() && sample !== sample.toUpperCase()) {
+        return target.toLowerCase();
+    }
+    return target;
+}
+
+function matchCalendarSeries(values: string[], stepIndex: number): string | null {
+    if (values.length === 0) return null;
+    for (const list of CALENDAR_SERIES_LISTS) {
+        const lowerList = list.map(item => item.toLowerCase());
+        const indices = values.map(v => lowerList.indexOf(v.trim().toLowerCase()));
+        if (indices.some(idx => idx < 0)) continue;
+
+        let stride = 1;
+        if (indices.length >= 2) {
+            const firstDiff = (indices[1] - indices[0] + list.length) % list.length || list.length;
+            let consistent = true;
+            for (let i = 2; i < indices.length; i++) {
+                const d = (indices[i] - indices[i - 1] + list.length) % list.length || list.length;
+                if (d !== firstDiff) {
+                    consistent = false;
+                    break;
+                }
+            }
+            if (!consistent) continue;
+            stride = firstDiff;
+        }
+
+        const rawIdx = (indices[0] + stepIndex * stride) % list.length;
+        const wrappedIdx = (rawIdx + list.length) % list.length;
+        const sample = values[values.length - 1].trim();
+        return applyDetectedCasing(sample, list[wrappedIdx]);
+    }
+    return null;
+}
+
+/**
+ * Menghitung nilai seri berikutnya dari deretan nilai teks/angka sumber (1D) pada indeks target `targetOffsetFromStart`
+ * Contoh:
+ * - sourceValues = ["1", "2"], targetOffsetFromStart = 2 -> "3"
+ * - sourceValues = ["2", "3"], targetOffsetFromStart = -1 (tarik ke atas) -> "1"
+ * - sourceValues = ["UH 1"], targetOffsetFromStart = 1 -> "UH 2"
+ * - sourceValues = ["1."], targetOffsetFromStart = 1 -> "2."
+ * - sourceValues = ["Senin"], targetOffsetFromStart = 1 -> "Selasa"
+ */
+export function computeSeriesStringAtOffset(
+    sourceValues: string[],
+    targetOffsetFromStart: number,
+    options?: {
+        forceSingleNumberIncrement?: boolean;
+        hasNumberingHeaderHint?: boolean;
+    }
+): string {
+    const n = sourceValues.length;
+    if (n === 0) return '';
+    const modIdx = ((targetOffsetFromStart % n) + n) % n;
+    const cyclicFallback = sourceValues[modIdx];
+
+    // Jangan ubah tag variabel $NAMA / media / rumus di sini
+    if (sourceValues.some(v => v.trim().startsWith('$') || v.trim().startsWith('='))) {
+        return cyclicFallback;
+    }
+
+    // 1. Cek daftar kalender (Hari, Bulan Masehi, Bulan Hijriah)
+    const calMatch = matchCalendarSeries(sourceValues, targetOffsetFromStart);
+    if (calMatch !== null) return calMatch;
+
+    // 2. Cek angka Arab Timur murni (١, ٢, ٣...)
+    const arabParsed = sourceValues.map(parseEasternArabicInteger);
+    if (arabParsed.every(p => p !== null)) {
+        const nums = arabParsed.map(p => p!.num);
+        if (n >= 2) {
+            const step = nums[1] - nums[0];
+            const isLinear = nums.every((val, i) => i === 0 || val - nums[i - 1] === step);
+            if (isLinear) {
+                return formatEasternArabicInteger(nums[0] + targetOffsetFromStart * step, arabParsed[0]!.padLen);
+            }
+        } else {
+            const shouldInc = Boolean(options?.forceSingleNumberIncrement || options?.hasNumberingHeaderHint || nums[0] === 1);
+            if (shouldInc) {
+                return formatEasternArabicInteger(nums[0] + targetOffsetFromStart, arabParsed[0]!.padLen);
+            }
+        }
+        return cyclicFallback;
+    }
+
+    // 3. Cek angka Latin murni (contoh: "1", "2", "01", "75", "80.5")
+    const pureNumRegex = /^([+-]?\d+(?:\.\d+)?)$/;
+    if (sourceValues.every(v => pureNumRegex.test(v.trim()))) {
+        const nums = sourceValues.map(v => Number(v.trim()));
+        const firstTrim = sourceValues[0].trim();
+        const padLen = /^\d+$/.test(firstTrim) && firstTrim.length > 1 && firstTrim.startsWith('0') ? firstTrim.length : 0;
+        const maxDecimals = Math.max(
+            0,
+            ...sourceValues.map(v => {
+                const parts = v.trim().split('.');
+                return parts[1] ? parts[1].length : 0;
+            })
+        );
+
+        const formatNumOut = (val: number): string => {
+            if (maxDecimals > 0) {
+                return Number(val.toFixed(maxDecimals)).toString();
+            }
+            const rounded = Math.round(val);
+            if (padLen > 0 && rounded >= 0) {
+                return String(rounded).padStart(padLen, '0');
+            }
+            return String(rounded);
+        };
+
+        if (n >= 2) {
+            const step = nums[1] - nums[0];
+            const isArithmetic = nums.every((val, i) => i === 0 || Math.abs((val - nums[i - 1]) - step) < 1e-9);
+            if (isArithmetic) {
+                return formatNumOut(nums[0] + targetOffsetFromStart * step);
+            }
+            return cyclicFallback;
+        }
+
+        // Jika hanya 1 sel angka: otomatis urutkan jika nilainya "1" / "01", atau kolom bernomor ("NO"), atau mode 'increment' (Ctrl+Drag / Opsi Urutkan)
+        const shouldIncrementSingle = Boolean(
+            options?.forceSingleNumberIncrement ||
+            options?.hasNumberingHeaderHint ||
+            firstTrim === '1' ||
+            /^0+1$/.test(firstTrim)
+        );
+        if (shouldIncrementSingle) {
+            const nextVal = nums[0] + targetOffsetFromStart;
+            // Hindari angka <= 0 saat ditarik ke atas kecuali dipaksa
+            if (nextVal <= 0 && nums[0] >= 1 && !options?.forceSingleNumberIncrement) {
+                return '1';
+            }
+            return formatNumOut(nextVal);
+        }
+        return cyclicFallback;
+    }
+
+    // 4. Cek teks berpola angka di akhir atau awal (contoh: "1.", "(1)", "UH 1", "Tugas 01", "Mapel 1", "Semester 1")
+    const patternRegex = /^(.*?)(\d+)([^\d]*)$/;
+    const parsedPatterns = sourceValues.map(v => v.match(patternRegex));
+    if (parsedPatterns.every(m => m !== null)) {
+        const p0 = parsedPatterns[0]!;
+        const sameAffix = parsedPatterns.every(m => m![1].toLowerCase() === p0[1].toLowerCase() && m![3].toLowerCase() === p0[3].toLowerCase());
+        // Hindari mengubah tahun seperti "Tahun 2026/2027"
+        const looksLikeSlashYear = p0[3].trim().startsWith('/') || p0[1].trim().endsWith('/');
+        if (sameAffix && !looksLikeSlashYear) {
+            const nums = parsedPatterns.map(m => parseInt(m![2], 10));
+            const padLen = p0[2].length > 1 && p0[2].startsWith('0') ? p0[2].length : 0;
+            let step = 1;
+            let valid = true;
+            if (n >= 2) {
+                step = nums[1] - nums[0];
+                valid = nums.every((val, i) => i === 0 || val - nums[i - 1] === step);
+            }
+            if (valid) {
+                const rawNext = nums[0] + targetOffsetFromStart * step;
+                if (rawNext >= 0) {
+                    const numStr = padLen > 0 ? String(rawNext).padStart(padLen, '0') : String(rawNext);
+                    const sampleAffix = parsedPatterns[modIdx]!;
+                    return `${sampleAffix[1]}${numStr}${sampleAffix[3]}`;
+                }
+            }
+        }
+    }
+
+    return cyclicFallback;
+}
+
+/**
+ * Menghasilkan key variabel input berikutnya saat sel bertipe 'input'/'dropdown' di-autofill
+ * Contoh: "UH1" -> "UH2", "NILAI_1" -> "NILAI_2", atau "FIQIH" -> "FIQIH_2" (unik tidak bentrok).
+ */
+export function computeAutoFillNextInputKey(
+    sourceKeys: (string | undefined)[],
+    targetOffsetFromStart: number,
+    usedKeysUpper: Set<string>,
+    mode: AutoFillMode
+): string | undefined {
+    const n = sourceKeys.length;
+    if (n === 0) return undefined;
+    const modIdx = ((targetOffsetFromStart % n) + n) % n;
+    const baseRaw = sourceKeys[modIdx]?.trim();
+    if (!baseRaw) return undefined;
+
+    let candidate = baseRaw;
+    if (mode === 'series' || mode === 'increment') {
+        const trailingNumMatches = sourceKeys.map(k => (k || '').trim().match(/^(.*?)(\d+)$/));
+        if (trailingNumMatches.every(m => m !== null)) {
+            const m0 = trailingNumMatches[0]!;
+            const samePrefix = trailingNumMatches.every(m => m![1].toUpperCase() === m0[1].toUpperCase());
+            if (samePrefix) {
+                const nums = trailingNumMatches.map(m => parseInt(m![2], 10));
+                const padLen = m0[2].length > 1 && m0[2].startsWith('0') ? m0[2].length : 0;
+                const step = n >= 2 ? nums[1] - nums[0] : 1;
+                const isLin = n < 2 || nums.every((val, i) => i === 0 || val - nums[i - 1] === step);
+                if (isLin) {
+                    const nextNum = Math.max(1, nums[0] + targetOffsetFromStart * step);
+                    const numStr = padLen > 0 ? String(nextNum).padStart(padLen, '0') : String(nextNum);
+                    candidate = `${m0[1]}${numStr}`;
+                }
+            }
+        }
+    }
+
+    let finalKey = candidate.toUpperCase().replace(/\s+/g, '_');
+    if (usedKeysUpper.has(finalKey)) {
+        const stem = finalKey.replace(/_\d+$/, '');
+        let suffix = 2;
+        while (usedKeysUpper.has(`${stem}_${suffix}`)) {
+            suffix++;
+        }
+        finalKey = `${stem}_${suffix}`;
+    }
+    usedKeysUpper.add(finalKey);
+    return finalKey;
+}
+

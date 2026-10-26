@@ -33,6 +33,7 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
 
     // Opsi Kolom
     const [includeKkm, setIncludeKkm] = useState<boolean>(true);
+    const [includeClassAvg, setIncludeClassAvg] = useState<boolean>(false);
     const [extraScoreFormat, setExtraScoreFormat] = useState<'none' | 'terbilang' | 'arab'>('terbilang');
     const [predikatMode, setPredikatMode] = useState<'none' | 'huruf' | 'pesantren'>('huruf');
 
@@ -105,6 +106,10 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
             cols.push({ id: 'kkm', header: 'KKM', width: 52, align: 'center' });
         }
         cols.push({ id: 'nilai', header: 'NILAI ANGKA', width: 78, align: 'center' });
+
+        if (includeClassAvg) {
+            cols.push({ id: 'rerata_kelas', header: 'RERATA KELAS', width: 74, align: 'center' });
+        }
 
         if (extraScoreFormat === 'terbilang') {
             cols.push({ id: 'extra', header: 'TERBILANG / HURUF', width: 165, align: 'left' });
@@ -185,6 +190,13 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
                         bold: true
                     });
                 }
+                if (col.id === 'rerata_kelas') {
+                    return makeCell(rIdx, cIdx, col.width, {
+                        type: 'formula',
+                        value: `=RATA2_KELAS($${key})`,
+                        align: 'center'
+                    });
+                }
                 if (col.id === 'extra') {
                     return makeCell(rIdx, cIdx, col.width, {
                         type: 'formula',
@@ -209,7 +221,13 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
         const labelSpanCount = Math.max(1, nilaiColIdx);
         const argsList = generatedKeys.join(', ');
 
-        const appendSummaryRow = (label: string, formulaExpr: string, extraFormula?: string, predikatFormula?: string) => {
+        const appendSummaryRow = (
+            label: string,
+            formulaExpr: string,
+            extraFormula?: string,
+            predikatFormula?: string,
+            classAvgFormula?: string
+        ) => {
             const rIdx = rows.length;
             const rowCells: GridCell[] = [];
             for (let cIdx = 0; cIdx < cols.length; cIdx++) {
@@ -237,6 +255,16 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
                             type: formulaExpr.startsWith('=') ? 'formula' : 'data',
                             value: formulaExpr,
                             bold: true,
+                            align: 'center',
+                            backgroundColor: '#f8fafc'
+                        })
+                    );
+                } else if (col.id === 'rerata_kelas') {
+                    rowCells.push(
+                        makeCell(rIdx, cIdx, col.width, {
+                            type: classAvgFormula ? 'formula' : 'label',
+                            value: classAvgFormula || '',
+                            bold: Boolean(classAvgFormula),
                             align: 'center',
                             backgroundColor: '#f8fafc'
                         })
@@ -290,7 +318,8 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
                 : predikatMode === 'huruf'
                 ? `=PREDIKAT(RATA2(${argsList}))`
                 : undefined;
-            appendSummaryRow('RATA-RATA NILAI', avgFormula, extraF, predF);
+            const classAvgF = includeClassAvg ? '=RATA2_KELAS()' : undefined;
+            appendSummaryRow('RATA-RATA NILAI', avgFormula, extraF, predF, classAvgF);
         }
 
         if (includeRankRow) {
@@ -443,6 +472,16 @@ export const RaporKurikulumGeneratorModal: React.FC<RaporKurikulumGeneratorModal
                                     type="checkbox"
                                     checked={includeKkm}
                                     onChange={e => setIncludeKkm(e.target.checked)}
+                                    className="rounded text-teal-600 w-4 h-4"
+                                />
+                            </label>
+
+                            <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
+                                <span>Tampilkan Kolom Rerata Kelas (<code>=RATA2_KELAS</code>)</span>
+                                <input
+                                    type="checkbox"
+                                    checked={includeClassAvg}
+                                    onChange={e => setIncludeClassAvg(e.target.checked)}
                                     className="rounded text-teal-600 w-4 h-4"
                                 />
                             </label>

@@ -3,6 +3,7 @@ import { extractTemplateKeys, ExtractedTemplateKey, getTemplateSheets } from './
 export { getTemplateSheets };
 import { loadXLSX } from '../utils/lazyClientLibs';
 import { formatDate } from '../utils/formatters';
+import { normalizeSubjectKeyForAvg } from '../utils/raporFormulaUtils';
 
 export interface PredikatResult {
     predikat: string;
@@ -84,6 +85,7 @@ export interface RombelLegerData {
     allKeys: ExtractedTemplateKey[];
     students: StudentLegerRow[];
     subjectStats: Record<string, SubjectStat>;
+    classAverages: Record<string, number>;
     classAverage: number;
     classHighest: number;
     classLowest: number;
@@ -93,6 +95,82 @@ export interface RombelLegerData {
     emptyCount: number;
     overallCompletionRate: number;
 }
+
+/**
+ * Menghitung rata-rata nilai per kode variabel ($KEY) dan rata-rata umum kelas dari sekumpulan RaporRecord rombel
+ */
+export const computeClassAveragesFromRecords = (
+    records: RaporRecord[],
+    template?: RaporTemplate | null
+): { classAverages: Record<string, number>; classOverallAverage: number } => {
+    const accum = new Map<string, { sum: number; count: number }>();
+    const studentAvgs: number[] = [];
+
+    for (const rec of records) {
+        if (!rec?.customData) continue;
+        let parsed: Record<string, any> = {};
+        try {
+            parsed = typeof rec.customData === 'string' ? JSON.parse(rec.customData) : rec.customData;
+        } catch {
+            parsed = {};
+        }
+
+        let sSum = 0;
+        let sCount = 0;
+
+        for (const [rawKey, rawVal] of Object.entries(parsed)) {
+            if (!rawKey || rawVal === undefined || rawVal === null) continue;
+            const strVal = String(rawVal).trim();
+            if (strVal === '' || strVal === '-') continue;
+            const num = Number(strVal.replace(',', '.'));
+            if (isNaN(num) || !isFinite(num)) continue;
+
+            const normKey = normalizeSubjectKeyForAvg(rawKey);
+            if (!normKey) continue;
+
+            const cur = accum.get(normKey) || { sum: 0, count: 0 };
+            cur.sum += num;
+            cur.count += 1;
+            accum.set(normKey, cur);
+
+            if (isSubjectGradeKey(rawKey)) {
+                sSum += num;
+                sCount += 1;
+            }
+        }
+
+        if (sCount > 0) {
+            studentAvgs.push(Math.round((sSum / sCount) * 100) / 100);
+        }
+    }
+
+    const classAverages: Record<string, number> = {};
+    for (const [normKey, stat] of accum.entries()) {
+        if (stat.count > 0) {
+            classAverages[normKey] = Math.round((stat.sum / stat.count) * 100) / 100;
+        }
+    }
+
+    if (template) {
+        const allKeys = extractTemplateKeys(template, 'all');
+        for (const item of allKeys) {
+            const normK = normalizeSubjectKeyForAvg(item.key);
+            const avg = classAverages[normK];
+            if (avg !== undefined && item.label) {
+                const labelKey = item.label.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                if (labelKey && classAverages[labelKey] === undefined) {
+                    classAverages[labelKey] = avg;
+                }
+            }
+        }
+    }
+
+    const classOverallAverage = studentAvgs.length > 0
+        ? Math.round((studentAvgs.reduce((a, b) => a + b, 0) / studentAvgs.length) * 100) / 100
+        : 0;
+
+    return { classAverages, classOverallAverage };
+};
 
 /**
  * Build consolidated Leger data with calculations, rankings, and completion stats
@@ -293,6 +371,13 @@ export const buildRombelLegerData = (params: {
         ? Math.round((completeCount / totalStudents) * 100)
         : 0;
 
+    const { classAverages: rawClassAverages } = computeClassAveragesFromRecords(records, template);
+    for (const [k, stat] of Object.entries(subjectStats)) {
+        if (stat.count > 0) {
+            rawClassAverages[normalizeSubjectKeyForAvg(k)] = stat.average;
+        }
+    }
+
     return {
         template,
         availableSheets,
@@ -302,6 +387,7 @@ export const buildRombelLegerData = (params: {
         allKeys,
         students,
         subjectStats,
+        classAverages: rawClassAverages,
         classAverage,
         classHighest,
         classLowest,

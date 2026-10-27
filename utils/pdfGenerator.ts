@@ -382,13 +382,71 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     const orientation = options?.orientation || 'portrait';
     const margin = options?.margin;
 
+    // Clone node first to strip offscreen measurement containers and reset preview zoom transform cleanly
+    const clonedElement = element.cloneNode(true) as HTMLElement;
+    clonedElement.style.transform = 'none';
+    clonedElement.style.transition = 'none';
+    clonedElement
+        .querySelectorAll('[data-rapor-measure-only="true"]')
+        .forEach((node) => node.remove());
+
+    const raporPages = Array.from(clonedElement.querySelectorAll<HTMLElement>('.rapor-exact-page'));
+    const hasPortraitRapor = raporPages.some(
+        (p) => (p.getAttribute('data-print-orientation') || 'portrait') !== 'landscape'
+    );
+    const hasLandscapeRapor = raporPages.some(
+        (p) => p.getAttribute('data-print-orientation') === 'landscape' || p.classList.contains('print-landscape')
+    );
+    const hasMixedRaporOrientations = hasPortraitRapor && hasLandscapeRapor;
+
+    // Normalize page-break markers across all discrete Rapor pages in DOM order
+    if (raporPages.length > 0) {
+        raporPages.forEach((pageEl, idx) => {
+            const isLast = idx === raporPages.length - 1;
+            const curOrient = pageEl.getAttribute('data-print-orientation') || (pageEl.classList.contains('print-landscape') ? 'landscape' : 'portrait');
+            pageEl.setAttribute('data-print-orientation', curOrient);
+
+            if (isLast) {
+                pageEl.classList.remove('page-break-after');
+                pageEl.style.pageBreakAfter = 'auto';
+                pageEl.style.breakAfter = 'auto';
+            } else {
+                const nextEl = raporPages[idx + 1];
+                const nextOrient = nextEl.getAttribute('data-print-orientation') || (nextEl.classList.contains('print-landscape') ? 'landscape' : 'portrait');
+                // When switching named @page orientations, CSS page-name change already triggers a page break;
+                // omitting break-after avoids a duplicate blank page in Chromium.
+                if (hasMixedRaporOrientations && curOrient !== nextOrient) {
+                    pageEl.classList.remove('page-break-after');
+                    pageEl.style.pageBreakAfter = 'auto';
+                    pageEl.style.breakAfter = 'auto';
+                } else {
+                    pageEl.classList.add('page-break-after');
+                    pageEl.style.pageBreakAfter = 'always';
+                    pageEl.style.breakAfter = 'page';
+                }
+            }
+        });
+    }
+
     // Detect orientation from the preview content
-    const isLandscape =
-        element.querySelector('.print-landscape, [data-print-orientation="landscape"]') !== null ||
-        orientation === 'landscape' ||
-        element.classList.contains('print-landscape') ||
-        element.getAttribute('data-print-orientation') === 'landscape';
-    const actualOrientation = isLandscape ? 'landscape' : 'portrait';
+    let actualOrientation: 'portrait' | 'landscape';
+    if (raporPages.length > 0) {
+        if (hasLandscapeRapor && !hasPortraitRapor) {
+            actualOrientation = 'landscape';
+        } else if (hasPortraitRapor && !hasLandscapeRapor) {
+            actualOrientation = 'portrait';
+        } else {
+            actualOrientation = orientation === 'landscape' ? 'landscape' : 'portrait';
+        }
+    } else {
+        const isLandscape =
+            clonedElement.querySelector('.print-landscape, [data-print-orientation="landscape"]') !== null ||
+            orientation === 'landscape' ||
+            clonedElement.classList.contains('print-landscape') ||
+            clonedElement.getAttribute('data-print-orientation') === 'landscape';
+        actualOrientation = isLandscape ? 'landscape' : 'portrait';
+    }
+
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isCalendarPrint = elementId === 'calendar-print-area';
     const isPerpusPrint = ['preview-kartu', 'preview-slip', 'preview-label'].includes(elementId);
@@ -404,14 +462,10 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     const [portraitWidth, portraitHeight] = paperDimensions[paperSize] || paperDimensions.A4;
     const pageWidth = actualOrientation === 'landscape' ? portraitHeight : portraitWidth;
     const pageHeight = actualOrientation === 'landscape' ? portraitWidth : portraitHeight;
-
-    // Clone node to strip offscreen measurement containers and reset preview zoom transform cleanly
-    const clonedElement = element.cloneNode(true) as HTMLElement;
-    clonedElement.style.transform = 'none';
-    clonedElement.style.transition = 'none';
-    clonedElement
-        .querySelectorAll('[data-rapor-measure-only="true"]')
-        .forEach((node) => node.remove());
+    // Subtract 0.05cm (0.5mm) from fixed page box height so OS DPI rounding never overflows the physical page slot
+    const safePortraitHeight = Number((portraitHeight - 0.05).toFixed(2));
+    const safeLandscapeHeight = Number((portraitWidth - 0.05).toFixed(2));
+    const safeDefaultHeight = actualOrientation === 'landscape' ? safeLandscapeHeight : safePortraitHeight;
 
     // Keep outer wrapper id/class so print-specific selectors (e.g. #calendar-print-area) can apply correctly.
     const content = clonedElement.outerHTML;
@@ -463,11 +517,43 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 margin: ${marginStr}; 
                 size: ${paperSize === 'F4' ? `${pageWidth}cm ${pageHeight}cm` : `${paperSize} ${actualOrientation}`}; 
             }
+            ${hasMixedRaporOrientations ? `
+            @page rapor-portrait {
+                margin: 0;
+                size: ${paperSize === 'F4' ? `${portraitWidth}cm ${portraitHeight}cm` : `${paperSize} portrait`};
+            }
+            @page rapor-landscape {
+                margin: 0;
+                size: ${paperSize === 'F4' ? `${portraitHeight}cm ${portraitWidth}cm` : `${paperSize} landscape`};
+            }
+            ` : ''}
             * {
                 box-shadow: none !important;
                 -webkit-box-shadow: none !important;
                 text-shadow: none !important;
                 filter: none !important;
+            }
+            /* Force pure normal-flow block containers for all Rapor ancestors so browser pagination never drops sibling formats */
+            #rapor-preview-container,
+            #batch-print-container,
+            #rapor-design-preview-print-area,
+            .dynamic-rapor-container,
+            .rapor-sheet-group,
+            .rapor-page-slot,
+            .rapor-batch-item {
+                display: block !important;
+                position: static !important;
+                float: none !important;
+                width: auto !important;
+                max-width: none !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+                transform: none !important;
+                gap: 0 !important;
             }
             .printable-content-wrapper {
                 transform: none !important;
@@ -496,16 +582,37 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
             .rapor-fit-1-page,
             .printable-content-wrapper.rapor-exact-page,
             .rapor-exact-page {
+                display: block !important;
+                position: relative !important;
                 width: ${pageWidth}cm !important;
-                height: ${pageHeight}cm !important;
-                max-height: ${pageHeight}cm !important;
+                height: ${safeDefaultHeight}cm !important;
+                max-height: ${safeDefaultHeight}cm !important;
                 min-height: 0 !important;
-                margin-top: 0 !important;
-                margin-bottom: 0 !important;
+                margin: 0 auto !important;
+                border: none !important;
+                border-radius: 0 !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 box-sizing: border-box !important;
                 overflow: hidden !important;
+            }
+            .printable-content-wrapper.rapor-exact-page[data-print-orientation="portrait"],
+            .rapor-exact-page[data-print-orientation="portrait"] {
+                width: ${portraitWidth}cm !important;
+                height: ${safePortraitHeight}cm !important;
+                max-height: ${safePortraitHeight}cm !important;
+                ${hasMixedRaporOrientations ? 'page: rapor-portrait;' : ''}
+            }
+            .printable-content-wrapper.rapor-exact-page[data-print-orientation="landscape"],
+            .rapor-exact-page[data-print-orientation="landscape"] {
+                width: ${portraitHeight}cm !important;
+                height: ${safeLandscapeHeight}cm !important;
+                max-height: ${safeLandscapeHeight}cm !important;
+                ${hasMixedRaporOrientations ? 'page: rapor-landscape;' : ''}
+            }
+            .rapor-scaled-viewport {
+                overflow: hidden !important;
+                position: relative !important;
             }
             .rapor-fit-1-page.page-break-after,
             .rapor-exact-page.page-break-after {
@@ -787,11 +894,32 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                     window.focus();
                     window.print();
                 }
-                // Wait for resources (images/fonts) to load before printing
-                window.onload = () => {
-                    setTimeout(triggerPrintOnce, 600);
-                };
-                // Fallback if onload takes too long
+                function waitForAllAssetsAndPrint() {
+                    var imgs = Array.prototype.slice.call(document.images || []);
+                    var imgPromises = imgs.map(function(img) {
+                        if (img.complete) return Promise.resolve();
+                        return new Promise(function(resolve) {
+                            img.addEventListener('load', resolve, { once: true });
+                            img.addEventListener('error', resolve, { once: true });
+                        });
+                    });
+                    var fontPromise = (document.fonts && document.fonts.ready)
+                        ? document.fonts.ready.catch(function() {})
+                        : Promise.resolve();
+                    Promise.all([Promise.all(imgPromises), fontPromise]).then(function() {
+                        requestAnimationFrame(function() {
+                            requestAnimationFrame(function() {
+                                setTimeout(triggerPrintOnce, 180);
+                            });
+                        });
+                    });
+                }
+                if (document.readyState === 'complete') {
+                    waitForAllAssetsAndPrint();
+                } else {
+                    window.addEventListener('load', waitForAllAssetsAndPrint, { once: true });
+                }
+                // Fallback if assets take too long
                 setTimeout(triggerPrintOnce, 3500);
             </script>
         </body>

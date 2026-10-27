@@ -25,10 +25,12 @@ import { getTemplateSheets } from '../../services/raporExcelService';
 import { RaporTitleEditModal } from './modals/RaporTitleEditModal';
 import { RaporWhatsAppModal } from './modals/RaporWhatsAppModal';
 import {
+    RAPOR_CREDIT_FOOTER_TEXT,
     normalizeRaporPageSetup,
     buildPageSetupStateFromPreset,
     formatPageSetupBadgeLabel,
     getRaporPaperMetrics,
+    getEffectivePopulatedColCount,
     computePaginatedRaporLayout,
     getRenderableRowCellsForPage,
     PaginatedRaporPage,
@@ -215,7 +217,15 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         [pageSetup.paperSize, pageSetup.orientation, pageSetup.marginMode]
     );
 
-    const totalColWidth = sheetColWidths.reduce((a, b) => a + b, 0) || paperMetrics.availableW;
+    const effectiveColCount = useMemo(
+        () => Math.max(1, getEffectivePopulatedColCount(sheet.cells || [], Math.max(1, colCount))),
+        [sheet.cells, colCount]
+    );
+    const activeColWidths = useMemo(
+        () => sheetColWidths.slice(0, effectiveColCount),
+        [sheetColWidths, effectiveColCount]
+    );
+    const totalColWidth = activeColWidths.reduce((a, b) => a + b, 0) || paperMetrics.availableW;
     const measureWidth = pageSetup.fitWidthPages === 1
         ? Math.max(paperMetrics.availableW, totalColWidth)
         : totalColWidth;
@@ -309,16 +319,28 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
     const triggerMeasure = () => {
         const container = measureContainerRef.current;
         if (!container) return;
+
+        // Normalize against any ancestor CSS transform (e.g. previewZoom scale) so measurements remain 100% unscaled
+        const rectW = container.getBoundingClientRect().width;
+        const layoutW = container.offsetWidth || measureWidth;
+        const zoomFactor = rectW > 0 && layoutW > 0 ? rectW / layoutW : 1;
+
         const hdrEl = measureHeaderRef.current;
-        const nextHeaderH = hdrEl ? Math.ceil(hdrEl.getBoundingClientRect().height) : 0;
+        const hdrRectH = hdrEl ? hdrEl.getBoundingClientRect().height : 0;
+        const rawHdrH = hdrEl
+            ? (zoomFactor > 0 && hdrRectH > 0 ? hdrRectH / zoomFactor : hdrEl.offsetHeight)
+            : 0;
+        const nextHeaderH = Math.ceil(rawHdrH);
+
         const trNodes = container.querySelectorAll<HTMLTableRowElement>('tr[data-measure-row]');
         const nextRowHeights: number[] = (sheet.cells || []).map((_, rIdx) => sheetRowHeights[rIdx] ?? 30);
         trNodes.forEach((tr) => {
             const idx = Number(tr.getAttribute('data-measure-row'));
             if (!Number.isNaN(idx)) {
-                const h = tr.getBoundingClientRect().height || tr.offsetHeight;
-                if (h > 0) {
-                    nextRowHeights[idx] = Math.max(sheetRowHeights[idx] ?? 0, Math.ceil(h));
+                const rectH = tr.getBoundingClientRect().height;
+                const unscaledH = zoomFactor > 0 && rectH > 0 ? rectH / zoomFactor : tr.offsetHeight;
+                if (unscaledH > 0) {
+                    nextRowHeights[idx] = Math.max(sheetRowHeights[idx] ?? 0, Math.ceil(unscaledH));
                 }
             }
         });
@@ -339,12 +361,25 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
     useLayoutEffect(() => {
         triggerMeasure();
         let ro: ResizeObserver | null = null;
-        if (typeof ResizeObserver !== 'undefined' && measureContainerRef.current) {
+        const container = measureContainerRef.current;
+        if (typeof ResizeObserver !== 'undefined' && container) {
             ro = new ResizeObserver(() => triggerMeasure());
-            ro.observe(measureContainerRef.current);
+            ro.observe(container);
         }
+        const imgNodes = container ? Array.from(container.querySelectorAll('img')) : [];
+        const onImgLoad = () => triggerMeasure();
+        imgNodes.forEach(img => {
+            if (!img.complete) {
+                img.addEventListener('load', onImgLoad);
+                img.addEventListener('error', onImgLoad);
+            }
+        });
         return () => {
             if (ro) ro.disconnect();
+            imgNodes.forEach(img => {
+                img.removeEventListener('load', onImgLoad);
+                img.removeEventListener('error', onImgLoad);
+            });
         };
     }, [sheet, measureWidth, showKop, shouldShowTitle, resolvedTitle, shouldShowBiodataHeader, santri.id, sheetRowHeights]);
 
@@ -561,14 +596,15 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         startRow: 0,
         endRow: Math.max(0, (sheet.cells?.length || 1) - 1),
         startCol: 0,
-        endCol: Math.max(0, colCount - 1),
-        sliceColWidths: sheetColWidths,
+        endCol: Math.max(0, effectiveColCount - 1),
+        sliceColWidths: activeColWidths,
         sliceNaturalWidth: measureWidth,
+        sliceNaturalHeight: 0,
         stretchColsToFillWidth: totalColWidth <= paperMetrics.availableW
     };
 
     return (
-        <div className="space-y-6 print:space-y-0">
+        <div className="rapor-sheet-group space-y-6 print:block print:space-y-0">
             {/* Offscreen Unscaled Measurement Container */}
             <div
                 ref={measureContainerRef}
@@ -589,7 +625,7 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                 <div ref={measureHeaderRef}>{renderDocumentHeader()}</div>
                 <table className="w-full border-collapse table-fixed">
                     <colgroup>
-                        {sheetColWidths.map((w, cIdx) => (
+                        {activeColWidths.map((w, cIdx) => (
                             <col
                                 key={cIdx}
                                 style={{
@@ -618,6 +654,9 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
             {paginatedLayout.pages.map((page, pageIdx) => {
                 const isVeryLastOutputPage = isLastDocument && isLastSheet && pageIdx === paginatedLayout.pages.length - 1;
                 const scaledSliceW = Math.floor(page.sliceNaturalWidth * paginatedLayout.scale);
+                const viewportMaxH = paperMetrics.availableH;
+                const footerBottomPx = Math.max(4, Math.min(10, Math.floor(paperMetrics.padPx * 0.35)));
+                const isScaled = paginatedLayout.scale !== 1;
                 const sliceSumCols = page.sliceColWidths.reduce((a, b) => a + b, 0) || 1;
                 const rowIndices: number[] = [];
                 if (page.endRow >= page.startRow) {
@@ -656,8 +695,11 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                         </div>
 
                         <div
+                            className="rapor-scaled-viewport"
                             style={{
                                 width: `${scaledSliceW}px`,
+                                height: isScaled ? `${viewportMaxH}px` : undefined,
+                                maxHeight: `${viewportMaxH}px`,
                                 overflow: 'hidden',
                                 margin: '0 auto',
                                 position: 'relative'
@@ -667,7 +709,10 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                                 className="flex flex-col justify-start"
                                 style={{
                                     width: `${page.sliceNaturalWidth}px`,
-                                    transform: paginatedLayout.scale < 1 ? `scale(${paginatedLayout.scale})` : undefined,
+                                    position: isScaled ? 'absolute' : 'relative',
+                                    top: isScaled ? 0 : undefined,
+                                    left: isScaled ? 0 : undefined,
+                                    transform: isScaled ? `scale(${paginatedLayout.scale})` : undefined,
                                     transformOrigin: 'top left'
                                 }}
                             >
@@ -710,18 +755,24 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                             </div>
                         </div>
 
-                        {page.totalPages > 1 && (
-                            <div
-                                className="text-[9px] text-slate-500 tabular-nums select-none"
-                                style={{
-                                    position: 'absolute',
-                                    bottom: '4px',
-                                    right: `${paperMetrics.padPx}px`
-                                }}
-                            >
-                                {santri.namaLengkap} · Halaman {page.pageNumber} dari {page.totalPages}
-                            </div>
-                        )}
+                        <div
+                            className={`border-t border-slate-300 pt-0.5 text-[8pt] text-slate-500 italic leading-tight select-none flex items-center ${
+                                page.totalPages > 1 ? 'justify-between gap-2' : 'justify-center text-center'
+                            }`}
+                            style={{
+                                position: 'absolute',
+                                bottom: `${footerBottomPx}px`,
+                                left: `${paperMetrics.padPx}px`,
+                                right: `${paperMetrics.padPx}px`
+                            }}
+                        >
+                            <span>{RAPOR_CREDIT_FOOTER_TEXT}</span>
+                            {page.totalPages > 1 && (
+                                <span className="not-italic text-[9px] tabular-nums shrink-0">
+                                    {santri.namaLengkap} · Halaman {page.pageNumber} dari {page.totalPages}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 );
             })}
@@ -795,7 +846,7 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     const hasBuiltInBiodata = useMemo(() => templateHasBuiltInBiodata(template), [template]);
 
     return (
-        <div className="dynamic-rapor-container space-y-8 print:space-y-0">
+        <div className="dynamic-rapor-container space-y-8 print:block print:space-y-0">
             {sheets.map((sheet, sheetIdx) => {
                 const isLastSheet = sheetIdx === sheets.length - 1;
                 const shouldShowBiodataHeader = showBiodataHeader !== undefined
@@ -870,6 +921,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     // Print Layout & Output Settings
     const [paperSize, setPaperSize] = useState<'A4' | 'F4'>('A4');
     const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+    const [hasManualOrientationOverride, setHasManualOrientationOverride] = useState<boolean>(false);
     const [showKop, setShowKop] = useState<boolean>(true);
     const [marginMode, setMarginMode] = useState<'normal' | 'narrow' | 'none'>('normal');
     const [rankingDisplayLimit, setRankingDisplayLimit] = useState<RankingDisplayLimit>('all');
@@ -899,6 +951,9 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     );
 
     const applyPrintPageSetupPatch = (patch: Partial<RaporPageSetupInput>) => {
+        if (patch.orientation !== undefined) {
+            setHasManualOrientationOverride(true);
+        }
         const next = normalizeRaporPageSetup({
             ...currentPageSetup,
             ...patch
@@ -1444,6 +1499,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
     useEffect(() => {
         if (selectedTemplate) {
+            setHasManualOrientationOverride(false);
             const hasSavedLayoutProp =
                 selectedTemplate.paperSize !== undefined ||
                 selectedTemplate.orientation !== undefined ||
@@ -2300,6 +2356,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                         )}
                     </div>
                 </div>
+
+                {/* Footer Kredit Cetak Rapor */}
+                <div className="no-print pt-3 pb-1 text-center text-xs text-slate-500">
+                    <span>dibuat dengan eSantri Web by AI Projek | </span>
+                    <a
+                        href="https://aiprojek01.my.id"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-teal-700 hover:underline"
+                    >
+                        aiprojek01.my.id
+                    </a>
+                </div>
             </div>
 
             {/* SINGLE PREVIEW MODAL WITH SLIDER NAVIGATION */}
@@ -2575,6 +2644,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                         <div className="flex-grow overflow-auto bg-slate-200/90 p-4 sm:p-8 flex justify-center">
                             <div
                                 id="rapor-preview-container"
+                                className="print:block"
                                 style={{
                                     transform: `scale(${previewZoom})`,
                                     transformOrigin: 'top center',
@@ -2598,7 +2668,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         calculation={currentPreviewCalculation}
                                         cohortRecords={currentPreviewCohortMeta?.rombelRecords}
                                         paperSize={currentPageSetup.paperSize}
-                                        orientation={currentPageSetup.orientation}
+                                        orientation={hasManualOrientationOverride ? currentPageSetup.orientation : undefined}
                                         showKop={showKop}
                                         marginMode={currentPageSetup.marginMode}
                                         fitToPage={currentPageSetup.fitToPage}
@@ -2826,13 +2896,13 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
                         {/* Modal Body: Continuous Batch Render */}
                         <div className="flex-grow overflow-auto bg-slate-200/90 p-4 sm:p-8 flex justify-center">
-                            <div id="batch-print-container" className="space-y-8 print:space-y-0">
+                            <div id="batch-print-container" className="space-y-8 print:block print:space-y-0">
                                 {batchData.map((item, idx) => {
                                     const isLastDoc = idx === batchData.length - 1;
                                     return (
                                         <div
                                             key={item.santri.id}
-                                            className={!selectedTemplate && !isLastDoc ? 'page-break-after' : undefined}
+                                            className={`rapor-batch-item print:block ${!selectedTemplate && !isLastDoc ? 'page-break-after' : ''}`}
                                             style={!selectedTemplate && !isLastDoc ? { pageBreakAfter: 'always', breakAfter: 'page' } : undefined}
                                         >
                                             {selectedTemplate ? (
@@ -2852,7 +2922,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                                     calculation={item.calculation}
                                                     cohortRecords={item.cohortRecords}
                                                     paperSize={currentPageSetup.paperSize}
-                                                    orientation={currentPageSetup.orientation}
+                                                    orientation={hasManualOrientationOverride ? currentPageSetup.orientation : undefined}
                                                     showKop={showKop}
                                                     marginMode={currentPageSetup.marginMode}
                                                     fitToPage={currentPageSetup.fitToPage}

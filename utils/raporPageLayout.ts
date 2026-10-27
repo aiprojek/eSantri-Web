@@ -3,6 +3,7 @@ import { GridCell, PageFitCount } from '../types';
 export type RaporPaperSize = 'A4' | 'F4';
 export type RaporOrientation = 'portrait' | 'landscape';
 export type RaporMarginMode = 'normal' | 'narrow' | 'none';
+export const RAPOR_CREDIT_FOOTER_TEXT = 'dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id';
 export type RaporPageScalePreset =
     | 'fit_1_page'
     | 'fit_width_1'
@@ -83,6 +84,7 @@ export interface PaginatedRaporPage {
     endCol: number;
     sliceColWidths: number[];
     sliceNaturalWidth: number;
+    sliceNaturalHeight: number;
     stretchColsToFillWidth: boolean;
 }
 
@@ -242,9 +244,9 @@ export function getRaporPaperMetrics(
     const padPx = marginMode === 'normal' ? 32 : marginMode === 'narrow' ? 16 : 8;
     const paddingClass = marginMode === 'normal' ? 'p-8' : marginMode === 'narrow' ? 'p-4' : 'p-2';
 
-    // Subtract padding + subtle safety buffer so bottom/right table borders never clip at page boundary
+    // Subtract padding + dedicated bottom credit footer strip so content and borders never collide with footer
     const availableW = Math.max(300, Math.floor(pxW - padPx * 2 - 2));
-    const availableH = Math.max(320, Math.floor(pxH - padPx * 2 - 12));
+    const availableH = Math.max(320, Math.floor(pxH - padPx * 2 - 22));
 
     return {
         paperSize,
@@ -551,15 +553,10 @@ export function computePaginatedRaporLayout({
         pageSetup.fitWidthPages === 1 &&
         pageSetup.fitHeightPages === 1;
 
-    // For single-page fit, keep full grid behavior for 100% backward fidelity;
-    // for multi-page / auto-overflow, trim trailing blank unbordered padding rows so they don't push empty pages.
-    const effectiveRowCount = isSinglePageFit
-        ? Math.max(1, rawRowCount)
-        : Math.max(1, getEffectivePopulatedRowCount(cells));
-
-    const effectiveColCount = pageSetup.fitWidthPages === 1
-        ? Math.max(1, rawColCount)
-        : Math.max(1, getEffectivePopulatedColCount(cells, rawColCount));
+    // Trim trailing completely empty, unbordered, uncolored canvas rows/columns across all fit presets
+    // so blank grid padding never distorts 1-page scaling or creates phantom overflow.
+    const effectiveRowCount = Math.max(1, getEffectivePopulatedRowCount(cells));
+    const effectiveColCount = Math.max(1, getEffectivePopulatedColCount(cells, rawColCount));
 
     const activeColWidths = colWidths.slice(0, effectiveColCount);
     const totalColWidth = activeColWidths.reduce((a, b) => a + b, 0) || availableW;
@@ -573,7 +570,7 @@ export function computePaginatedRaporLayout({
     const totalRowsHeight = rowHeights
         .slice(0, effectiveRowCount)
         .reduce((acc, h) => acc + (h || 30), 0);
-    const totalNaturalHeight = headerHeight + totalRowsHeight + (isSinglePageFit ? 8 : 2);
+    const totalNaturalHeight = headerHeight + totalRowsHeight + (isSinglePageFit ? 14 : 4);
 
     let scale = 1;
 
@@ -653,18 +650,19 @@ export function computePaginatedRaporLayout({
             includeDocHeader: true,
             headerGroupRows: [],
             startRow: 0,
-            endRow: Math.max(0, rawRowCount - 1),
+            endRow: Math.max(0, effectiveRowCount - 1),
             startCol: 0,
-            endCol: Math.max(0, rawColCount - 1),
-            sliceColWidths: colWidths,
+            endCol: Math.max(0, effectiveColCount - 1),
+            sliceColWidths: activeColWidths,
             sliceNaturalWidth: naturalWidth,
+            sliceNaturalHeight: totalNaturalHeight,
             stretchColsToFillWidth: totalColWidth <= availableW
         };
         return {
             scale,
             naturalWidth,
-            effectiveRowCount: rawRowCount,
-            effectiveColCount: rawColCount,
+            effectiveRowCount,
+            effectiveColCount,
             isSinglePageFit: true,
             pages: [singlePage]
         };
@@ -706,6 +704,16 @@ export function computePaginatedRaporLayout({
 
         for (let vIdx = 0; vIdx < totalVPages; vIdx++) {
             const vSlice = vSlices[vIdx];
+            const includeHdr = vSlice.includeDocHeader && hIdx === 0;
+            const repeatedHdrH = vSlice.headerGroupRows.reduce((acc, r) => acc + (rowHeights[r] || 30), 0);
+            let bodyRowsH = 0;
+            if (vSlice.endRow >= vSlice.startRow) {
+                for (let r = vSlice.startRow; r <= vSlice.endRow; r++) {
+                    bodyRowsH += rowHeights[r] || 30;
+                }
+            }
+            const sliceNaturalHeight = (includeHdr ? headerHeight : 0) + repeatedHdrH + bodyRowsH + 4;
+
             pages.push({
                 pageIndex,
                 pageNumber: pageIndex + 1,
@@ -714,7 +722,7 @@ export function computePaginatedRaporLayout({
                 hIndex: hIdx,
                 totalVPages,
                 totalHPages,
-                includeDocHeader: vSlice.includeDocHeader && hIdx === 0,
+                includeDocHeader: includeHdr,
                 headerGroupRows: vSlice.headerGroupRows,
                 startRow: vSlice.startRow,
                 endRow: vSlice.endRow,
@@ -722,6 +730,7 @@ export function computePaginatedRaporLayout({
                 endCol: hSlice.endCol,
                 sliceColWidths,
                 sliceNaturalWidth,
+                sliceNaturalHeight,
                 stretchColsToFillWidth
             });
             pageIndex++;

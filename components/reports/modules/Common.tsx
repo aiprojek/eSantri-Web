@@ -104,7 +104,7 @@ export const BreakAvoidSection: React.FC<{ children: React.ReactNode; className?
     <div className={className} style={{ breakInside: 'avoid' }}>{children}</div>
 );
 
-export const ReportFooter: React.FC = () => (
+export const ReportFooter: React.FC<{ text?: string }> = ({ text }) => (
     <div
         className="report-signature-footer print-meta border-t border-gray-400 text-center text-[8pt] text-gray-500 italic w-full"
         style={{
@@ -125,7 +125,7 @@ export const ReportFooter: React.FC = () => (
                 }
             }
         `}</style>
-        dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id
+        {text || 'dibuat dengan aplikasi eSantri Web by AI Projek | aiprojek01.my.id'}
     </div>
 );
 

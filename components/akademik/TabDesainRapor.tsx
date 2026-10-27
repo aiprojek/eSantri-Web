@@ -6,10 +6,12 @@ import { loadXLSX } from '../../utils/lazyClientLibs';
 import { printToPdfNative } from '../../utils/pdfGenerator';
 import { PrintHeader } from '../common/PrintHeader';
 import {
+    RAPOR_CREDIT_FOOTER_TEXT,
     normalizeRaporPageSetup,
     buildPageSetupStateFromPreset,
     formatPageSetupBadgeLabel,
     getRaporPaperMetrics,
+    getEffectivePopulatedColCount,
     computePaginatedRaporLayout,
     getRenderableRowCellsForPage,
     PaginatedRaporPage,
@@ -171,7 +173,15 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
         [pageSetup.paperSize, pageSetup.orientation, pageSetup.marginMode]
     );
 
-    const totalColWidth = colWidths.reduce((a, b) => a + b, 0) || paperMetrics.availableW;
+    const effectiveColCount = useMemo(
+        () => Math.max(1, getEffectivePopulatedColCount(sh.cells || [], Math.max(1, colCount))),
+        [sh.cells, colCount]
+    );
+    const activeColWidths = useMemo(
+        () => colWidths.slice(0, effectiveColCount),
+        [colWidths, effectiveColCount]
+    );
+    const totalColWidth = activeColWidths.reduce((a, b) => a + b, 0) || paperMetrics.availableW;
     const measureWidth = pageSetup.fitWidthPages === 1
         ? Math.max(paperMetrics.availableW, totalColWidth)
         : totalColWidth;
@@ -259,16 +269,28 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
         const measure = () => {
             const container = measureContainerRef.current;
             if (!container) return;
+
+            // Normalize against any ancestor CSS transform (e.g. previewModalZoom scale) so measurements stay 100% unscaled
+            const rectW = container.getBoundingClientRect().width;
+            const layoutW = container.offsetWidth || measureWidth;
+            const zoomFactor = rectW > 0 && layoutW > 0 ? rectW / layoutW : 1;
+
             const hdrEl = measureHeaderRef.current;
-            const nextHeaderH = hdrEl ? Math.ceil(hdrEl.getBoundingClientRect().height) : 0;
+            const hdrRectH = hdrEl ? hdrEl.getBoundingClientRect().height : 0;
+            const rawHdrH = hdrEl
+                ? (zoomFactor > 0 && hdrRectH > 0 ? hdrRectH / zoomFactor : hdrEl.offsetHeight)
+                : 0;
+            const nextHeaderH = Math.ceil(rawHdrH);
+
             const trNodes = container.querySelectorAll<HTMLTableRowElement>('tr[data-measure-row]');
             const nextRowHeights: number[] = (sh.cells || []).map((_, rIdx) => configuredRowHeights[rIdx] ?? 30);
             trNodes.forEach((tr) => {
                 const idx = Number(tr.getAttribute('data-measure-row'));
                 if (!Number.isNaN(idx)) {
-                    const h = tr.getBoundingClientRect().height || tr.offsetHeight;
-                    if (h > 0) {
-                        nextRowHeights[idx] = Math.max(configuredRowHeights[idx] ?? 0, Math.ceil(h));
+                    const rectH = tr.getBoundingClientRect().height;
+                    const unscaledH = zoomFactor > 0 && rectH > 0 ? rectH / zoomFactor : tr.offsetHeight;
+                    if (unscaledH > 0) {
+                        nextRowHeights[idx] = Math.max(configuredRowHeights[idx] ?? 0, Math.ceil(unscaledH));
                     }
                 }
             });
@@ -288,12 +310,25 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
 
         measure();
         let ro: ResizeObserver | null = null;
-        if (typeof ResizeObserver !== 'undefined' && measureContainerRef.current) {
+        const container = measureContainerRef.current;
+        if (typeof ResizeObserver !== 'undefined' && container) {
             ro = new ResizeObserver(() => measure());
-            ro.observe(measureContainerRef.current);
+            ro.observe(container);
         }
+        const imgNodes = container ? Array.from(container.querySelectorAll('img')) : [];
+        const onImgLoad = () => measure();
+        imgNodes.forEach(img => {
+            if (!img.complete) {
+                img.addEventListener('load', onImgLoad);
+                img.addEventListener('error', onImgLoad);
+            }
+        });
         return () => {
             if (ro) ro.disconnect();
+            imgNodes.forEach(img => {
+                img.removeEventListener('load', onImgLoad);
+                img.removeEventListener('error', onImgLoad);
+            });
         };
     }, [sh, measureWidth, showKop, shouldShowBiodataHeader, shouldShowDocTitle, resolvedDocTitle, configuredRowHeights]);
 
@@ -467,14 +502,15 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
         startRow: 0,
         endRow: Math.max(0, (sh.cells?.length || 1) - 1),
         startCol: 0,
-        endCol: Math.max(0, colCount - 1),
-        sliceColWidths: colWidths,
+        endCol: Math.max(0, effectiveColCount - 1),
+        sliceColWidths: activeColWidths,
         sliceNaturalWidth: measureWidth,
+        sliceNaturalHeight: 0,
         stretchColsToFillWidth: totalColWidth <= paperMetrics.availableW
     };
 
     return (
-        <div className="w-full flex flex-col items-center gap-6 print:gap-0">
+        <div className="rapor-sheet-group w-full flex flex-col items-center gap-6 print:block print:gap-0">
             {/* Offscreen Unscaled Measurement Container */}
             <div
                 ref={measureContainerRef}
@@ -495,7 +531,7 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                 <div ref={measureHeaderRef}>{renderDocumentHeader()}</div>
                 <table className="w-full border-collapse table-fixed">
                     <colgroup>
-                        {colWidths.map((w, cIdx) => (
+                        {activeColWidths.map((w, cIdx) => (
                             <col
                                 key={cIdx}
                                 style={{
@@ -524,6 +560,9 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
             {paginatedLayout.pages.map((page, pIdx) => {
                 const isVeryLastPage = isLastSheet && pIdx === paginatedLayout.pages.length - 1;
                 const scaledSliceW = Math.floor(page.sliceNaturalWidth * paginatedLayout.scale);
+                const viewportMaxH = paperMetrics.availableH;
+                const footerBottomPx = Math.max(4, Math.min(10, Math.floor(paperMetrics.padPx * 0.35)));
+                const isScaled = paginatedLayout.scale !== 1;
                 const sliceSumCols = page.sliceColWidths.reduce((a, b) => a + b, 0) || 1;
                 const rowIndices: number[] = [];
                 if (page.endRow >= page.startRow) {
@@ -533,7 +572,7 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                 }
 
                 return (
-                    <div key={`${sh.id}-p-${page.pageIndex}`} className="w-full overflow-x-auto p-1 print:p-0 flex justify-start sm:justify-center">
+                    <div key={`${sh.id}-p-${page.pageIndex}`} className="rapor-page-slot w-full overflow-x-auto p-1 print:block print:overflow-visible print:p-0 flex justify-start sm:justify-center">
                         <div
                             data-print-orientation={paperMetrics.orientation}
                             className={`bg-white text-black font-sans text-sm printable-content-wrapper rapor-exact-page ${paginatedLayout.isSinglePageFit ? 'rapor-fit-1-page' : ''} ${paperMetrics.orientation === 'landscape' ? 'print-landscape' : ''} shadow-2xl ${paperMetrics.paddingClass} relative shrink-0 rounded-xs border border-slate-300 print:border-none ${!isVeryLastPage ? 'page-break-after' : ''}`}
@@ -564,8 +603,11 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                             </div>
 
                             <div
+                                className="rapor-scaled-viewport"
                                 style={{
                                     width: `${scaledSliceW}px`,
+                                    height: isScaled ? `${viewportMaxH}px` : undefined,
+                                    maxHeight: `${viewportMaxH}px`,
                                     overflow: 'hidden',
                                     margin: '0 auto',
                                     position: 'relative'
@@ -575,7 +617,10 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                                     className="flex flex-col justify-start"
                                     style={{
                                         width: `${page.sliceNaturalWidth}px`,
-                                        transform: paginatedLayout.scale < 1 ? `scale(${paginatedLayout.scale})` : undefined,
+                                        position: isScaled ? 'absolute' : 'relative',
+                                        top: isScaled ? 0 : undefined,
+                                        left: isScaled ? 0 : undefined,
+                                        transform: isScaled ? `scale(${paginatedLayout.scale})` : undefined,
                                         transformOrigin: 'top left'
                                     }}
                                 >
@@ -618,18 +663,24 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                                 </div>
                             </div>
 
-                            {page.totalPages > 1 && (
-                                <div
-                                    className="text-[9px] text-slate-500 tabular-nums select-none"
-                                    style={{
-                                        position: 'absolute',
-                                        bottom: '4px',
-                                        right: `${paperMetrics.padPx}px`
-                                    }}
-                                >
-                                    Halaman {page.pageNumber} dari {page.totalPages}
-                                </div>
-                            )}
+                            <div
+                                className={`border-t border-slate-300 pt-0.5 text-[8pt] text-slate-500 italic leading-tight select-none flex items-center ${
+                                    page.totalPages > 1 ? 'justify-between gap-2' : 'justify-center text-center'
+                                }`}
+                                style={{
+                                    position: 'absolute',
+                                    bottom: `${footerBottomPx}px`,
+                                    left: `${paperMetrics.padPx}px`,
+                                    right: `${paperMetrics.padPx}px`
+                                }}
+                            >
+                                <span>{RAPOR_CREDIT_FOOTER_TEXT}</span>
+                                {page.totalPages > 1 && (
+                                    <span className="not-italic text-[9px] tabular-nums shrink-0">
+                                        Halaman {page.pageNumber} dari {page.totalPages}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
                 );
@@ -8454,7 +8505,7 @@ export const TabDesainRapor: React.FC = () => {
                             <div className="flex-grow overflow-auto bg-slate-300 p-2 sm:p-6 md:p-8 flex justify-center">
                                 <div
                                     id="rapor-design-preview-print-area"
-                                    className="w-full flex flex-col items-center gap-6 print:gap-0"
+                                    className="w-full flex flex-col items-center gap-6 print:block print:gap-0"
                                     style={{
                                         transform: previewModalZoom !== 1 ? `scale(${previewModalZoom})` : undefined,
                                         transformOrigin: 'top center',

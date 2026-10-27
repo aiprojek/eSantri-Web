@@ -216,7 +216,7 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                     );
                 })()}
             </div>
-            <ReportFooter />
+            <ReportFooter text="dibuat dengan eSantri Web by AI Projek | aiprojek01.my.id" />
         </div>
     );
 };

@@ -35,8 +35,10 @@ const getRenderablePages = (element: HTMLElement): HTMLElement[] => {
             wrapper.style.pageBreakAfter === 'always' ||
             wrapper.style.width === '21cm' ||
             wrapper.style.width === '21.5cm' ||
+            wrapper.style.width === '29.7cm' ||
             wrapper.style.width === '33cm' ||
-            wrapper.classList.contains('rapor-fit-1-page')
+            wrapper.classList.contains('rapor-fit-1-page') ||
+            wrapper.classList.contains('rapor-exact-page')
         ) {
             return [wrapper];
         }
@@ -59,8 +61,9 @@ const renderPageCanvas = async (page: HTMLElement) => {
         windowWidth: 1400,
         windowHeight: 2200,
         onclone: (clonedDoc) => {
-            const clonedElement = clonedDoc.querySelector(`[data-html2canvas-ignore]`);
-            if (clonedElement) clonedElement.remove();
+            clonedDoc
+                .querySelectorAll('[data-html2canvas-ignore], [data-rapor-measure-only="true"]')
+                .forEach((el) => el.remove());
 
             const reportPages = clonedDoc.querySelectorAll('.printable-content-wrapper > div');
             reportPages.forEach((p) => {
@@ -96,7 +99,9 @@ export const generatePdf = async (elementId: string, options: PdfGeneratorOption
 
         let format: [number, number] = getPageDimensions(options.paperSize);
         
-        const isFirstPageLandscape = pages[0].classList.contains('print-landscape');
+        const isFirstPageLandscape =
+            pages[0].classList.contains('print-landscape') ||
+            pages[0].getAttribute('data-print-orientation') === 'landscape';
         const orientation = isFirstPageLandscape ? 'l' : 'p';
 
         const doc = new jsPDF({
@@ -115,7 +120,9 @@ export const generatePdf = async (elementId: string, options: PdfGeneratorOption
             const page = pages[i];
             if (page.style.display === 'none') continue;
 
-            const isLandscape = page.classList.contains('print-landscape');
+            const isLandscape =
+                page.classList.contains('print-landscape') ||
+                page.getAttribute('data-print-orientation') === 'landscape';
 
             const canvas = await renderPageCanvas(page);
 
@@ -376,7 +383,11 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     const margin = options?.margin;
 
     // Detect orientation from the preview content
-    const isLandscape = element.querySelector('.print-landscape') !== null || orientation === 'landscape' || element.classList.contains('print-landscape');
+    const isLandscape =
+        element.querySelector('.print-landscape, [data-print-orientation="landscape"]') !== null ||
+        orientation === 'landscape' ||
+        element.classList.contains('print-landscape') ||
+        element.getAttribute('data-print-orientation') === 'landscape';
     const actualOrientation = isLandscape ? 'landscape' : 'portrait';
     const isJadwalPrint = elementId === 'jadwal-print-area';
     const isCalendarPrint = elementId === 'calendar-print-area';
@@ -394,8 +405,16 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
     const pageWidth = actualOrientation === 'landscape' ? portraitHeight : portraitWidth;
     const pageHeight = actualOrientation === 'landscape' ? portraitWidth : portraitHeight;
 
+    // Clone node to strip offscreen measurement containers and reset preview zoom transform cleanly
+    const clonedElement = element.cloneNode(true) as HTMLElement;
+    clonedElement.style.transform = 'none';
+    clonedElement.style.transition = 'none';
+    clonedElement
+        .querySelectorAll('[data-rapor-measure-only="true"]')
+        .forEach((node) => node.remove());
+
     // Keep outer wrapper id/class so print-specific selectors (e.g. #calendar-print-area) can apply correctly.
-    const content = element.outerHTML;
+    const content = clonedElement.outerHTML;
 
     // Create an isolated printing iframe
     const iframe = document.createElement('iframe');
@@ -472,9 +491,12 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 page-break-inside: auto !important;
                 break-inside: auto !important;
             }
-            /* Fit to 1 Page (1 Muka Rapor) Rules */
+            /* Exact Paginated Rapor Sheets & Fit to 1 Page Rules */
             .printable-content-wrapper.rapor-fit-1-page,
-            .rapor-fit-1-page {
+            .rapor-fit-1-page,
+            .printable-content-wrapper.rapor-exact-page,
+            .rapor-exact-page {
+                width: ${pageWidth}cm !important;
                 height: ${pageHeight}cm !important;
                 max-height: ${pageHeight}cm !important;
                 min-height: 0 !important;
@@ -485,7 +507,8 @@ export const printToPdfNative = (elementId: string, fileName: string, options?: 
                 box-sizing: border-box !important;
                 overflow: hidden !important;
             }
-            .rapor-fit-1-page.page-break-after {
+            .rapor-fit-1-page.page-break-after,
+            .rapor-exact-page.page-break-after {
                 page-break-after: always !important;
                 break-after: page !important;
             }

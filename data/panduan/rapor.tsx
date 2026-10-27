@@ -264,10 +264,10 @@ export const raporPanduan: PanduanSectionData = {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                         <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-1.5">
                             <strong className="text-indigo-950 flex items-center gap-1.5 font-bold">
-                                <i className="bi bi-file-earmark-break text-indigo-600"></i> Panduan Batas Halaman (Page Break Guide A4 &amp; F4)
+                                <i className="bi bi-file-earmark-break text-indigo-600"></i> Fit Halaman ala Excel &amp; Oper Multi-Halaman Otomatis
                             </strong>
                             <p className="text-gray-600 leading-relaxed">
-                                Nyalakan toggle <strong>"Batas Halaman"</strong> di toolbar. Garis putus-putus merah/oranye interaktif (<code>✂ BATAS HALAMAN 1</code>) akan muncul di baris penanda batas cetak 1 lembar (~980px untuk kertas A4, ~1100px untuk F4/Folio). Ini mencegah tabel terpotong jelek ke halaman kedua saat dicetak.
+                                Pada panel <strong>Setelan Lembar</strong> &amp; <strong>Preview Cetak</strong>, tersedia mode <strong>Fit Dokumen ke 1 Halaman</strong>, <strong>Fit Lebar ke X Halaman</strong> (1–4 hal), <strong>Fit Tinggi ke Y Halaman</strong> (Otomatis / 1–5 hal), serta <strong>Skala Manual (%)</strong>. Jika tidak dipaksa 1 halaman, sisa baris bagian bawah otomatis di-oper rapi ke <strong>Halaman 2, 3, dst.</strong> lengkap dengan opsi <strong>Ulangi Judul Tabel</strong> dan penanda garis <code>BATAS HALAMAN</code> di kanvas.
                             </p>
                         </div>
 
@@ -439,10 +439,65 @@ export const raporPanduan: PanduanSectionData = {
                         </div>
                     </div>
 
-                    {/* D. Kode Pemanggil Pejabat, TTD, Santri & Pondok */}
+                    {/* D. Rumus Titimangsa (Tempat & Tanggal Penandatanganan Rapor: Gabungan & Sendiri-Sendiri) */}
+                    <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2.5 text-xs">
+                        <strong className="text-emerald-950 flex items-center gap-1.5 font-bold">
+                            <i className="bi bi-calendar-check-fill text-emerald-600"></i> D. Rumus Titimangsa (Tempat &amp; Tanggal Penandatanganan Rapor — Hijriah, Masehi &amp; Gabungan)
+                        </strong>
+                        <p className="text-gray-700 text-[11px] leading-relaxed">
+                            Seluruh rumus di bawah ini terhubung langsung ke pengaturan <strong>Titimangsa (Tempat, Tanggal &amp; Format Kalender)</strong> pada tab <strong>Cetak Rapor</strong>. Anda dapat memanggilnya sebagai <strong>Titimangsa Utuh (Kota + Tanggal)</strong> maupun <strong>Sendiri-Sendiri (Tempat saja / Tanggal saja)</strong>:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-[11px]">
+                            <div className="p-2.5 bg-white rounded-lg border border-emerald-200 space-y-1.5">
+                                <strong className="text-emerald-900 block">1. Titimangsa Lengkap (Tempat + Tanggal)</strong>
+                                <ul className="space-y-1 text-gray-700">
+                                    <li>
+                                        <code className="text-emerald-900 font-bold">=TITIMANGSA()</code> atau <code className="text-emerald-900 font-bold">$TITIMANGSA</code>
+                                        <p className="text-gray-600">Otomatis mengikuti pilihan format di Cetak Rapor (Masehi / Hijriah / Hijriah &amp; Masehi). Mendukung argumen mode seperti <code>=TITIMANGSA(&quot;gabungan&quot;)</code>, <code>&quot;dua_baris&quot;</code>, <code>&quot;masehi_dulu&quot;</code>, atau kota kustom <code>=TITIMANGSA(&quot;gabungan&quot;, &quot;Kudus&quot;)</code>.</p>
+                                    </li>
+                                    <li>
+                                        <code className="text-emerald-900 font-bold">=TITIMANGSA_GABUNGAN()</code> / <code className="text-emerald-900 font-bold">$TITIMANGSA_GABUNGAN</code>
+                                        <p className="text-gray-600">Khusus gabungan Hijriah &amp; Masehi (contoh: <code>Banyumas, 5 Muharram 1448 H / 20 Juni 2026 M</code>). Tersedia opsi <code>&quot;masehi_dulu&quot;</code>, <code>&quot;dua_baris&quot;</code> (Hijriah &amp; Masehi atas-bawah), serta <code>&quot;arab&quot;</code>.</p>
+                                    </li>
+                                    <li>
+                                        <code className="text-emerald-900 font-bold">=TITIMANGSA_MASEHI()</code> / <code className="text-emerald-900 font-bold">$TITIMANGSA_MASEHI</code>
+                                        <p className="text-gray-600">Khusus Masehi (<code>Banyumas, 20 Juni 2026</code>; opsi <code>&quot;m&quot;</code>, <code>&quot;singkat&quot;</code>, <code>&quot;arab&quot;</code>).</p>
+                                    </li>
+                                    <li>
+                                        <code className="text-emerald-900 font-bold">=TITIMANGSA_HIJRIAH()</code> / <code className="text-emerald-900 font-bold">$TITIMANGSA_HIJRIAH</code>
+                                        <p className="text-gray-600">Khusus Hijriah (<code>Banyumas, 5 Muharram 1448 H</code>; opsi <code>&quot;polos&quot;</code>, <code>&quot;arab&quot;</code>).</p>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-2.5 bg-white rounded-lg border border-emerald-200 space-y-1.5">
+                                <strong className="text-emerald-900 block">2. Rumus Sendiri-Sendiri (Tempat / Tanggal Terpisah)</strong>
+                                <ul className="space-y-1 text-gray-700">
+                                    <li>
+                                        <code className="text-emerald-900 font-bold">=TEMPAT_RAPOR()</code> atau <code className="text-emerald-900 font-bold">$TEMPAT_RAPOR</code>
+                                        <p className="text-gray-600">Menampilkan nama kota/tempat pengeluaran rapor saja (alias: <code>=KOTA_RAPOR()</code>, <code>=TEMPAT_TTD()</code>). Cocok untuk baris <em>&quot;Ditetapkan di : =TEMPAT_RAPOR()&quot;</em>.</p>
+                                    </li>
+                                    <li>
+                                        <code className="text-emerald-900 font-bold">=TANGGAL_RAPOR()</code> atau <code className="text-emerald-900 font-bold">$TANGGAL_RAPOR</code>
+                                        <p className="text-gray-600">Menampilkan tanggal saja sesuai format aktif di Cetak Rapor. Cocok untuk baris <em>&quot;Pada tanggal : =TANGGAL_RAPOR()&quot;</em>.</p>
+                                    </li>
+                                    <li>
+                                        <code className="text-emerald-900 font-bold">=TANGGAL_RAPOR_GABUNGAN()</code> / <code className="text-emerald-900 font-bold">$TANGGAL_RAPOR_GABUNGAN</code>
+                                        <p className="text-gray-600">Tanggal gabungan tanpa nama kota (<code>5 Muharram 1448 H / 20 Juni 2026 M</code>; opsi <code>&quot;masehi_dulu&quot;</code>, <code>&quot;dua_baris&quot;</code>, <code>&quot;arab&quot;</code>).</p>
+                                    </li>
+                                    <li>
+                                        <code className="text-emerald-900 font-bold">=TANGGAL_RAPOR_MASEHI()</code> &amp; <code className="text-emerald-900 font-bold">=TANGGAL_RAPOR_HIJRIAH()</code>
+                                        <p className="text-gray-600">Tanggal Masehi saja (<code>20 Juni 2026</code>) atau Tanggal Hijriah saja (<code>5 Muharram 1448 H</code>) bila diletakkan pada 2 baris sel berbeda.</p>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* E. Kode Pemanggil Pejabat, TTD, Santri & Pondok */}
                     <div className="p-3.5 bg-purple-50/70 rounded-xl border border-purple-200 space-y-2.5 text-xs">
                         <strong className="text-purple-950 flex items-center gap-1.5 font-bold">
-                            <i className="bi bi-person-check-fill text-purple-600"></i> D. Kode Pemanggil Pejabat (Wali Kelas, Mudir Marhalah, Mudir Aam), TTD &amp; Biodata
+                            <i className="bi bi-person-check-fill text-purple-600"></i> E. Kode Pemanggil Pejabat (Wali Kelas, Mudir Marhalah, Mudir Aam), TTD &amp; Biodata
                         </strong>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                             <div className="p-2.5 bg-white rounded-lg border border-purple-200 space-y-1">
@@ -482,9 +537,9 @@ export const raporPanduan: PanduanSectionData = {
                                 </p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-gray-200">
-                                <strong className="text-gray-800 block mb-0.5">Identitas Lembaga, Logo &amp; Titimangsa</strong>
+                                <strong className="text-gray-800 block mb-0.5">Identitas Lembaga, Logo &amp; Tag Titimangsa</strong>
                                 <p className="text-gray-600 leading-relaxed">
-                                    <code>$NAMA_PONPES</code>, <code>$NAMA_YAYASAN</code>, <code>$ALAMAT_PONPES</code>, <code>$NSPP</code>, <code>$NPSN</code>, <code>$LOGO_PONPES</code>, <code>$LOGO_YAYASAN</code>, <code>$KOTA_TANGGAL_DOKUMEN</code>, <code>$TANGGAL_DOKUMEN</code>, <code>$KOTA_TANGGAL_HIJRIAH_MASEHI</code>.
+                                    <code>$NAMA_PONPES</code>, <code>$NAMA_YAYASAN</code>, <code>$ALAMAT_PONPES</code>, <code>$NSPP</code>, <code>$NPSN</code>, <code>$LOGO_PONPES</code>, <code>$LOGO_YAYASAN</code>, <code>$TITIMANGSA</code>, <code>$TITIMANGSA_GABUNGAN</code>, <code>$TEMPAT_RAPOR</code>, <code>$TANGGAL_RAPOR</code>.
                                 </p>
                             </div>
                         </div>
@@ -644,12 +699,12 @@ export const raporPanduan: PanduanSectionData = {
                                 <p className="text-gray-600">Atur kota serta tanggal penerbitan rapor secara serentak untuk satu rombel maupun per santri, lalu klik <strong>Set Default</strong> agar tersimpan otomatis.</p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
-                                <strong className="text-slate-800 block">Kertas A4/F4 &amp; Pas 1 Lembar</strong>
-                                <p className="text-gray-600">Pilih ukuran kertas <strong>A4</strong> atau <strong>F4</strong> dan aktifkan tombol <strong>Pas 1 Lembar</strong> agar skala rapor menyesuaikan otomatis tanpa meluber ke halaman ke-2.</p>
+                                <strong className="text-slate-800 block">Fit Halaman ala Excel (A4/F4 &amp; Multi-Halaman)</strong>
+                                <p className="text-gray-600">Pilih kertas <strong>A4/F4</strong> (Tegak/Mendatar), lalu atur <strong>Fit Dokumen 1 Halaman</strong>, <strong>Fit Lebar ke X Halaman</strong>, <strong>Fit Tinggi ke Y Halaman</strong>, atau <strong>Skala Manual (%)</strong>. Baris berlebih otomatis di-oper ke halaman berikutnya tanpa menggantung.</p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
-                                <strong className="text-slate-800 block">Panel Atur Lanjutan</strong>
-                                <p className="text-gray-600">Sesuaikan <strong>Kop Rapor</strong> (Aktif/Tanpa Kop untuk kertas berlogo), <strong>Judul Rapor (1–3 baris)</strong>, <strong>Header Biodata</strong>, Margin, Skala (%), serta <strong>Batas Ranking</strong> (<em>Semua / Top 3 / Top 5 / Top 10 / Off</em>).</p>
+                                <strong className="text-slate-800 block">Panel Atur Lanjutan &amp; Ulangi Header</strong>
+                                <p className="text-gray-600">Sesuaikan <strong>Kop Rapor</strong>, <strong>Judul Rapor (1–3 baris)</strong>, <strong>Header Biodata</strong>, <strong>Ulangi Judul Tabel di Halaman Lanjutan</strong>, Margin, serta <strong>Batas Ranking</strong> (<em>Semua / Top 3 / Top 5 / Top 10 / Off</em>).</p>
                             </div>
                             <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
                                 <strong className="text-slate-800 block">Seleksi Santri Siap Cetak</strong>

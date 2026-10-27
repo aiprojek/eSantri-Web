@@ -3,19 +3,39 @@ import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
 import { RaporLengkapTemplate } from '../reports/modules/AcademicReports';
 import { printToPdfNative } from '../../utils/pdfGenerator';
-import { Santri, RaporTemplate, RaporRecord, DigitalAsset, RaporSheet } from '../../types';
+import { Santri, RaporTemplate, RaporRecord, DigitalAsset, RaporSheet, PageFitCount } from '../../types';
 import { PrintHeader } from '../common/PrintHeader';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { getRaporRecordsByPeriod } from '../../services/academicQueries';
 import { resolveRaporText, isMediaTag, getMediaTagImageSrc, templateHasBuiltInBiodata } from '../../utils/raporPlaceholderResolver';
 import { applyCellTextTransform } from '../../utils/raporFormulaUtils';
+import {
+    formatLocalDate,
+    parseLocalDateSafe,
+    resolveTempatRapor,
+    formatTanggalDokumen,
+    getHijriDate,
+    DateFormatMode
+} from '../../utils/formatters';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { buildRombelLegerData, StudentLegerRow } from '../../services/raporCalculationService';
 import { getTemplateSheets } from '../../services/raporExcelService';
 import { RaporTitleEditModal } from './modals/RaporTitleEditModal';
 import { RaporWhatsAppModal } from './modals/RaporWhatsAppModal';
+import {
+    normalizeRaporPageSetup,
+    buildPageSetupStateFromPreset,
+    formatPageSetupBadgeLabel,
+    getRaporPaperMetrics,
+    computePaginatedRaporLayout,
+    getRenderableRowCellsForPage,
+    PaginatedRaporPage,
+    PaginatedSliceCell,
+    RaporPageScalePreset,
+    RaporPageSetupInput
+} from '../../utils/raporPageLayout';
 
 export interface TabCetakRaporProps {
     onNavigateToTab?: (tab: string, rombelId?: number) => void;
@@ -42,6 +62,8 @@ interface DynamicRaporPreviewProps {
     digitalAssets?: DigitalAsset[];
     tanggalRapor?: string;
     tempatRapor?: string;
+    formatTanggalRapor?: DateFormatMode;
+    manualHijriRapor?: string;
     tahunAjaran?: string;
     semester?: 'Ganjil' | 'Genap';
     calculation?: {
@@ -55,18 +77,24 @@ interface DynamicRaporPreviewProps {
     };
     cohortRecords?: RaporRecord[];
     paperSize?: 'A4' | 'F4';
+    orientation?: 'portrait' | 'landscape';
     showKop?: boolean;
     marginMode?: 'normal' | 'narrow' | 'none';
     showJudul?: boolean;
     showBiodataHeader?: boolean;
     fitToPage?: boolean;
+    fitWidthPages?: PageFitCount;
+    fitHeightPages?: PageFitCount;
+    repeatHeaderRows?: boolean;
     printScale?: number | 'auto';
+    isLastDocument?: boolean;
 }
 
 interface ScaledRaporSheetProps {
     sheet: RaporSheet;
     sheetsCount: number;
     isLastSheet: boolean;
+    isLastDocument: boolean;
     template: RaporTemplate;
     santri: Santri;
     settings: any;
@@ -74,11 +102,15 @@ interface ScaledRaporSheetProps {
     resolveContext: any;
     calculation?: DynamicRaporPreviewProps['calculation'];
     paperSize: 'A4' | 'F4';
+    orientation: 'portrait' | 'landscape';
     showKop: boolean;
     marginMode: 'normal' | 'narrow' | 'none';
     showJudul?: boolean;
     shouldShowBiodataHeader: boolean;
     fitToPage: boolean;
+    fitWidthPages?: PageFitCount;
+    fitHeightPages?: PageFitCount;
+    repeatHeaderRows?: boolean;
     printScale: number | 'auto';
 }
 
@@ -86,6 +118,7 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
     sheet,
     sheetsCount,
     isLastSheet,
+    isLastDocument,
     template,
     santri,
     settings,
@@ -93,31 +126,23 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
     resolveContext,
     calculation,
     paperSize,
+    orientation,
     showKop,
     marginMode,
     showJudul,
     shouldShowBiodataHeader,
     fitToPage,
+    fitWidthPages,
+    fitHeightPages,
+    repeatHeaderRows,
     printScale
 }) => {
-    const innerContentRef = useRef<HTMLDivElement>(null);
-    const [measuredHeight, setMeasuredHeight] = useState<number>(0);
-
-    const paperDimensions = {
-        A4: { width: '21cm', minHeight: '29.7cm', maxHeight: '29.7cm', pxW: 793.7, pxH: 1122.5 },
-        F4: { width: '21.5cm', minHeight: '33cm', maxHeight: '33cm', pxW: 812.6, pxH: 1247.2 }
-    };
-
-    const paddingClasses = {
-        normal: 'p-8',
-        narrow: 'p-4',
-        none: 'p-2'
-    };
-
-    const currentDimensions = paperDimensions[paperSize] || paperDimensions.A4;
-    const padSidePx = marginMode === 'normal' ? 32 : marginMode === 'narrow' ? 16 : 8;
-    const availableW = Math.max(300, Math.floor(currentDimensions.pxW - padSidePx * 2 - 2));
-    const availableH = Math.max(400, Math.floor(currentDimensions.pxH - padSidePx * 2 - 8));
+    const measureContainerRef = useRef<HTMLDivElement>(null);
+    const measureHeaderRef = useRef<HTMLDivElement>(null);
+    const [measuredMetrics, setMeasuredMetrics] = useState<{
+        headerHeight: number;
+        rowHeights: number[];
+    } | null>(null);
 
     const colCount = sheet.colCount || sheet.cells?.[0]?.length || 0;
     const sheetColWidths = useMemo(() => {
@@ -170,47 +195,30 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         });
     }, [sheet.cells]);
 
-    const totalColWidth = sheetColWidths.reduce((a, b) => a + b, 0) || availableW;
-    // Seperti Microsoft Excel: jika total lebar kolom melebihi area kertas, render kanvas utuh sesuai lebar aslinya lalu perkecil proporsional bersama teksnya
-    const naturalWidth = Math.max(availableW, totalColWidth);
+    const pageSetup = useMemo(
+        () =>
+            normalizeRaporPageSetup({
+                paperSize,
+                orientation,
+                marginMode,
+                fitToPage,
+                fitWidthPages,
+                fitHeightPages,
+                printScale,
+                repeatHeaderRows
+            }),
+        [paperSize, orientation, marginMode, fitToPage, fitWidthPages, fitHeightPages, printScale, repeatHeaderRows]
+    );
 
-    const estimatedHeight = useMemo(() => {
-        const rowsSum = sheetRowHeights.reduce<number>((acc, h) => acc + (h || 30), 0);
-        return (showKop ? 150 : 0) + (shouldShowBiodataHeader ? 65 : 0) + rowsSum + 16;
-    }, [sheetRowHeights, showKop, shouldShowBiodataHeader]);
+    const paperMetrics = useMemo(
+        () => getRaporPaperMetrics(pageSetup.paperSize, pageSetup.orientation, pageSetup.marginMode),
+        [pageSetup.paperSize, pageSetup.orientation, pageSetup.marginMode]
+    );
 
-    const triggerMeasure = () => {
-        const el = innerContentRef.current;
-        if (!el) return;
-        const h = Math.max(el.offsetHeight, el.scrollHeight);
-        if (h > 0) {
-            setMeasuredHeight(prev => (Math.abs(h - prev) > 1 ? h : prev));
-        }
-    };
-
-    useLayoutEffect(() => {
-        triggerMeasure();
-        let ro: ResizeObserver | null = null;
-        if (typeof ResizeObserver !== 'undefined' && innerContentRef.current) {
-            ro = new ResizeObserver(() => triggerMeasure());
-            ro.observe(innerContentRef.current);
-        }
-        return () => {
-            if (ro) ro.disconnect();
-        };
-    }, [sheet, naturalWidth, showKop, showJudul, shouldShowBiodataHeader, santri.id]);
-
-    const effectiveNaturalH = measuredHeight > 0 ? measuredHeight : estimatedHeight;
-    const scaleX = availableW / naturalWidth;
-    const scaleY = fitToPage && effectiveNaturalH > availableH ? availableH / effectiveNaturalH : 1;
-
-    const rawScale = typeof printScale === 'number'
-        ? (fitToPage ? Math.min(printScale / 100, scaleX, scaleY) : Math.min(printScale / 100, scaleX))
-        : (fitToPage ? Math.min(1, scaleX, scaleY) : Math.min(1, scaleX));
-
-    const scale = Math.max(0.2, Math.min(1, Number(rawScale.toFixed(4))));
-    const scaledW = Math.floor(naturalWidth * scale);
-    const scaledH = effectiveNaturalH > 0 ? Math.ceil(effectiveNaturalH * scale) : undefined;
+    const totalColWidth = sheetColWidths.reduce((a, b) => a + b, 0) || paperMetrics.availableW;
+    const measureWidth = pageSetup.fitWidthPages === 1
+        ? Math.max(paperMetrics.availableW, totalColWidth)
+        : totalColWidth;
 
     // Evaluasi berantai untuk sel rumus yang juga diberi kode variabel ($KEY) agar bisa direferensikan oleh rumus lain (misal =TERBILANG($SUBTOTAL))
     const sheetResolveContext = useMemo(() => {
@@ -233,293 +241,490 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         return ctx;
     }, [sheet.cells, customData, resolveContext]);
 
+    const hasTitleInGrid = useMemo(() => {
+        if (!sheet.cells || sheet.cells.length === 0) return false;
+        return sheet.cells.slice(0, 3).some(row =>
+            row.some(cell => {
+                if (!cell || !cell.value) return false;
+                const up = cell.value.toUpperCase();
+                return up.includes('RAPOR') || up.includes('LAPORAN HASIL') || up.includes('CAPAIAN KOMPETENSI') || up.includes('HASIL EVALUASI');
+            })
+        );
+    }, [sheet.cells]);
+
+    const shouldShowTitle = showJudul !== undefined
+        ? showJudul
+        : (sheet.showJudul !== undefined
+            ? sheet.showJudul
+            : (template.showJudul !== undefined ? template.showJudul : !hasTitleInGrid));
+
+    const rawTitle = sheet.customTitle !== undefined
+        ? sheet.customTitle
+        : (template.customTitle !== undefined ? template.customTitle : (shouldShowTitle ? (sheet.name || template.name) : ''));
+
+    const resolvedTitle = useMemo(
+        () => (rawTitle ? resolveRaporText(rawTitle, sheetResolveContext) : undefined),
+        [rawTitle, sheetResolveContext]
+    );
+
+    const renderDocumentHeader = () => {
+        if (!showKop && !shouldShowBiodataHeader) return null;
+        return (
+            <div>
+                {showKop && (
+                    <PrintHeader
+                        settings={settings}
+                        title={shouldShowTitle ? resolvedTitle : undefined}
+                    />
+                )}
+                {shouldShowBiodataHeader && (
+                    <div className="mb-3">
+                        <table className="w-full text-sm font-medium mb-3">
+                            <tbody>
+                                <tr>
+                                    <td className="w-24 font-bold">Nama</td>
+                                    <td>: {santri.namaLengkap}</td>
+                                    <td className="w-24 text-right font-bold">NIS</td>
+                                    <td className="w-32 text-right">: {santri.nis}</td>
+                                </tr>
+                                <tr>
+                                    <td className="w-24 font-bold">Rombel</td>
+                                    <td>: {settings.rombel.find((r: any) => r.id === santri.rombelId)?.nama || '-'}</td>
+                                    <td className="w-24 text-right font-bold">{sheetsCount > 1 ? 'Format / Lembar' : 'Peringkat'}</td>
+                                    <td className="w-32 text-right font-semibold">
+                                        {sheetsCount > 1
+                                            ? `: ${sheet.name}`
+                                            : `: ${calculation?.ranking ? `${calculation.ranking} / ${calculation.totalSantri || '-'}` : '-'}`
+                                        }
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const triggerMeasure = () => {
+        const container = measureContainerRef.current;
+        if (!container) return;
+        const hdrEl = measureHeaderRef.current;
+        const nextHeaderH = hdrEl ? Math.ceil(hdrEl.getBoundingClientRect().height) : 0;
+        const trNodes = container.querySelectorAll<HTMLTableRowElement>('tr[data-measure-row]');
+        const nextRowHeights: number[] = (sheet.cells || []).map((_, rIdx) => sheetRowHeights[rIdx] ?? 30);
+        trNodes.forEach((tr) => {
+            const idx = Number(tr.getAttribute('data-measure-row'));
+            if (!Number.isNaN(idx)) {
+                const h = tr.getBoundingClientRect().height || tr.offsetHeight;
+                if (h > 0) {
+                    nextRowHeights[idx] = Math.max(sheetRowHeights[idx] ?? 0, Math.ceil(h));
+                }
+            }
+        });
+
+        setMeasuredMetrics((prev) => {
+            if (
+                prev &&
+                Math.abs(prev.headerHeight - nextHeaderH) <= 1 &&
+                prev.rowHeights.length === nextRowHeights.length &&
+                prev.rowHeights.every((v, i) => Math.abs(v - nextRowHeights[i]) <= 1)
+            ) {
+                return prev;
+            }
+            return { headerHeight: nextHeaderH, rowHeights: nextRowHeights };
+        });
+    };
+
+    useLayoutEffect(() => {
+        triggerMeasure();
+        let ro: ResizeObserver | null = null;
+        if (typeof ResizeObserver !== 'undefined' && measureContainerRef.current) {
+            ro = new ResizeObserver(() => triggerMeasure());
+            ro.observe(measureContainerRef.current);
+        }
+        return () => {
+            if (ro) ro.disconnect();
+        };
+    }, [sheet, measureWidth, showKop, shouldShowTitle, resolvedTitle, shouldShowBiodataHeader, santri.id, sheetRowHeights]);
+
+    const fallbackHeaderH = (showKop ? 150 : 0) + (shouldShowBiodataHeader ? 65 : 0);
+    const effectiveHeaderH = measuredMetrics ? measuredMetrics.headerHeight : fallbackHeaderH;
+    const effectiveRowHeights = useMemo(
+        () =>
+            measuredMetrics?.rowHeights && measuredMetrics.rowHeights.length === (sheet.cells?.length || 0)
+                ? measuredMetrics.rowHeights
+                : sheetRowHeights.map(h => h ?? 30),
+        [measuredMetrics, sheetRowHeights, sheet.cells]
+    );
+
+    const paginatedLayout = useMemo(
+        () =>
+            computePaginatedRaporLayout({
+                cells: sheet.cells || [],
+                colWidths: sheetColWidths,
+                rowHeights: effectiveRowHeights,
+                headerHeight: effectiveHeaderH,
+                paperMetrics,
+                pageSetup
+            }),
+        [sheet.cells, sheetColWidths, effectiveRowHeights, effectiveHeaderH, paperMetrics, pageSetup]
+    );
+
+    const badgeText = formatPageSetupBadgeLabel(pageSetup, paginatedLayout.scale);
+
+    const renderSliceCellTd = (sliceItem: PaginatedSliceCell, rIdx: number, keyPrefix: string) => {
+        const { cell, masterC, colSpan, rowSpan, borders } = sliceItem;
+        const rH = sheetRowHeights[rIdx];
+        let renderedContent: React.ReactNode = cell.value;
+        let isMediaElement = false;
+
+        if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(cell.value)) {
+            isMediaElement = true;
+            const imgSrc = getMediaTagImageSrc(cell.value, sheetResolveContext);
+            const upperCellVal = (cell.value || '').toUpperCase();
+            if (imgSrc) {
+                const isStempel = upperCellVal.includes('STEMPEL');
+                const isTtd = upperCellVal.includes('TTD');
+                renderedContent = (
+                    <div className="flex items-center justify-center p-0.5 w-full h-full">
+                        <img
+                            src={imgSrc}
+                            alt={cell.value}
+                            onLoad={triggerMeasure}
+                            className={`object-contain ${isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
+                        />
+                    </div>
+                );
+            } else {
+                renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
+            }
+        } else if (cell.type === 'data') {
+            renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC } });
+        } else if (cell.type === 'formula') {
+            if (cell.value && cell.value.trim() !== '') {
+                const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
+                renderedContent = resolveRaporText(rawExpr, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC } });
+            } else if (cell.key && customData[cell.key] !== undefined && customData[cell.key] !== '') {
+                renderedContent = customData[cell.key];
+            } else {
+                renderedContent = '-';
+            }
+        } else if ((cell.type === 'input' || cell.type === 'dropdown') && cell.key) {
+            renderedContent = (customData[cell.key] !== undefined && customData[cell.key] !== '')
+                ? customData[cell.key]
+                : resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC } });
+        } else {
+            renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC } });
+        }
+
+        if (!isMediaElement && (typeof renderedContent === 'string' || typeof renderedContent === 'number') && cell.textTransform && cell.textTransform !== 'none') {
+            renderedContent = applyCellTextTransform(String(renderedContent), cell.textTransform);
+        }
+
+        const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
+        const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
+        const effectiveBg = hasCustomBg ? cell.backgroundColor : 'transparent';
+        const effectiveFontWeight = cell.bold ? 'bold' : 'normal';
+        const effectiveFontSize = cell.fontSize || 11;
+        const hAlign = cell.align || 'center';
+        const vAlign = cell.verticalAlign || 'middle';
+        const textWrap = cell.textWrap || 'wrap';
+        const isFloat = textWrap === 'float' && !isMediaElement;
+        const isClip = textWrap === 'clip';
+
+        let cellWidthPx = 0;
+        for (let i = 0; i < colSpan; i++) {
+            cellWidthPx += sheetColWidths[masterC + i] || 100;
+        }
+
+        let cellHeightPx: number | undefined = undefined;
+        if (rH !== undefined || cell.height !== undefined) {
+            let sumH = 0;
+            for (let i = 0; i < rowSpan; i++) {
+                sumH += sheetRowHeights[rIdx + i] ?? cell.height ?? 30;
+            }
+            cellHeightPx = sumH;
+        }
+
+        const upperToken = `${cell.value || ''} ${cell.key || ''}`.toUpperCase();
+        const isExpandableDynamic = (upperToken.includes('DESKRIPSI') || upperToken.includes('CATATAN')) && !isClip && !isFloat && (cellHeightPx === undefined || cellHeightPx >= 28);
+        const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
+
+        const tdStyle: React.CSSProperties = {
+            borderTop: (!isLogoMedia && borders.top) ? '1px solid black' : 'none',
+            borderRight: (!isLogoMedia && borders.right) ? '1px solid black' : 'none',
+            borderBottom: (!isLogoMedia && borders.bottom) ? '1px solid black' : 'none',
+            borderLeft: (!isLogoMedia && borders.left) ? '1px solid black' : 'none',
+            textAlign: hAlign,
+            verticalAlign: vAlign,
+            height: cellHeightPx ? `${cellHeightPx}px` : undefined,
+            backgroundColor: effectiveBg,
+            fontWeight: effectiveFontWeight,
+            fontStyle: cell.italic ? 'italic' : undefined,
+            color: cell.color || undefined,
+            fontSize: `${effectiveFontSize}px`,
+            padding: 0,
+            boxSizing: 'border-box',
+            overflow: isFloat ? 'visible' : 'hidden',
+            position: isFloat ? 'relative' : undefined
+        };
+
+        return (
+            <td
+                key={`${keyPrefix}-${rIdx}-${sliceItem.renderCol}`}
+                colSpan={colSpan > 1 ? colSpan : undefined}
+                rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                style={tdStyle}
+            >
+                {isFloat ? (
+                    <div
+                        style={{
+                            position: 'relative',
+                            width: '100%',
+                            height: cellHeightPx ? `${cellHeightPx}px` : '100%',
+                            minHeight: cellHeightPx ? `${cellHeightPx}px` : '22px',
+                            overflow: 'visible',
+                            zIndex: 20
+                        }}
+                    >
+                        <div
+                            style={{
+                                position: 'absolute',
+                                whiteSpace: 'pre',
+                                left: hAlign === 'left' ? '4px' : hAlign === 'center' ? '50%' : undefined,
+                                right: hAlign === 'right' ? '4px' : undefined,
+                                top: vAlign === 'top' ? '2px' : vAlign === 'bottom' ? undefined : '50%',
+                                bottom: vAlign === 'bottom' ? '2px' : undefined,
+                                transform:
+                                    hAlign === 'center' && vAlign === 'middle'
+                                        ? 'translate(-50%, -50%)'
+                                        : hAlign === 'center'
+                                        ? 'translateX(-50%)'
+                                        : vAlign === 'middle'
+                                        ? 'translateY(-50%)'
+                                        : undefined,
+                                textAlign: hAlign,
+                                lineHeight: 1.25
+                            }}
+                        >
+                            {renderedContent}
+                        </div>
+                    </div>
+                ) : (
+                    <div
+                        style={{
+                            width: '100%',
+                            height: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : '100%',
+                            minHeight: (isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
+                            maxHeight: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
+                            padding: isMediaElement ? '1px' : cellPadding,
+                            boxSizing: 'border-box',
+                            overflow: 'hidden',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
+                            textAlign: hAlign,
+                            lineHeight: 1.25
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: '100%',
+                                marginTop: vAlign === 'top' ? 0 : 'auto',
+                                marginBottom: vAlign === 'bottom' ? 0 : 'auto',
+                                whiteSpace: isClip ? 'pre' : 'pre-wrap',
+                                wordBreak: isClip ? 'normal' : 'break-word',
+                                overflowWrap: isClip ? 'normal' : 'anywhere',
+                                overflow: isClip ? 'hidden' : undefined,
+                                textAlign: hAlign
+                            }}
+                        >
+                            {renderedContent}
+                        </div>
+                    </div>
+                )}
+            </td>
+        );
+    };
+
+    const fullMeasurePage: PaginatedRaporPage = {
+        pageIndex: 0,
+        pageNumber: 1,
+        totalPages: 1,
+        vIndex: 0,
+        hIndex: 0,
+        totalVPages: 1,
+        totalHPages: 1,
+        includeDocHeader: true,
+        headerGroupRows: [],
+        startRow: 0,
+        endRow: Math.max(0, (sheet.cells?.length || 1) - 1),
+        startCol: 0,
+        endCol: Math.max(0, colCount - 1),
+        sliceColWidths: sheetColWidths,
+        sliceNaturalWidth: measureWidth,
+        stretchColsToFillWidth: totalColWidth <= paperMetrics.availableW
+    };
+
     return (
-        <div
-            className={`bg-white text-black font-sans text-sm printable-content-wrapper shadow-md mx-auto ${paddingClasses[marginMode]} ${!isLastSheet ? 'page-break-after' : ''} ${fitToPage ? 'rapor-fit-1-page' : ''}`}
-            style={{
-                width: currentDimensions.width,
-                minHeight: fitToPage ? undefined : currentDimensions.minHeight,
-                height: fitToPage ? currentDimensions.maxHeight : undefined,
-                maxHeight: fitToPage ? currentDimensions.maxHeight : undefined,
-                overflow: fitToPage ? 'hidden' : undefined,
-                pageBreakAfter: isLastSheet ? 'auto' : 'always',
-                breakAfter: isLastSheet ? 'auto' : 'page',
-                pageBreakInside: fitToPage ? 'avoid' : 'auto',
-                breakInside: fitToPage ? 'avoid' : 'auto',
-                boxSizing: 'border-box'
-            }}
-        >
+        <div className="space-y-6 print:space-y-0">
+            {/* Offscreen Unscaled Measurement Container */}
             <div
+                ref={measureContainerRef}
+                aria-hidden="true"
+                data-html2canvas-ignore="true"
+                data-rapor-measure-only="true"
+                className="no-print text-black font-sans text-sm"
                 style={{
-                    width: `${scaledW}px`,
-                    height: scale < 1 && scaledH ? `${scaledH}px` : undefined,
-                    overflow: fitToPage ? 'hidden' : 'visible',
-                    margin: '0 auto',
-                    position: 'relative'
+                    position: 'fixed',
+                    left: '-99999px',
+                    top: 0,
+                    width: `${measureWidth}px`,
+                    visibility: 'hidden',
+                    pointerEvents: 'none',
+                    zIndex: -50
                 }}
             >
-                <div
-                    ref={innerContentRef}
-                    className="flex flex-col justify-start"
-                    style={{
-                        width: `${naturalWidth}px`,
-                        transform: scale < 1 ? `scale(${scale})` : undefined,
-                        transformOrigin: 'top left'
-                    }}
-                >
-                    {(() => {
-                        if (!showKop) return null;
-
-                        const hasTitleInGrid = sheet.cells && sheet.cells.length > 0 && sheet.cells.slice(0, 3).some(row =>
-                            row.some(cell => {
-                                if (!cell || !cell.value) return false;
-                                const up = cell.value.toUpperCase();
-                                return up.includes('RAPOR') || up.includes('LAPORAN HASIL') || up.includes('CAPAIAN KOMPETENSI') || up.includes('HASIL EVALUASI');
-                            })
-                        );
-
-                        const shouldShowTitle = showJudul !== undefined
-                            ? showJudul
-                            : (sheet.showJudul !== undefined
-                                ? sheet.showJudul
-                                : (template.showJudul !== undefined ? template.showJudul : !hasTitleInGrid));
-
-                        const rawTitle = sheet.customTitle !== undefined
-                            ? sheet.customTitle
-                            : (template.customTitle !== undefined ? template.customTitle : (shouldShowTitle ? (sheet.name || template.name) : ''));
-
-                        const resolvedTitle = rawTitle ? resolveRaporText(rawTitle, sheetResolveContext) : undefined;
-
-                        return (
-                            <PrintHeader
-                                settings={settings}
-                                title={shouldShowTitle ? resolvedTitle : undefined}
+                <div ref={measureHeaderRef}>{renderDocumentHeader()}</div>
+                <table className="w-full border-collapse table-fixed">
+                    <colgroup>
+                        {sheetColWidths.map((w, cIdx) => (
+                            <col
+                                key={cIdx}
+                                style={{
+                                    width: totalColWidth > paperMetrics.availableW
+                                        ? `${w}px`
+                                        : `${((w / Math.max(1, totalColWidth)) * 100).toFixed(3)}%`
+                                }}
                             />
-                        );
-                    })()}
+                        ))}
+                    </colgroup>
+                    <tbody>
+                        {(sheet.cells || []).map((_, rIdx) => {
+                            const rH = sheetRowHeights[rIdx];
+                            const rowCells = getRenderableRowCellsForPage(sheet.cells, rIdx, fullMeasurePage, false);
+                            return (
+                                <tr key={rIdx} data-measure-row={rIdx} style={{ height: rH ? `${rH}px` : undefined }}>
+                                    {rowCells.map(sc => renderSliceCellTd(sc, rIdx, 'measure'))}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
 
-                    {shouldShowBiodataHeader && (
-                        <div className="mb-3">
-                            <table className="w-full text-sm font-medium mb-3">
-                                <tbody>
-                                    <tr>
-                                        <td className="w-24 font-bold">Nama</td>
-                                        <td>: {santri.namaLengkap}</td>
-                                        <td className="w-24 text-right font-bold">NIS</td>
-                                        <td className="w-32 text-right">: {santri.nis}</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="w-24 font-bold">Rombel</td>
-                                        <td>: {settings.rombel.find((r: any) => r.id === santri.rombelId)?.nama || '-'}</td>
-                                        <td className="w-24 text-right font-bold">{sheetsCount > 1 ? 'Format / Lembar' : 'Peringkat'}</td>
-                                        <td className="w-32 text-right font-semibold">
-                                            {sheetsCount > 1
-                                                ? `: ${sheet.name}`
-                                                : `: ${calculation?.ranking ? `${calculation.ranking} / ${calculation.totalSantri || '-'}` : '-'}`
-                                            }
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+            {/* Discrete Physical Paper Pages */}
+            {paginatedLayout.pages.map((page, pageIdx) => {
+                const isVeryLastOutputPage = isLastDocument && isLastSheet && pageIdx === paginatedLayout.pages.length - 1;
+                const scaledSliceW = Math.floor(page.sliceNaturalWidth * paginatedLayout.scale);
+                const sliceSumCols = page.sliceColWidths.reduce((a, b) => a + b, 0) || 1;
+                const rowIndices: number[] = [];
+                if (page.endRow >= page.startRow) {
+                    for (let r = page.startRow; r <= page.endRow; r++) {
+                        rowIndices.push(r);
+                    }
+                }
+
+                return (
+                    <div
+                        key={`${sheet.id}-page-${page.pageIndex}`}
+                        data-print-orientation={paperMetrics.orientation}
+                        className={`bg-white text-black font-sans text-sm printable-content-wrapper rapor-exact-page ${paginatedLayout.isSinglePageFit ? 'rapor-fit-1-page' : ''} ${paperMetrics.orientation === 'landscape' ? 'print-landscape' : ''} shadow-md mx-auto relative ${paperMetrics.paddingClass} ${!isVeryLastOutputPage ? 'page-break-after' : ''}`}
+                        style={{
+                            width: paperMetrics.widthCss,
+                            height: paperMetrics.heightCss,
+                            minHeight: paperMetrics.heightCss,
+                            maxHeight: paperMetrics.heightCss,
+                            overflow: 'hidden',
+                            pageBreakAfter: isVeryLastOutputPage ? 'auto' : 'always',
+                            breakAfter: isVeryLastOutputPage ? 'auto' : 'page',
+                            pageBreakInside: 'avoid',
+                            breakInside: 'avoid',
+                            boxSizing: 'border-box'
+                        }}
+                    >
+                        {/* Screen-Only Metadata Line */}
+                        <div className="no-print absolute top-2 right-4 text-[10px] text-slate-400 font-mono tabular-nums select-none flex items-center gap-1.5 z-30">
+                            <span>{sheet.name}</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-semibold text-slate-600">
+                                Hal. {page.pageNumber}/{page.totalPages}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="text-teal-700 font-semibold">{badgeText}</span>
                         </div>
-                    )}
 
-                    <table className="w-full border-collapse table-fixed">
-                        <colgroup>
-                            {sheetColWidths.map((w, cIdx) => (
-                                <col
-                                    key={cIdx}
-                                    style={{
-                                        width: totalColWidth > availableW
-                                            ? `${w}px`
-                                            : `${((w / totalColWidth) * 100).toFixed(3)}%`
-                                    }}
-                                />
-                            ))}
-                        </colgroup>
-                        <tbody>
-                            {sheet.cells.map((row, rIdx) => {
-                                const rH = sheetRowHeights[rIdx];
-                                return (
-                                    <tr key={rIdx} style={{ breakInside: 'avoid', pageBreakInside: 'avoid', height: rH ? `${rH}px` : undefined }}>
-                                        {row.map((cell, cIdx) => {
-                                            if (cell.hidden) return null;
-                                            let renderedContent: React.ReactNode = cell.value;
-                                            let isMediaElement = false;
+                        <div
+                            style={{
+                                width: `${scaledSliceW}px`,
+                                overflow: 'hidden',
+                                margin: '0 auto',
+                                position: 'relative'
+                            }}
+                        >
+                            <div
+                                className="flex flex-col justify-start"
+                                style={{
+                                    width: `${page.sliceNaturalWidth}px`,
+                                    transform: paginatedLayout.scale < 1 ? `scale(${paginatedLayout.scale})` : undefined,
+                                    transformOrigin: 'top left'
+                                }}
+                            >
+                                {page.includeDocHeader && renderDocumentHeader()}
 
-                                            if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(cell.value)) {
-                                                isMediaElement = true;
-                                                const imgSrc = getMediaTagImageSrc(cell.value, sheetResolveContext);
-                                                const upperCellVal = (cell.value || '').toUpperCase();
-                                                if (imgSrc) {
-                                                    const isStempel = upperCellVal.includes('STEMPEL');
-                                                    const isTtd = upperCellVal.includes('TTD');
-                                                    renderedContent = (
-                                                        <div className="flex items-center justify-center p-0.5 w-full h-full">
-                                                            <img
-                                                                src={imgSrc}
-                                                                alt={cell.value}
-                                                                onLoad={triggerMeasure}
-                                                                className={`object-contain ${isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
-                                                            />
-                                                        </div>
-                                                    );
-                                                } else {
-                                                    renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
-                                                }
-                                            } else if (cell.type === 'data') {
-                                                renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: cIdx } });
-                                            } else if (cell.type === 'formula') {
-                                                if (cell.value && cell.value.trim() !== '') {
-                                                    const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
-                                                    renderedContent = resolveRaporText(rawExpr, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: cIdx } });
-                                                } else if (cell.key && customData[cell.key] !== undefined && customData[cell.key] !== '') {
-                                                    renderedContent = customData[cell.key];
-                                                } else {
-                                                    renderedContent = '-';
-                                                }
-                                            } else if ((cell.type === 'input' || cell.type === 'dropdown') && cell.key) {
-                                                renderedContent = (customData[cell.key] !== undefined && customData[cell.key] !== '')
-                                                    ? customData[cell.key]
-                                                    : resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: cIdx } });
-                                            } else {
-                                                renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: cIdx } });
-                                            }
-
-                                            if (!isMediaElement && (typeof renderedContent === 'string' || typeof renderedContent === 'number') && cell.textTransform && cell.textTransform !== 'none') {
-                                                renderedContent = applyCellTextTransform(String(renderedContent), cell.textTransform);
-                                            }
-
-                                            const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
-                                            const b = cell.borders || { top: false, right: false, bottom: false, left: false };
-                                            const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
-                                            const effectiveBg = hasCustomBg ? cell.backgroundColor : 'transparent';
-                                            const effectiveFontWeight = cell.bold ? 'bold' : 'normal';
-                                            const effectiveFontSize = cell.fontSize || 11;
-                                            const hAlign = cell.align || 'center';
-                                            const vAlign = cell.verticalAlign || 'middle';
-                                            const textWrap = cell.textWrap || 'wrap';
-                                            const isFloat = textWrap === 'float' && !isMediaElement;
-                                            const isClip = textWrap === 'clip';
-
-                                            const cellColSpan = cell.colSpan || 1;
-                                            let cellWidthPx = 0;
-                                            for (let i = 0; i < cellColSpan; i++) {
-                                                cellWidthPx += sheetColWidths[cIdx + i] || 100;
-                                            }
-
-                                            const cellRowSpan = cell.rowSpan || 1;
-                                            let cellHeightPx: number | undefined = undefined;
-                                            if (rH !== undefined || cell.height !== undefined) {
-                                                let sumH = 0;
-                                                for (let i = 0; i < cellRowSpan; i++) {
-                                                    sumH += sheetRowHeights[rIdx + i] ?? cell.height ?? 30;
-                                                }
-                                                cellHeightPx = sumH;
-                                            }
-
-                                            const upperToken = `${cell.value || ''} ${cell.key || ''}`.toUpperCase();
-                                            const isExpandableDynamic = (upperToken.includes('DESKRIPSI') || upperToken.includes('CATATAN')) && !isClip && !isFloat && (cellHeightPx === undefined || cellHeightPx >= 28);
-                                            const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
-
-                                            const tdStyle: React.CSSProperties = {
-                                                borderTop: (!isLogoMedia && b.top) ? '1px solid black' : 'none',
-                                                borderRight: (!isLogoMedia && b.right) ? '1px solid black' : 'none',
-                                                borderBottom: (!isLogoMedia && b.bottom) ? '1px solid black' : 'none',
-                                                borderLeft: (!isLogoMedia && b.left) ? '1px solid black' : 'none',
-                                                textAlign: hAlign,
-                                                verticalAlign: vAlign,
-                                                height: cellHeightPx ? `${cellHeightPx}px` : undefined,
-                                                backgroundColor: effectiveBg,
-                                                fontWeight: effectiveFontWeight,
-                                                fontStyle: cell.italic ? 'italic' : undefined,
-                                                color: cell.color || undefined,
-                                                fontSize: `${effectiveFontSize}px`,
-                                                padding: 0,
-                                                boxSizing: 'border-box',
-                                                overflow: isFloat ? 'visible' : 'hidden',
-                                                position: isFloat ? 'relative' : undefined
-                                            };
-
+                                <table className="w-full border-collapse table-fixed">
+                                    <colgroup>
+                                        {page.sliceColWidths.map((w, cIdx) => (
+                                            <col
+                                                key={cIdx}
+                                                style={{
+                                                    width: page.stretchColsToFillWidth
+                                                        ? `${((w / sliceSumCols) * 100).toFixed(3)}%`
+                                                        : `${w}px`
+                                                }}
+                                            />
+                                        ))}
+                                    </colgroup>
+                                    <tbody>
+                                        {page.headerGroupRows.map((hrIdx) => {
+                                            const rH = sheetRowHeights[hrIdx];
+                                            const rowCells = getRenderableRowCellsForPage(sheet.cells, hrIdx, page, true);
                                             return (
-                                                <td key={cIdx} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={tdStyle}>
-                                                    {isFloat ? (
-                                                        <div
-                                                            style={{
-                                                                position: 'relative',
-                                                                width: '100%',
-                                                                height: cellHeightPx ? `${cellHeightPx}px` : '100%',
-                                                                minHeight: cellHeightPx ? `${cellHeightPx}px` : '22px',
-                                                                overflow: 'visible',
-                                                                zIndex: 20
-                                                            }}
-                                                        >
-                                                            <div
-                                                                style={{
-                                                                    position: 'absolute',
-                                                                    whiteSpace: 'pre',
-                                                                    left: hAlign === 'left' ? '4px' : hAlign === 'center' ? '50%' : undefined,
-                                                                    right: hAlign === 'right' ? '4px' : undefined,
-                                                                    top: vAlign === 'top' ? '2px' : vAlign === 'bottom' ? undefined : '50%',
-                                                                    bottom: vAlign === 'bottom' ? '2px' : undefined,
-                                                                    transform:
-                                                                        hAlign === 'center' && vAlign === 'middle'
-                                                                            ? 'translate(-50%, -50%)'
-                                                                            : hAlign === 'center'
-                                                                            ? 'translateX(-50%)'
-                                                                            : vAlign === 'middle'
-                                                                            ? 'translateY(-50%)'
-                                                                            : undefined,
-                                                                    textAlign: hAlign,
-                                                                    lineHeight: 1.25
-                                                                }}
-                                                            >
-                                                                {renderedContent}
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div
-                                                            style={{
-                                                                width: '100%',
-                                                                height: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : '100%',
-                                                                minHeight: (isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
-                                                                maxHeight: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
-                                                                padding: isMediaElement ? '1px' : cellPadding,
-                                                                boxSizing: 'border-box',
-                                                                overflow: 'hidden',
-                                                                display: 'flex',
-                                                                flexDirection: 'column',
-                                                                alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
-                                                                textAlign: hAlign,
-                                                                lineHeight: 1.25
-                                                            }}
-                                                        >
-                                                            <div
-                                                                style={{
-                                                                    width: '100%',
-                                                                    marginTop: vAlign === 'top' ? 0 : 'auto',
-                                                                    marginBottom: vAlign === 'bottom' ? 0 : 'auto',
-                                                                    whiteSpace: isClip ? 'pre' : 'pre-wrap',
-                                                                    wordBreak: isClip ? 'normal' : 'break-word',
-                                                                    overflowWrap: isClip ? 'normal' : 'anywhere',
-                                                                    overflow: isClip ? 'hidden' : undefined,
-                                                                    textAlign: hAlign
-                                                                }}
-                                                            >
-                                                                {renderedContent}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </td>
+                                                <tr key={`hdr-${hrIdx}`} style={{ breakInside: 'avoid', pageBreakInside: 'avoid', height: rH ? `${rH}px` : undefined }}>
+                                                    {rowCells.map(sc => renderSliceCellTd(sc, hrIdx, `hdr-${page.pageIndex}`))}
+                                                </tr>
                                             );
                                         })}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                                        {rowIndices.map((rIdx) => {
+                                            const rH = sheetRowHeights[rIdx];
+                                            const rowCells = getRenderableRowCellsForPage(sheet.cells, rIdx, page, false);
+                                            return (
+                                                <tr key={rIdx} style={{ breakInside: 'avoid', pageBreakInside: 'avoid', height: rH ? `${rH}px` : undefined }}>
+                                                    {rowCells.map(sc => renderSliceCellTd(sc, rIdx, `pg-${page.pageIndex}`))}
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {page.totalPages > 1 && (
+                            <div
+                                className="text-[9px] text-slate-500 tabular-nums select-none"
+                                style={{
+                                    position: 'absolute',
+                                    bottom: '4px',
+                                    right: `${paperMetrics.padPx}px`
+                                }}
+                            >
+                                {santri.namaLengkap} · Halaman {page.pageNumber} dari {page.totalPages}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 };
@@ -533,17 +738,24 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     digitalAssets = [],
     tanggalRapor,
     tempatRapor,
+    formatTanggalRapor,
+    manualHijriRapor,
     tahunAjaran,
     semester,
     calculation,
     cohortRecords,
     paperSize = 'A4',
+    orientation,
     showKop = true,
     marginMode = 'normal',
     showJudul,
     showBiodataHeader,
     fitToPage = true,
-    printScale = 'auto'
+    fitWidthPages,
+    fitHeightPages,
+    repeatHeaderRows,
+    printScale = 'auto',
+    isLastDocument = true
 }) => {
     const sheets = useMemo(() => {
         const allSheets = getTemplateSheets(template);
@@ -555,13 +767,17 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     }, [template, targetSheetId]);
 
     const customData = record?.customData ? JSON.parse(record.customData) : {};
-    const effectiveDate = record?.tanggalRapor
-        ? new Date(record.tanggalRapor)
-        : (tanggalRapor ? new Date(tanggalRapor) : (settings?.tanggalRaporDefault ? new Date(settings.tanggalRaporDefault) : new Date()));
+    const effectiveDate =
+        parseLocalDateSafe(record?.tanggalRapor) ||
+        parseLocalDateSafe(tanggalRapor) ||
+        parseLocalDateSafe(settings?.tanggalRaporDefault) ||
+        new Date();
 
     const effectiveSettings = {
         ...settings,
-        tempatRaporDefault: tempatRapor?.trim() || settings?.tempatRaporDefault
+        tempatRaporDefault: tempatRapor?.trim() || settings?.tempatRaporDefault,
+        formatTanggalRaporDefault: formatTanggalRapor || settings?.formatTanggalRaporDefault || 'masehi',
+        manualHijriRaporDefault: manualHijriRapor !== undefined ? manualHijriRapor : settings?.manualHijriRaporDefault
     };
 
     const resolveContext = {
@@ -588,12 +804,15 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                         ? sheet.showBiodataHeader
                         : (template.showBiodataHeader !== undefined ? template.showBiodataHeader : !hasBuiltInBiodata));
 
+                const effectiveOrientation = orientation || sheet.orientation || template.orientation || 'portrait';
+
                 return (
                     <ScaledRaporSheet
                         key={sheet.id}
                         sheet={sheet}
                         sheetsCount={sheets.length}
                         isLastSheet={isLastSheet}
+                        isLastDocument={isLastDocument}
                         template={template}
                         santri={santri}
                         settings={settings}
@@ -601,11 +820,15 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
                         resolveContext={resolveContext}
                         calculation={calculation}
                         paperSize={paperSize}
+                        orientation={effectiveOrientation}
                         showKop={showKop}
                         marginMode={marginMode}
                         showJudul={showJudul}
                         shouldShowBiodataHeader={shouldShowBiodataHeader}
                         fitToPage={fitToPage}
+                        fitWidthPages={fitWidthPages}
+                        fitHeightPages={fitHeightPages}
+                        repeatHeaderRows={repeatHeaderRows}
                         printScale={printScale}
                     />
                 );
@@ -646,15 +869,49 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
     // Print Layout & Output Settings
     const [paperSize, setPaperSize] = useState<'A4' | 'F4'>('A4');
+    const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
     const [showKop, setShowKop] = useState<boolean>(true);
     const [marginMode, setMarginMode] = useState<'normal' | 'narrow' | 'none'>('normal');
     const [rankingDisplayLimit, setRankingDisplayLimit] = useState<RankingDisplayLimit>('all');
     const [fitToPage, setFitToPage] = useState<boolean>(true);
+    const [fitWidthPages, setFitWidthPages] = useState<PageFitCount>(1);
+    const [fitHeightPages, setFitHeightPages] = useState<PageFitCount>(1);
+    const [repeatHeaderRows, setRepeatHeaderRows] = useState<boolean>(true);
     const [printScale, setPrintScale] = useState<number | 'auto'>('auto');
     const [showBiodataHeader, setShowBiodataHeader] = useState<boolean | 'auto'>('auto');
     const [showJudul, setShowJudul] = useState<boolean | 'auto'>('auto');
     const [showAdvancedPrintSettings, setShowAdvancedPrintSettings] = useState(false);
     const [previewZoom, setPreviewZoom] = useState<number>(1.0);
+
+    const currentPageSetup = useMemo(
+        () =>
+            normalizeRaporPageSetup({
+                paperSize,
+                orientation,
+                marginMode,
+                fitToPage,
+                fitWidthPages,
+                fitHeightPages,
+                printScale,
+                repeatHeaderRows
+            }),
+        [paperSize, orientation, marginMode, fitToPage, fitWidthPages, fitHeightPages, printScale, repeatHeaderRows]
+    );
+
+    const applyPrintPageSetupPatch = (patch: Partial<RaporPageSetupInput>) => {
+        const next = normalizeRaporPageSetup({
+            ...currentPageSetup,
+            ...patch
+        });
+        setPaperSize(next.paperSize);
+        setOrientation(next.orientation);
+        setMarginMode(next.marginMode);
+        setFitToPage(next.fitToPage);
+        setFitWidthPages(next.fitWidthPages);
+        setFitHeightPages(next.fitHeightPages);
+        setPrintScale(next.printScale);
+        setRepeatHeaderRows(next.repeatHeaderRows);
+    };
 
     // Load and persist print preferences across sessions
     const PRINT_PREF_KEY = 'esantri_rapor_print_preferences_v1';
@@ -663,11 +920,25 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
             const stored = localStorage.getItem(PRINT_PREF_KEY);
             if (stored) {
                 const parsed = JSON.parse(stored);
-                if (parsed.paperSize) setPaperSize(parsed.paperSize);
+                const normalized = normalizeRaporPageSetup({
+                    paperSize: parsed.paperSize,
+                    orientation: parsed.orientation,
+                    marginMode: parsed.marginMode,
+                    fitToPage: parsed.fitToPage,
+                    fitWidthPages: parsed.fitWidthPages,
+                    fitHeightPages: parsed.fitHeightPages,
+                    printScale: parsed.printScale,
+                    repeatHeaderRows: parsed.repeatHeaderRows ?? true
+                });
+                setPaperSize(normalized.paperSize);
+                setOrientation(normalized.orientation);
+                setMarginMode(normalized.marginMode);
+                setFitToPage(normalized.fitToPage);
+                setFitWidthPages(normalized.fitWidthPages);
+                setFitHeightPages(normalized.fitHeightPages);
+                setPrintScale(normalized.printScale);
+                setRepeatHeaderRows(normalized.repeatHeaderRows);
                 if (parsed.showKop !== undefined) setShowKop(parsed.showKop);
-                if (parsed.marginMode) setMarginMode(parsed.marginMode);
-                if (parsed.fitToPage !== undefined) setFitToPage(parsed.fitToPage);
-                if (parsed.printScale !== undefined) setPrintScale(parsed.printScale);
                 if (parsed.rankingDisplayLimit) setRankingDisplayLimit(parsed.rankingDisplayLimit);
             }
         } catch {}
@@ -677,19 +948,41 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
         try {
             localStorage.setItem(PRINT_PREF_KEY, JSON.stringify({
                 paperSize,
+                orientation,
                 showKop,
                 marginMode,
                 fitToPage,
+                fitWidthPages,
+                fitHeightPages,
+                repeatHeaderRows,
                 printScale,
                 rankingDisplayLimit
             }));
         } catch {}
-    }, [paperSize, showKop, marginMode, fitToPage, printScale, rankingDisplayLimit]);
+    }, [paperSize, orientation, showKop, marginMode, fitToPage, fitWidthPages, fitHeightPages, repeatHeaderRows, printScale, rankingDisplayLimit]);
 
-    // Universal / Custom Issuance Date & Place
-    const [tanggalRapor, setTanggalRapor] = useState(settings.tanggalRaporDefault || new Date().toISOString().split('T')[0]);
-    const [tempatRapor, setTempatRapor] = useState(settings.tempatRaporDefault || '');
+    // Universal / Custom Issuance Date, Place & Calendar Format (Masehi / Hijriah / Gabungan)
+    const [tanggalRapor, setTanggalRapor] = useState(settings.tanggalRaporDefault || formatLocalDate(new Date()));
+    const [tempatRapor, setTempatRapor] = useState(() => settings.tempatRaporDefault || resolveTempatRapor(settings, ''));
+    const [formatTanggalRapor, setFormatTanggalRapor] = useState<DateFormatMode>(settings.formatTanggalRaporDefault || 'masehi');
+    const [manualHijriRapor, setManualHijriRapor] = useState(settings.manualHijriRaporDefault || '');
     const [isSavingUniversalDate, setIsSavingUniversalDate] = useState(false);
+
+    const liveTitimangsaPreview = useMemo(() => {
+        const city = tempatRapor.trim() || resolveTempatRapor(settings, 'Pesantren');
+        const dateFormatted = formatTanggalDokumen(tanggalRapor, {
+            formatMode: formatTanggalRapor,
+            hijriAdjustment: settings.hijriAdjustment || 0,
+            manualHijri: manualHijriRapor
+        });
+        return dateFormatted ? `${city}, ${dateFormatted}` : city;
+    }, [tempatRapor, tanggalRapor, formatTanggalRapor, manualHijriRapor, settings]);
+
+    const autoHijriHint = useMemo(() => {
+        const d = parseLocalDateSafe(tanggalRapor) || new Date();
+        const info = getHijriDate(d, settings.hijriAdjustment || 0);
+        return info.full ? `${info.full} H` : '5 Muharram 1448 H';
+    }, [tanggalRapor, settings.hijriAdjustment]);
 
     // Records and Leger Calculations Map
     const [periodRecordsMap, setPeriodRecordsMap] = useState<Map<number, RaporRecord>>(new Map());
@@ -746,7 +1039,13 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
         if (settings.tempatRaporDefault && !tempatRapor) {
             setTempatRapor(settings.tempatRaporDefault);
         }
-    }, [settings.tanggalRaporDefault, settings.tempatRaporDefault]);
+        if (settings.formatTanggalRaporDefault) {
+            setFormatTanggalRapor(settings.formatTanggalRaporDefault);
+        }
+        if (settings.manualHijriRaporDefault !== undefined) {
+            setManualHijriRapor(settings.manualHijriRaporDefault);
+        }
+    }, [settings.tanggalRaporDefault, settings.tempatRaporDefault, settings.formatTanggalRaporDefault, settings.manualHijriRaporDefault]);
 
     const handleSaveRaporTitle = async (customTitle: string, isShowJudul: boolean, targetSheet: 'all' | string) => {
         if (!selectedTemplate) return;
@@ -787,9 +1086,11 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
             await onUpdateSettings({
                 ...settings,
                 tanggalRaporDefault: tanggalRapor,
-                tempatRaporDefault: tempatRapor.trim()
+                tempatRaporDefault: tempatRapor.trim(),
+                formatTanggalRaporDefault: formatTanggalRapor,
+                manualHijriRaporDefault: manualHijriRapor.trim()
             });
-            showToast('Tanggal & Tempat Rapor berhasil disimpan sebagai default universal!', 'success');
+            showToast('Titimangsa (Tempat, Tanggal & Format Kalender) berhasil disimpan sebagai default!', 'success');
         } catch (error) {
             showToast('Gagal menyimpan default tanggal: ' + String(error), 'error');
         } finally {
@@ -1143,18 +1444,37 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
     useEffect(() => {
         if (selectedTemplate) {
-            if (selectedTemplate.fitToPage !== undefined) {
-                setFitToPage(selectedTemplate.fitToPage);
+            const hasSavedLayoutProp =
+                selectedTemplate.paperSize !== undefined ||
+                selectedTemplate.orientation !== undefined ||
+                selectedTemplate.marginMode !== undefined ||
+                selectedTemplate.fitToPage !== undefined ||
+                selectedTemplate.fitWidthPages !== undefined ||
+                selectedTemplate.fitHeightPages !== undefined ||
+                selectedTemplate.printScale !== undefined ||
+                selectedTemplate.repeatHeaderRows !== undefined;
+
+            if (hasSavedLayoutProp) {
+                const normalized = normalizeRaporPageSetup({
+                    paperSize: selectedTemplate.paperSize ?? paperSize,
+                    orientation: selectedTemplate.orientation ?? orientation,
+                    marginMode: selectedTemplate.marginMode ?? marginMode,
+                    fitToPage: selectedTemplate.fitToPage,
+                    fitWidthPages: selectedTemplate.fitWidthPages,
+                    fitHeightPages: selectedTemplate.fitHeightPages,
+                    printScale: selectedTemplate.printScale,
+                    repeatHeaderRows: selectedTemplate.repeatHeaderRows ?? repeatHeaderRows
+                });
+                setPaperSize(normalized.paperSize);
+                setOrientation(normalized.orientation);
+                setMarginMode(normalized.marginMode);
+                setFitToPage(normalized.fitToPage);
+                setFitWidthPages(normalized.fitWidthPages);
+                setFitHeightPages(normalized.fitHeightPages);
+                setPrintScale(normalized.printScale);
+                setRepeatHeaderRows(normalized.repeatHeaderRows);
             }
-            if (selectedTemplate.printScale !== undefined) {
-                setPrintScale(selectedTemplate.printScale);
-            }
-            if (selectedTemplate.marginMode !== undefined) {
-                setMarginMode(selectedTemplate.marginMode);
-            }
-            if (selectedTemplate.paperSize !== undefined) {
-                setPaperSize(selectedTemplate.paperSize);
-            }
+
             if (selectedTemplate.showBiodataHeader !== undefined) {
                 setShowBiodataHeader(selectedTemplate.showBiodataHeader);
             } else {
@@ -1387,102 +1707,141 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                     {/* Primary Quick Bar */}
                     <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
                         {/* Titimangsa Controls (Responsive & Anti-Overflow di Layar Mobile) */}
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
-                            <div className="flex items-center justify-between sm:justify-start gap-2">
-                                <div className="flex items-center gap-1.5 text-slate-700 font-bold text-xs shrink-0">
-                                    <i className="bi bi-calendar-check text-base text-teal-600"></i>
-                                    <span>Titimangsa:</span>
+                        <div className="flex flex-col gap-1.5 w-full lg:w-auto min-w-0">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 flex-wrap">
+                                <div className="flex items-center justify-between sm:justify-start gap-2">
+                                    <div className="flex items-center gap-1.5 text-slate-700 font-bold text-xs shrink-0">
+                                        <i className="bi bi-calendar-check text-base text-teal-600"></i>
+                                        <span>Titimangsa:</span>
+                                    </div>
+                                    <button
+                                        onClick={handleSaveUniversalDate}
+                                        disabled={isSavingUniversalDate}
+                                        title="Simpan tempat, tanggal & format kalender ini sebagai default universal untuk desain & cetak rapor"
+                                        className="sm:hidden bg-white hover:bg-slate-100 text-teal-700 border border-teal-200 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 disabled:opacity-50 shrink-0"
+                                    >
+                                        {isSavingUniversalDate ? <span className="animate-spin h-3 w-3 border-2 border-teal-600 border-t-transparent rounded-full"></span> : <i className="bi bi-floppy"></i>}
+                                        <span>Set Default</span>
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={handleSaveUniversalDate}
-                                    disabled={isSavingUniversalDate}
-                                    title="Simpan tanggal & tempat ini sebagai default universal untuk semua santri"
-                                    className="sm:hidden bg-white hover:bg-slate-100 text-teal-700 border border-teal-200 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 disabled:opacity-50 shrink-0"
-                                >
-                                    {isSavingUniversalDate ? <span className="animate-spin h-3 w-3 border-2 border-teal-600 border-t-transparent rounded-full"></span> : <i className="bi bi-floppy"></i>}
-                                    <span>Set Default</span>
-                                </button>
-                            </div>
 
-                            <div className="flex items-center gap-1.5 w-full sm:w-auto min-w-0">
-                                <input
-                                    type="text"
-                                    value={tempatRapor}
-                                    onChange={e => setTempatRapor(e.target.value)}
-                                    placeholder="Kota (Cth: Banyumas)"
-                                    className="flex-1 sm:w-36 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 min-w-0 max-w-full"
-                                    title="Kota / Tempat Ditetapkannya Rapor"
-                                />
-                                <span className="text-slate-400 font-bold shrink-0">,</span>
-                                <input
-                                    type="date"
-                                    value={tanggalRapor}
-                                    onChange={e => setTanggalRapor(e.target.value)}
-                                    className="flex-1 sm:w-40 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 min-w-0 max-w-full"
-                                    title="Tanggal Diresmikan / Dikeluarkannya Rapor"
-                                />
-                                <button
-                                    onClick={handleSaveUniversalDate}
-                                    disabled={isSavingUniversalDate}
-                                    title="Simpan tanggal & tempat ini sebagai default universal untuk semua santri"
-                                    className="hidden sm:flex bg-white hover:bg-slate-100 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs items-center gap-1.5 disabled:opacity-50 shrink-0"
-                                >
-                                    {isSavingUniversalDate ? <span className="animate-spin h-3 w-3 border-2 border-teal-600 border-t-transparent rounded-full"></span> : <i className="bi bi-floppy"></i>}
-                                    <span className="hidden sm:inline">Set Default</span>
-                                </button>
+                                <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto min-w-0">
+                                    <input
+                                        type="text"
+                                        value={tempatRapor}
+                                        onChange={e => setTempatRapor(e.target.value)}
+                                        placeholder="Kota (Cth: Banyumas)"
+                                        className="flex-1 sm:flex-initial sm:w-32 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 min-w-[110px]"
+                                        title="Kota / Tempat Ditetapkannya Rapor (=TEMPAT_RAPOR() / =TITIMANGSA())"
+                                    />
+                                    <span className="text-slate-400 font-bold shrink-0">,</span>
+                                    <input
+                                        type="date"
+                                        value={tanggalRapor}
+                                        onChange={e => setTanggalRapor(e.target.value)}
+                                        className="flex-1 sm:flex-initial sm:w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 min-w-[130px]"
+                                        title="Tanggal Pengeluaran Rapor (=TANGGAL_RAPOR() / =TITIMANGSA())"
+                                    />
+                                    <select
+                                        value={formatTanggalRapor}
+                                        onChange={e => setFormatTanggalRapor(e.target.value as DateFormatMode)}
+                                        className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer shrink-0"
+                                        title="Format kalender default untuk =TITIMANGSA(), =TANGGAL_RAPOR(), dan Rapor Standar"
+                                    >
+                                        <option value="masehi">Masehi</option>
+                                        <option value="hijriah_masehi">Hijriah &amp; Masehi</option>
+                                        <option value="hijriah">Hijriah Saja</option>
+                                    </select>
+                                    {formatTanggalRapor !== 'masehi' && (
+                                        <input
+                                            type="text"
+                                            value={manualHijriRapor}
+                                            onChange={e => setManualHijriRapor(e.target.value)}
+                                            placeholder={`Otomatis: ${autoHijriHint}`}
+                                            className="w-full sm:w-44 border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-amber-50/40 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                            title="Opsional: Ketik tanggal Hijriah manual jika mengikuti ketetapan rukyat/istimal pondok (kosongkan untuk konversi otomatis)"
+                                        />
+                                    )}
+                                    <button
+                                        onClick={handleSaveUniversalDate}
+                                        disabled={isSavingUniversalDate}
+                                        title="Simpan tempat, tanggal & format kalender ini sebagai default universal untuk desain & cetak rapor"
+                                        className="hidden sm:flex bg-white hover:bg-slate-100 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs items-center gap-1.5 disabled:opacity-50 shrink-0"
+                                    >
+                                        {isSavingUniversalDate ? <span className="animate-spin h-3 w-3 border-2 border-teal-600 border-t-transparent rounded-full"></span> : <i className="bi bi-floppy"></i>}
+                                        <span className="hidden sm:inline">Set Default</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap pl-0.5">
+                                <span>Hasil Titimangsa:</span>
+                                <span className="font-semibold text-slate-700">{liveTitimangsaPreview}</span>
+                                {formatTanggalRapor === 'masehi' && (
+                                    <>
+                                        <span aria-hidden="true">·</span>
+                                        <span>Hijriah: {manualHijriRapor.trim() || autoHijriHint}</span>
+                                    </>
+                                )}
                             </div>
                         </div>
 
-                        {/* Quick Format & Drawer Toggle (Tersusun rapih 1 atau 2 baris di mobile) */}
+                        {/* Quick Format & Drawer Toggle */}
                         <div className="w-full lg:w-auto grid grid-cols-2 xs:flex xs:flex-wrap sm:flex-nowrap items-center gap-2 border-t border-slate-200/70 lg:border-t-0 pt-3 lg:pt-0">
                             {/* Paper Size Switch */}
-                            <div className="col-span-1 flex items-center justify-center bg-white border border-slate-200 rounded-xl p-0.5 sm:p-1 shadow-2xs h-[36px]">
+                            <div className="col-span-1 flex items-center justify-center bg-white border border-slate-200 rounded-xl p-0.5 sm:p-1 shadow-2xs h-[36px] shrink-0">
                                 <button
                                     type="button"
-                                    onClick={() => setPaperSize('A4')}
-                                    className={`flex-1 xs:flex-initial px-2.5 py-1 rounded-lg text-xs font-bold transition-all h-full flex items-center justify-center ${paperSize === 'A4' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                                    onClick={() => applyPrintPageSetupPatch({ paperSize: 'A4' })}
+                                    className={`flex-1 xs:flex-initial px-2.5 py-1 rounded-lg text-xs font-bold transition-all h-full flex items-center justify-center ${currentPageSetup.paperSize === 'A4' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
                                 >
                                     A4
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setPaperSize('F4')}
-                                    className={`flex-1 xs:flex-initial px-2.5 py-1 rounded-lg text-xs font-bold transition-all h-full flex items-center justify-center ${paperSize === 'F4' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                                    onClick={() => applyPrintPageSetupPatch({ paperSize: 'F4' })}
+                                    className={`flex-1 xs:flex-initial px-2.5 py-1 rounded-lg text-xs font-bold transition-all h-full flex items-center justify-center ${currentPageSetup.paperSize === 'F4' ? 'bg-teal-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
                                     title="F4 / Folio (21.5 x 33.0 cm)"
                                 >
                                     F4
                                 </button>
                             </div>
 
-                            {/* Fit to 1 Page (Paksa Pas 1 Muka) */}
-                            <button
-                                type="button"
-                                onClick={() => setFitToPage(prev => !prev)}
-                                className={`col-span-1 flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 h-[36px] ${
-                                    fitToPage ? 'bg-indigo-50 text-indigo-800 border-indigo-200 shadow-2xs' : 'bg-slate-100 text-slate-500 border-slate-200'
-                                }`}
-                                title="Fit to 1 Page: Memaksa desain rapor pas tepat dalam 1 lembar tanpa meluber ke halaman 2 seperti di Excel"
-                            >
-                                <i className={`bi ${fitToPage ? 'bi-file-earmark-check-fill text-indigo-600' : 'bi-file-earmark'}`}></i>
-                                <span className="whitespace-nowrap">{fitToPage ? 'Pas 1 Lembar' : 'Tinggi Bebas'}</span>
-                            </button>
+                            {/* Excel-Style Page Fit Preset Selector */}
+                            <div className="col-span-1 flex-1 sm:flex-initial flex items-center gap-1.5 bg-indigo-50/70 border border-indigo-200 rounded-xl px-2.5 h-[36px] shadow-2xs min-w-0">
+                                <i className="bi bi-aspect-ratio text-indigo-600 text-xs shrink-0"></i>
+                                <select
+                                    value={currentPageSetup.preset}
+                                    onChange={e => {
+                                        const nextPreset = e.target.value as RaporPageScalePreset;
+                                        applyPrintPageSetupPatch(buildPageSetupStateFromPreset(nextPreset, currentPageSetup));
+                                        if (nextPreset === 'fit_custom' || nextPreset === 'manual_scale') {
+                                            setShowAdvancedPrintSettings(true);
+                                        }
+                                    }}
+                                    className="font-bold text-xs text-indigo-950 bg-transparent focus:outline-none cursor-pointer w-full truncate"
+                                    title="Pilih mode penyesuaian halaman seperti di Excel (Fit 1 Halaman, Fit Lebar ke X Halaman, Fit Tinggi ke Y Halaman, atau Skala Manual)"
+                                >
+                                    <option value="fit_1_page">Fit Dokumen ke 1 Halaman</option>
+                                    <option value="fit_width_1">Fit Lebar 1 Hal (Oper Bawah)</option>
+                                    <option value="fit_height_1">Fit Tinggi 1 Hal</option>
+                                    <option value="fit_custom">Fit Lebar × Tinggi Kustom</option>
+                                    <option value="manual_scale">Skala Manual (%)</option>
+                                </select>
+                            </div>
 
                             {/* Collapsible Advanced Settings Toggle */}
                             <button
                                 type="button"
                                 onClick={() => setShowAdvancedPrintSettings(prev => !prev)}
-                                className={`col-span-2 xs:flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 h-[36px] ${
-                                    showAdvancedPrintSettings || !showKop || marginMode !== 'normal' || printScale !== 'auto' || rankingDisplayLimit !== 'all'
+                                className={`col-span-2 xs:flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 h-[36px] shrink-0 ${
+                                    showAdvancedPrintSettings || !showKop || marginMode !== 'normal' || currentPageSetup.preset !== 'fit_1_page' || orientation !== 'portrait' || rankingDisplayLimit !== 'all'
                                         ? 'bg-teal-50 text-teal-800 border-teal-300 shadow-2xs font-bold'
                                         : 'bg-white text-slate-600 hover:text-slate-900 border-slate-200'
                                 }`}
-                                title="Buka / tutup opsi tata letak lanjutan (Kop, Judul 3 Baris, Skala %, Margin, Batas Ranking)"
+                                title="Buka / tutup opsi tata letak lanjutan (Fit Lebar/Tinggi ke X Halaman, Orientasi, Kop, Judul 3 Baris, Skala %, Margin, Batas Ranking)"
                             >
                                 <i className="bi bi-sliders2 text-teal-600"></i>
                                 <span className="whitespace-nowrap">Atur Lanjutan</span>
-                                {(!showKop || marginMode !== 'normal' || printScale !== 'auto' || rankingDisplayLimit !== 'all') && (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
-                                )}
                                 <i className={`bi bi-chevron-${showAdvancedPrintSettings ? 'up' : 'down'} text-[10px]`}></i>
                             </button>
                         </div>
@@ -1490,11 +1849,117 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
                     {/* Collapsible Advanced Settings Drawer */}
                     {showAdvancedPrintSettings && (
-                        <div className="mt-3 pt-3 border-t border-slate-200/80 flex flex-wrap items-center gap-3 animate-fade-in bg-white/70 p-3 rounded-xl border border-slate-200/60">
+                        <div className="mt-3 pt-3 border-t border-slate-200/80 flex flex-wrap items-center gap-2.5 animate-fade-in bg-white/70 p-3 rounded-xl border border-slate-200/60">
+                            {/* Orientasi Kertas */}
+                            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs shadow-2xs">
+                                <i className="bi bi-file-earmark-ruled text-slate-500"></i>
+                                <select
+                                    value={currentPageSetup.orientation}
+                                    onChange={e => applyPrintPageSetupPatch({ orientation: e.target.value as 'portrait' | 'landscape' })}
+                                    className="font-bold text-xs bg-transparent text-slate-800 focus:outline-none cursor-pointer"
+                                    title="Orientasi Kertas"
+                                >
+                                    <option value="portrait">Orientasi: Portrait</option>
+                                    <option value="landscape">Orientasi: Landscape</option>
+                                </select>
+                            </div>
+
+                            {/* Excel Fit Lebar ke X Hal & Fit Tinggi ke Y Hal OR Skala Manual */}
+                            {currentPageSetup.preset === 'manual_scale' ? (
+                                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs shadow-2xs">
+                                    <i className="bi bi-zoom-in text-slate-500"></i>
+                                    <span className="font-bold text-slate-500 text-[11px]">Skala:</span>
+                                    <select
+                                        value={String(typeof currentPageSetup.printScale === 'number' ? currentPageSetup.printScale : 100)}
+                                        onChange={e => {
+                                            const v = e.target.value;
+                                            if (v === 'auto') {
+                                                applyPrintPageSetupPatch(buildPageSetupStateFromPreset('fit_1_page', currentPageSetup));
+                                            } else {
+                                                applyPrintPageSetupPatch({
+                                                    printScale: parseInt(v, 10) || 100,
+                                                    fitWidthPages: 'auto',
+                                                    fitHeightPages: 'auto'
+                                                });
+                                            }
+                                        }}
+                                        className="font-bold text-xs bg-transparent text-slate-800 focus:outline-none cursor-pointer tabular-nums"
+                                        title="Skala persentase manual (sisa baris/kolom otomatis di-oper ke halaman berikutnya)"
+                                    >
+                                        <option value="auto">Auto (Fit 1 Halaman)</option>
+                                        <option value="100">100% (Normal)</option>
+                                        <option value="95">95%</option>
+                                        <option value="90">90%</option>
+                                        <option value="85">85%</option>
+                                        <option value="80">80%</option>
+                                        <option value="75">75%</option>
+                                        <option value="70">70%</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap items-center gap-1.5 bg-indigo-50/50 border border-indigo-200 rounded-xl px-2.5 py-1.5 text-xs shadow-2xs">
+                                    <span className="font-bold text-indigo-900 text-[11px] whitespace-nowrap">Fit Lebar:</span>
+                                    <select
+                                        value={String(currentPageSetup.fitWidthPages)}
+                                        onChange={e =>
+                                            applyPrintPageSetupPatch({
+                                                printScale: 'auto',
+                                                fitWidthPages: e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10)
+                                            })
+                                        }
+                                        className="font-bold text-xs bg-white border border-indigo-200 rounded-lg px-2 py-0.5 text-slate-800 focus:outline-none cursor-pointer"
+                                        title="Fit lebar dokumen ke X halaman"
+                                    >
+                                        <option value="auto">Otomatis</option>
+                                        <option value="1">1 Halaman</option>
+                                        <option value="2">2 Halaman</option>
+                                        <option value="3">3 Halaman</option>
+                                        <option value="4">4 Halaman</option>
+                                    </select>
+                                    <span className="text-indigo-300 font-bold">×</span>
+                                    <span className="font-bold text-indigo-900 text-[11px] whitespace-nowrap">Fit Tinggi:</span>
+                                    <select
+                                        value={String(currentPageSetup.fitHeightPages)}
+                                        onChange={e =>
+                                            applyPrintPageSetupPatch({
+                                                printScale: 'auto',
+                                                fitHeightPages: e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10)
+                                            })
+                                        }
+                                        className="font-bold text-xs bg-white border border-indigo-200 rounded-lg px-2 py-0.5 text-slate-800 focus:outline-none cursor-pointer"
+                                        title="Fit tinggi dokumen ke Y halaman (Otomatis = sisa bawah di-oper ke halaman selanjutnya)"
+                                    >
+                                        <option value="auto">Otomatis (Oper Hal.)</option>
+                                        <option value="1">1 Halaman</option>
+                                        <option value="2">2 Halaman</option>
+                                        <option value="3">3 Halaman</option>
+                                        <option value="4">4 Halaman</option>
+                                        <option value="5">5 Halaman</option>
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* Toggle Ulangi Baris Header Tabel saat Multi-Halaman */}
+                            {currentPageSetup.fitHeightPages !== 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() => applyPrintPageSetupPatch({ repeatHeaderRows: !currentPageSetup.repeatHeaderRows })}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                                        currentPageSetup.repeatHeaderRows
+                                            ? 'bg-teal-50 text-teal-800 border-teal-200 shadow-2xs'
+                                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                                    }`}
+                                    title="Ulangi baris judul tabel nilai secara otomatis di Halaman 2 dan seterusnya"
+                                >
+                                    <i className="bi bi-layout-three-columns"></i>
+                                    <span>{currentPageSetup.repeatHeaderRows ? 'Ulangi Header: Aktif' : 'Ulangi Header: Off'}</span>
+                                </button>
+                            )}
+
                             {/* Kop Toggle */}
                             <button
                                 onClick={() => setShowKop(prev => !prev)}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${showKop ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 whitespace-nowrap ${showKop ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}
                                 title="Toggle tampilan Kop Lembaga (nonaktifkan jika mencetak pada kertas berkop cetak sendiri)"
                             >
                                 <i className={`bi ${showKop ? 'bi-check-circle-fill text-emerald-600' : 'bi-circle'}`}></i>
@@ -1506,7 +1971,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 <button
                                     type="button"
                                     onClick={() => setShowJudul(prev => (prev === 'auto' ? (isTemplateHasCustomTitle ? true : false) : !prev))}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 whitespace-nowrap ${
                                         effectiveShowJudul ? 'bg-amber-50 text-amber-800 border-amber-200 shadow-2xs' : 'bg-slate-100 text-slate-500 border-slate-200'
                                     }`}
                                     title={
@@ -1518,8 +1983,8 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                     <i className={`bi ${effectiveShowJudul ? 'bi-card-heading text-amber-600' : 'bi-card-text text-slate-400'}`}></i>
                                     <span>{effectiveShowJudul ? 'Judul: Aktif' : 'Judul: Nonaktif'}</span>
                                     {isTemplateHasCustomTitle && !effectiveShowJudul && (
-                                        <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 py-0.5 rounded-md hidden xl:inline" title="Judul rapor dibuat mandiri di dalam tabel sel desain">
-                                            Format Sendiri
+                                        <span className="text-amber-700 text-[10px] font-semibold hidden xl:inline" title="Judul rapor dibuat mandiri di dalam tabel sel desain">
+                                            · Format Sendiri
                                         </span>
                                     )}
                                 </button>
@@ -1527,7 +1992,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                     <button
                                         type="button"
                                         onClick={() => setIsTitleModalOpen(true)}
-                                        className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-amber-300 bg-amber-100/90 hover:bg-amber-200 text-amber-900 transition-all flex items-center gap-1 shadow-2xs"
+                                        className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-amber-300 bg-amber-100/90 hover:bg-amber-200 text-amber-900 transition-all flex items-center gap-1 shadow-2xs whitespace-nowrap"
                                         title="Atur teks judul dokumen rapor resmi (bisa 1 - 3 baris dengan Enter dan tag otomatis)"
                                     >
                                         <i className="bi bi-pencil-square text-amber-700"></i>
@@ -1536,34 +2001,11 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 )}
                             </div>
 
-                            {/* Skala Cetak */}
-                            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1 text-xs shadow-xs">
-                                <i className="bi bi-aspect-ratio text-slate-500 text-xs"></i>
-                                <span className="font-bold text-slate-500 text-[11px] hidden sm:inline">Skala:</span>
-                                <select
-                                    value={String(printScale)}
-                                    onChange={e => {
-                                        const v = e.target.value;
-                                        setPrintScale(v === 'auto' ? 'auto' : parseInt(v, 10));
-                                    }}
-                                    className="font-bold text-xs bg-transparent text-slate-800 focus:outline-none cursor-pointer"
-                                    title="Skala cetak rapor. Pilih 'Auto Fit' agar pas 1 lembar atau tentukan persen ukuran"
-                                >
-                                    <option value="auto">Auto Fit (1 Muka)</option>
-                                    <option value="100">100% (Normal)</option>
-                                    <option value="95">95%</option>
-                                    <option value="90">90%</option>
-                                    <option value="85">85%</option>
-                                    <option value="80">80%</option>
-                                    <option value="75">75%</option>
-                                </select>
-                            </div>
-
                             {/* Toggle Biodata Otomatis (Nama, NIS, Rombel, Ranking) */}
                             <button
                                 type="button"
                                 onClick={() => setShowBiodataHeader(prev => (prev === 'auto' ? isTemplateHasCustomBiodata : !prev))}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 whitespace-nowrap ${
                                     effectiveShowBiodata
                                         ? 'bg-blue-50 text-blue-800 border-blue-200 shadow-2xs'
                                         : 'bg-slate-100 text-slate-500 border-slate-200'
@@ -1577,16 +2019,16 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 <i className={`bi ${effectiveShowBiodata ? 'bi-person-badge-fill text-blue-600' : 'bi-person-x text-slate-400'}`}></i>
                                 <span>{effectiveShowBiodata ? 'Biodata: Aktif' : 'Biodata: Nonaktif'}</span>
                                 {isTemplateHasCustomBiodata && !effectiveShowBiodata && (
-                                    <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 py-0.5 rounded-md hidden xl:inline" title="Format santri dibuat mandiri di dalam tabel desain">
-                                        Format Sendiri
+                                    <span className="text-amber-700 text-[10px] font-semibold hidden xl:inline" title="Format santri dibuat mandiri di dalam tabel desain">
+                                        · Format Sendiri
                                     </span>
                                 )}
                             </button>
 
                             {/* Margins */}
                             <select
-                                value={marginMode}
-                                onChange={e => setMarginMode(e.target.value as any)}
+                                value={currentPageSetup.marginMode}
+                                onChange={e => applyPrintPageSetupPatch({ marginMode: e.target.value as any })}
                                 className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold bg-white text-slate-700"
                                 title="Pilihan Margin Kertas"
                             >
@@ -1971,6 +2413,86 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         </select>
                                     )}
 
+                                    {/* Excel Page Fit Preset & Dimension Controls in Single Preview */}
+                                    <select
+                                        value={currentPageSetup.preset}
+                                        onChange={e => {
+                                            const nextPreset = e.target.value as RaporPageScalePreset;
+                                            applyPrintPageSetupPatch(buildPageSetupStateFromPreset(nextPreset, currentPageSetup));
+                                        }}
+                                        className="h-[32px] px-2 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-950 focus:outline-none cursor-pointer shrink-0"
+                                        title="Mode Penyesuaian Halaman (Ala Excel)"
+                                    >
+                                        <option value="fit_1_page">Fit Dokumen 1 Hal</option>
+                                        <option value="fit_width_1">Fit Lebar 1 Hal (Oper Bawah)</option>
+                                        <option value="fit_height_1">Fit Tinggi 1 Hal</option>
+                                        <option value="fit_custom">Fit Lebar × Tinggi Kustom</option>
+                                        <option value="manual_scale">Skala Manual (%)</option>
+                                    </select>
+
+                                    {currentPageSetup.preset === 'manual_scale' ? (
+                                        <select
+                                            value={String(typeof currentPageSetup.printScale === 'number' ? currentPageSetup.printScale : 100)}
+                                            onChange={e =>
+                                                applyPrintPageSetupPatch({
+                                                    printScale: parseInt(e.target.value, 10) || 100,
+                                                    fitWidthPages: 'auto',
+                                                    fitHeightPages: 'auto'
+                                                })
+                                            }
+                                            className="h-[32px] px-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none cursor-pointer shrink-0 tabular-nums"
+                                            title="Skala Cetak Manual"
+                                        >
+                                            <option value="100">100%</option>
+                                            <option value="95">95%</option>
+                                            <option value="90">90%</option>
+                                            <option value="85">85%</option>
+                                            <option value="80">80%</option>
+                                            <option value="75">75%</option>
+                                        </select>
+                                    ) : (
+                                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 h-[32px] gap-1 text-xs shrink-0">
+                                            <span className="text-slate-500 font-semibold">L:</span>
+                                            <select
+                                                value={String(currentPageSetup.fitWidthPages)}
+                                                onChange={e =>
+                                                    applyPrintPageSetupPatch({
+                                                        printScale: 'auto',
+                                                        fitWidthPages: e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10)
+                                                    })
+                                                }
+                                                className="font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                                                title="Fit lebar ke X halaman"
+                                            >
+                                                <option value="auto">Auto</option>
+                                                <option value="1">1 Hal</option>
+                                                <option value="2">2 Hal</option>
+                                                <option value="3">3 Hal</option>
+                                                <option value="4">4 Hal</option>
+                                            </select>
+                                            <span className="text-slate-300">×</span>
+                                            <span className="text-slate-500 font-semibold">T:</span>
+                                            <select
+                                                value={String(currentPageSetup.fitHeightPages)}
+                                                onChange={e =>
+                                                    applyPrintPageSetupPatch({
+                                                        printScale: 'auto',
+                                                        fitHeightPages: e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10)
+                                                    })
+                                                }
+                                                className="font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                                                title="Fit tinggi ke Y halaman (Auto = sisa bawah di-oper ke halaman selanjutnya)"
+                                            >
+                                                <option value="auto">Auto (Oper)</option>
+                                                <option value="1">1 Hal</option>
+                                                <option value="2">2 Hal</option>
+                                                <option value="3">3 Hal</option>
+                                                <option value="4">4 Hal</option>
+                                                <option value="5">5 Hal</option>
+                                            </select>
+                                        </div>
+                                    )}
+
                                     <select
                                         value={rankingDisplayLimit}
                                         onChange={e => setRankingDisplayLimit(e.target.value as RankingDisplayLimit)}
@@ -1986,17 +2508,26 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
                                     <button
                                         type="button"
-                                        onClick={() => setPaperSize(prev => prev === 'A4' ? 'F4' : 'A4')}
-                                        className="h-[32px] px-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all shrink-0 shadow-2xs"
+                                        onClick={() => applyPrintPageSetupPatch({ paperSize: currentPageSetup.paperSize === 'A4' ? 'F4' : 'A4' })}
+                                        className="h-[32px] px-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all shrink-0 shadow-2xs whitespace-nowrap"
                                         title="Ganti ukuran kertas (A4 / F4)"
                                     >
-                                        Kertas: {paperSize}
+                                        Kertas: {currentPageSetup.paperSize}
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => applyPrintPageSetupPatch({ orientation: currentPageSetup.orientation === 'portrait' ? 'landscape' : 'portrait' })}
+                                        className="h-[32px] px-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all shrink-0 shadow-2xs whitespace-nowrap"
+                                        title="Ganti orientasi kertas (Portrait / Landscape)"
+                                    >
+                                        {currentPageSetup.orientation === 'landscape' ? 'Landscape' : 'Portrait'}
                                     </button>
 
                                     <button
                                         type="button"
                                         onClick={() => setShowKop(prev => !prev)}
-                                        className={`h-[32px] px-2.5 rounded-xl text-xs font-bold border transition-all shrink-0 shadow-2xs flex items-center gap-1 ${
+                                        className={`h-[32px] px-2.5 rounded-xl text-xs font-bold border transition-all shrink-0 shadow-2xs flex items-center gap-1 whitespace-nowrap ${
                                             showKop ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'
                                         }`}
                                         title="Toggle Kop Dokumen"
@@ -2011,7 +2542,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                     <button
                                         type="button"
                                         onClick={() => handleOpenWhatsAppModal(currentPreviewSantri)}
-                                        className="flex-1 sm:flex-initial h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0"
+                                        className="flex-1 sm:flex-initial h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0 whitespace-nowrap"
                                         title="Kirim ringkasan rapor santri ini via WhatsApp"
                                     >
                                         <i className="bi bi-whatsapp"></i>
@@ -2020,8 +2551,17 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
                                     <button
                                         type="button"
-                                        onClick={() => printToPdfNative('rapor-preview-container', `Rapor_${currentPreviewSantri.namaLengkap.replace(/\s+/g, '_')}_${filterTahun.replace('/', '-')}`, { paperSize })}
-                                        className="flex-1 sm:flex-initial h-[36px] bg-teal-600 hover:bg-teal-700 text-white px-4 py-1.5 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0"
+                                        onClick={() =>
+                                            printToPdfNative(
+                                                'rapor-preview-container',
+                                                `Rapor_${currentPreviewSantri.namaLengkap.replace(/\s+/g, '_')}_${filterTahun.replace('/', '-')}`,
+                                                {
+                                                    paperSize: currentPageSetup.paperSize,
+                                                    orientation: currentPageSetup.orientation
+                                                }
+                                            )
+                                        }
+                                        className="flex-1 sm:flex-initial h-[36px] bg-teal-600 hover:bg-teal-700 text-white px-4 py-1.5 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0 whitespace-nowrap"
                                         title="Cetak Rapor ke printer atau simpan sebagai PDF"
                                     >
                                         <i className="bi bi-printer-fill"></i>
@@ -2051,22 +2591,29 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         digitalAssets={digitalAssets}
                                         tanggalRapor={tanggalRapor}
                                         tempatRapor={tempatRapor}
+                                        formatTanggalRapor={formatTanggalRapor}
+                                        manualHijriRapor={manualHijriRapor}
                                         tahunAjaran={filterTahun}
                                         semester={filterSemester}
                                         calculation={currentPreviewCalculation}
                                         cohortRecords={currentPreviewCohortMeta?.rombelRecords}
-                                        paperSize={paperSize}
+                                        paperSize={currentPageSetup.paperSize}
+                                        orientation={currentPageSetup.orientation}
                                         showKop={showKop}
-                                        marginMode={marginMode}
-                                        fitToPage={fitToPage}
-                                        printScale={printScale}
+                                        marginMode={currentPageSetup.marginMode}
+                                        fitToPage={currentPageSetup.fitToPage}
+                                        fitWidthPages={currentPageSetup.fitWidthPages}
+                                        fitHeightPages={currentPageSetup.fitHeightPages}
+                                        repeatHeaderRows={currentPageSetup.repeatHeaderRows}
+                                        printScale={currentPageSetup.printScale}
                                         showJudul={effectiveShowJudul}
                                         showBiodataHeader={effectiveShowBiodata}
+                                        isLastDocument={true}
                                     />
                                 ) : (
                                     <div
                                         className="bg-white shadow-lg p-8 printable-content-wrapper"
-                                        style={{ width: paperSize === 'F4' ? '21.5cm' : '21cm', minHeight: paperSize === 'F4' ? '33cm' : '29.7cm', padding: marginMode === 'narrow' ? '1.2cm' : marginMode === 'none' ? '0.4cm' : '2cm' }}
+                                        style={{ width: currentPageSetup.paperSize === 'F4' ? '21.5cm' : '21cm', minHeight: currentPageSetup.paperSize === 'F4' ? '33cm' : '29.7cm', padding: currentPageSetup.marginMode === 'narrow' ? '1.2cm' : currentPageSetup.marginMode === 'none' ? '0.4cm' : '2cm' }}
                                     >
                                         <RaporLengkapTemplate
                                             santri={currentPreviewSantri}
@@ -2076,8 +2623,10 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                                 semester: filterSemester,
                                                 tanggalRapor,
                                                 tempatRapor,
+                                                formatMode: formatTanggalRapor,
+                                                manualHijri: manualHijriRapor,
                                                 showKop,
-                                                paperSize
+                                                paperSize: currentPageSetup.paperSize
                                             }}
                                         />
                                     </div>
@@ -2094,18 +2643,17 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[95vh] sm:h-[92vh] max-h-[96dvh] flex flex-col overflow-hidden border border-slate-200">
                         {/* Modal Header */}
                         <div className="p-3 sm:p-4 border-b border-slate-200 bg-slate-50 flex flex-col gap-2.5 sm:gap-3 shrink-0">
-                            {/* Row 1: Title + Subtitle + PINNED CLOSE BUTTON (Always visible on mobile) */}
+                            {/* Row 1: Title + Subtitle + PINNED CLOSE BUTTON */}
                             <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0 flex-1">
                                     <h3 className="text-sm sm:text-base font-black text-slate-800 truncate">
                                         Cetak Massal ({batchData.length} Dokumen Rapor)
                                     </h3>
                                     <p className="text-[10px] text-slate-500 font-bold truncate">
-                                        Ukuran: {paperSize} • Kop: {showKop ? 'Aktif' : 'Nonaktif'} • Tiap santri 1 lembar baru
+                                        Ukuran: {currentPageSetup.paperSize} ({currentPageSetup.orientation === 'landscape' ? 'Landscape' : 'Portrait'}) · Kop: {showKop ? 'Aktif' : 'Nonaktif'} · Tiap santri otomatis mulai di halaman baru
                                     </p>
                                 </div>
 
-                                {/* PINNED CLOSE BUTTON - GUARANTEED VISIBLE ON ALL SCREENS */}
                                 <button
                                     type="button"
                                     onClick={() => setIsBatchPrinting(false)}
@@ -2135,6 +2683,82 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                     )}
 
                                     <select
+                                        value={currentPageSetup.preset}
+                                        onChange={e => {
+                                            const nextPreset = e.target.value as RaporPageScalePreset;
+                                            applyPrintPageSetupPatch(buildPageSetupStateFromPreset(nextPreset, currentPageSetup));
+                                        }}
+                                        className="h-[32px] px-2 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-950 focus:outline-none cursor-pointer shrink-0"
+                                        title="Mode Penyesuaian Halaman (Ala Excel)"
+                                    >
+                                        <option value="fit_1_page">Fit Dokumen 1 Hal</option>
+                                        <option value="fit_width_1">Fit Lebar 1 Hal (Oper Bawah)</option>
+                                        <option value="fit_height_1">Fit Tinggi 1 Hal</option>
+                                        <option value="fit_custom">Fit Lebar × Tinggi Kustom</option>
+                                        <option value="manual_scale">Skala Manual (%)</option>
+                                    </select>
+
+                                    {currentPageSetup.preset !== 'manual_scale' ? (
+                                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 h-[32px] gap-1 text-xs shrink-0">
+                                            <span className="text-slate-500 font-semibold">L:</span>
+                                            <select
+                                                value={String(currentPageSetup.fitWidthPages)}
+                                                onChange={e =>
+                                                    applyPrintPageSetupPatch({
+                                                        printScale: 'auto',
+                                                        fitWidthPages: e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10)
+                                                    })
+                                                }
+                                                className="font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                                            >
+                                                <option value="auto">Auto</option>
+                                                <option value="1">1 Hal</option>
+                                                <option value="2">2 Hal</option>
+                                                <option value="3">3 Hal</option>
+                                                <option value="4">4 Hal</option>
+                                            </select>
+                                            <span className="text-slate-300">×</span>
+                                            <span className="text-slate-500 font-semibold">T:</span>
+                                            <select
+                                                value={String(currentPageSetup.fitHeightPages)}
+                                                onChange={e =>
+                                                    applyPrintPageSetupPatch({
+                                                        printScale: 'auto',
+                                                        fitHeightPages: e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10)
+                                                    })
+                                                }
+                                                className="font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                                            >
+                                                <option value="auto">Auto (Oper)</option>
+                                                <option value="1">1 Hal</option>
+                                                <option value="2">2 Hal</option>
+                                                <option value="3">3 Hal</option>
+                                                <option value="4">4 Hal</option>
+                                                <option value="5">5 Hal</option>
+                                            </select>
+                                        </div>
+                                    ) : (
+                                        <select
+                                            value={String(typeof currentPageSetup.printScale === 'number' ? currentPageSetup.printScale : 100)}
+                                            onChange={e =>
+                                                applyPrintPageSetupPatch({
+                                                    printScale: parseInt(e.target.value, 10) || 100,
+                                                    fitWidthPages: 'auto',
+                                                    fitHeightPages: 'auto'
+                                                })
+                                            }
+                                            className="h-[32px] px-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none cursor-pointer shrink-0 tabular-nums"
+                                        >
+                                            <option value="100">100%</option>
+                                            <option value="95">95%</option>
+                                            <option value="90">90%</option>
+                                            <option value="85">85%</option>
+                                            <option value="80">80%</option>
+                                            <option value="75">75%</option>
+                                        </select>
+                                    )}
+
+                                    <select
                                         value={rankingDisplayLimit}
                                         onChange={e => setRankingDisplayLimit(e.target.value as RankingDisplayLimit)}
                                         className="h-[32px] px-2 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 focus:outline-none cursor-pointer shrink-0"
@@ -2149,17 +2773,26 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
 
                                     <button
                                         type="button"
-                                        onClick={() => setPaperSize(prev => prev === 'A4' ? 'F4' : 'A4')}
-                                        className="h-[32px] px-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all shrink-0 shadow-2xs"
+                                        onClick={() => applyPrintPageSetupPatch({ paperSize: currentPageSetup.paperSize === 'A4' ? 'F4' : 'A4' })}
+                                        className="h-[32px] px-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all shrink-0 shadow-2xs whitespace-nowrap"
                                         title="Ganti ukuran kertas (A4 / F4)"
                                     >
-                                        Format: {paperSize}
+                                        Format: {currentPageSetup.paperSize}
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => applyPrintPageSetupPatch({ orientation: currentPageSetup.orientation === 'portrait' ? 'landscape' : 'portrait' })}
+                                        className="h-[32px] px-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all shrink-0 shadow-2xs whitespace-nowrap"
+                                        title="Ganti orientasi kertas (Portrait / Landscape)"
+                                    >
+                                        {currentPageSetup.orientation === 'landscape' ? 'Landscape' : 'Portrait'}
                                     </button>
 
                                     <button
                                         type="button"
                                         onClick={() => setShowKop(prev => !prev)}
-                                        className={`h-[32px] px-2.5 rounded-xl text-xs font-bold border transition-all shrink-0 shadow-2xs flex items-center gap-1 ${
+                                        className={`h-[32px] px-2.5 rounded-xl text-xs font-bold border transition-all shrink-0 shadow-2xs flex items-center gap-1 whitespace-nowrap ${
                                             showKop ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'
                                         }`}
                                     >
@@ -2172,8 +2805,17 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 <div className="w-full sm:w-auto shrink-0">
                                     <button
                                         type="button"
-                                        onClick={() => printToPdfNative('batch-print-container', `Rapor_Massal_${filterTahun.replace('/', '-')}_${filterSemester}`, { paperSize })}
-                                        className="w-full sm:w-auto h-[36px] bg-teal-600 hover:bg-teal-700 text-white px-4 py-1.5 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0"
+                                        onClick={() =>
+                                            printToPdfNative(
+                                                'batch-print-container',
+                                                `Rapor_Massal_${filterTahun.replace('/', '-')}_${filterSemester}`,
+                                                {
+                                                    paperSize: currentPageSetup.paperSize,
+                                                    orientation: currentPageSetup.orientation
+                                                }
+                                            )
+                                        }
+                                        className="w-full sm:w-auto h-[36px] bg-teal-600 hover:bg-teal-700 text-white px-4 py-1.5 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0 whitespace-nowrap"
                                     >
                                         <i className="bi bi-printer-fill"></i>
                                         <span>Mulai Cetak Semua ({batchData.length})</span>
@@ -2185,57 +2827,67 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                         {/* Modal Body: Continuous Batch Render */}
                         <div className="flex-grow overflow-auto bg-slate-200/90 p-4 sm:p-8 flex justify-center">
                             <div id="batch-print-container" className="space-y-8 print:space-y-0">
-                                {batchData.map((item, idx) => (
-                                    <div
-                                        key={item.santri.id}
-                                        className="page-break-after"
-                                        style={{ pageBreakAfter: 'always', breakAfter: 'page' }}
-                                    >
-                                        {selectedTemplate ? (
-                                            <DynamicRaporPreview
-                                                template={selectedTemplate}
-                                                targetSheetId={selectedPrintSheetId}
-                                                santri={item.santri}
-                                                record={item.record}
-                                                settings={settings}
-                                                digitalAssets={digitalAssets}
-                                                tanggalRapor={tanggalRapor}
-                                                tempatRapor={tempatRapor}
-                                                tahunAjaran={filterTahun}
-                                                semester={filterSemester}
-                                                calculation={item.calculation}
-                                                cohortRecords={item.cohortRecords}
-                                                paperSize={paperSize}
-                                                showKop={showKop}
-                                                marginMode={marginMode}
-                                                fitToPage={fitToPage}
-                                                printScale={printScale}
-                                                showJudul={effectiveShowJudul}
-                                                showBiodataHeader={effectiveShowBiodata}
-                                            />
-                                        ) : (
-                                            <div
-                                                className="bg-white shadow-lg p-8 printable-content-wrapper"
-                                                style={{ width: paperSize === 'F4' ? '21.5cm' : '21cm', minHeight: paperSize === 'F4' ? '33cm' : '29.7cm', padding: marginMode === 'narrow' ? '1.2cm' : marginMode === 'none' ? '0.4cm' : '2cm' }}
-                                            >
-                                                <RaporLengkapTemplate
+                                {batchData.map((item, idx) => {
+                                    const isLastDoc = idx === batchData.length - 1;
+                                    return (
+                                        <div
+                                            key={item.santri.id}
+                                            className={!selectedTemplate && !isLastDoc ? 'page-break-after' : undefined}
+                                            style={!selectedTemplate && !isLastDoc ? { pageBreakAfter: 'always', breakAfter: 'page' } : undefined}
+                                        >
+                                            {selectedTemplate ? (
+                                                <DynamicRaporPreview
+                                                    template={selectedTemplate}
+                                                    targetSheetId={selectedPrintSheetId}
                                                     santri={item.santri}
+                                                    record={item.record}
                                                     settings={settings}
-                                                    options={{
-                                                        tahunAjaran: filterTahun,
-                                                        semester: filterSemester,
-                                                        tanggalRapor,
-                                                        tempatRapor,
-                                                        showKop,
-                                                        paperSize
-                                                    }}
+                                                    digitalAssets={digitalAssets}
+                                                    tanggalRapor={tanggalRapor}
+                                                    tempatRapor={tempatRapor}
+                                                    formatTanggalRapor={formatTanggalRapor}
+                                                    manualHijriRapor={manualHijriRapor}
+                                                    tahunAjaran={filterTahun}
+                                                    semester={filterSemester}
+                                                    calculation={item.calculation}
+                                                    cohortRecords={item.cohortRecords}
+                                                    paperSize={currentPageSetup.paperSize}
+                                                    orientation={currentPageSetup.orientation}
+                                                    showKop={showKop}
+                                                    marginMode={currentPageSetup.marginMode}
+                                                    fitToPage={currentPageSetup.fitToPage}
+                                                    fitWidthPages={currentPageSetup.fitWidthPages}
+                                                    fitHeightPages={currentPageSetup.fitHeightPages}
+                                                    repeatHeaderRows={currentPageSetup.repeatHeaderRows}
+                                                    printScale={currentPageSetup.printScale}
+                                                    showJudul={effectiveShowJudul}
+                                                    showBiodataHeader={effectiveShowBiodata}
+                                                    isLastDocument={isLastDoc}
                                                 />
-                                            </div>
-                                        )}
-                                        {/* CSS Page Break for Batch Print */}
-                                        <div style={{ pageBreakAfter: 'always', breakAfter: 'page' }}></div>
-                                    </div>
-                                ))}
+                                            ) : (
+                                                <div
+                                                    className="bg-white shadow-lg p-8 printable-content-wrapper"
+                                                    style={{ width: currentPageSetup.paperSize === 'F4' ? '21.5cm' : '21cm', minHeight: currentPageSetup.paperSize === 'F4' ? '33cm' : '29.7cm', padding: currentPageSetup.marginMode === 'narrow' ? '1.2cm' : currentPageSetup.marginMode === 'none' ? '0.4cm' : '2cm' }}
+                                                >
+                                                    <RaporLengkapTemplate
+                                                        santri={item.santri}
+                                                        settings={settings}
+                                                        options={{
+                                                            tahunAjaran: filterTahun,
+                                                            semester: filterSemester,
+                                                            tanggalRapor,
+                                                            tempatRapor,
+                                                            formatMode: formatTanggalRapor,
+                                                            manualHijri: manualHijriRapor,
+                                                            showKop,
+                                                            paperSize: currentPageSetup.paperSize
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
@@ -2361,6 +3013,33 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 onChange={e => setTanggalRapor(e.target.value)}
                                 className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-semibold bg-white"
                             />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Format Kalender Default</label>
+                            <select
+                                value={formatTanggalRapor}
+                                onChange={e => setFormatTanggalRapor(e.target.value as DateFormatMode)}
+                                className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold bg-white"
+                            >
+                                <option value="masehi">Masehi</option>
+                                <option value="hijriah_masehi">Hijriah &amp; Masehi (Gabungan)</option>
+                                <option value="hijriah">Hijriah Saja</option>
+                            </select>
+                        </div>
+                        {formatTanggalRapor !== 'masehi' && (
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tanggal Hijriah Manual (Opsional)</label>
+                                <input
+                                    type="text"
+                                    value={manualHijriRapor}
+                                    onChange={e => setManualHijriRapor(e.target.value)}
+                                    placeholder={`Otomatis: ${autoHijriHint}`}
+                                    className="w-full border border-amber-200 rounded-xl p-2.5 text-sm font-semibold bg-white"
+                                />
+                            </div>
+                        )}
+                        <div className="text-[11px] text-slate-600">
+                            Hasil: <span className="font-semibold text-slate-800">{liveTitimangsaPreview}</span>
                         </div>
                         <button
                             onClick={handleSaveUniversalDate}

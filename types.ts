@@ -597,6 +597,8 @@ export interface AcademicYearConfig {
     status?: 'Aktif' | 'Mendatang' | 'Arsip';
 }
 
+export type PageFitCount = 'auto' | number;
+
 export interface RaporSheet {
     id: string;
     name: string;
@@ -609,6 +611,9 @@ export interface RaporSheet {
     showJudul?: boolean;
     showBiodataHeader?: boolean;
     fitToPage?: boolean;
+    fitWidthPages?: PageFitCount;  // Fit lebar ke X halaman ('auto' = lanjut halaman samping, 1..4 = paksa X halaman)
+    fitHeightPages?: PageFitCount; // Fit tinggi ke Y halaman ('auto' = oper sisa ke halaman bawah, 1..5 = paksa Y halaman)
+    repeatHeaderRows?: boolean;    // Ulangi baris judul tabel pada halaman lanjutan (Halaman 2, dst.)
     printScale?: number | 'auto';
     marginMode?: 'normal' | 'narrow' | 'none';
 }
@@ -629,7 +634,11 @@ export interface RaporTemplate {
     showJudul?: boolean;
     showBiodataHeader?: boolean;
     paperSize?: 'A4' | 'F4';
+    orientation?: 'portrait' | 'landscape';
     fitToPage?: boolean;
+    fitWidthPages?: PageFitCount;
+    fitHeightPages?: PageFitCount;
+    repeatHeaderRows?: boolean;
     printScale?: number | 'auto';
     marginMode?: 'normal' | 'narrow' | 'none';
 }

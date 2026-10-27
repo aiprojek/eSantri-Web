@@ -177,6 +177,78 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         syntax: '=SEMESTER()',
         description: 'Memanggil semester aktif berjalan (Ganjil / Genap)',
         category: 'formula'
+    },
+    {
+        token: '=TITIMANGSA',
+        insertText: '=TITIMANGSA()',
+        label: 'Titimangsa Rapor (Sesuai Cetak)',
+        syntax: '=TITIMANGSA()',
+        description: 'Tempat & tanggal penandatanganan otomatis sesuai pengaturan Cetak Rapor',
+        category: 'formula'
+    },
+    {
+        token: '=TITIMANGSA_GABUNGAN',
+        insertText: '=TITIMANGSA_GABUNGAN()',
+        label: 'Titimangsa Hijriah & Masehi',
+        syntax: '=TITIMANGSA_GABUNGAN()',
+        description: 'Kota + tanggal Hijriah & Masehi (opsi: "masehi_dulu" atau "dua_baris")',
+        category: 'formula'
+    },
+    {
+        token: '=TITIMANGSA_MASEHI',
+        insertText: '=TITIMANGSA_MASEHI()',
+        label: 'Titimangsa Khusus Masehi',
+        syntax: '=TITIMANGSA_MASEHI()',
+        description: 'Kota + tanggal Masehi pengeluaran rapor (misal: Banyumas, 20 Juni 2026)',
+        category: 'formula'
+    },
+    {
+        token: '=TITIMANGSA_HIJRIAH',
+        insertText: '=TITIMANGSA_HIJRIAH()',
+        label: 'Titimangsa Khusus Hijriah',
+        syntax: '=TITIMANGSA_HIJRIAH()',
+        description: 'Kota + tanggal Hijriah pengeluaran rapor (misal: Banyumas, 5 Muharram 1448 H)',
+        category: 'formula'
+    },
+    {
+        token: '=TEMPAT_RAPOR',
+        insertText: '=TEMPAT_RAPOR()',
+        label: 'Tempat / Kota Rapor Saja',
+        syntax: '=TEMPAT_RAPOR()',
+        description: 'Menampilkan nama kota pengeluaran rapor saja tanpa tanggal (sendiri)',
+        category: 'formula'
+    },
+    {
+        token: '=TANGGAL_RAPOR',
+        insertText: '=TANGGAL_RAPOR()',
+        label: 'Tanggal Rapor Saja (Sesuai Cetak)',
+        syntax: '=TANGGAL_RAPOR()',
+        description: 'Tanggal pengeluaran rapor saja mengikuti format di pengaturan Cetak Rapor',
+        category: 'formula'
+    },
+    {
+        token: '=TANGGAL_RAPOR_GABUNGAN',
+        insertText: '=TANGGAL_RAPOR_GABUNGAN()',
+        label: 'Tanggal Rapor Hijriah & Masehi',
+        syntax: '=TANGGAL_RAPOR_GABUNGAN()',
+        description: 'Tanggal Hijriah & Masehi gabungan tanpa nama kota (opsi: "masehi_dulu", "dua_baris")',
+        category: 'formula'
+    },
+    {
+        token: '=TANGGAL_RAPOR_MASEHI',
+        insertText: '=TANGGAL_RAPOR_MASEHI()',
+        label: 'Tanggal Rapor Masehi Saja',
+        syntax: '=TANGGAL_RAPOR_MASEHI()',
+        description: 'Tanggal Masehi pengeluaran rapor saja (misal: 20 Juni 2026)',
+        category: 'formula'
+    },
+    {
+        token: '=TANGGAL_RAPOR_HIJRIAH',
+        insertText: '=TANGGAL_RAPOR_HIJRIAH()',
+        label: 'Tanggal Rapor Hijriah Saja',
+        syntax: '=TANGGAL_RAPOR_HIJRIAH()',
+        description: 'Tanggal Hijriah pengeluaran rapor saja (misal: 5 Muharram 1448 H)',
+        category: 'formula'
     }
 ];
 
@@ -189,6 +261,15 @@ export interface FormulaEvalMeta {
     tahunAjaranHijriah?: string;   // khusus Hijriah (misal "1448/1449 H")
     tahunAjaranGabungan?: string;  // khusus Gabungan (misal "1448/1449 H / 2026/2027 M")
     semester?: string;
+    tempatRapor?: string;                 // misal "Banyumas"
+    tanggalRaporOtomatis?: string;        // sesuai formatTanggalRaporDefault di pengaturan Cetak Rapor
+    tanggalRaporMasehi?: string;          // misal "20 Juni 2026"
+    tanggalRaporSingkat?: string;         // misal "20/06/2026"
+    tanggalRaporMasehiArab?: string;      // misal "٢٠ يونيو ٢٠٢٦ م"
+    tanggalRaporHijriah?: string;         // misal "5 Muharram 1448 H"
+    tanggalRaporHijriahArab?: string;     // misal "٥ محرم ١٤٤٨ هـ"
+    tanggalRaporGabungan?: string;        // misal "5 Muharram 1448 H / 20 Juni 2026 M"
+    tanggalRaporMasehiHijriah?: string;   // misal "20 Juni 2026 M / 5 Muharram 1448 H"
     classAverages?: Record<string, number>; // rata-rata kelas per kunci mapel (misal { FIQIH: 84.35 })
     classOverallAverage?: number;           // rata-rata umum seluruh mapel di kelas/rombel
 }
@@ -756,6 +837,225 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
             if (fnName === 'SEMESTER_ANGKA') {
                 return (meta?.semester || 'Ganjil') === 'Genap' ? '2' : '1';
             }
+
+            // --- RUMUS TEMPAT, TANGGAL & TITIMANGSA PENANDATANGANAN RAPOR ---
+            if (fnName === 'TEMPAT_RAPOR' || fnName === 'KOTA_RAPOR' || fnName === 'TEMPAT_TTD' || fnName === 'KOTA_PONPES') {
+                const overrideCity = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim() : '';
+                return overrideCity || meta?.tempatRapor || 'Pesantren';
+            }
+
+            const DATE_MODE_KEYWORDS = new Set([
+                '',
+                'otomatis',
+                'default',
+                'masehi',
+                'm',
+                'singkat',
+                'angka',
+                'hijriah',
+                'hijriyah',
+                'hijri',
+                'h',
+                'polos',
+                'tanpa_h',
+                'gabungan',
+                'lengkap',
+                'hijriah_masehi',
+                'hijriah_dulu',
+                'hm',
+                'masehi_hijriah',
+                'masehi_dulu',
+                'mh',
+                'dua_baris',
+                '2baris',
+                'baris_baru',
+                'masehi_dulu_2baris',
+                'mh_2baris',
+                'arab',
+                'angka_arab'
+            ]);
+
+            const formatDatePartByMode = (
+                family: 'auto' | 'masehi' | 'hijriah' | 'gabungan' | 'masehi_hijriah',
+                rawMode: string
+            ): string => {
+                const mode = rawMode.trim().toLowerCase().replace(/[\s-]+/g, '_');
+                const masehiVal = meta?.tanggalRaporMasehi || '-';
+                const masehiWithM = masehiVal !== '-' && !/\bM$/i.test(masehiVal) ? `${masehiVal} M` : masehiVal;
+                const singkatVal = meta?.tanggalRaporSingkat || masehiVal;
+                const masehiArab = meta?.tanggalRaporMasehiArab || (masehiVal !== '-' ? `${angkaKeArab(masehiVal.replace(/\s*M$/i, ''))} م` : '-');
+                const hijriVal = meta?.tanggalRaporHijriah || '-';
+                const hijriPolos = hijriVal !== '-' ? hijriVal.replace(/\s*H\.?$/i, '').trim() : '-';
+                const hijriArab = meta?.tanggalRaporHijriahArab || (hijriPolos !== '-' ? `${angkaKeArab(hijriPolos)} هـ` : '-');
+                const gabunganHM = meta?.tanggalRaporGabungan || (hijriVal !== '-' ? `${hijriVal} / ${masehiWithM}` : masehiVal);
+                const gabunganMH = meta?.tanggalRaporMasehiHijriah || (hijriVal !== '-' ? `${masehiWithM} / ${hijriVal}` : masehiVal);
+                const autoVal = meta?.tanggalRaporOtomatis || masehiVal;
+
+                if (family === 'masehi') {
+                    if (masehiVal === '-') return '-';
+                    if (mode === 'm' || mode === 'lengkap') return masehiWithM;
+                    if (mode === 'singkat' || mode === 'angka') return singkatVal;
+                    if (mode === 'arab') return masehiArab;
+                    if (mode === 'angka_arab') return angkaKeArab(masehiVal);
+                    return masehiVal;
+                }
+
+                if (family === 'hijriah') {
+                    if (hijriVal === '-') return masehiVal;
+                    if (mode === 'polos' || mode === 'tanpa_h' || mode === 'angka') return hijriPolos;
+                    if (mode === 'arab') return hijriArab;
+                    if (mode === 'angka_arab') return angkaKeArab(hijriVal);
+                    return hijriVal;
+                }
+
+                if (family === 'gabungan' || family === 'masehi_hijriah') {
+                    if (mode === 'masehi_dulu' || mode === 'masehi_hijriah' || mode === 'mh') {
+                        return gabunganMH;
+                    }
+                    if (mode === 'hijriah_dulu' || mode === 'hijriah_masehi' || mode === 'hm') {
+                        return gabunganHM;
+                    }
+                    if (mode === 'dua_baris' || mode === '2baris' || mode === 'baris_baru') {
+                        if (family === 'masehi_hijriah') {
+                            return hijriVal !== '-' ? `${masehiWithM}\n${hijriVal}` : masehiVal;
+                        }
+                        return hijriVal !== '-' ? `${hijriVal}\n${masehiWithM}` : masehiVal;
+                    }
+                    if (mode === 'masehi_dulu_2baris' || mode === 'mh_2baris') {
+                        return hijriVal !== '-' ? `${masehiWithM}\n${hijriVal}` : masehiVal;
+                    }
+                    if (mode === 'arab') {
+                        if (family === 'masehi_hijriah') {
+                            return hijriArab !== '-' ? `${masehiArab} / ${hijriArab}` : masehiArab;
+                        }
+                        return hijriArab !== '-' ? `${hijriArab} / ${masehiArab}` : masehiArab;
+                    }
+                    if (mode === 'angka_arab') {
+                        return angkaKeArab(family === 'masehi_hijriah' ? gabunganMH : gabunganHM);
+                    }
+                    return family === 'masehi_hijriah' ? gabunganMH : gabunganHM;
+                }
+
+                // family === 'auto'
+                if (mode === 'masehi') return masehiVal;
+                if (mode === 'm') return masehiWithM;
+                if (mode === 'singkat' || mode === 'angka') return singkatVal;
+                if (mode === 'hijriah' || mode === 'hijriyah' || mode === 'hijri' || mode === 'h') return hijriVal !== '-' ? hijriVal : masehiVal;
+                if (mode === 'polos' || mode === 'tanpa_h') return hijriPolos !== '-' ? hijriPolos : masehiVal;
+                if (mode === 'gabungan' || mode === 'lengkap' || mode === 'hijriah_masehi' || mode === 'hijriah_dulu' || mode === 'hm') return gabunganHM;
+                if (mode === 'masehi_hijriah' || mode === 'masehi_dulu' || mode === 'mh') return gabunganMH;
+                if (mode === 'dua_baris' || mode === '2baris' || mode === 'baris_baru') {
+                    return hijriVal !== '-' ? `${hijriVal}\n${masehiWithM}` : masehiVal;
+                }
+                if (mode === 'masehi_dulu_2baris' || mode === 'mh_2baris') {
+                    return hijriVal !== '-' ? `${masehiWithM}\n${hijriVal}` : masehiVal;
+                }
+                if (mode === 'arab') {
+                    if (autoVal.includes('/')) {
+                        return hijriArab !== '-' ? `${hijriArab} / ${masehiArab}` : masehiArab;
+                    }
+                    if (/\bH$/i.test(autoVal)) return hijriArab;
+                    return masehiArab;
+                }
+                if (mode === 'angka_arab') return angkaKeArab(autoVal);
+                return autoVal;
+            };
+
+            if (fnName === 'TANGGAL_RAPOR' || fnName === 'TANGGAL_TTD' || fnName === 'TANGGAL_CETAK' || fnName === 'TANGGAL_DOKUMEN') {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim() : '';
+                return formatDatePartByMode('auto', modeArg);
+            }
+            if (fnName === 'TANGGAL_RAPOR_MASEHI' || fnName === 'TANGGAL_MASEHI') {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim() : '';
+                return formatDatePartByMode('masehi', modeArg);
+            }
+            if (
+                fnName === 'TANGGAL_RAPOR_HIJRIAH' ||
+                fnName === 'TANGGAL_RAPOR_HIJRIYAH' ||
+                fnName === 'TANGGAL_HIJRIAH' ||
+                fnName === 'TANGGAL_HIJRIYAH'
+            ) {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim() : '';
+                return formatDatePartByMode('hijriah', modeArg);
+            }
+            if (
+                fnName === 'TANGGAL_RAPOR_GABUNGAN' ||
+                fnName === 'TANGGAL_RAPOR_LENGKAP' ||
+                fnName === 'TANGGAL_HIJRIAH_MASEHI' ||
+                fnName === 'TANGGAL_MASEHI_HIJRIAH'
+            ) {
+                const modeArg = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim() : '';
+                const fam = fnName === 'TANGGAL_MASEHI_HIJRIAH' ? 'masehi_hijriah' : 'gabungan';
+                return formatDatePartByMode(fam, modeArg);
+            }
+
+            if (
+                fnName === 'TITIMANGSA' ||
+                fnName === 'TITIMANGSA_RAPOR' ||
+                fnName === 'KOTA_TANGGAL' ||
+                fnName === 'TEMPAT_TANGGAL' ||
+                fnName === 'KOTA_TANGGAL_DOKUMEN' ||
+                fnName === 'TITIMANGSA_MASEHI' ||
+                fnName === 'KOTA_TANGGAL_MASEHI' ||
+                fnName === 'TEMPAT_TANGGAL_MASEHI' ||
+                fnName === 'TITIMANGSA_HIJRIAH' ||
+                fnName === 'TITIMANGSA_HIJRIYAH' ||
+                fnName === 'KOTA_TANGGAL_HIJRIAH' ||
+                fnName === 'TEMPAT_TANGGAL_HIJRIAH' ||
+                fnName === 'TITIMANGSA_GABUNGAN' ||
+                fnName === 'TITIMANGSA_HIJRIAH_MASEHI' ||
+                fnName === 'TITIMANGSA_MASEHI_HIJRIAH' ||
+                fnName === 'TITIMANGSA_LENGKAP' ||
+                fnName === 'KOTA_TANGGAL_GABUNGAN' ||
+                fnName === 'KOTA_TANGGAL_HIJRIAH_MASEHI'
+            ) {
+                const arg0 = evalArgs[0] !== undefined ? unquote(evalArgs[0]).trim() : '';
+                const arg1 = evalArgs[1] !== undefined ? unquote(evalArgs[1]).trim() : '';
+                const normArg0 = arg0.toLowerCase().replace(/[\s-]+/g, '_');
+
+                let modeStr = '';
+                let cityVal = meta?.tempatRapor || 'Pesantren';
+
+                if (arg0 && !DATE_MODE_KEYWORDS.has(normArg0) && !arg1) {
+                    // Contoh: =TITIMANGSA("Gontor") atau =TITIMANGSA_GABUNGAN("Gontor")
+                    cityVal = arg0;
+                } else {
+                    modeStr = arg0;
+                    if (arg1) cityVal = arg1;
+                }
+
+                let family: 'auto' | 'masehi' | 'hijriah' | 'gabungan' | 'masehi_hijriah' = 'auto';
+                if (
+                    fnName === 'TITIMANGSA_MASEHI' ||
+                    fnName === 'KOTA_TANGGAL_MASEHI' ||
+                    fnName === 'TEMPAT_TANGGAL_MASEHI' ||
+                    (fnName === 'KOTA_TANGGAL' && !modeStr)
+                ) {
+                    family = fnName === 'KOTA_TANGGAL' ? 'auto' : 'masehi';
+                } else if (
+                    fnName === 'TITIMANGSA_HIJRIAH' ||
+                    fnName === 'TITIMANGSA_HIJRIYAH' ||
+                    fnName === 'KOTA_TANGGAL_HIJRIAH' ||
+                    fnName === 'TEMPAT_TANGGAL_HIJRIAH'
+                ) {
+                    family = 'hijriah';
+                } else if (fnName === 'TITIMANGSA_MASEHI_HIJRIAH') {
+                    family = 'masehi_hijriah';
+                } else if (
+                    fnName === 'TITIMANGSA_GABUNGAN' ||
+                    fnName === 'TITIMANGSA_HIJRIAH_MASEHI' ||
+                    fnName === 'TITIMANGSA_LENGKAP' ||
+                    fnName === 'KOTA_TANGGAL_GABUNGAN' ||
+                    fnName === 'KOTA_TANGGAL_HIJRIAH_MASEHI'
+                ) {
+                    family = 'gabungan';
+                }
+
+                const formattedDatePart = formatDatePartByMode(family, modeStr);
+                const commaSep = modeStr.trim().toLowerCase() === 'arab' ? '، ' : ', ';
+                return cityVal ? `${cityVal}${commaSep}${formattedDatePart}` : formattedDatePart;
+            }
+
             if (fnName === 'SUM' || fnName === 'JUMLAH' || fnName === 'TOTAL') {
                 const nums = parseNumericValues(evalArgs);
                 if (nums.length === 0) return '-';
@@ -898,7 +1198,7 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
     return unquote(trimmed);
 }
 
-const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA)\s*\([\s\S]*\)$/i;
+const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA|TEMPAT_RAPOR|KOTA_RAPOR|TEMPAT_TTD|KOTA_PONPES|TANGGAL_RAPOR|TANGGAL_TTD|TANGGAL_CETAK|TANGGAL_DOKUMEN|TANGGAL_RAPOR_MASEHI|TANGGAL_MASEHI|TANGGAL_RAPOR_HIJRIAH|TANGGAL_RAPOR_HIJRIYAH|TANGGAL_HIJRIAH|TANGGAL_HIJRIYAH|TANGGAL_RAPOR_GABUNGAN|TANGGAL_RAPOR_LENGKAP|TANGGAL_HIJRIAH_MASEHI|TANGGAL_MASEHI_HIJRIAH|TITIMANGSA|TITIMANGSA_RAPOR|KOTA_TANGGAL|TEMPAT_TANGGAL|KOTA_TANGGAL_DOKUMEN|TITIMANGSA_MASEHI|KOTA_TANGGAL_MASEHI|TEMPAT_TANGGAL_MASEHI|TITIMANGSA_HIJRIAH|TITIMANGSA_HIJRIYAH|KOTA_TANGGAL_HIJRIAH|TEMPAT_TANGGAL_HIJRIAH|TITIMANGSA_GABUNGAN|TITIMANGSA_HIJRIAH_MASEHI|TITIMANGSA_MASEHI_HIJRIAH|TITIMANGSA_LENGKAP|KOTA_TANGGAL_GABUNGAN|KOTA_TANGGAL_HIJRIAH_MASEHI)\s*\([\s\S]*\)$/i;
 
 /**
  * Mengecek apakah string teks sel merupakan ekspresi rumus rapor

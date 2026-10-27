@@ -23,10 +23,20 @@ export const getTemplateSheets = (template?: RaporTemplate | null): RaporSheet[]
         return [{
             id: 'sheet_default',
             name: template.name || 'Lembar 1',
+            customTitle: template.customTitle,
             rowCount: template.rowCount || template.cells.length,
             colCount: template.colCount || (template.cells[0]?.length || 0),
             cells: template.cells,
-            showJudul: template.showJudul
+            paperSize: template.paperSize,
+            orientation: template.orientation,
+            showJudul: template.showJudul,
+            showBiodataHeader: template.showBiodataHeader,
+            fitToPage: template.fitToPage,
+            fitWidthPages: template.fitWidthPages,
+            fitHeightPages: template.fitHeightPages,
+            repeatHeaderRows: template.repeatHeaderRows,
+            printScale: template.printScale,
+            marginMode: template.marginMode
         }];
     }
     return [];

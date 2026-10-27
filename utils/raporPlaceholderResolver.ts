@@ -1,6 +1,14 @@
 import React from 'react';
 import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTemplate, TenagaPengajar, Rombel, Jenjang, Kelas } from '../types';
-import { formatDate, getHijriDate, formatTanggalDokumen } from './formatters';
+import {
+    formatDate,
+    getHijriDate,
+    formatTanggalDokumen,
+    parseLocalDateSafe,
+    formatGregorianArabic,
+    ensureHijriSuffix,
+    resolveTempatRapor
+} from './formatters';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import {
@@ -139,23 +147,29 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
     },
     {
         id: 'tanggal',
-        title: 'Tanggal & Kalender',
+        title: 'Titimangsa & Tanggal Rapor',
         icon: 'bi-calendar3',
         color: 'text-amber-600 bg-amber-50 border-amber-200',
         tags: [
-            { tag: '$TANGGAL_MASEHI', label: 'Tanggal Lengkap Masehi', description: 'Hari, tanggal bulan tahun', example: '18 Agustus 2026' },
-            { tag: '$TANGGAL_SINGKAT_MASEHI', label: 'Tanggal Singkat (DD/MM/YYYY)', description: 'Format numerik', example: '18/08/2026' },
-            { tag: '$TAHUN_MASEHI', label: 'Tahun Masehi', description: '4 digit tahun masehi', example: '2026' },
-            { tag: '$BULAN_MASEHI', label: 'Nama Bulan Masehi', description: 'Nama bulan masehi', example: 'Agustus' },
-            { tag: '$TANGGAL_HIJRIAH', label: 'Tanggal Lengkap Hijriah', description: 'Sesuai kalender Hijriah & koreksi', example: '5 Shafar 1448 H' },
-            { tag: '$TANGGAL_HIJRIAH_MASEHI', label: 'Tanggal Hijriah & Masehi', description: 'Format: Hijriah / Masehi', example: '5 Shafar 1448 H / 18 Agustus 2026 M' },
-            { tag: '$TAHUN_HIJRIAH', label: 'Tahun Hijriah', description: 'Tahun hijriah', example: '1448 H' },
-            { tag: '$BULAN_HIJRIAH', label: 'Bulan Hijriah', description: 'Nama bulan hijriah', example: 'Shafar' },
-            { tag: '$KOTA_TANGGAL', label: 'Kota & Tanggal Masehi', description: 'Kota pondok dan tanggal cetak', example: 'Jember, 18 Agustus 2026' },
-            { tag: '$KOTA_TANGGAL_HIJRIAH', label: 'Kota & Tanggal Hijriah', description: 'Kota pondok dan tanggal hijriah', example: 'Jember, 5 Shafar 1448 H' },
-            { tag: '$KOTA_TANGGAL_HIJRIAH_MASEHI', label: 'Kota & Tanggal Hijriah/Masehi', description: 'Kota dan tanggal gabungan', example: 'Jember, 5 Shafar 1448 H / 18 Agustus 2026 M' },
-            { tag: '$TANGGAL_DOKUMEN', label: 'Tanggal Rapor (Format Pengaturan)', description: 'Otomatis sesuai format Masehi/Hijriah di pengaturan', example: '18 Agustus 2026' },
-            { tag: '$KOTA_TANGGAL_DOKUMEN', label: 'Kota & Tanggal (Format Pengaturan)', description: 'Kota dan tanggal sesuai format di pengaturan', example: 'Jember, 18 Agustus 2026' },
+            { tag: '$TITIMANGSA', label: 'Titimangsa Rapor (Sesuai Cetak)', description: 'Tempat & tanggal otomatis mengikuti format di Cetak Rapor', example: 'Banyumas, 20 Juni 2026' },
+            { tag: '$TITIMANGSA_GABUNGAN', label: 'Titimangsa Hijriah & Masehi', description: 'Tempat & tanggal gabungan Hijriah dan Masehi', example: 'Banyumas, 5 Muharram 1448 H / 20 Juni 2026 M' },
+            { tag: '$TITIMANGSA_MASEHI', label: 'Titimangsa Masehi Saja', description: 'Tempat & tanggal khusus Masehi', example: 'Banyumas, 20 Juni 2026' },
+            { tag: '$TITIMANGSA_HIJRIAH', label: 'Titimangsa Hijriah Saja', description: 'Tempat & tanggal khusus Hijriah', example: 'Banyumas, 5 Muharram 1448 H' },
+            { tag: '$TEMPAT_RAPOR', label: 'Tempat / Kota Rapor Saja', description: 'Nama kota/tempat pengeluaran rapor saja', example: 'Banyumas' },
+            { tag: '$TANGGAL_RAPOR', label: 'Tanggal Rapor Saja (Sesuai Cetak)', description: 'Tanggal saja sesuai format Masehi/Hijriah/Gabungan di Cetak Rapor', example: '20 Juni 2026' },
+            { tag: '$TANGGAL_RAPOR_GABUNGAN', label: 'Tanggal Gabungan Hijriah & Masehi', description: 'Tanggal Hijriah & Masehi tanpa nama kota', example: '5 Muharram 1448 H / 20 Juni 2026 M' },
+            { tag: '$TANGGAL_RAPOR_MASEHI', label: 'Tanggal Rapor Masehi Saja', description: 'Tanggal Masehi lengkap tanpa nama kota', example: '20 Juni 2026' },
+            { tag: '$TANGGAL_RAPOR_HIJRIAH', label: 'Tanggal Rapor Hijriah Saja', description: 'Tanggal Hijriah lengkap tanpa nama kota', example: '5 Muharram 1448 H' },
+            { tag: '$TANGGAL_SINGKAT_MASEHI', label: 'Tanggal Singkat (DD/MM/YYYY)', description: 'Format numerik Masehi', example: '20/06/2026' },
+            { tag: '$TAHUN_MASEHI', label: 'Tahun Masehi', description: '4 digit tahun Masehi', example: '2026' },
+            { tag: '$BULAN_MASEHI', label: 'Nama Bulan Masehi', description: 'Nama bulan Masehi', example: 'Juni' },
+            { tag: '$TAHUN_HIJRIAH', label: 'Tahun Hijriah', description: 'Tahun Hijriah', example: '1448 H' },
+            { tag: '$BULAN_HIJRIAH', label: 'Bulan Hijriah', description: 'Nama bulan Hijriah', example: 'Muharram' },
+            { tag: '$KOTA_TANGGAL_DOKUMEN', label: 'Kota & Tanggal (Alias)', description: 'Alias $TITIMANGSA (sesuai pengaturan cetak)', example: 'Banyumas, 20 Juni 2026' },
+            { tag: '$KOTA_TANGGAL_HIJRIAH_MASEHI', label: 'Kota & Tanggal Hijriah/Masehi (Alias)', description: 'Alias $TITIMANGSA_GABUNGAN', example: 'Banyumas, 5 Muharram 1448 H / 20 Juni 2026 M' },
+            { tag: '$KOTA_TANGGAL', label: 'Kota & Tanggal Masehi (Alias)', description: 'Alias $TITIMANGSA_MASEHI', example: 'Banyumas, 20 Juni 2026' },
+            { tag: '$KOTA_TANGGAL_HIJRIAH', label: 'Kota & Tanggal Hijriah (Alias)', description: 'Alias $TITIMANGSA_HIJRIAH', example: 'Banyumas, 5 Muharram 1448 H' },
+            { tag: '$TANGGAL_DOKUMEN', label: 'Tanggal Dokumen (Alias)', description: 'Alias $TANGGAL_RAPOR', example: '20 Juni 2026' },
         ]
     },
     {
@@ -594,8 +608,43 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         if (u === 'TTD_MUDIR' || u === 'TTD_MUDIR_AAM' || u === 'TTD_PIMPINAN' || u === 'TTD_KEPALA_SEKOLAH' || u === 'TTD_KEPALA_MADRASAH') {
             return '$TTD_MUDIR';
         }
-        if (u === 'TANGGAL_RAPOR' || u === 'TANGGAL' || u === 'TANGGALRAPOR') return '$TANGGAL_DOKUMEN';
-        if (u === 'TEMPAT_RAPOR' || u === 'KOTA' || u === 'TEMPATRAPOR') return '$TEMPAT_RAPOR';
+        if (u === 'TITIMANGSA' || u === 'TITIMANGSA_RAPOR' || u === 'KOTA_TANGGAL_DOKUMEN') return '$TITIMANGSA';
+        if (u === 'TITIMANGSA_MASEHI' || u === 'KOTA_TANGGAL_MASEHI') return '$TITIMANGSA_MASEHI';
+        if (u === 'TITIMANGSA_HIJRIAH' || u === 'TITIMANGSA_HIJRIYAH') return '$TITIMANGSA_HIJRIAH';
+        if (
+            u === 'TITIMANGSA_GABUNGAN' ||
+            u === 'TITIMANGSA_HIJRIAH_MASEHI' ||
+            u === 'TITIMANGSA_HIJRIYAH_MASEHI' ||
+            u === 'TITIMANGSA_LENGKAP'
+        ) {
+            return '$TITIMANGSA_GABUNGAN';
+        }
+        if (u === 'TITIMANGSA_MASEHI_HIJRIAH' || u === 'TITIMANGSA_MASEHI_HIJRIYAH') {
+            return '$TITIMANGSA_MASEHI_HIJRIAH';
+        }
+        if (u === 'TANGGAL_RAPOR' || u === 'TANGGAL' || u === 'TANGGALRAPOR' || u === 'TANGGAL_DOKUMEN') return '$TANGGAL_RAPOR';
+        if (u === 'TANGGAL_RAPOR_MASEHI' || u === 'TANGGAL_MASEHI') return '$TANGGAL_RAPOR_MASEHI';
+        if (
+            u === 'TANGGAL_RAPOR_HIJRIAH' ||
+            u === 'TANGGAL_RAPOR_HIJRIYAH' ||
+            u === 'TANGGAL_HIJRIAH' ||
+            u === 'TANGGAL_HIJRIYAH'
+        ) {
+            return '$TANGGAL_RAPOR_HIJRIAH';
+        }
+        if (
+            u === 'TANGGAL_RAPOR_GABUNGAN' ||
+            u === 'TANGGAL_RAPOR_LENGKAP' ||
+            u === 'TANGGAL_GABUNGAN' ||
+            u === 'TANGGAL_HIJRIAH_MASEHI' ||
+            u === 'TANGGAL_HIJRIYAH_MASEHI'
+        ) {
+            return '$TANGGAL_RAPOR_GABUNGAN';
+        }
+        if (u === 'TANGGAL_MASEHI_HIJRIAH' || u === 'TANGGAL_MASEHI_HIJRIYAH') {
+            return '$TANGGAL_MASEHI_HIJRIAH';
+        }
+        if (u === 'TEMPAT_RAPOR' || u === 'KOTA_RAPOR' || u === 'TEMPAT_TTD' || u === 'KOTA' || u === 'TEMPATRAPOR') return '$TEMPAT_RAPOR';
         if (u === 'SEMESTER' || u === 'SEMESTER_AKTIF') return '$SEMESTER';
         if (
             u === 'TAHUN_AJAR' ||
@@ -925,51 +974,64 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     setToken('$CAPAIAN_UMUM', String(defaultKompetensi));
     setToken('$STATUS_KELULUSAN', String(defaultKelulusan));
 
-    // Date & Hijri
-    let dateObj: Date;
-    if (record?.tanggalRapor) {
-        dateObj = new Date(record.tanggalRapor);
-    } else if (context.targetDate) {
-        dateObj = context.targetDate;
-    } else if (settings?.tanggalRaporDefault) {
-        dateObj = new Date(settings.tanggalRaporDefault);
-    } else {
-        dateObj = new Date();
-    }
+    // Date, Hijri & Titimangsa Rapor
+    const dateObj: Date =
+        parseLocalDateSafe(record?.tanggalRapor) ||
+        parseLocalDateSafe(context.targetDate) ||
+        parseLocalDateSafe(settings?.tanggalRaporDefault) ||
+        new Date();
 
     const hijriAdjustment = settings?.hijriAdjustment || 0;
     const hijriInfo = getHijriDate(dateObj, hijriAdjustment);
     const masehiStr = formatDate(dateObj);
-    const hijriFullWithH = hijriInfo.full ? `${hijriInfo.full} H` : '';
+    const singkatMasehiStr = format(dateObj, 'dd/MM/yyyy');
+    const masehiArabStr = formatGregorianArabic(dateObj);
+
+    const manualHijriOverride = !record?.tanggalRapor && settings?.manualHijriRaporDefault?.trim()
+        ? ensureHijriSuffix(settings.manualHijriRaporDefault)
+        : '';
+    const hijriFullWithH = manualHijriOverride || (hijriInfo.full ? `${hijriInfo.full} H` : '');
+    const hijriArabStr = hijriInfo.fullArabic || hijriFullWithH;
     const hijriMasehiCombined = hijriFullWithH ? `${hijriFullWithH} / ${masehiStr} M` : masehiStr;
+    const masehiHijriCombined = hijriFullWithH ? `${masehiStr} M / ${hijriFullWithH}` : masehiStr;
 
     const docFormattedDate = formatTanggalDokumen(dateObj, {
         formatMode: settings?.formatTanggalRaporDefault || 'masehi',
         hijriAdjustment,
-        manualHijri: settings?.manualHijriRaporDefault
+        manualHijri: !record?.tanggalRapor ? settings?.manualHijriRaporDefault : undefined
     });
 
+    const kotaPondok = resolveTempatRapor(settings, 'Pesantren');
+
+    // Separate Date Tokens
+    setToken('$TANGGAL_RAPOR', docFormattedDate);
+    setToken('$TANGGAL_DOKUMEN', docFormattedDate);
+    setToken('$TANGGAL_RAPOR_MASEHI', masehiStr);
     setToken('$TANGGAL_MASEHI', masehiStr);
-    setToken('$TANGGAL_SINGKAT_MASEHI', format(dateObj, 'dd/MM/yyyy'));
+    setToken('$TANGGAL_SINGKAT_MASEHI', singkatMasehiStr);
     setToken('$TAHUN_MASEHI', format(dateObj, 'yyyy'));
     setToken('$BULAN_MASEHI', format(dateObj, 'MMMM', { locale: idLocale }));
 
-    setToken('$TANGGAL_HIJRIAH_MASEHI', hijriMasehiCombined);
+    setToken('$TANGGAL_RAPOR_HIJRIAH', hijriFullWithH || '-');
     setToken('$TANGGAL_HIJRIAH', hijriFullWithH || '-');
+    setToken('$TANGGAL_RAPOR_GABUNGAN', hijriMasehiCombined);
+    setToken('$TANGGAL_HIJRIAH_MASEHI', hijriMasehiCombined);
+    setToken('$TANGGAL_MASEHI_HIJRIAH', masehiHijriCombined);
     setToken('$TAHUN_HIJRIAH', hijriInfo.year ? `${hijriInfo.year} H` : '-');
     setToken('$BULAN_HIJRIAH', hijriInfo.month || '-');
 
-    setToken('$TANGGAL_DOKUMEN', docFormattedDate);
-
-    const kotaPondok = settings?.tempatRaporDefault?.trim() 
-        || (settings?.alamat ? (settings.alamat.includes(',') ? settings.alamat.split(',')[0].trim() : 'Pesantren') : 'Pesantren');
-    
+    // Separate Place & Combined Titimangsa Tokens
     setToken('$TEMPAT_RAPOR', kotaPondok);
     setToken('$KOTA_PONPES', kotaPondok);
-    setToken('$KOTA_TANGGAL_HIJRIAH_MASEHI', `${kotaPondok}, ${hijriMasehiCombined}`);
-    setToken('$KOTA_TANGGAL_HIJRIAH', `${kotaPondok}, ${hijriFullWithH || '-'}`);
+    setToken('$TITIMANGSA', `${kotaPondok}, ${docFormattedDate}`);
     setToken('$KOTA_TANGGAL_DOKUMEN', `${kotaPondok}, ${docFormattedDate}`);
+    setToken('$TITIMANGSA_MASEHI', `${kotaPondok}, ${masehiStr}`);
     setToken('$KOTA_TANGGAL', `${kotaPondok}, ${masehiStr}`);
+    setToken('$TITIMANGSA_HIJRIAH', `${kotaPondok}, ${hijriFullWithH || '-'}`);
+    setToken('$KOTA_TANGGAL_HIJRIAH', `${kotaPondok}, ${hijriFullWithH || '-'}`);
+    setToken('$TITIMANGSA_GABUNGAN', `${kotaPondok}, ${hijriMasehiCombined}`);
+    setToken('$KOTA_TANGGAL_HIJRIAH_MASEHI', `${kotaPondok}, ${hijriMasehiCombined}`);
+    setToken('$TITIMANGSA_MASEHI_HIJRIAH', `${kotaPondok}, ${masehiHijriCombined}`);
 
     // Substitusi seluruh variabel input kustom ($MTK, $FIQIH, $UH1, dsb.) dari customData & extraVars
     const mergedVars: Record<string, any> = {
@@ -1439,7 +1501,7 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         idx++;
     }
 
-    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =RATA2_KELAS, =IF, =PREDIKAT, =TERBILANG, =ARAB, =UPPER, =LOWER, =PROPER, =TAHUN_AJAR_*, =SEMESTER, &)
+    // Evaluasi seluruh rumus sel rapor (=SUM, =RATA2, =RATA2_KELAS, =IF, =PREDIKAT, =TERBILANG, =ARAB, =UPPER, =LOWER, =PROPER, =TAHUN_AJAR_*, =SEMESTER, =TITIMANGSA*, =TANGGAL_RAPOR*, =TEMPAT_RAPOR, &)
     return evaluateRaporFormula(substituted, {
         rank: rankVal,
         tahunAjaran: yearInfo.otomatis,
@@ -1447,6 +1509,15 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         tahunAjaranHijriah: yearInfo.hijriah,
         tahunAjaranGabungan: yearInfo.gabungan,
         semester: sem,
+        tempatRapor: kotaPondok,
+        tanggalRaporOtomatis: docFormattedDate,
+        tanggalRaporMasehi: masehiStr,
+        tanggalRaporSingkat: singkatMasehiStr,
+        tanggalRaporMasehiArab: masehiArabStr,
+        tanggalRaporHijriah: hijriFullWithH,
+        tanggalRaporHijriahArab: hijriArabStr,
+        tanggalRaporGabungan: hijriMasehiCombined,
+        tanggalRaporMasehiHijriah: masehiHijriCombined,
         classAverages: effectiveClassAverages,
         classOverallAverage: effectiveClassOverallAvg
     });

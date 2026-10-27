@@ -11,11 +11,42 @@ export const formatRupiah = (number: number) => {
     }).format(number);
 };
 
+/**
+ * Parses a date string or Date object safely in local timezone without UTC midnight shift on YYYY-MM-DD strings.
+ */
+export const parseLocalDateSafe = (dateInput?: string | Date | null): Date | null => {
+    if (!dateInput) return null;
+    if (dateInput instanceof Date) {
+        return isValid(dateInput) ? dateInput : null;
+    }
+    if (typeof dateInput === 'string') {
+        const trimmed = dateInput.trim();
+        if (!trimmed) return null;
+        const isoDayMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (isoDayMatch) {
+            const d = new Date(
+                parseInt(isoDayMatch[1], 10),
+                parseInt(isoDayMatch[2], 10) - 1,
+                parseInt(isoDayMatch[3], 10),
+                12,
+                0,
+                0
+            );
+            return isValid(d) ? d : null;
+        }
+        const parsedIso = parseISO(trimmed);
+        if (isValid(parsedIso)) return parsedIso;
+        const fallback = new Date(trimmed);
+        return isValid(fallback) ? fallback : null;
+    }
+    return null;
+};
+
 export const formatDate = (dateString?: string | Date) => {
     if (!dateString) return '';
     try {
-        const date = typeof dateString === 'string' ? parseISO(dateString) : dateString;
-        if (!isValid(date)) return '';
+        const date = parseLocalDateSafe(dateString);
+        if (!date) return '';
         return format(date, 'd MMMM yyyy', { locale: id });
     } catch (e) { return ''; }
 };
@@ -49,6 +80,45 @@ export const toArabicNumerals = (num: number | string | undefined | null): strin
     return str.replace(/[0-9]/g, (d) => arabicDigits[parseInt(d, 10)]);
 };
 
+const HIJRI_MONTHS_ARABIC = [
+    'محرم',
+    'صفر',
+    'ربيع الأول',
+    'ربيع الآخر',
+    'جمادى الأولى',
+    'جمادى الآخرة',
+    'رجب',
+    'شعبان',
+    'رمضان',
+    'شوال',
+    'ذو القعدة',
+    'ذو الحجة'
+];
+
+const GREGORIAN_MONTHS_ARABIC = [
+    'يناير',
+    'فبراير',
+    'مارس',
+    'أبريل',
+    'مايو',
+    'يونيو',
+    'يوليو',
+    'أغسطس',
+    'سبتمبر',
+    'أكتوبر',
+    'نوفمبر',
+    'ديسمبر'
+];
+
+export const formatGregorianArabic = (dateInput?: string | Date | null): string => {
+    const date = parseLocalDateSafe(dateInput);
+    if (!date) return '';
+    const d = toArabicNumerals(date.getDate());
+    const m = GREGORIAN_MONTHS_ARABIC[date.getMonth()] || '';
+    const y = toArabicNumerals(date.getFullYear());
+    return `${d} ${m} ${y} م`;
+};
+
 // Mendapatkan detail Hijriah dari tanggal Masehi dengan opsi Adjustment (Koreksi)
 // Note: date-fns tidak memiliki built-in Hijri, kita tetap gunakan Intl.DateTimeFormat
 export const getHijriDate = (date: Date, adjustment: number = 0) => {
@@ -73,10 +143,13 @@ export const getHijriDate = (date: Date, adjustment: number = 0) => {
         const year = parts.find(p => p.type === 'year')?.value || '';
         const monthIndex = parseInt(numericFormatter.format(adjustedDate)) - 1;
         const dayArabic = toArabicNumerals(day);
+        const yearArabic = toArabicNumerals(year);
+        const monthArabic = (monthIndex >= 0 && monthIndex < 12) ? HIJRI_MONTHS_ARABIC[monthIndex] : month;
+        const fullArabic = day && year ? `${dayArabic} ${monthArabic} ${yearArabic} هـ` : '';
 
-        return { day, dayArabic, month, year, monthIndex, full: `${day} ${month} ${year}` };
+        return { day, dayArabic, month, monthArabic, year, yearArabic, monthIndex, full: `${day} ${month} ${year}`, fullArabic };
     } catch (e) {
-        return { day: '', dayArabic: '', month: '', year: '', full: '' };
+        return { day: '', dayArabic: '', month: '', monthArabic: '', year: '', yearArabic: '', full: '', fullArabic: '' };
     }
 };
 
@@ -88,14 +161,21 @@ export interface FormatTanggalDokumenOptions {
     manualHijri?: string;
 }
 
+export const ensureHijriSuffix = (rawHijri: string): string => {
+    const trimmed = rawHijri.trim();
+    if (!trimmed) return '';
+    if (/\bH\.?$/i.test(trimmed) || /هـ$/.test(trimmed)) return trimmed;
+    return `${trimmed} H`;
+};
+
 export const formatTanggalDokumen = (
     dateString?: string | Date,
     options?: FormatTanggalDokumenOptions
 ): string => {
     if (!dateString) return '';
     try {
-        const date = typeof dateString === 'string' ? parseISO(dateString) : dateString;
-        if (!isValid(date)) return '';
+        const date = parseLocalDateSafe(dateString);
+        if (!date) return '';
 
         const masehiStr = format(date, 'd MMMM yyyy', { locale: id });
         const formatMode = options?.formatMode || 'masehi';
@@ -106,7 +186,8 @@ export const formatTanggalDokumen = (
 
         const hijriInfo = getHijriDate(date, options?.hijriAdjustment || 0);
         const hijriStr = options?.manualHijri?.trim()
-            || (hijriInfo.full ? `${hijriInfo.full} H` : '');
+            ? ensureHijriSuffix(options.manualHijri)
+            : (hijriInfo.full ? `${hijriInfo.full} H` : '');
 
         if (formatMode === 'hijriah') {
             return hijriStr || masehiStr;
@@ -258,4 +339,19 @@ export const resolveTempatPesantren = (
 
     return fallback;
 };
+
+/**
+ * Resolves the Rapor issuance city/place, explicitly prioritizing `tempatRaporDefault`
+ * configured in Cetak Rapor / Pengaturan Rapor before falling back to Pondok city/address.
+ */
+export const resolveTempatRapor = (
+    settings?: { kabupatenKota?: string; tempatRaporDefault?: string; alamat?: string } | null,
+    fallback = 'Pesantren'
+): string => {
+    if (settings?.tempatRaporDefault && settings.tempatRaporDefault.trim()) {
+        return settings.tempatRaporDefault.trim();
+    }
+    return resolveTempatPesantren(settings, fallback);
+};
+
 

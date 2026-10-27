@@ -1,8 +1,22 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
-import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, DigitalAsset } from '../../types';
+import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, DigitalAsset, PageFitCount } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
+import { printToPdfNative } from '../../utils/pdfGenerator';
+import { PrintHeader } from '../common/PrintHeader';
+import {
+    normalizeRaporPageSetup,
+    buildPageSetupStateFromPreset,
+    formatPageSetupBadgeLabel,
+    getRaporPaperMetrics,
+    computePaginatedRaporLayout,
+    getRenderableRowCellsForPage,
+    PaginatedRaporPage,
+    PaginatedSliceCell,
+    RaporPageScalePreset,
+    RaporPageSetupInput
+} from '../../utils/raporPageLayout';
 import {
     DYNAMIC_TAG_CATEGORIES,
     isMediaTag,
@@ -29,6 +43,14 @@ import {
     AutoFillDirection
 } from '../../utils/raporFormulaUtils';
 import { resolveAcademicYearLabels } from '../../utils/academicYear';
+import {
+    parseLocalDateSafe,
+    resolveTempatRapor,
+    formatTanggalDokumen,
+    formatDate,
+    getHijriDate,
+    ensureHijriSuffix
+} from '../../utils/formatters';
 import { computeClassAveragesFromRecords } from '../../services/raporCalculationService';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -48,22 +70,35 @@ interface AutocompleteOption {
 interface DesignPreviewSheetCardProps {
     sh: RaporSheet;
     sIdx: number;
+    sheetsCount: number;
+    isLastSheet: boolean;
     activeTemplate: RaporTemplate;
     settings: any;
     digitalAssets: DigitalAsset[];
     resolveContext: RaporResolveContext;
     renderPreviewCell: (cell: GridCell) => { content: React.ReactNode; isMedia: boolean };
+    showKop: boolean;
+    santriObj: any;
 }
 
 const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
     sh,
     sIdx,
+    sheetsCount,
+    isLastSheet,
     activeTemplate,
+    settings,
     resolveContext,
-    renderPreviewCell
+    renderPreviewCell,
+    showKop,
+    santriObj
 }) => {
-    const innerRef = useRef<HTMLDivElement>(null);
-    const [measuredHeight, setMeasuredHeight] = useState<number>(0);
+    const measureContainerRef = useRef<HTMLDivElement>(null);
+    const measureHeaderRef = useRef<HTMLDivElement>(null);
+    const [measuredMetrics, setMeasuredMetrics] = useState<{
+        headerHeight: number;
+        rowHeights: number[];
+    } | null>(null);
 
     const colCount = sh.colCount || sh.cells?.[0]?.length || 0;
     const colWidths = useMemo(() => {
@@ -97,7 +132,7 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
         return widths;
     }, [sh.cells, colCount]);
 
-    const rowHeights = useMemo(() => {
+    const configuredRowHeights = useMemo(() => {
         if (!sh.cells) return [];
         return sh.cells.map(row => {
             for (let c = 0; c < row.length; c++) {
@@ -116,271 +151,489 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
         });
     }, [sh.cells]);
 
-    const totalColWidth = colWidths.reduce((a, b) => a + b, 0) || 727;
-    const isF4 = sh.paperSize === 'F4' || activeTemplate.paperSize === 'F4';
-    const marginMode = sh.marginMode || activeTemplate.marginMode || 'normal';
-    const padSidePx = marginMode === 'normal' ? 32 : marginMode === 'narrow' ? 16 : 8;
-    const paperWidth = isF4 ? '21.5cm' : '21cm';
-    const paperHeight = isF4 ? '33cm' : '29.7cm';
-    const paperPxW = isF4 ? 812.6 : 793.7;
-    const paperPxH = isF4 ? 1247.2 : 1122.5;
-    const availableW = Math.max(300, Math.floor(paperPxW - padSidePx * 2 - 2));
-    const availableH = Math.max(400, Math.floor(paperPxH - padSidePx * 2 - 8));
+    const pageSetup = useMemo(
+        () =>
+            normalizeRaporPageSetup({
+                paperSize: sh.paperSize || activeTemplate.paperSize,
+                orientation: sh.orientation || activeTemplate.orientation,
+                marginMode: sh.marginMode || activeTemplate.marginMode,
+                fitToPage: sh.fitToPage ?? activeTemplate.fitToPage,
+                fitWidthPages: sh.fitWidthPages ?? activeTemplate.fitWidthPages,
+                fitHeightPages: sh.fitHeightPages ?? activeTemplate.fitHeightPages,
+                printScale: sh.printScale ?? activeTemplate.printScale,
+                repeatHeaderRows: sh.repeatHeaderRows ?? activeTemplate.repeatHeaderRows
+            }),
+        [sh, activeTemplate]
+    );
 
-    const naturalWidth = Math.max(availableW, totalColWidth);
-    const isFitPage = sh.fitToPage !== false && activeTemplate.fitToPage !== false;
-    const printScale = sh.printScale ?? activeTemplate.printScale ?? 'auto';
+    const paperMetrics = useMemo(
+        () => getRaporPaperMetrics(pageSetup.paperSize, pageSetup.orientation, pageSetup.marginMode),
+        [pageSetup.paperSize, pageSetup.orientation, pageSetup.marginMode]
+    );
 
-    const estimatedHeight = useMemo(() => {
-        const rowsSum = rowHeights.reduce<number>((acc, h) => acc + (h || 30), 0);
-        return ((sh.customTitle || sh.showJudul) ? 55 : 0) + rowsSum + 16;
-    }, [rowHeights, sh.customTitle, sh.showJudul]);
+    const totalColWidth = colWidths.reduce((a, b) => a + b, 0) || paperMetrics.availableW;
+    const measureWidth = pageSetup.fitWidthPages === 1
+        ? Math.max(paperMetrics.availableW, totalColWidth)
+        : totalColWidth;
+
+    const shouldShowBiodataHeader = sh.showBiodataHeader !== undefined
+        ? sh.showBiodataHeader
+        : Boolean(activeTemplate.showBiodataHeader);
+
+    const hasTitleInGrid = useMemo(() => {
+        if (!sh.cells || sh.cells.length === 0) return false;
+        return sh.cells.slice(0, 3).some(row =>
+            row.some(cell => {
+                if (!cell || !cell.value) return false;
+                const up = cell.value.toUpperCase();
+                return up.includes('RAPOR') || up.includes('LAPORAN HASIL') || up.includes('CAPAIAN KOMPETENSI') || up.includes('HASIL EVALUASI');
+            })
+        );
+    }, [sh.cells]);
+
+    const shouldShowDocTitle = sh.showJudul !== undefined
+        ? sh.showJudul
+        : (activeTemplate.showJudul !== undefined ? activeTemplate.showJudul : !hasTitleInGrid);
+
+    const rawDocTitle = sh.customTitle !== undefined
+        ? sh.customTitle
+        : (activeTemplate.customTitle !== undefined ? activeTemplate.customTitle : (shouldShowDocTitle ? sh.name : ''));
+
+    const resolvedDocTitle = useMemo(
+        () => (rawDocTitle ? resolveRaporText(rawDocTitle, resolveContext) : undefined),
+        [rawDocTitle, resolveContext]
+    );
+
+    const renderDocumentHeader = () => {
+        const hasStandaloneTitle = !showKop && (Boolean(sh.customTitle) || sh.showJudul === true);
+        if (!showKop && !hasStandaloneTitle && !shouldShowBiodataHeader) return null;
+        return (
+            <div>
+                {showKop && (
+                    <PrintHeader
+                        settings={settings}
+                        title={shouldShowDocTitle ? resolvedDocTitle : undefined}
+                    />
+                )}
+                {hasStandaloneTitle && (
+                    <div className="text-center mb-4 space-y-0.5">
+                        {(sh.customTitle || sh.name).split('\n').map((line, lIdx) => (
+                            <div
+                                key={lIdx}
+                                className={`${lIdx === 0 ? 'font-black text-sm text-slate-900 tracking-wide uppercase' : 'font-semibold text-xs text-slate-700'}`}
+                            >
+                                {resolveRaporText(line, resolveContext)}
+                            </div>
+                        ))}
+                    </div>
+                )}
+                {shouldShowBiodataHeader && santriObj && (
+                    <div className="mb-3">
+                        <table className="w-full text-sm font-medium mb-3">
+                            <tbody>
+                                <tr>
+                                    <td className="w-24 font-bold">Nama</td>
+                                    <td>: {santriObj.namaLengkap}</td>
+                                    <td className="w-24 text-right font-bold">NIS</td>
+                                    <td className="w-32 text-right">: {santriObj.nis}</td>
+                                </tr>
+                                <tr>
+                                    <td className="w-24 font-bold">Rombel</td>
+                                    <td>: {settings.rombel?.find((r: any) => r.id === santriObj.rombelId)?.nama || '-'}</td>
+                                    <td className="w-24 text-right font-bold">{sheetsCount > 1 ? 'Format / Lembar' : 'Peringkat'}</td>
+                                    <td className="w-32 text-right font-semibold">
+                                        {sheetsCount > 1
+                                            ? `: ${sh.name}`
+                                            : `: ${resolveContext.calculation?.ranking ? `${resolveContext.calculation.ranking} / ${resolveContext.calculation.totalSantri || '-'}` : '-'}`}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     useLayoutEffect(() => {
         const measure = () => {
-            const el = innerRef.current;
-            if (!el) return;
-            const h = Math.max(el.offsetHeight, el.scrollHeight);
-            if (h > 0) {
-                setMeasuredHeight(prev => (Math.abs(h - prev) > 1 ? h : prev));
-            }
+            const container = measureContainerRef.current;
+            if (!container) return;
+            const hdrEl = measureHeaderRef.current;
+            const nextHeaderH = hdrEl ? Math.ceil(hdrEl.getBoundingClientRect().height) : 0;
+            const trNodes = container.querySelectorAll<HTMLTableRowElement>('tr[data-measure-row]');
+            const nextRowHeights: number[] = (sh.cells || []).map((_, rIdx) => configuredRowHeights[rIdx] ?? 30);
+            trNodes.forEach((tr) => {
+                const idx = Number(tr.getAttribute('data-measure-row'));
+                if (!Number.isNaN(idx)) {
+                    const h = tr.getBoundingClientRect().height || tr.offsetHeight;
+                    if (h > 0) {
+                        nextRowHeights[idx] = Math.max(configuredRowHeights[idx] ?? 0, Math.ceil(h));
+                    }
+                }
+            });
+
+            setMeasuredMetrics((prev) => {
+                if (
+                    prev &&
+                    Math.abs(prev.headerHeight - nextHeaderH) <= 1 &&
+                    prev.rowHeights.length === nextRowHeights.length &&
+                    prev.rowHeights.every((v, i) => Math.abs(v - nextRowHeights[i]) <= 1)
+                ) {
+                    return prev;
+                }
+                return { headerHeight: nextHeaderH, rowHeights: nextRowHeights };
+            });
         };
+
         measure();
         let ro: ResizeObserver | null = null;
-        if (typeof ResizeObserver !== 'undefined' && innerRef.current) {
+        if (typeof ResizeObserver !== 'undefined' && measureContainerRef.current) {
             ro = new ResizeObserver(() => measure());
-            ro.observe(innerRef.current);
+            ro.observe(measureContainerRef.current);
         }
         return () => {
             if (ro) ro.disconnect();
         };
-    }, [sh, naturalWidth]);
+    }, [sh, measureWidth, showKop, shouldShowBiodataHeader, shouldShowDocTitle, resolvedDocTitle, configuredRowHeights]);
 
-    const effectiveNaturalH = measuredHeight > 0 ? measuredHeight : estimatedHeight;
-    const scaleX = availableW / naturalWidth;
-    const scaleY = isFitPage && effectiveNaturalH > availableH ? availableH / effectiveNaturalH : 1;
-    const rawScale = typeof printScale === 'number'
-        ? (isFitPage ? Math.min(printScale / 100, scaleX, scaleY) : Math.min(printScale / 100, scaleX))
-        : (isFitPage ? Math.min(1, scaleX, scaleY) : Math.min(1, scaleX));
-    const sheetScale = Math.max(0.2, Math.min(1, Number(rawScale.toFixed(4))));
-    const scaledW = Math.floor(naturalWidth * sheetScale);
-    const scaledH = effectiveNaturalH > 0 ? Math.ceil(effectiveNaturalH * sheetScale) : undefined;
+    const fallbackHeaderH =
+        (showKop ? 145 : (sh.customTitle || sh.showJudul ? 52 : 0)) +
+        (shouldShowBiodataHeader ? 62 : 0);
+    const effectiveHeaderH = measuredMetrics ? measuredMetrics.headerHeight : fallbackHeaderH;
+    const effectiveRowHeights = useMemo(
+        () =>
+            measuredMetrics?.rowHeights && measuredMetrics.rowHeights.length === (sh.cells?.length || 0)
+                ? measuredMetrics.rowHeights
+                : configuredRowHeights.map(h => h ?? 30),
+        [measuredMetrics, configuredRowHeights, sh.cells]
+    );
 
-    const paddingClass = marginMode === 'normal' ? 'p-8' : marginMode === 'narrow' ? 'p-4' : 'p-2';
+    const paginatedLayout = useMemo(
+        () =>
+            computePaginatedRaporLayout({
+                cells: sh.cells || [],
+                colWidths,
+                rowHeights: effectiveRowHeights,
+                headerHeight: effectiveHeaderH,
+                paperMetrics,
+                pageSetup
+            }),
+        [sh.cells, colWidths, effectiveRowHeights, effectiveHeaderH, paperMetrics, pageSetup]
+    );
 
-    return (
-        <div className="w-full overflow-x-auto p-1 flex justify-start sm:justify-center">
-            <div
-                className={`bg-white shadow-2xl ${paddingClass} relative shrink-0 rounded-xs border border-slate-300`}
+    const badgeText = formatPageSetupBadgeLabel(pageSetup, paginatedLayout.scale);
+
+    const renderSliceCellTd = (sliceItem: PaginatedSliceCell, rowIdx: number, keyPrefix: string) => {
+        const { cell, masterC, colSpan, rowSpan, borders } = sliceItem;
+        const rH = configuredRowHeights[rowIdx];
+        const isLogo = typeof cell.value === 'string' && (cell.value.includes('LOGO') || cell.value === '$LOGO');
+        const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
+        const { content: rawContent, isMedia } = renderPreviewCell(cell);
+        const content = (!isMedia && (typeof rawContent === 'string' || typeof rawContent === 'number') && cell.textTransform && cell.textTransform !== 'none')
+            ? applyCellTextTransform(String(rawContent), cell.textTransform)
+            : rawContent;
+
+        const effectiveFontSize = cell.fontSize || 11;
+        const hAlign = cell.align || 'center';
+        const vAlign = cell.verticalAlign || 'middle';
+        const textWrap = cell.textWrap || 'wrap';
+        const isFloat = textWrap === 'float' && !isMedia;
+        const isClip = textWrap === 'clip';
+
+        let cellWidthPx = 0;
+        for (let i = 0; i < colSpan; i++) {
+            cellWidthPx += colWidths[masterC + i] || 100;
+        }
+
+        let cellHeightPx: number | undefined = undefined;
+        if (rH !== undefined || cell.height !== undefined) {
+            let sumH = 0;
+            for (let i = 0; i < rowSpan; i++) {
+                sumH += configuredRowHeights[rowIdx + i] ?? cell.height ?? 30;
+            }
+            cellHeightPx = sumH;
+        }
+
+        const upperToken = `${cell.value || ''} ${cell.key || ''}`.toUpperCase();
+        const isExpandableDynamic = (upperToken.includes('DESKRIPSI') || upperToken.includes('CATATAN')) && !isClip && !isFloat && (cellHeightPx === undefined || cellHeightPx >= 28);
+        const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
+
+        return (
+            <td
+                key={`${keyPrefix}-${rowIdx}-${sliceItem.renderCol}`}
+                colSpan={colSpan > 1 ? colSpan : undefined}
+                rowSpan={rowSpan > 1 ? rowSpan : undefined}
                 style={{
-                    width: paperWidth,
-                    minHeight: isFitPage ? undefined : paperHeight,
-                    height: isFitPage ? paperHeight : undefined,
-                    maxHeight: isFitPage ? paperHeight : undefined,
-                    overflow: isFitPage ? 'hidden' : undefined,
-                    boxSizing: 'border-box'
+                    borderTop: (!isLogo && borders.top) ? '1px solid black' : 'none',
+                    borderRight: (!isLogo && borders.right) ? '1px solid black' : 'none',
+                    borderBottom: (!isLogo && borders.bottom) ? '1px solid black' : 'none',
+                    borderLeft: (!isLogo && borders.left) ? '1px solid black' : 'none',
+                    textAlign: hAlign,
+                    verticalAlign: vAlign,
+                    height: cellHeightPx ? `${cellHeightPx}px` : undefined,
+                    backgroundColor: hasCustomBg ? cell.backgroundColor : 'transparent',
+                    fontWeight: cell.bold ? 'bold' : 'normal',
+                    fontStyle: cell.italic ? 'italic' : undefined,
+                    color: cell.color || undefined,
+                    fontSize: `${effectiveFontSize}px`,
+                    padding: 0,
+                    boxSizing: 'border-box',
+                    overflow: isFloat ? 'visible' : 'hidden',
+                    position: isFloat ? 'relative' : undefined
                 }}
             >
-                <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono select-none flex items-center gap-2 z-30">
-                    <span>{sh.name} (Lembar {sIdx + 1})</span>
-                    <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-bold text-slate-500 uppercase">{isF4 ? 'F4' : 'A4'}</span>
-                    {isFitPage && (
-                        <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[9px] font-bold">
-                            Fit 1 Muka ({Math.round(sheetScale * 100)}%)
-                        </span>
-                    )}
-                    {!isFitPage && sheetScale < 1 && (
-                        <span className="px-1.5 py-0.5 bg-teal-50 text-teal-700 rounded text-[9px] font-bold">
-                            Skala: {Math.round(sheetScale * 100)}%
-                        </span>
-                    )}
-                </div>
-
-                <div
-                    style={{
-                        width: `${scaledW}px`,
-                        height: sheetScale < 1 && scaledH ? `${scaledH}px` : undefined,
-                        overflow: isFitPage ? 'hidden' : 'visible',
-                        margin: '0 auto',
-                        position: 'relative'
-                    }}
-                >
+                {isFloat ? (
                     <div
-                        ref={innerRef}
-                        className="flex flex-col justify-start"
                         style={{
-                            width: `${naturalWidth}px`,
-                            transform: sheetScale < 1 ? `scale(${sheetScale})` : undefined,
-                            transformOrigin: 'top left'
+                            position: 'relative',
+                            width: '100%',
+                            height: cellHeightPx ? `${cellHeightPx}px` : '100%',
+                            minHeight: cellHeightPx ? `${cellHeightPx}px` : '22px',
+                            overflow: 'visible',
+                            zIndex: 20
                         }}
                     >
-                        {(sh.customTitle || sh.showJudul) && (
-                            <div className="text-center mb-4 space-y-0.5">
-                                {(sh.customTitle || sh.name).split('\n').map((line, lIdx) => (
-                                    <div
-                                        key={lIdx}
-                                        className={`${lIdx === 0 ? 'font-black text-sm text-slate-900 tracking-wide uppercase' : 'font-semibold text-xs text-slate-700'}`}
-                                    >
-                                        {resolveRaporText(line, resolveContext)}
-                                    </div>
-                                ))}
+                        <div
+                            style={{
+                                position: 'absolute',
+                                whiteSpace: 'pre',
+                                left: hAlign === 'left' ? '4px' : hAlign === 'center' ? '50%' : undefined,
+                                right: hAlign === 'right' ? '4px' : undefined,
+                                top: vAlign === 'top' ? '2px' : vAlign === 'bottom' ? undefined : '50%',
+                                bottom: vAlign === 'bottom' ? '2px' : undefined,
+                                transform:
+                                    hAlign === 'center' && vAlign === 'middle'
+                                        ? 'translate(-50%, -50%)'
+                                        : hAlign === 'center'
+                                        ? 'translateX(-50%)'
+                                        : vAlign === 'middle'
+                                        ? 'translateY(-50%)'
+                                        : undefined,
+                                textAlign: hAlign,
+                                lineHeight: 1.25
+                            }}
+                        >
+                            {content}
+                        </div>
+                    </div>
+                ) : (
+                    <div
+                        style={{
+                            width: '100%',
+                            height: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : '100%',
+                            minHeight: (isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
+                            maxHeight: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
+                            padding: isMedia ? '1px' : cellPadding,
+                            boxSizing: 'border-box',
+                            overflow: 'hidden',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
+                            textAlign: hAlign,
+                            lineHeight: 1.25
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: '100%',
+                                marginTop: vAlign === 'top' ? 0 : 'auto',
+                                marginBottom: vAlign === 'bottom' ? 0 : 'auto',
+                                whiteSpace: isClip ? 'pre' : 'pre-wrap',
+                                wordBreak: isClip ? 'normal' : 'break-word',
+                                overflowWrap: isClip ? 'normal' : 'anywhere',
+                                overflow: isClip ? 'hidden' : undefined,
+                                textAlign: hAlign
+                            }}
+                        >
+                            {content}
+                        </div>
+                    </div>
+                )}
+            </td>
+        );
+    };
+
+    const fullMeasurePage: PaginatedRaporPage = {
+        pageIndex: 0,
+        pageNumber: 1,
+        totalPages: 1,
+        vIndex: 0,
+        hIndex: 0,
+        totalVPages: 1,
+        totalHPages: 1,
+        includeDocHeader: true,
+        headerGroupRows: [],
+        startRow: 0,
+        endRow: Math.max(0, (sh.cells?.length || 1) - 1),
+        startCol: 0,
+        endCol: Math.max(0, colCount - 1),
+        sliceColWidths: colWidths,
+        sliceNaturalWidth: measureWidth,
+        stretchColsToFillWidth: totalColWidth <= paperMetrics.availableW
+    };
+
+    return (
+        <div className="w-full flex flex-col items-center gap-6 print:gap-0">
+            {/* Offscreen Unscaled Measurement Container */}
+            <div
+                ref={measureContainerRef}
+                aria-hidden="true"
+                data-html2canvas-ignore="true"
+                data-rapor-measure-only="true"
+                className="no-print text-black font-sans text-sm"
+                style={{
+                    position: 'fixed',
+                    left: '-99999px',
+                    top: 0,
+                    width: `${measureWidth}px`,
+                    visibility: 'hidden',
+                    pointerEvents: 'none',
+                    zIndex: -50
+                }}
+            >
+                <div ref={measureHeaderRef}>{renderDocumentHeader()}</div>
+                <table className="w-full border-collapse table-fixed">
+                    <colgroup>
+                        {colWidths.map((w, cIdx) => (
+                            <col
+                                key={cIdx}
+                                style={{
+                                    width: totalColWidth > paperMetrics.availableW
+                                        ? `${w}px`
+                                        : `${((w / Math.max(1, totalColWidth)) * 100).toFixed(3)}%`
+                                }}
+                            />
+                        ))}
+                    </colgroup>
+                    <tbody>
+                        {(sh.cells || []).map((_, rIdx) => {
+                            const rH = configuredRowHeights[rIdx];
+                            const rowSliceCells = getRenderableRowCellsForPage(sh.cells, rIdx, fullMeasurePage, false);
+                            return (
+                                <tr key={rIdx} data-measure-row={rIdx} style={{ height: rH ? `${rH}px` : undefined }}>
+                                    {rowSliceCells.map(sc => renderSliceCellTd(sc, rIdx, 'measure'))}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Discrete Paginated Paper Sheets */}
+            {paginatedLayout.pages.map((page, pIdx) => {
+                const isVeryLastPage = isLastSheet && pIdx === paginatedLayout.pages.length - 1;
+                const scaledSliceW = Math.floor(page.sliceNaturalWidth * paginatedLayout.scale);
+                const sliceSumCols = page.sliceColWidths.reduce((a, b) => a + b, 0) || 1;
+                const rowIndices: number[] = [];
+                if (page.endRow >= page.startRow) {
+                    for (let r = page.startRow; r <= page.endRow; r++) {
+                        rowIndices.push(r);
+                    }
+                }
+
+                return (
+                    <div key={`${sh.id}-p-${page.pageIndex}`} className="w-full overflow-x-auto p-1 print:p-0 flex justify-start sm:justify-center">
+                        <div
+                            data-print-orientation={paperMetrics.orientation}
+                            className={`bg-white text-black font-sans text-sm printable-content-wrapper rapor-exact-page ${paginatedLayout.isSinglePageFit ? 'rapor-fit-1-page' : ''} ${paperMetrics.orientation === 'landscape' ? 'print-landscape' : ''} shadow-2xl ${paperMetrics.paddingClass} relative shrink-0 rounded-xs border border-slate-300 print:border-none ${!isVeryLastPage ? 'page-break-after' : ''}`}
+                            style={{
+                                width: paperMetrics.widthCss,
+                                height: paperMetrics.heightCss,
+                                minHeight: paperMetrics.heightCss,
+                                maxHeight: paperMetrics.heightCss,
+                                overflow: 'hidden',
+                                pageBreakAfter: isVeryLastPage ? 'auto' : 'always',
+                                breakAfter: isVeryLastPage ? 'auto' : 'page',
+                                pageBreakInside: 'avoid',
+                                breakInside: 'avoid',
+                                boxSizing: 'border-box'
+                            }}
+                        >
+                            {/* Screen-Only Metadata Line */}
+                            <div className="no-print absolute top-2 right-4 text-[10px] text-slate-500 font-mono tabular-nums select-none flex items-center gap-1.5 z-30">
+                                <span>{sh.name} (Lembar {sIdx + 1})</span>
+                                <span aria-hidden="true">·</span>
+                                <span>{paperMetrics.paperSize}{paperMetrics.orientation === 'landscape' ? ' Landscape' : ''}</span>
+                                <span aria-hidden="true">·</span>
+                                <span className="font-semibold text-slate-700">
+                                    Hal. {page.pageNumber}/{page.totalPages}
+                                </span>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-teal-700 font-semibold">{badgeText}</span>
                             </div>
-                        )}
 
-                        <table className="w-full border-collapse table-fixed">
-                            <colgroup>
-                                {colWidths.map((w, cIdx) => (
-                                    <col
-                                        key={cIdx}
-                                        style={{
-                                            width: totalColWidth > availableW
-                                                ? `${w}px`
-                                                : `${((w / totalColWidth) * 100).toFixed(3)}%`
-                                        }}
-                                    />
-                                ))}
-                            </colgroup>
-                            <tbody>
-                                {sh.cells.map((row, rIdx) => {
-                                    const rH = rowHeights[rIdx];
-                                    return (
-                                        <tr key={rIdx} style={{ height: rH ? `${rH}px` : undefined }}>
-                                            {row.map((cell, cIdx) => {
-                                                if (cell.hidden) return null;
-                                                const borders = cell.borders || { top: false, right: false, bottom: false, left: false };
-                                                const isLogo = typeof cell.value === 'string' && (cell.value.includes('LOGO') || cell.value === '$LOGO');
-                                                const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
-                                                const { content: rawContent, isMedia } = renderPreviewCell(cell);
-                                                const content = (!isMedia && (typeof rawContent === 'string' || typeof rawContent === 'number') && cell.textTransform && cell.textTransform !== 'none')
-                                                    ? applyCellTextTransform(String(rawContent), cell.textTransform)
-                                                    : rawContent;
+                            <div
+                                style={{
+                                    width: `${scaledSliceW}px`,
+                                    overflow: 'hidden',
+                                    margin: '0 auto',
+                                    position: 'relative'
+                                }}
+                            >
+                                <div
+                                    className="flex flex-col justify-start"
+                                    style={{
+                                        width: `${page.sliceNaturalWidth}px`,
+                                        transform: paginatedLayout.scale < 1 ? `scale(${paginatedLayout.scale})` : undefined,
+                                        transformOrigin: 'top left'
+                                    }}
+                                >
+                                    {page.includeDocHeader && renderDocumentHeader()}
 
-                                                const effectiveFontSize = cell.fontSize || 11;
-                                                const hAlign = cell.align || 'center';
-                                                const vAlign = cell.verticalAlign || 'middle';
-                                                const textWrap = cell.textWrap || 'wrap';
-                                                const isFloat = textWrap === 'float' && !isMedia;
-                                                const isClip = textWrap === 'clip';
-
-                                                const cellColSpan = cell.colSpan || 1;
-                                                let cellWidthPx = 0;
-                                                for (let i = 0; i < cellColSpan; i++) {
-                                                    cellWidthPx += colWidths[cIdx + i] || 100;
-                                                }
-
-                                                const cellRowSpan = cell.rowSpan || 1;
-                                                let cellHeightPx: number | undefined = undefined;
-                                                if (rH !== undefined || cell.height !== undefined) {
-                                                    let sumH = 0;
-                                                    for (let i = 0; i < cellRowSpan; i++) {
-                                                        sumH += rowHeights[rIdx + i] ?? cell.height ?? 30;
-                                                    }
-                                                    cellHeightPx = sumH;
-                                                }
-
-                                                const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
-
+                                    <table className="w-full border-collapse table-fixed">
+                                        <colgroup>
+                                            {page.sliceColWidths.map((w, cIdx) => (
+                                                <col
+                                                    key={cIdx}
+                                                    style={{
+                                                        width: page.stretchColsToFillWidth
+                                                            ? `${((w / sliceSumCols) * 100).toFixed(3)}%`
+                                                            : `${w}px`
+                                                    }}
+                                                />
+                                            ))}
+                                        </colgroup>
+                                        <tbody>
+                                            {page.headerGroupRows.map((hrIdx) => {
+                                                const rH = configuredRowHeights[hrIdx];
+                                                const rowCells = getRenderableRowCellsForPage(sh.cells, hrIdx, page, true);
                                                 return (
-                                                    <td
-                                                        key={`${rIdx}-${cIdx}`}
-                                                        colSpan={cell.colSpan}
-                                                        rowSpan={cell.rowSpan}
-                                                        style={{
-                                                            borderTop: (!isLogo && borders.top) ? '1px solid black' : 'none',
-                                                            borderRight: (!isLogo && borders.right) ? '1px solid black' : 'none',
-                                                            borderBottom: (!isLogo && borders.bottom) ? '1px solid black' : 'none',
-                                                            borderLeft: (!isLogo && borders.left) ? '1px solid black' : 'none',
-                                                            textAlign: hAlign,
-                                                            verticalAlign: vAlign,
-                                                            height: cellHeightPx ? `${cellHeightPx}px` : undefined,
-                                                            backgroundColor: hasCustomBg ? cell.backgroundColor : 'transparent',
-                                                            fontWeight: cell.bold ? 'bold' : 'normal',
-                                                            fontStyle: cell.italic ? 'italic' : undefined,
-                                                            color: cell.color || undefined,
-                                                            fontSize: `${effectiveFontSize}px`,
-                                                            padding: 0,
-                                                            boxSizing: 'border-box',
-                                                            overflow: isFloat ? 'visible' : 'hidden',
-                                                            position: isFloat ? 'relative' : undefined
-                                                        }}
-                                                    >
-                                                        {isFloat ? (
-                                                            <div
-                                                                style={{
-                                                                    position: 'relative',
-                                                                    width: '100%',
-                                                                    height: cellHeightPx ? `${cellHeightPx}px` : '100%',
-                                                                    minHeight: cellHeightPx ? `${cellHeightPx}px` : '22px',
-                                                                    overflow: 'visible',
-                                                                    zIndex: 20
-                                                                }}
-                                                            >
-                                                                <div
-                                                                    style={{
-                                                                        position: 'absolute',
-                                                                        whiteSpace: 'pre',
-                                                                        left: hAlign === 'left' ? '4px' : hAlign === 'center' ? '50%' : undefined,
-                                                                        right: hAlign === 'right' ? '4px' : undefined,
-                                                                        top: vAlign === 'top' ? '2px' : vAlign === 'bottom' ? undefined : '50%',
-                                                                        bottom: vAlign === 'bottom' ? '2px' : undefined,
-                                                                        transform:
-                                                                            hAlign === 'center' && vAlign === 'middle'
-                                                                                ? 'translate(-50%, -50%)'
-                                                                                : hAlign === 'center'
-                                                                                ? 'translateX(-50%)'
-                                                                                : vAlign === 'middle'
-                                                                                ? 'translateY(-50%)'
-                                                                                : undefined,
-                                                                        textAlign: hAlign,
-                                                                        lineHeight: 1.25
-                                                                    }}
-                                                                >
-                                                                    {content}
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <div
-                                                                style={{
-                                                                    width: '100%',
-                                                                    height: cellHeightPx ? `${cellHeightPx}px` : '100%',
-                                                                    maxHeight: cellHeightPx ? `${cellHeightPx}px` : undefined,
-                                                                    padding: isMedia ? '1px' : cellPadding,
-                                                                    boxSizing: 'border-box',
-                                                                    overflow: 'hidden',
-                                                                    display: 'flex',
-                                                                    flexDirection: 'column',
-                                                                    alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
-                                                                    textAlign: hAlign,
-                                                                    lineHeight: 1.25
-                                                                }}
-                                                            >
-                                                                <div
-                                                                    style={{
-                                                                        width: '100%',
-                                                                        marginTop: vAlign === 'top' ? 0 : 'auto',
-                                                                        marginBottom: vAlign === 'bottom' ? 0 : 'auto',
-                                                                        whiteSpace: isClip ? 'pre' : 'pre-wrap',
-                                                                        wordBreak: isClip ? 'normal' : 'break-word',
-                                                                        overflowWrap: isClip ? 'normal' : 'anywhere',
-                                                                        overflow: isClip ? 'hidden' : undefined,
-                                                                        textAlign: hAlign
-                                                                    }}
-                                                                >
-                                                                    {content}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </td>
+                                                    <tr key={`hdr-${hrIdx}`} style={{ height: rH ? `${rH}px` : undefined }}>
+                                                        {rowCells.map(sc => renderSliceCellTd(sc, hrIdx, `hdr-${page.pageIndex}`))}
+                                                    </tr>
                                                 );
                                             })}
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                            {rowIndices.map((rIdx) => {
+                                                const rH = configuredRowHeights[rIdx];
+                                                const rowCells = getRenderableRowCellsForPage(sh.cells, rIdx, page, false);
+                                                return (
+                                                    <tr key={rIdx} style={{ height: rH ? `${rH}px` : undefined }}>
+                                                        {rowCells.map(sc => renderSliceCellTd(sc, rIdx, `pg-${page.pageIndex}`))}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {page.totalPages > 1 && (
+                                <div
+                                    className="text-[9px] text-slate-500 tabular-nums select-none"
+                                    style={{
+                                        position: 'absolute',
+                                        bottom: '4px',
+                                        right: `${paperMetrics.padPx}px`
+                                    }}
+                                >
+                                    Halaman {page.pageNumber} dari {page.totalPages}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-            </div>
+                );
+            })}
         </div>
     );
 };
@@ -408,6 +661,8 @@ export const TabDesainRapor: React.FC = () => {
     const [isDesignPreviewOpen, setIsDesignPreviewOpen] = useState(false);
     const [previewSantriId, setPreviewSantriId] = useState<string>('simulasi');
     const [previewFallbackDummyGrades, setPreviewFallbackDummyGrades] = useState<boolean>(true);
+    const [previewModalZoom, setPreviewModalZoom] = useState<number>(1);
+    const [previewShowKop, setPreviewShowKop] = useState<boolean>(false);
     const [isExcelPasteModalOpen, setIsExcelPasteModalOpen] = useState(false);
     const [isKurikulumGeneratorOpen, setIsKurikulumGeneratorOpen] = useState(false);
     const [selectedTagCategory, setSelectedTagCategory] = useState<string>('santri');
@@ -630,7 +885,18 @@ export const TabDesainRapor: React.FC = () => {
                 activeSheetId: currentSheet.id,
                 cells: currentSheet.cells,
                 rowCount: currentSheet.rowCount,
-                colCount: currentSheet.colCount
+                colCount: currentSheet.colCount,
+                customTitle: currentSheet.customTitle !== undefined ? currentSheet.customTitle : tpl.customTitle,
+                showJudul: currentSheet.showJudul !== undefined ? currentSheet.showJudul : tpl.showJudul,
+                showBiodataHeader: currentSheet.showBiodataHeader !== undefined ? currentSheet.showBiodataHeader : tpl.showBiodataHeader,
+                fitToPage: currentSheet.fitToPage !== undefined ? currentSheet.fitToPage : tpl.fitToPage,
+                fitWidthPages: currentSheet.fitWidthPages !== undefined ? currentSheet.fitWidthPages : tpl.fitWidthPages,
+                fitHeightPages: currentSheet.fitHeightPages !== undefined ? currentSheet.fitHeightPages : tpl.fitHeightPages,
+                repeatHeaderRows: currentSheet.repeatHeaderRows !== undefined ? currentSheet.repeatHeaderRows : tpl.repeatHeaderRows,
+                paperSize: currentSheet.paperSize || tpl.paperSize,
+                orientation: currentSheet.orientation || tpl.orientation,
+                printScale: currentSheet.printScale !== undefined ? currentSheet.printScale : tpl.printScale,
+                marginMode: currentSheet.marginMode || tpl.marginMode
             };
         }
         const defaultSheet: RaporSheet = {
@@ -639,8 +905,17 @@ export const TabDesainRapor: React.FC = () => {
             rowCount: tpl.rowCount || tpl.cells?.length || 10,
             colCount: tpl.colCount || tpl.cells?.[0]?.length || 8,
             cells: tpl.cells || createInitialGrid(10, 8),
+            customTitle: tpl.customTitle,
             showJudul: tpl.showJudul,
-            paperSize: 'A4'
+            showBiodataHeader: tpl.showBiodataHeader,
+            fitToPage: tpl.fitToPage,
+            fitWidthPages: tpl.fitWidthPages,
+            fitHeightPages: tpl.fitHeightPages,
+            repeatHeaderRows: tpl.repeatHeaderRows,
+            paperSize: tpl.paperSize || 'A4',
+            orientation: tpl.orientation,
+            printScale: tpl.printScale,
+            marginMode: tpl.marginMode
         };
         return {
             ...tpl,
@@ -661,7 +936,7 @@ export const TabDesainRapor: React.FC = () => {
             colCount: tpl.colCount,
             cells: tpl.cells,
             showJudul: tpl.showJudul,
-            paperSize: 'A4' as const
+            paperSize: (tpl.paperSize || 'A4') as 'A4' | 'F4'
         }];
 
         const idx = sheets.findIndex(s => s.id === sheetId);
@@ -675,8 +950,12 @@ export const TabDesainRapor: React.FC = () => {
                 showJudul: tpl.showJudul !== undefined ? tpl.showJudul : sheets[idx].showJudul,
                 showBiodataHeader: tpl.showBiodataHeader !== undefined ? tpl.showBiodataHeader : sheets[idx].showBiodataHeader,
                 fitToPage: tpl.fitToPage !== undefined ? tpl.fitToPage : sheets[idx].fitToPage,
+                fitWidthPages: tpl.fitWidthPages !== undefined ? tpl.fitWidthPages : sheets[idx].fitWidthPages,
+                fitHeightPages: tpl.fitHeightPages !== undefined ? tpl.fitHeightPages : sheets[idx].fitHeightPages,
+                repeatHeaderRows: tpl.repeatHeaderRows !== undefined ? tpl.repeatHeaderRows : sheets[idx].repeatHeaderRows,
                 paperSize: tpl.paperSize || sheets[idx].paperSize,
-                printScale: tpl.printScale || sheets[idx].printScale,
+                orientation: tpl.orientation || sheets[idx].orientation,
+                printScale: tpl.printScale !== undefined ? tpl.printScale : sheets[idx].printScale,
                 marginMode: tpl.marginMode || sheets[idx].marginMode
             };
         } else {
@@ -690,7 +969,11 @@ export const TabDesainRapor: React.FC = () => {
                 showJudul: tpl.showJudul,
                 showBiodataHeader: tpl.showBiodataHeader,
                 fitToPage: tpl.fitToPage,
+                fitWidthPages: tpl.fitWidthPages,
+                fitHeightPages: tpl.fitHeightPages,
+                repeatHeaderRows: tpl.repeatHeaderRows,
                 paperSize: tpl.paperSize || 'A4',
+                orientation: tpl.orientation,
                 printScale: tpl.printScale,
                 marginMode: tpl.marginMode
             });
@@ -1033,7 +1316,11 @@ export const TabDesainRapor: React.FC = () => {
             showJudul: targetSheet.showJudul,
             showBiodataHeader: targetSheet.showBiodataHeader,
             fitToPage: targetSheet.fitToPage,
+            fitWidthPages: targetSheet.fitWidthPages,
+            fitHeightPages: targetSheet.fitHeightPages,
+            repeatHeaderRows: targetSheet.repeatHeaderRows,
             paperSize: targetSheet.paperSize,
+            orientation: targetSheet.orientation,
             printScale: targetSheet.printScale,
             marginMode: targetSheet.marginMode
         });
@@ -1083,13 +1370,12 @@ export const TabDesainRapor: React.FC = () => {
         const newSheetId = 'sheet_' + Date.now();
         const newSheetName = `${targetSheet.name} (Salinan)`;
         const newSheet: RaporSheet = {
+            ...targetSheet,
             id: newSheetId,
             name: newSheetName,
             rowCount: targetSheet.rowCount,
             colCount: targetSheet.colCount,
-            cells: clonedCells,
-            paperSize: targetSheet.paperSize,
-            orientation: targetSheet.orientation
+            cells: clonedCells
         };
 
         const sheets = [...(synced.sheets || []), newSheet];
@@ -1101,7 +1387,18 @@ export const TabDesainRapor: React.FC = () => {
             activeSheetId: newSheetId,
             cells: clonedCells,
             rowCount: targetSheet.rowCount,
-            colCount: targetSheet.colCount
+            colCount: targetSheet.colCount,
+            customTitle: newSheet.customTitle,
+            showJudul: newSheet.showJudul,
+            showBiodataHeader: newSheet.showBiodataHeader,
+            fitToPage: newSheet.fitToPage,
+            fitWidthPages: newSheet.fitWidthPages,
+            fitHeightPages: newSheet.fitHeightPages,
+            repeatHeaderRows: newSheet.repeatHeaderRows,
+            paperSize: newSheet.paperSize,
+            orientation: newSheet.orientation,
+            printScale: newSheet.printScale,
+            marginMode: newSheet.marginMode
         });
         showToast(`Lembar "${targetSheet.name}" berhasil digandakan.`, 'success');
     };
@@ -4154,20 +4451,70 @@ export const TabDesainRapor: React.FC = () => {
         return activeSheets.find(s => s.id === (activeSheetId || activeTemplate?.activeSheetId)) || activeSheets[0];
     }, [activeSheets, activeSheetId, activeTemplate]);
 
-    const paperFormat = curSheet?.paperSize || activeTemplate?.paperSize || 'A4';
-    // Printable height estimation at 96 DPI: A4 is 297mm (printable ~980px); F4 is 330mm (printable ~1100px)
-    const pageBreakThresholdPx = paperFormat === 'F4' ? 1100 : 980;
+    const curPageSetup = useMemo(
+        () =>
+            normalizeRaporPageSetup({
+                paperSize: curSheet?.paperSize || activeTemplate?.paperSize,
+                orientation: curSheet?.orientation || activeTemplate?.orientation,
+                marginMode: curSheet?.marginMode || activeTemplate?.marginMode,
+                fitToPage: curSheet?.fitToPage ?? activeTemplate?.fitToPage,
+                fitWidthPages: curSheet?.fitWidthPages ?? activeTemplate?.fitWidthPages,
+                fitHeightPages: curSheet?.fitHeightPages ?? activeTemplate?.fitHeightPages,
+                printScale: curSheet?.printScale ?? activeTemplate?.printScale,
+                repeatHeaderRows: curSheet?.repeatHeaderRows ?? activeTemplate?.repeatHeaderRows
+            }),
+        [curSheet, activeTemplate]
+    );
+
+    const curPaperMetrics = useMemo(
+        () => getRaporPaperMetrics(curPageSetup.paperSize, curPageSetup.orientation, curPageSetup.marginMode),
+        [curPageSetup.paperSize, curPageSetup.orientation, curPageSetup.marginMode]
+    );
+
+    const paperFormat = curPageSetup.paperSize;
+    const pageBreakThresholdPx = curPaperMetrics.availableH;
 
     const rowHeightsList = useMemo(() => {
         if (!activeTemplate) return [];
         return Array.from({ length: activeTemplate.rowCount }).map((_, rIdx) => getRowHeight(rIdx));
     }, [activeTemplate]);
 
+    const colWidthsList = useMemo(() => {
+        if (!activeTemplate) return [];
+        return Array.from({ length: activeTemplate.colCount }).map((_, cIdx) => getColWidth(cIdx));
+    }, [activeTemplate]);
+
     const totalDesignHeight = useMemo(() => {
         return rowHeightsList.reduce((acc, h) => acc + h, 0);
     }, [rowHeightsList]);
 
+    const canvasPaginatedLayout = useMemo(() => {
+        if (!activeTemplate) return null;
+        const estHeaderH = (curSheet?.customTitle || curSheet?.showJudul) ? 50 : 0;
+        return computePaginatedRaporLayout({
+            cells: activeTemplate.cells,
+            colWidths: colWidthsList,
+            rowHeights: rowHeightsList,
+            headerHeight: estHeaderH,
+            paperMetrics: curPaperMetrics,
+            pageSetup: curPageSetup
+        });
+    }, [activeTemplate, colWidthsList, rowHeightsList, curSheet?.customTitle, curSheet?.showJudul, curPaperMetrics, curPageSetup]);
+
     const pageBreakRowIndices = useMemo(() => {
+        if (!canvasPaginatedLayout) return [];
+        if (canvasPaginatedLayout.pages.length > 1) {
+            const seen = new Set<number>();
+            const breaks: number[] = [];
+            for (const pg of canvasPaginatedLayout.pages) {
+                if (pg.vIndex > 0 && pg.startRow > 0 && !seen.has(pg.startRow)) {
+                    seen.add(pg.startRow);
+                    breaks.push(pg.startRow);
+                }
+            }
+            return breaks;
+        }
+        // In Fit 1 Page mode, still show natural 100% height reference line if total height exceeds 1 sheet
         const breaks: number[] = [];
         let cum = 0;
         let page = 1;
@@ -4179,7 +4526,7 @@ export const TabDesainRapor: React.FC = () => {
             }
         });
         return breaks;
-    }, [rowHeightsList, pageBreakThresholdPx]);
+    }, [canvasPaginatedLayout, rowHeightsList, pageBreakThresholdPx]);
 
     const updateActiveSheet = (updates: Partial<RaporSheet>) => {
         if (!activeTemplate) return;
@@ -4197,11 +4544,32 @@ export const TabDesainRapor: React.FC = () => {
             showJudul: updates.showJudul !== undefined ? updates.showJudul : activeTemplate.showJudul,
             showBiodataHeader: updates.showBiodataHeader !== undefined ? updates.showBiodataHeader : activeTemplate.showBiodataHeader,
             fitToPage: updates.fitToPage !== undefined ? updates.fitToPage : activeTemplate.fitToPage,
-            paperSize: updates.paperSize || activeTemplate.paperSize,
-            printScale: updates.printScale || activeTemplate.printScale,
-            marginMode: updates.marginMode || activeTemplate.marginMode
+            fitWidthPages: updates.fitWidthPages !== undefined ? updates.fitWidthPages : activeTemplate.fitWidthPages,
+            fitHeightPages: updates.fitHeightPages !== undefined ? updates.fitHeightPages : activeTemplate.fitHeightPages,
+            repeatHeaderRows: updates.repeatHeaderRows !== undefined ? updates.repeatHeaderRows : activeTemplate.repeatHeaderRows,
+            paperSize: updates.paperSize !== undefined ? updates.paperSize : activeTemplate.paperSize,
+            orientation: updates.orientation !== undefined ? updates.orientation : activeTemplate.orientation,
+            printScale: updates.printScale !== undefined ? updates.printScale : activeTemplate.printScale,
+            marginMode: updates.marginMode !== undefined ? updates.marginMode : activeTemplate.marginMode
         };
         setActiveTemplate(updatedTpl);
+    };
+
+    const applyActiveSheetPageSetupPatch = (patch: Partial<RaporPageSetupInput>) => {
+        const next = normalizeRaporPageSetup({
+            ...curPageSetup,
+            ...patch
+        });
+        updateActiveSheet({
+            paperSize: next.paperSize,
+            orientation: next.orientation,
+            marginMode: next.marginMode,
+            fitToPage: next.fitToPage,
+            fitWidthPages: next.fitWidthPages,
+            fitHeightPages: next.fitHeightPages,
+            printScale: next.printScale,
+            repeatHeaderRows: next.repeatHeaderRows
+        });
     };
 
     const getTemplateSimulatedHierarchy = () => {
@@ -4310,6 +4678,40 @@ export const TabDesainRapor: React.FC = () => {
             }
             if (upperVal === '$SEMESTER_ANGKA') {
                 return formatText(ay.semester === 'Genap' ? '2' : '1');
+            }
+            if (
+                upperVal.includes('TITIMANGSA') ||
+                upperVal.includes('TANGGAL_RAPOR') ||
+                upperVal.includes('TANGGAL_DOKUMEN') ||
+                upperVal.includes('TANGGAL_MASEHI') ||
+                upperVal.includes('TANGGAL_HIJRIAH') ||
+                upperVal.includes('KOTA_TANGGAL') ||
+                upperVal === '$TEMPAT_RAPOR' ||
+                upperVal === '$KOTA_PONPES'
+            ) {
+                const simDate = parseLocalDateSafe(settings.tanggalRaporDefault) || new Date();
+                const kotaSim = resolveTempatRapor(settings, 'Pesantren');
+                const masehiSim = formatDate(simDate);
+                const hijriSimInfo = getHijriDate(simDate, settings.hijriAdjustment || 0);
+                const hijriSim = settings.manualHijriRaporDefault?.trim()
+                    ? ensureHijriSuffix(settings.manualHijriRaporDefault)
+                    : (hijriSimInfo.full ? `${hijriSimInfo.full} H` : '');
+                const gabunganSim = hijriSim ? `${hijriSim} / ${masehiSim} M` : masehiSim;
+                const docDateSim = formatTanggalDokumen(simDate, {
+                    formatMode: settings.formatTanggalRaporDefault || 'masehi',
+                    hijriAdjustment: settings.hijriAdjustment || 0,
+                    manualHijri: settings.manualHijriRaporDefault
+                });
+
+                if (upperVal === '$TEMPAT_RAPOR' || upperVal === '$KOTA_PONPES') return formatText(kotaSim);
+                if (upperVal === '$TITIMANGSA' || upperVal === '$KOTA_TANGGAL_DOKUMEN') return formatText(`${kotaSim}, ${docDateSim}`);
+                if (upperVal === '$TITIMANGSA_GABUNGAN' || upperVal === '$KOTA_TANGGAL_HIJRIAH_MASEHI') return formatText(`${kotaSim}, ${gabunganSim}`);
+                if (upperVal === '$TITIMANGSA_MASEHI' || upperVal === '$KOTA_TANGGAL') return formatText(`${kotaSim}, ${masehiSim}`);
+                if (upperVal === '$TITIMANGSA_HIJRIAH' || upperVal === '$KOTA_TANGGAL_HIJRIAH') return formatText(`${kotaSim}, ${hijriSim || masehiSim}`);
+                if (upperVal === '$TANGGAL_RAPOR' || upperVal === '$TANGGAL_DOKUMEN') return formatText(docDateSim);
+                if (upperVal === '$TANGGAL_RAPOR_GABUNGAN' || upperVal === '$TANGGAL_HIJRIAH_MASEHI') return formatText(gabunganSim);
+                if (upperVal === '$TANGGAL_RAPOR_MASEHI' || upperVal === '$TANGGAL_MASEHI') return formatText(masehiSim);
+                if (upperVal === '$TANGGAL_RAPOR_HIJRIAH' || upperVal === '$TANGGAL_HIJRIAH') return formatText(hijriSim || masehiSim);
             }
             if (upperVal === '$NAMA_PONPES' && settings.namaPonpes) {
                 return formatText(settings.namaPonpes);
@@ -5686,13 +6088,17 @@ export const TabDesainRapor: React.FC = () => {
                                             {isPageBreak && (
                                                 <tr className="pointer-events-none select-none bg-rose-500/10">
                                                     <td colSpan={(activeTemplate?.colCount || 1) + 1} className="p-0 border-y-2 border-dashed border-rose-500">
-                                                        <div className="bg-rose-100 text-rose-900 text-[10px] font-black py-1 px-3 flex items-center justify-between">
+                                                        <div className="bg-rose-100 text-rose-900 text-[10px] font-black py-1 px-3 flex items-center justify-between gap-2">
                                                             <span className="flex items-center gap-1.5">
                                                                 <i className="bi bi-scissors rotate-90 text-rose-600"></i>
-                                                                <span>✂ BATAS HALAMAN ({paperFormat}: ~{pageBreakThresholdPx}px)</span>
+                                                                <span>
+                                                                    BATAS HALAMAN ({paperFormat}{curPageSetup.orientation === 'landscape' ? ' Landscape' : ''})
+                                                                </span>
                                                             </span>
-                                                            <span className="text-[9px] font-bold text-rose-700 bg-white/90 px-2 py-0.5 rounded">
-                                                                Baris ke-{rIdx + 1} akan masuk ke Halaman Berikutnya
+                                                            <span className="text-[9px] font-bold text-rose-700 bg-white/90 px-2 py-0.5 rounded tabular-nums">
+                                                                {canvasPaginatedLayout?.isSinglePageFit
+                                                                    ? `Batas 100% — Otomatis diperkecil ke ${Math.round((canvasPaginatedLayout?.scale || 1) * 100)}% (Fit 1 Halaman)`
+                                                                    : `Mulai Halaman ${(pageBreakRowIndices.indexOf(rIdx) + 2)} (Baris ke-${rIdx + 1} di-oper ke halaman baru)`}
                                                             </span>
                                                         </div>
                                                     </td>
@@ -6552,6 +6958,36 @@ export const TabDesainRapor: React.FC = () => {
                                             🔒 Kunci $ (F4)
                                         </button>
                                     </div>
+                                    <div className="pt-1 border-t border-slate-100 space-y-1">
+                                        <span className="block text-[10px] font-semibold text-slate-500">Sisip Cepat Titimangsa &amp; Tanggal Rapor:</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {([
+                                                { expr: '=TITIMANGSA()', label: '=TITIMANGSA()', desc: 'Tempat & Tanggal sesuai pengaturan di Cetak Rapor' },
+                                                { expr: '=TITIMANGSA_GABUNGAN()', label: 'Titimangsa Hijriah+Masehi', desc: 'Contoh: Banyumas, 5 Muharram 1448 H / 20 Juni 2026 M' },
+                                                { expr: '=TITIMANGSA_MASEHI()', label: 'Titimangsa Masehi', desc: 'Contoh: Banyumas, 20 Juni 2026' },
+                                                { expr: '=TITIMANGSA_HIJRIAH()', label: 'Titimangsa Hijriah', desc: 'Contoh: Banyumas, 5 Muharram 1448 H' },
+                                                { expr: '=TEMPAT_RAPOR()', label: 'Tempat Saja', desc: 'Nama kota/tempat rapor saja (Contoh: Banyumas)' },
+                                                { expr: '=TANGGAL_RAPOR_GABUNGAN()', label: 'Tgl Gabungan Saja', desc: 'Tanggal Hijriah & Masehi tanpa nama kota' },
+                                                { expr: '=TANGGAL_RAPOR_HIJRIAH()', label: 'Tgl Hijriah Saja', desc: 'Tanggal Hijriah saja tanpa nama kota' },
+                                                { expr: '=TANGGAL_RAPOR_MASEHI()', label: 'Tgl Masehi Saja', desc: 'Tanggal Masehi saja tanpa nama kota' }
+                                            ] as const).map(item => (
+                                                <button
+                                                    key={item.expr}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        formulaPickedSpanRef.current = null;
+                                                        updateActiveCell({ value: item.expr });
+                                                        setActiveFormulaSource('sidebar');
+                                                        activeFormulaSourceRef.current = 'sidebar';
+                                                    }}
+                                                    className="px-1.5 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded text-[10px] font-mono font-semibold transition-colors"
+                                                    title={`${item.expr} — ${item.desc}`}
+                                                >
+                                                    {item.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                     <p className="text-[10px] text-emerald-700 bg-emerald-50/80 border border-emerald-200 rounded px-2 py-1 leading-snug">
                                         <i className="bi bi-cursor-fill mr-1"></i>
                                         <strong>Seperti Excel:</strong> Blok sel di tabel untuk menyisipkan rentang, tekan <strong>F4</strong> untuk mengunci <code>$D$6 / D$6 / $D6</code>, lalu tarik titik sudut sel ke bawah/samping untuk melanjutkan rumus!
@@ -6617,6 +7053,10 @@ export const TabDesainRapor: React.FC = () => {
                                             <li><code>=UPPER($NAMA)</code> / <code>=LOWER($NAMA)</code> / <code>=PROPER($NAMA)</code> : Format HURUF BESAR / kecil / Judul</li>
                                             <li><code>=TAHUN_AJAR()</code> / <code>=TAHUN_AJAR_MASEHI()</code> / <code>=TAHUN_AJAR_HIJRIAH()</code> / <code>=TAHUN_AJAR_GABUNGAN()</code> : Tahun Ajaran</li>
                                             <li><code>=SEMESTER()</code> / <code>$SEMESTER</code> : Semester Aktif</li>
+                                            <li><code>=TITIMANGSA()</code> : Tempat &amp; tanggal rapor sesuai pengaturan di Cetak Rapor (atau mode <code>&quot;gabungan&quot;</code>, <code>&quot;masehi&quot;</code>, <code>&quot;hijriah&quot;</code>, <code>&quot;dua_baris&quot;</code>, <code>&quot;arab&quot;</code>)</li>
+                                            <li><code>=TITIMANGSA_GABUNGAN()</code> / <code>=TITIMANGSA_MASEHI()</code> / <code>=TITIMANGSA_HIJRIAH()</code> : Titimangsa gabungan Hijriah+Masehi atau masing-masing</li>
+                                            <li><code>=TEMPAT_RAPOR()</code> : Nama tempat/kota penandatanganan rapor saja</li>
+                                            <li><code>=TANGGAL_RAPOR()</code> / <code>=TANGGAL_RAPOR_GABUNGAN()</code> / <code>=TANGGAL_RAPOR_MASEHI()</code> / <code>=TANGGAL_RAPOR_HIJRIAH()</code> : Tanggal rapor saja (tanpa kota)</li>
                                             <li><code>$NAMA_WALI_KELAS</code>, <code>$NIP_WALI_KELAS</code>, <code>$TTD_WALI_KELAS</code> : Wali Kelas</li>
                                             <li><code>$NAMA_MUDIR_MARHALAH</code>, <code>$NIP_MUDIR_MARHALAH</code>, <code>$TTD_MUDIR_MARHALAH</code> : Mudir Marhalah</li>
                                             <li><code>$NAMA_MUDIR</code>, <code>$NIP_MUDIR</code>, <code>$TTD_MUDIR</code> : Mudir Aam / Pimpinan</li>
@@ -7288,25 +7728,156 @@ export const TabDesainRapor: React.FC = () => {
                             </div>
                         )}
 
-                        {/* 4. Fit to 1 Page */}
-                        <div className="pt-2 border-t border-slate-200 space-y-2">
-                            <label className="flex items-center justify-between cursor-pointer font-bold text-xs text-slate-800">
-                                <span className="flex items-center gap-1.5">
-                                    <i className="bi bi-file-earmark-check-fill text-indigo-600"></i>
-                                    <span>Paksa Pas 1 Muka (Fit to 1 Page):</span>
+                        {/* 4. Tata Letak Kertas & Penyesuaian Halaman (Ala Excel) */}
+                        <div className="pt-2 border-t border-slate-200 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
+                                    <i className="bi bi-aspect-ratio text-indigo-600"></i>
+                                    <span>Ukuran Kertas &amp; Fit Halaman</span>
                                 </span>
-                                <input
-                                    type="checkbox"
-                                    checked={activeTemplate?.fitToPage !== false}
+                                {canvasPaginatedLayout && (
+                                    <span className="text-[10px] font-semibold text-teal-700 tabular-nums">
+                                        {canvasPaginatedLayout.pages.length} Hal · {Math.round(canvasPaginatedLayout.scale * 100)}%
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Kertas, Orientasi & Margin */}
+                            <div className="grid grid-cols-3 gap-1.5">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Kertas</label>
+                                    <select
+                                        value={curPageSetup.paperSize}
+                                        onChange={e => applyActiveSheetPageSetupPatch({ paperSize: e.target.value as 'A4' | 'F4' })}
+                                        className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold bg-white text-slate-800"
+                                    >
+                                        <option value="A4">A4</option>
+                                        <option value="F4">F4 / Folio</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Orientasi</label>
+                                    <select
+                                        value={curPageSetup.orientation}
+                                        onChange={e => applyActiveSheetPageSetupPatch({ orientation: e.target.value as 'portrait' | 'landscape' })}
+                                        className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold bg-white text-slate-800"
+                                    >
+                                        <option value="portrait">Portrait</option>
+                                        <option value="landscape">Landscape</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Margin</label>
+                                    <select
+                                        value={curPageSetup.marginMode}
+                                        onChange={e => applyActiveSheetPageSetupPatch({ marginMode: e.target.value as 'normal' | 'narrow' | 'none' })}
+                                        className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold bg-white text-slate-800"
+                                    >
+                                        <option value="normal">Normal</option>
+                                        <option value="narrow">Sempit</option>
+                                        <option value="none">Tipis</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Preset Penyesuaian Halaman Ala Excel */}
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Mode Skala &amp; Pemecahan Halaman</label>
+                                <select
+                                    value={curPageSetup.preset}
                                     onChange={e => {
-                                        const val = e.target.checked;
-                                        updateActiveSheet({ fitToPage: val });
+                                        const nextPreset = e.target.value as RaporPageScalePreset;
+                                        applyActiveSheetPageSetupPatch(buildPageSetupStateFromPreset(nextPreset, curPageSetup));
                                     }}
-                                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                                />
-                            </label>
+                                    className="w-full border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-bold bg-indigo-50/40 text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                >
+                                    <option value="fit_1_page">Fit Dokumen ke 1 Halaman (Pas 1 Muka)</option>
+                                    <option value="fit_width_1">Fit Lebar ke 1 Halaman (Sisa Bawah Oper ke Hal. 2+)</option>
+                                    <option value="fit_height_1">Fit Tinggi ke 1 Halaman (Lebar Mengikuti)</option>
+                                    <option value="fit_custom">Fit Lebar ke X &amp; Tinggi ke Y Halaman...</option>
+                                    <option value="manual_scale">Skala Persentase Manual (%)</option>
+                                </select>
+                            </div>
+
+                            {/* Kontrol Detail Fit Lebar X & Fit Tinggi Y atau Skala % */}
+                            {curPageSetup.preset === 'manual_scale' ? (
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Skala Cetak Manual (%)</label>
+                                    <select
+                                        value={String(typeof curPageSetup.printScale === 'number' ? curPageSetup.printScale : 100)}
+                                        onChange={e => {
+                                            const val = parseInt(e.target.value, 10) || 100;
+                                            applyActiveSheetPageSetupPatch({
+                                                printScale: val,
+                                                fitWidthPages: 'auto',
+                                                fitHeightPages: 'auto'
+                                            });
+                                        }}
+                                        className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold bg-white text-slate-800 tabular-nums"
+                                    >
+                                        <option value="100">100% (Ukuran Asli — Oper Otomatis)</option>
+                                        <option value="95">95%</option>
+                                        <option value="90">90%</option>
+                                        <option value="85">85%</option>
+                                        <option value="80">80%</option>
+                                        <option value="75">75%</option>
+                                        <option value="70">70%</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Fit Lebar ke</label>
+                                        <select
+                                            value={String(curPageSetup.fitWidthPages)}
+                                            onChange={e => {
+                                                const v = e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10);
+                                                applyActiveSheetPageSetupPatch({ printScale: 'auto', fitWidthPages: v });
+                                            }}
+                                            className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold bg-white text-slate-800"
+                                        >
+                                            <option value="auto">Otomatis</option>
+                                            <option value="1">1 Halaman</option>
+                                            <option value="2">2 Halaman</option>
+                                            <option value="3">3 Halaman</option>
+                                            <option value="4">4 Halaman</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Fit Tinggi ke</label>
+                                        <select
+                                            value={String(curPageSetup.fitHeightPages)}
+                                            onChange={e => {
+                                                const v = e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10);
+                                                applyActiveSheetPageSetupPatch({ printScale: 'auto', fitHeightPages: v });
+                                            }}
+                                            className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold bg-white text-slate-800"
+                                        >
+                                            <option value="auto">Otomatis (Oper Hal.)</option>
+                                            <option value="1">1 Halaman</option>
+                                            <option value="2">2 Halaman</option>
+                                            <option value="3">3 Halaman</option>
+                                            <option value="4">4 Halaman</option>
+                                            <option value="5">5 Halaman</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+
+                            {curPageSetup.fitHeightPages !== 1 && (
+                                <label className="flex items-center justify-between cursor-pointer text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                                    <span>Ulangi baris judul tabel di Hal. 2+</span>
+                                    <input
+                                        type="checkbox"
+                                        checked={curPageSetup.repeatHeaderRows}
+                                        onChange={e => applyActiveSheetPageSetupPatch({ repeatHeaderRows: e.target.checked })}
+                                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                    />
+                                </label>
+                            )}
+
                             <p className="text-[10.5px] text-slate-500 leading-snug">
-                                Memaksa lembar ini pas tepat dalam 1 lembar cetak tanpa meluber ke halaman 2 seperti setelan cetak di Excel.
+                                Saat <strong>Fit Tinggi</strong> diatur ke <em>Otomatis</em> atau <em>2+ Halaman</em>, sisa baris bagian bawah otomatis di-oper rapi ke lembar halaman berikutnya tanpa menggantung.
                             </p>
                         </div>
 
@@ -7527,7 +8098,7 @@ export const TabDesainRapor: React.FC = () => {
                     santri: previewSantriObj,
                     record: activeRecord,
                     cohortRecords: previewCohortRecords,
-                    targetDate: new Date(),
+                    targetDate: parseLocalDateSafe(settings.tanggalRaporDefault) || new Date(),
                     extraVars: baseExtraVars,
                     calculation: {
                         totalNilai: sumVal || 850,
@@ -7559,84 +8130,338 @@ export const TabDesainRapor: React.FC = () => {
                     });
                 }
 
+                const visiblePreviewSheets = activeSheets.filter(
+                    sh => previewSheetId === 'all' || previewSheetId === sh.id
+                );
+                const targetSetupSheet = previewSheetId !== 'all'
+                    ? (activeSheets.find(sh => sh.id === previewSheetId) || curSheet)
+                    : curSheet;
+                const modalPageSetup = normalizeRaporPageSetup({
+                    paperSize: targetSetupSheet?.paperSize || activeTemplate.paperSize,
+                    orientation: targetSetupSheet?.orientation || activeTemplate.orientation,
+                    marginMode: targetSetupSheet?.marginMode || activeTemplate.marginMode,
+                    fitToPage: targetSetupSheet?.fitToPage ?? activeTemplate.fitToPage,
+                    fitWidthPages: targetSetupSheet?.fitWidthPages ?? activeTemplate.fitWidthPages,
+                    fitHeightPages: targetSetupSheet?.fitHeightPages ?? activeTemplate.fitHeightPages,
+                    printScale: targetSetupSheet?.printScale ?? activeTemplate.printScale,
+                    repeatHeaderRows: targetSetupSheet?.repeatHeaderRows ?? activeTemplate.repeatHeaderRows
+                });
+
+                const applyModalPageSetup = (patch: Partial<RaporPageSetupInput>) => {
+                    const next = normalizeRaporPageSetup({ ...modalPageSetup, ...patch });
+                    const sheetUpdates: Partial<RaporSheet> = {
+                        paperSize: next.paperSize,
+                        orientation: next.orientation,
+                        marginMode: next.marginMode,
+                        fitToPage: next.fitToPage,
+                        fitWidthPages: next.fitWidthPages,
+                        fitHeightPages: next.fitHeightPages,
+                        printScale: next.printScale,
+                        repeatHeaderRows: next.repeatHeaderRows
+                    };
+                    if (previewSheetId === 'all') {
+                        const updatedSheets = activeSheets.map(s => ({ ...s, ...sheetUpdates }));
+                        setActiveTemplate({
+                            ...activeTemplate,
+                            ...sheetUpdates,
+                            sheets: updatedSheets
+                        });
+                    } else {
+                        const updatedSheets = activeSheets.map(s =>
+                            s.id === previewSheetId ? { ...s, ...sheetUpdates } : s
+                        );
+                        const isAlsoActive = previewSheetId === (activeSheetId || activeTemplate.activeSheetId);
+                        setActiveTemplate({
+                            ...activeTemplate,
+                            ...(isAlsoActive ? sheetUpdates : {}),
+                            sheets: updatedSheets
+                        });
+                    }
+                };
+
                 return (
                     <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[80] flex justify-center items-center p-0 sm:p-4">
-                        <div className="bg-white sm:rounded-2xl shadow-2xl w-full max-w-6xl h-full sm:h-[92vh] flex flex-col overflow-hidden">
-                            <div className="p-3 sm:p-4 border-b border-slate-200 flex flex-wrap justify-between items-center bg-slate-50 gap-2 shrink-0">
-                                <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-grow min-w-0">
-                                    <h3 className="text-sm sm:text-base font-black text-slate-800 shrink-0 flex items-center gap-1.5">
-                                        <i className="bi bi-printer text-teal-600"></i>
-                                        <span>Preview Cetak</span>
-                                    </h3>
-                                    <div className="flex bg-slate-200/80 p-0.5 sm:p-1 rounded-xl text-xs font-bold overflow-x-auto no-scrollbar max-w-full">
-                                        <button
-                                            type="button"
-                                            onClick={() => setPreviewSheetId('all')}
-                                            className={`px-2.5 py-1 rounded-lg transition-all shrink-0 ${previewSheetId === 'all' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
-                                        >
-                                            Semua ({activeSheets.length})
-                                        </button>
-                                        {activeSheets.map((sh) => (
+                        <div className="bg-white sm:rounded-2xl shadow-2xl w-full max-w-6xl h-full sm:h-[94vh] flex flex-col overflow-hidden">
+                            <div className="p-3 sm:p-4 border-b border-slate-200 bg-slate-50 flex flex-col gap-2.5 shrink-0">
+                                {/* Row 1: Title, Sheet Filter, Santri Selector & Close */}
+                                <div className="flex flex-wrap justify-between items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-grow min-w-0">
+                                        <h3 className="text-sm sm:text-base font-black text-slate-800 shrink-0 flex items-center gap-1.5">
+                                            <i className="bi bi-printer text-teal-600"></i>
+                                            <span>Preview Cetak</span>
+                                        </h3>
+                                        <div className="flex bg-slate-200/80 p-0.5 sm:p-1 rounded-xl text-xs font-bold overflow-x-auto no-scrollbar max-w-full">
                                             <button
-                                                key={sh.id}
                                                 type="button"
-                                                onClick={() => setPreviewSheetId(sh.id)}
-                                                className={`px-2.5 py-1 rounded-lg transition-all shrink-0 ${previewSheetId === sh.id ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+                                                onClick={() => setPreviewSheetId('all')}
+                                                className={`px-2.5 py-1 rounded-lg transition-all shrink-0 whitespace-nowrap ${previewSheetId === 'all' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
                                             >
-                                                {sh.name}
+                                                Semua ({activeSheets.length})
                                             </button>
-                                        ))}
-                                    </div>
+                                            {activeSheets.map((sh) => (
+                                                <button
+                                                    key={sh.id}
+                                                    type="button"
+                                                    onClick={() => setPreviewSheetId(sh.id)}
+                                                    className={`px-2.5 py-1 rounded-lg transition-all shrink-0 whitespace-nowrap ${previewSheetId === sh.id ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+                                                >
+                                                    {sh.name}
+                                                </button>
+                                            ))}
+                                        </div>
 
-                                    {/* Live Santri Data Selector */}
-                                    <div className="flex flex-wrap items-center gap-2 ml-auto sm:ml-2">
-                                        <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-2.5 py-1 shadow-2xs">
-                                            <i className="bi bi-person-check-fill text-teal-600 text-xs"></i>
-                                            <select
-                                                value={previewSantriId}
-                                                onChange={(e) => setPreviewSantriId(e.target.value)}
-                                                className="text-xs font-bold text-slate-700 bg-transparent focus:outline-none max-w-[210px] sm:max-w-[260px]"
-                                                title="Uji tampilan desain dengan data santri asli dari database"
+                                        {/* Live Santri Data Selector */}
+                                        <div className="flex flex-wrap items-center gap-2 ml-auto sm:ml-2">
+                                            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-2.5 py-1 shadow-2xs">
+                                                <i className="bi bi-person-check-fill text-teal-600 text-xs"></i>
+                                                <select
+                                                    value={previewSantriId}
+                                                    onChange={(e) => setPreviewSantriId(e.target.value)}
+                                                    className="text-xs font-bold text-slate-700 bg-transparent focus:outline-none max-w-[200px] sm:max-w-[240px]"
+                                                    title="Uji tampilan desain dengan data santri asli dari database"
+                                                >
+                                                    <option value="simulasi">Data Simulasi (Ahmad Fauzan)</option>
+                                                    {effectiveSantriOptions.slice(0, 150).map(s => {
+                                                        const rName = settings.rombel.find(r => r.id === s.rombelId)?.nama || '-';
+                                                        const hasRec = raporRecords.some(rec => rec.santriId === s.id);
+                                                        return (
+                                                            <option key={s.id} value={String(s.id)}>
+                                                                {s.namaLengkap} ({rName}){hasRec ? ' ✓ Ada Nilai' : ''}
+                                                            </option>
+                                                        );
+                                                    })}
+                                                </select>
+                                            </div>
+
+                                            {selectedRealSantri && (
+                                                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-xl cursor-pointer select-none whitespace-nowrap">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={previewFallbackDummyGrades}
+                                                        onChange={(e) => setPreviewFallbackDummyGrades(e.target.checked)}
+                                                        className="rounded text-teal-600 focus:ring-teal-500"
+                                                    />
+                                                    <span>Isi contoh jika kosong</span>
+                                                </label>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setIsDesignPreviewOpen(false)} 
+                                        className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors shrink-0"
+                                        title="Tutup"
+                                    >
+                                        <i className="bi bi-x-lg text-sm"></i>
+                                    </button>
+                                </div>
+
+                                {/* Row 2: Excel-Style Page Fit Controls, Paper Size, Zoom & Print PDF */}
+                                <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        {/* Zoom */}
+                                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-1.5 h-[32px] shadow-2xs text-xs shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewModalZoom(z => Math.max(0.5, Number((z - 0.1).toFixed(1))))}
+                                                disabled={previewModalZoom <= 0.5}
+                                                className="p-1 text-slate-500 hover:text-slate-800 disabled:opacity-30"
+                                                title="Perkecil tampilan"
                                             >
-                                                <option value="simulasi">Data Simulasi (Ahmad Fauzan)</option>
-                                                {effectiveSantriOptions.slice(0, 150).map(s => {
-                                                    const rName = settings.rombel.find(r => r.id === s.rombelId)?.nama || '-';
-                                                    const hasRec = raporRecords.some(rec => rec.santriId === s.id);
-                                                    return (
-                                                        <option key={s.id} value={String(s.id)}>
-                                                            {s.namaLengkap} ({rName}){hasRec ? ' ✓ Ada Nilai' : ''}
-                                                        </option>
-                                                    );
-                                                })}
+                                                <i className="bi bi-dash-lg"></i>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewModalZoom(1)}
+                                                className="px-1.5 font-black text-slate-700 hover:text-teal-700 text-[11px] tabular-nums"
+                                                title="Reset zoom 100%"
+                                            >
+                                                {Math.round(previewModalZoom * 100)}%
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewModalZoom(z => Math.min(1.6, Number((z + 0.1).toFixed(1))))}
+                                                disabled={previewModalZoom >= 1.6}
+                                                className="p-1 text-slate-500 hover:text-slate-800 disabled:opacity-30"
+                                                title="Perbesar tampilan"
+                                            >
+                                                <i className="bi bi-plus-lg"></i>
+                                            </button>
+                                        </div>
+
+                                        {/* Paper Size & Orientation */}
+                                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 h-[32px] gap-1.5 text-xs shrink-0">
+                                            <select
+                                                value={modalPageSetup.paperSize}
+                                                onChange={e => applyModalPageSetup({ paperSize: e.target.value as 'A4' | 'F4' })}
+                                                className="font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                                                title="Ukuran Kertas"
+                                            >
+                                                <option value="A4">A4</option>
+                                                <option value="F4">F4</option>
+                                            </select>
+                                            <span className="text-slate-300">|</span>
+                                            <select
+                                                value={modalPageSetup.orientation}
+                                                onChange={e => applyModalPageSetup({ orientation: e.target.value as 'portrait' | 'landscape' })}
+                                                className="font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                                                title="Orientasi Kertas"
+                                            >
+                                                <option value="portrait">Portrait</option>
+                                                <option value="landscape">Landscape</option>
                                             </select>
                                         </div>
 
-                                        {selectedRealSantri && (
-                                            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-xl cursor-pointer select-none">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={previewFallbackDummyGrades}
-                                                    onChange={(e) => setPreviewFallbackDummyGrades(e.target.checked)}
-                                                    className="rounded text-teal-600 focus:ring-teal-500"
-                                                />
-                                                <span>Isi contoh angka jika nilai kosong</span>
-                                            </label>
+                                        {/* Preset Fit Mode */}
+                                        <div className="flex items-center bg-indigo-50/70 border border-indigo-200 rounded-xl px-2.5 h-[32px] gap-1.5 text-xs shrink-0">
+                                            <i className="bi bi-aspect-ratio text-indigo-600"></i>
+                                            <select
+                                                value={modalPageSetup.preset}
+                                                onChange={e => {
+                                                    const nextPreset = e.target.value as RaporPageScalePreset;
+                                                    applyModalPageSetup(buildPageSetupStateFromPreset(nextPreset, modalPageSetup));
+                                                }}
+                                                className="font-bold text-indigo-950 bg-transparent focus:outline-none cursor-pointer"
+                                                title="Mode Penyesuaian Halaman (Ala Excel)"
+                                            >
+                                                <option value="fit_1_page">Fit Dokumen ke 1 Halaman</option>
+                                                <option value="fit_width_1">Fit Lebar 1 Hal (Oper Bawah)</option>
+                                                <option value="fit_height_1">Fit Tinggi 1 Hal</option>
+                                                <option value="fit_custom">Fit Lebar × Tinggi Kustom</option>
+                                                <option value="manual_scale">Skala Manual (%)</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Explicit Width x Height Pages OR Manual Scale % */}
+                                        {modalPageSetup.preset === 'manual_scale' ? (
+                                            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2.5 h-[32px] gap-1 text-xs shrink-0">
+                                                <span className="text-slate-500 font-semibold">Skala:</span>
+                                                <select
+                                                    value={String(typeof modalPageSetup.printScale === 'number' ? modalPageSetup.printScale : 100)}
+                                                    onChange={e =>
+                                                        applyModalPageSetup({
+                                                            printScale: parseInt(e.target.value, 10) || 100,
+                                                            fitWidthPages: 'auto',
+                                                            fitHeightPages: 'auto'
+                                                        })
+                                                    }
+                                                    className="font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer tabular-nums"
+                                                >
+                                                    <option value="100">100%</option>
+                                                    <option value="95">95%</option>
+                                                    <option value="90">90%</option>
+                                                    <option value="85">85%</option>
+                                                    <option value="80">80%</option>
+                                                    <option value="75">75%</option>
+                                                    <option value="70">70%</option>
+                                                </select>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2.5 h-[32px] gap-1.5 text-xs shrink-0">
+                                                <span className="text-slate-500 font-semibold whitespace-nowrap">Lebar:</span>
+                                                <select
+                                                    value={String(modalPageSetup.fitWidthPages)}
+                                                    onChange={e =>
+                                                        applyModalPageSetup({
+                                                            printScale: 'auto',
+                                                            fitWidthPages: e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10)
+                                                        })
+                                                    }
+                                                    className="font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                                                    title="Fit lebar ke X halaman"
+                                                >
+                                                    <option value="auto">Auto</option>
+                                                    <option value="1">1 Hal</option>
+                                                    <option value="2">2 Hal</option>
+                                                    <option value="3">3 Hal</option>
+                                                    <option value="4">4 Hal</option>
+                                                </select>
+                                                <span className="text-slate-300">×</span>
+                                                <span className="text-slate-500 font-semibold whitespace-nowrap">Tinggi:</span>
+                                                <select
+                                                    value={String(modalPageSetup.fitHeightPages)}
+                                                    onChange={e =>
+                                                        applyModalPageSetup({
+                                                            printScale: 'auto',
+                                                            fitHeightPages: e.target.value === 'auto' ? 'auto' : parseInt(e.target.value, 10)
+                                                        })
+                                                    }
+                                                    className="font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                                                    title="Fit tinggi ke Y halaman (Auto = oper sisa baris ke halaman selanjutnya)"
+                                                >
+                                                    <option value="auto">Auto (Oper)</option>
+                                                    <option value="1">1 Hal</option>
+                                                    <option value="2">2 Hal</option>
+                                                    <option value="3">3 Hal</option>
+                                                    <option value="4">4 Hal</option>
+                                                    <option value="5">5 Hal</option>
+                                                </select>
+                                            </div>
                                         )}
+
+                                        {modalPageSetup.fitHeightPages !== 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => applyModalPageSetup({ repeatHeaderRows: !modalPageSetup.repeatHeaderRows })}
+                                                className={`h-[32px] px-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1 whitespace-nowrap ${
+                                                    modalPageSetup.repeatHeaderRows
+                                                        ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                                }`}
+                                                title="Ulangi baris judul tabel secara otomatis di halaman ke-2 dan seterusnya"
+                                            >
+                                                <i className="bi bi-layout-three-columns"></i>
+                                                <span>Ulangi Header Tabel</span>
+                                            </button>
+                                        )}
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreviewShowKop(v => !v)}
+                                            className={`h-[32px] px-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1 whitespace-nowrap ${
+                                                previewShowKop
+                                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                            }`}
+                                            title="Simulasikan Kop Resmi Pondok di atas halaman pertama"
+                                        >
+                                            <i className={`bi ${previewShowKop ? 'bi-check-circle-fill text-emerald-600' : 'bi-circle'}`}></i>
+                                            <span>Simulasi Kop</span>
+                                        </button>
                                     </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            printToPdfNative(
+                                                'rapor-design-preview-print-area',
+                                                `Uji_Desain_${(activeTemplate.name || 'Rapor').replace(/\s+/g, '_')}`,
+                                                {
+                                                    paperSize: modalPageSetup.paperSize,
+                                                    orientation: modalPageSetup.orientation
+                                                }
+                                            )
+                                        }
+                                        className="h-[32px] bg-teal-600 hover:bg-teal-700 text-white px-3.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs transition-colors whitespace-nowrap shrink-0"
+                                        title="Cetak atau simpan uji pratinjau sebagai PDF"
+                                    >
+                                        <i className="bi bi-printer-fill"></i>
+                                        <span>Cetak Uji PDF</span>
+                                    </button>
                                 </div>
-                                <button 
-                                    type="button"
-                                    onClick={() => setIsDesignPreviewOpen(false)} 
-                                    className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors shrink-0"
-                                    title="Tutup"
-                                >
-                                    <i className="bi bi-x-lg text-sm"></i>
-                                </button>
                             </div>
-                            <div className="flex-grow overflow-auto bg-slate-300 p-2 sm:p-6 md:p-8 flex flex-col items-center gap-6">
-                                {activeSheets
-                                    .filter(sh => previewSheetId === 'all' || previewSheetId === sh.id)
-                                    .map((sh, sIdx) => {
+
+                            <div className="flex-grow overflow-auto bg-slate-300 p-2 sm:p-6 md:p-8 flex justify-center">
+                                <div
+                                    id="rapor-design-preview-print-area"
+                                    className="w-full flex flex-col items-center gap-6 print:gap-0"
+                                    style={{
+                                        transform: previewModalZoom !== 1 ? `scale(${previewModalZoom})` : undefined,
+                                        transformOrigin: 'top center',
+                                        transition: 'transform 0.15s ease'
+                                    }}
+                                >
+                                    {visiblePreviewSheets.map((sh, sIdx) => {
                                         const renderPreviewCell = (cell: GridCell): { content: React.ReactNode; isMedia: boolean } => {
                                             if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(cell.value || '')) {
                                                 const imgSrc = getMediaTagImageSrc(cell.value?.trim() || '', baseResolveContext);
@@ -7690,14 +8515,19 @@ export const TabDesainRapor: React.FC = () => {
                                                 key={sh.id}
                                                 sh={sh}
                                                 sIdx={sIdx}
+                                                sheetsCount={visiblePreviewSheets.length}
+                                                isLastSheet={sIdx === visiblePreviewSheets.length - 1}
                                                 activeTemplate={activeTemplate}
                                                 settings={settings}
                                                 digitalAssets={digitalAssets}
                                                 resolveContext={baseResolveContext}
                                                 renderPreviewCell={renderPreviewCell}
+                                                showKop={previewShowKop}
+                                                santriObj={previewSantriObj}
                                             />
                                         );
                                     })}
+                                </div>
                             </div>
                         </div>
                     </div>

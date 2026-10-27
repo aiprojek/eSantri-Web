@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Santri, PondokSettings, RaporRecord } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
 import { ReportFooter, chunkArray, formatDate, formatAlamat } from './Common';
-import { formatTanggalDokumen } from '../../../utils/formatters';
+import { formatTanggalDokumen, resolveTempatRapor } from '../../../utils/formatters';
 import { db } from '../../../db';
 import { formatAcademicYearDisplay } from '../../../utils/academicYear';
 
@@ -183,7 +183,7 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
 
                 {/* Tanda Tangan */}
                 {(() => {
-                    const tempatRapor = options?.tempatRapor || settings?.tempatRaporDefault?.trim() || (settings?.alamat ? (settings.alamat.includes(',') ? settings.alamat.split(',')[0].trim() : 'Pesantren') : 'Pesantren');
+                    const tempatRapor = options?.tempatRapor?.trim() || resolveTempatRapor(settings, 'Pesantren');
                     const tanggalRaw = options?.tanggalRapor || (raporData as any)?.tanggalRapor || settings?.tanggalRaporDefault || new Date().toISOString();
                     const formatMode = options?.formatMode || settings?.formatTanggalRaporDefault || 'masehi';
                     const manualHijri = options?.manualHijri || settings?.manualHijriRaporDefault || '';

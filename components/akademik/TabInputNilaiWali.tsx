@@ -79,15 +79,22 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
     const [adminJenjangId, setAdminJenjangId] = useState<number>(0);
     const [adminKelasId, setAdminKelasId] = useState<number>(0);
 
-    // Detect assigned Rombel
-    const myRombel = useMemo(() => {
-        if (!currentUser) return null;
-        if (currentUser.role === 'admin') return null; // Admin uses filters
-        return settings.rombel.find(r => r.waliKelasUserId === currentUser.id) || null;
-    }, [currentUser, settings.rombel]);
-
+    const canManageAllRombel = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
     const [activeRombelId, setActiveRombelId] = useState<number | null>(null);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+
+    // Detect assigned Rombel(s) for Wali Kelas
+    const myRombels = useMemo(() => {
+        if (!currentUser || canManageAllRombel) return [];
+        return settings.rombel.filter(
+            r => r.waliKelasUserId === currentUser.id || r.waliKelasId === currentUser.id
+        );
+    }, [currentUser, canManageAllRombel, settings.rombel]);
+
+    const myRombel = useMemo(() => {
+        if (myRombels.length === 0) return null;
+        return myRombels.find(r => r.id === activeRombelId) || myRombels[0] || null;
+    }, [myRombels, activeRombelId]);
 
     // Sync from initialContext when provided
     useEffect(() => {
@@ -210,7 +217,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
     }, [settings.raporApprovalStatus, tahunAjaran, semester, activeRombelId, globalLockKey]);
 
     const handleAdminUnlockRapor = async () => {
-        if (currentUser?.role !== 'admin') return;
+        if (!canManageAllRombel) return;
         const updatedMap = { ...(settings.raporApprovalStatus || {}) };
         if (activeRombelId && updatedMap[rombelLockKey] === 'locked') {
             updatedMap[rombelLockKey] = 'verified';
@@ -225,11 +232,11 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         showToast('Kunci rapor dibuka sementara (Status: Terverifikasi). Silakan lakukan revisi nilai.', 'info');
     };
 
-    // Filter students in the active selection
+    // Filter active non-deleted students in the active selection
     const studentsInRombel = useMemo(() => {
-        let list = santriList.filter(s => s.status === 'Aktif');
+        let list = santriList.filter(s => !s.deleted && s.status === 'Aktif');
 
-        if (currentUser?.role === 'admin') {
+        if (canManageAllRombel) {
             if (adminJenjangId) list = list.filter(s => s.jenjangId === adminJenjangId);
             if (adminKelasId) list = list.filter(s => s.kelasId === adminKelasId);
             if (activeRombelId) list = list.filter(s => s.rombelId === activeRombelId);
@@ -242,7 +249,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
             if (a.rombelId !== b.rombelId) return a.rombelId - b.rombelId;
             return a.namaLengkap.localeCompare(b.namaLengkap);
         });
-    }, [activeRombelId, adminJenjangId, adminKelasId, santriList, currentUser]);
+    }, [activeRombelId, adminJenjangId, adminKelasId, santriList, canManageAllRombel]);
 
     // Get template & input keys
     const template = useMemo(() => {
@@ -383,6 +390,13 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         return list;
     }, [studentsInRombel, studentSearchQuery, studentStatusFilter, studentStatsMap]);
 
+    // Clamp activeStudentIndex in Card Mode when search/status filter changes
+    useEffect(() => {
+        if (activeStudentIndex >= filteredStudents.length && filteredStudents.length > 0) {
+            setActiveStudentIndex(0);
+        }
+    }, [filteredStudents.length, activeStudentIndex]);
+
     // Handle global Ctrl+S / Cmd+S save shortcut
     useEffect(() => {
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -415,7 +429,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                 return;
             }
 
-            let existing = await query;
+            let existing = (await query).filter(r => !r.deleted);
 
             if (!activeRombelId && adminJenjangId) {
                 existing = existing.filter(r => r.jenjangId === adminJenjangId);
@@ -550,7 +564,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
 
     // Navigasi keyboard ala Excel di tabel web
     const focusTableCell = (sIdx: number, kIdx: number) => {
-        if (sIdx < 0 || sIdx >= studentsInRombel.length || kIdx < 0 || kIdx >= inputKeys.length) return;
+        if (sIdx < 0 || sIdx >= filteredStudents.length || kIdx < 0 || kIdx >= inputKeys.length) return;
         const container = tableWrapperRef.current;
         if (!container) return;
         const el = container.querySelector<HTMLInputElement | HTMLSelectElement>(
@@ -623,7 +637,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         setGrades(prev => {
             const next = { ...prev };
             rawRows.forEach((rowStr, rOffset) => {
-                const targetStudent = studentsInRombel[startStudentIdx + rOffset];
+                const targetStudent = filteredStudents[startStudentIdx + rOffset];
                 if (!targetStudent) return;
                 const cols = rowStr.split('\t');
                 let rowTouched = false;
@@ -689,8 +703,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
 
             const findKeyVal = (...kList: string[]): number | undefined => {
                 for (const k of kList) {
-                    if (studentGrades[k] !== undefined && studentGrades[k] !== '') {
-                        const num = Number(studentGrades[k]);
+                    if (studentGrades[k] !== undefined && String(studentGrades[k]).trim() !== '') {
+                        const num = Number(String(studentGrades[k]).trim().replace(',', '.'));
                         if (!isNaN(num)) return num;
                     }
                 }
@@ -757,6 +771,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                 keputusan,
                 tanggalRapor: existing?.tanggalRapor || new Date().toISOString(),
                 customData: JSON.stringify(studentGrades),
+                deleted: false,
                 lastModified: Date.now()
             };
 
@@ -903,7 +918,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         }
     };
 
-    if (!myRombel && currentUser?.role !== 'admin') {
+    if (myRombels.length === 0 && !canManageAllRombel) {
         return (
             <div className="p-10 text-center bg-gray-50 rounded-xl border-2 border-dashed">
                 <i className="bi bi-person-x text-5xl text-gray-300 mb-4 block"></i>
@@ -930,14 +945,14 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                             </p>
                         </div>
                     </div>
-                    {currentUser?.role === 'admin' && (
+                    {canManageAllRombel && (
                         <button
                             type="button"
                             onClick={handleAdminUnlockRapor}
                             className="px-3 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg font-bold transition-colors shrink-0 flex items-center gap-1.5"
                         >
                             <i className="bi bi-unlock-fill"></i>
-                            <span>Buka Kunci (Admin)</span>
+                            <span>Buka Kunci</span>
                         </button>
                     )}
                 </div>
@@ -1052,7 +1067,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                         </select>
                     </div>
 
-                    {currentUser?.role === 'admin' ? (
+                    {canManageAllRombel ? (
                         <>
                             <div className="md:col-span-1">
                                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 tracking-widest pl-1">
@@ -1115,6 +1130,23 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                 </select>
                             </div>
                         </>
+                    ) : myRombels.length > 1 ? (
+                        <div className="md:col-span-2">
+                            <label className="block text-[10px] font-bold text-teal-600 uppercase mb-1 tracking-widest pl-1">
+                                Pilih Rombel Anda ({myRombels.length})
+                            </label>
+                            <select
+                                value={activeRombelId || myRombel?.id || 0}
+                                onChange={e => setActiveRombelId(Number(e.target.value))}
+                                className="w-full border-2 border-teal-200 rounded-lg p-2 text-xs font-black bg-teal-50 text-teal-900 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all"
+                            >
+                                {myRombels.map(r => (
+                                    <option key={r.id} value={r.id}>
+                                        {r.nama}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     ) : (
                         <div className="md:col-span-1">
                             <label className="block text-[10px] font-bold text-teal-600 uppercase mb-1 tracking-widest pl-1">
@@ -1300,7 +1332,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                         </div>
                     </div>
 
-                    {currentUser?.role === 'admin' ? (
+                    {canManageAllRombel ? (
                         <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
                             <h4 className="text-xs font-black text-teal-700 uppercase tracking-widest flex items-center gap-2">
                                 <i className="bi bi-funnel"></i> Filter Rombel
@@ -1367,6 +1399,23 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                     </select>
                                 </div>
                             </div>
+                        </div>
+                    ) : myRombels.length > 1 ? (
+                        <div className="bg-teal-50 p-6 rounded-3xl border border-teal-100 space-y-2">
+                            <label className="text-[10px] font-black text-teal-600 uppercase tracking-widest block">
+                                Pilih Rombel Pengampu ({myRombels.length})
+                            </label>
+                            <select
+                                value={activeRombelId || myRombel?.id || 0}
+                                onChange={e => setActiveRombelId(Number(e.target.value))}
+                                className="w-full border-2 border-white rounded-2xl p-3.5 text-base font-black text-teal-900 bg-white shadow-sm outline-none"
+                            >
+                                {myRombels.map(r => (
+                                    <option key={r.id} value={r.id}>
+                                        {r.nama}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                     ) : (
                         <div className="bg-teal-50 p-6 rounded-3xl border border-teal-100 text-center">
@@ -1838,6 +1887,9 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                                                     onKeyDown={e =>
                                                                                         handleTableKeyDown(e, idx, kIdx)
                                                                                     }
+                                                                                    onPaste={e =>
+                                                                                        handleTablePaste(e, idx, kIdx)
+                                                                                    }
                                                                                     placeholder="Ketik catatan..."
                                                                                     className="w-full border border-slate-200 rounded-lg p-2 pr-7 text-left font-sans text-xs focus:ring-2 focus:ring-teal-500 outline-none bg-white transition-colors"
                                                                                     title="Klik ikon di kanan atau klik ganda untuk menulis catatan panjang yang lebih lega"
@@ -1927,7 +1979,29 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                     {/* CARD / MOBILE STEPPER MODE */}
                     {viewMode === 'card' &&
                         (() => {
-                            const currentStudent = studentsInRombel[activeStudentIndex] || studentsInRombel[0];
+                            if (filteredStudents.length === 0) {
+                                return (
+                                    <div className="bg-white rounded-2xl border p-8 text-center max-w-xl mx-auto space-y-3 shadow-xs">
+                                        <i className="bi bi-search text-3xl text-slate-300 block"></i>
+                                        <p className="text-sm font-bold text-slate-700">
+                                            Tidak ada santri yang sesuai dengan filter pencarian.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setStudentSearchQuery('');
+                                                setStudentStatusFilter('all');
+                                            }}
+                                            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors"
+                                        >
+                                            Reset Pencarian &amp; Filter
+                                        </button>
+                                    </div>
+                                );
+                            }
+
+                            const safeStudentIdx = Math.min(activeStudentIndex, filteredStudents.length - 1);
+                            const currentStudent = filteredStudents[safeStudentIdx] || filteredStudents[0];
                             const rombelName =
                                 settings.rombel.find(r => r.id === currentStudent?.rombelId)?.nama || 'Tanpa Rombel';
 
@@ -1937,7 +2011,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                     <div className="bg-gradient-to-r from-teal-700 to-emerald-700 p-4 text-white">
                                         <div className="flex items-center justify-between mb-3">
                                             <span className="text-xs font-bold bg-white/20 px-2.5 py-0.5 rounded-full backdrop-blur-sm">
-                                                Santri #{activeStudentIndex + 1} dari {studentsInRombel.length}
+                                                Santri #{safeStudentIdx + 1} dari {filteredStudents.length}
                                             </span>
                                             <span className="text-xs font-bold text-teal-100">Rombel: {rombelName}</span>
                                         </div>
@@ -1951,11 +2025,11 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                 </p>
                                             </div>
                                             <select
-                                                value={activeStudentIndex}
+                                                value={safeStudentIdx}
                                                 onChange={e => setActiveStudentIndex(Number(e.target.value))}
                                                 className="bg-white text-gray-900 text-xs font-bold rounded-lg px-3 py-2 border-0 outline-none shadow-sm cursor-pointer"
                                             >
-                                                {studentsInRombel.map((s, idx) => (
+                                                {filteredStudents.map((s, idx) => (
                                                     <option key={s.id} value={idx}>
                                                         {idx + 1}. {s.namaLengkap}
                                                     </option>
@@ -2081,8 +2155,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                     <div className="p-4 bg-white border-t flex items-center justify-between gap-2">
                                         <button
                                             type="button"
-                                            disabled={activeStudentIndex === 0}
-                                            onClick={() => setActiveStudentIndex(prev => Math.max(0, prev - 1))}
+                                            disabled={safeStudentIdx === 0}
+                                            onClick={() => setActiveStudentIndex(Math.max(0, safeStudentIdx - 1))}
                                             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-200 disabled:opacity-40 flex items-center gap-1 transition-all"
                                         >
                                             <i className="bi bi-chevron-left"></i> Sebelumnya
@@ -2099,9 +2173,9 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                         </button>
                                         <button
                                             type="button"
-                                            disabled={activeStudentIndex === studentsInRombel.length - 1}
+                                            disabled={safeStudentIdx >= filteredStudents.length - 1}
                                             onClick={() =>
-                                                setActiveStudentIndex(prev => Math.min(studentsInRombel.length - 1, prev + 1))
+                                                setActiveStudentIndex(Math.min(filteredStudents.length - 1, safeStudentIdx + 1))
                                             }
                                             className="px-4 py-2 bg-teal-50 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold hover:bg-teal-100 disabled:opacity-40 flex items-center gap-1 transition-all"
                                         >

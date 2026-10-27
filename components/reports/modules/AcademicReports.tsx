@@ -43,7 +43,7 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                     .where('[santriId+tahunAjaran+semester]')
                     .equals([santri.id, options.tahunAjaran, options.semester])
                     .first();
-                setRaporData(record || null);
+                setRaporData(record && !record.deleted ? record : null);
             } catch (error) {
                 console.error("Gagal mengambil data rapor", error);
             } finally {
@@ -64,10 +64,30 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
         </div>
     );
 
+    let customGradesMap: Record<string, any> = {};
+    if (raporData.customData) {
+        try {
+            const parsed = JSON.parse(raporData.customData);
+            if (parsed && typeof parsed === 'object') {
+                Object.entries(parsed).forEach(([k, v]) => {
+                    customGradesMap[k.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')] = v;
+                });
+            }
+        } catch {
+            customGradesMap = {};
+        }
+    }
+
     return (
         <div className="font-sans text-black flex flex-col h-full justify-between" style={{ fontSize: '10pt', lineHeight: '1.4' }}>
             <div>
-                <PrintHeader settings={settings} title="LAPORAN HASIL BELAJAR SANTRI (RAPOR)" />
+                {options?.showKop !== false ? (
+                    <PrintHeader settings={settings} title="LAPORAN HASIL BELAJAR SANTRI (RAPOR)" />
+                ) : (
+                    <div className="text-center font-bold text-base uppercase tracking-wide mb-4 pb-2 border-b border-black">
+                        LAPORAN HASIL BELAJAR SANTRI (RAPOR)
+                    </div>
+                )}
                 
                 <table className="print-meta w-full text-sm mb-4 font-medium">
                     <tbody>
@@ -92,19 +112,36 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                     </thead>
                     <tbody>
                         {settings.mataPelajaran.filter(m => m.jenjangId === santri.jenjangId).map((mapel, idx) => {
-                            const nilaiItem = raporData.nilai.find(n => n.mapelId === mapel.id);
-                            const val = nilaiItem ? nilaiItem.nilaiAngka : 0;
-                            let pred = "D";
-                            if(val >= 90) pred = "A"; else if(val >= 80) pred = "B"; else if(val >= 70) pred = "C";
+                            const nilaiItem = raporData.nilai?.find(n => n.mapelId === mapel.id);
+                            let val: number | null = nilaiItem ? nilaiItem.nilaiAngka : null;
+                            if (val === null) {
+                                const codeKey = (mapel.kodeMapel || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+                                const nameKey = (mapel.nama || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+                                const rawCustom = (codeKey && customGradesMap[codeKey] !== undefined)
+                                    ? customGradesMap[codeKey]
+                                    : customGradesMap[nameKey];
+                                if (rawCustom !== undefined && rawCustom !== null && String(rawCustom).trim() !== '') {
+                                    const parsedNum = Number(String(rawCustom).trim().replace(',', '.'));
+                                    if (!isNaN(parsedNum)) val = parsedNum;
+                                }
+                            }
+                            const numericVal = val ?? 0;
+                            let pred = val === null ? '-' : 'D';
+                            if (val !== null) {
+                                if (numericVal >= 90) pred = 'A';
+                                else if (numericVal >= 80) pred = 'B';
+                                else if (numericVal >= 70) pred = 'C';
+                            }
+                            const kkm = mapel.kkm || 70;
                             
                             return (
                                 <tr key={mapel.id}>
                                     <td className="border border-black p-1 text-center">{idx+1}</td>
                                     <td className="border border-black p-1">{mapel.nama}</td>
-                                    <td className="border border-black p-1 text-center">70</td>
-                                    <td className="border border-black p-1 text-center font-bold">{val}</td>
+                                    <td className="border border-black p-1 text-center">{kkm}</td>
+                                    <td className="border border-black p-1 text-center font-bold">{val !== null ? val : '-'}</td>
                                     <td className="border border-black p-1 text-center">{pred}</td>
-                                    <td className="border border-black p-1 italic text-gray-600">{val < 70 ? 'Perlu ditingkatkan' : 'Tuntas'}</td>
+                                    <td className="border border-black p-1 italic text-gray-600">{val === null ? '-' : (numericVal < kkm ? 'Perlu ditingkatkan' : 'Tuntas')}</td>
                                 </tr>
                             )
                         })}

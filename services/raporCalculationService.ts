@@ -140,14 +140,14 @@ export const computeClassAveragesFromRecords = (
         }
 
         if (sCount > 0) {
-            studentAvgs.push(Math.round((sSum / sCount) * 100) / 100);
+            studentAvgs.push(Math.round(((sSum / sCount) + Number.EPSILON) * 10000) / 10000);
         }
     }
 
     const classAverages: Record<string, number> = {};
     for (const [normKey, stat] of accum.entries()) {
         if (stat.count > 0) {
-            classAverages[normKey] = Math.round((stat.sum / stat.count) * 100) / 100;
+            classAverages[normKey] = Math.round(((stat.sum / stat.count) + Number.EPSILON) * 10000) / 10000;
         }
     }
 
@@ -166,7 +166,7 @@ export const computeClassAveragesFromRecords = (
     }
 
     const classOverallAverage = studentAvgs.length > 0
-        ? Math.round((studentAvgs.reduce((a, b) => a + b, 0) / studentAvgs.length) * 100) / 100
+        ? Math.round(((studentAvgs.reduce((a, b) => a + b, 0) / studentAvgs.length) + Number.EPSILON) * 10000) / 10000
         : 0;
 
     return { classAverages, classOverallAverage };
@@ -180,8 +180,10 @@ export const buildRombelLegerData = (params: {
     santriList: Santri[];
     records: RaporRecord[];
     targetSheetId?: string;
+    decimalPlaces?: 0 | 1 | 2 | 3;
 }): RombelLegerData => {
-    const { template = null, santriList, records, targetSheetId = 'all' } = params;
+    const { template = null, santriList, records, targetSheetId = 'all', decimalPlaces = 2 } = params;
+    const decFactor = Math.pow(10, decimalPlaces);
 
     const availableSheets = getTemplateSheets(template);
     const allKeys = extractTemplateKeys(template, targetSheetId);
@@ -189,7 +191,9 @@ export const buildRombelLegerData = (params: {
     const nonGradeKeys = allKeys.filter(k => !isSubjectGradeKey(k.key));
 
     const recordBySantri = new Map<number, RaporRecord>();
-    records.forEach(r => recordBySantri.set(r.santriId, r));
+    records.forEach(r => {
+        if (!r.deleted) recordBySantri.set(r.santriId, r);
+    });
 
     // 1. Initial pass: parse values per student
     const studentRows: Array<Omit<StudentLegerRow, 'ranking'>> = santriList.map(santri => {
@@ -211,7 +215,7 @@ export const buildRombelLegerData = (params: {
         gradeKeys.forEach(k => {
             const rawVal = customData[k.key];
             if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '') {
-                const num = Number(rawVal);
+                const num = Number(String(rawVal).trim().replace(',', '.'));
                 if (!isNaN(num)) {
                     numericGrades[k.key] = num;
                     totalNilai += num;
@@ -220,15 +224,17 @@ export const buildRombelLegerData = (params: {
             }
         });
 
-        const rataRata = numericCount > 0 ? Math.round((totalNilai / numericCount) * 100) / 100 : 0;
-        const rataRataFormatted = rataRata > 0 ? rataRata.toFixed(2) : '-';
+        const rawAvg = numericCount > 0 ? totalNilai / numericCount : 0;
+        const rataRata = numericCount > 0 ? Math.round((rawAvg + Number.EPSILON) * 10000) / 10000 : 0;
+        const roundedForDisplay = numericCount > 0 ? Math.round((rawAvg + Number.EPSILON) * decFactor) / decFactor : 0;
+        const rataRataFormatted = numericCount > 0 && rataRata > 0 ? roundedForDisplay.toFixed(decimalPlaces) : '-';
         const predikat = calculatePredikat(rataRata);
 
         // Attendance resolution
         const findVal = (...kList: string[]): number | undefined => {
             for (const key of kList) {
-                if (customData[key] !== undefined && customData[key] !== '') {
-                    const n = Number(customData[key]);
+                if (customData[key] !== undefined && String(customData[key]).trim() !== '') {
+                    const n = Number(String(customData[key]).trim().replace(',', '.'));
                     if (!isNaN(n)) return n;
                 }
             }
@@ -330,7 +336,7 @@ export const buildRombelLegerData = (params: {
 
         if (scores.length > 0) {
             const sum = scores.reduce((acc, v) => acc + v, 0);
-            const average = Math.round((sum / scores.length) * 100) / 100;
+            const average = Math.round(((sum / scores.length) + Number.EPSILON) * decFactor) / decFactor;
             const highest = Math.max(...scores);
             const lowest = Math.min(...scores);
             subjectStats[k.key] = {
@@ -356,7 +362,7 @@ export const buildRombelLegerData = (params: {
     // 4. Class summary
     const studentsWithAvg = students.filter(s => s.rataRata > 0);
     const classAverage = studentsWithAvg.length > 0
-        ? Math.round((studentsWithAvg.reduce((acc, s) => acc + s.rataRata, 0) / studentsWithAvg.length) * 100) / 100
+        ? Math.round(((studentsWithAvg.reduce((acc, s) => acc + s.rataRata, 0) / studentsWithAvg.length) + Number.EPSILON) * decFactor) / decFactor
         : 0;
 
     const classHighest = studentsWithAvg.length > 0 ? Math.max(...studentsWithAvg.map(s => s.totalNilai)) : 0;
@@ -373,7 +379,7 @@ export const buildRombelLegerData = (params: {
 
     const { classAverages: rawClassAverages } = computeClassAveragesFromRecords(records, template);
     for (const [k, stat] of Object.entries(subjectStats)) {
-        if (stat.count > 0) {
+        if (stat.count > 0 && rawClassAverages[normalizeSubjectKeyForAvg(k)] === undefined) {
             rawClassAverages[normalizeSubjectKeyForAvg(k)] = stat.average;
         }
     }
@@ -411,8 +417,10 @@ export const exportLegerToExcel = async (params: {
     semester: string;
     settings?: PondokSettings | null;
     waliName?: string;
+    decimalPlaces?: 0 | 1 | 2 | 3;
 }): Promise<string> => {
-    const { rombelData, rombelName, jenjangName, kelasName, tahunAjaran, semester, settings, waliName = 'Wali Kelas' } = params;
+    const { rombelData, rombelName, jenjangName, kelasName, tahunAjaran, semester, settings, waliName = 'Wali Kelas', decimalPlaces = 2 } = params;
+    const decFactor = Math.pow(10, decimalPlaces);
     const XLSX = await loadXLSX();
 
     const wb = XLSX.utils.book_new();
@@ -469,8 +477,8 @@ export const exportLegerToExcel = async (params: {
             row.santri.namaLengkap,
             row.santri.jenisKelamin || '-',
             ...rombelData.gradeKeys.map(k => row.numericGrades[k.key] ?? (row.grades[k.key] || '')),
-            row.totalNilai > 0 ? row.totalNilai : '',
-            row.rataRata > 0 ? row.rataRata : '',
+            row.totalNilai > 0 ? Number((Math.round((row.totalNilai + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '',
+            row.rataRata > 0 ? Number((Math.round((row.rataRata + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '',
             row.rataRata > 0 ? row.predikat.predikat : '',
             row.ranking > 0 ? row.ranking : '',
             row.sakit,
@@ -493,9 +501,14 @@ export const exportLegerToExcel = async (params: {
         '',
         'RATA-RATA KELAS',
         '',
-        ...rombelData.gradeKeys.map(k => rombelData.subjectStats[k.key]?.average || ''),
+        ...rombelData.gradeKeys.map(k => {
+            const avg = rombelData.subjectStats[k.key]?.average;
+            return avg ? Number((Math.round((avg + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces)) : '';
+        }),
         '',
-        rombelData.classAverage || '',
+        rombelData.classAverage
+            ? Number((Math.round((rombelData.classAverage + Number.EPSILON) * decFactor) / decFactor).toFixed(decimalPlaces))
+            : '',
         '',
         '',
         '',

@@ -147,15 +147,9 @@ _Panitia Akademik & Wali Kelas ${ponpesName}_`;
         }
     };
 
-    const handleOpenWhatsApp = () => {
-        if (!targetNumber) {
-            alert('Mohon masukkan nomor WhatsApp tujuan.');
-            return;
-        }
-        const encoded = encodeURIComponent(message);
-        const url = `https://api.whatsapp.com/send?phone=${targetNumber}&text=${encoded}`;
-        window.open(url, '_blank');
-    };
+    const whatsappUrl = targetNumber
+        ? `https://api.whatsapp.com/send?phone=${targetNumber}&text=${encodeURIComponent(message)}`
+        : '';
 
     return (
         <div className="fixed inset-0 bg-black/75 z-[90] flex justify-center items-center p-3 sm:p-4 animate-fade-in backdrop-blur-xs">
@@ -282,15 +276,27 @@ _Panitia Akademik & Wali Kelas ${ponpesName}_`;
                         >
                             Tutup
                         </button>
-                        <button
-                            type="button"
-                            onClick={handleOpenWhatsApp}
-                            disabled={!targetNumber}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2 rounded-xl text-xs font-black shadow-md shadow-emerald-200 flex items-center gap-2 transition-all active:scale-95"
-                        >
-                            <i className="bi bi-whatsapp text-sm"></i>
-                            <span>Buka WhatsApp</span>
-                        </button>
+                        {whatsappUrl ? (
+                            <a
+                                href={whatsappUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-black shadow-md shadow-emerald-200 flex items-center gap-2 transition-all active:scale-95 no-underline"
+                            >
+                                <i className="bi bi-whatsapp text-sm"></i>
+                                <span>Buka WhatsApp</span>
+                            </a>
+                        ) : (
+                            <button
+                                type="button"
+                                disabled
+                                title="Masukkan nomor WhatsApp tujuan terlebih dahulu"
+                                className="bg-emerald-600 opacity-50 cursor-not-allowed text-white px-5 py-2 rounded-xl text-xs font-black shadow-md shadow-emerald-200 flex items-center gap-2"
+                            >
+                                <i className="bi bi-whatsapp text-sm"></i>
+                                <span>Buka WhatsApp</span>
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

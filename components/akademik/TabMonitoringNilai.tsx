@@ -9,7 +9,11 @@ import { formatAcademicYearDisplay } from '../../utils/academicYear';
 import { extractTemplateKeys } from '../../services/raporExcelService';
 
 export interface TabMonitoringNilaiProps {
-    onNavigateToTab?: (tab: string, rombelId?: number) => void;
+    onNavigateToTab?: (
+        tab: string,
+        rombelId?: number,
+        period?: { tahunAjaran: string; semester: 'Ganjil' | 'Genap' }
+    ) => void;
 }
 
 export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNavigateToTab }) => {
@@ -38,10 +42,13 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
         const calculateStats = async () => {
             setIsLoading(true);
             try {
-                // 1. Get all records for current period
-                const records = await db.raporRecords
-                    .where({ tahunAjaran: filterTahun, semester: filterSemester })
+                const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
+                // 1. Get all non-deleted records for current period
+                const rawRecords = await db.raporRecords
+                    .where('[tahunAjaran+semester]')
+                    .equals([currentYear, filterSemester])
                     .toArray();
+                const records = rawRecords.filter(r => !r.deleted);
                 
                 // Map records by Santri ID for fast lookup
                 const recMap = new Map<number, any>();
@@ -53,19 +60,25 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                 const rombelStats = settings.rombel.map(rombel => {
                     const kelas = settings.kelas.find(k => k.id === rombel.kelasId);
                     const jenjang = settings.jenjang.find(j => j.id === kelas?.jenjangId);
-                    const wali = settings.tenagaPengajar.find(t => t.id === rombel.waliKelasId);
+                    const wali = settings.tenagaPengajar.find(
+                        t => t.id === rombel.waliKelasId || t.id === rombel.waliKelasUserId
+                    );
 
                     // Find template to know expected keys
                     const matchedTemplate =
-                        templates.find(t => t.jenjangId === kelas?.jenjangId && (!t.kelasId || t.kelasId === kelas?.id)) ||
-                        templates.find(t => t.jenjangId === kelas?.jenjangId) ||
+                        templates.find(t => t.rombelId === rombel.id) ||
+                        templates.find(t => t.jenjangId === kelas?.jenjangId && t.kelasId === kelas?.id && !t.rombelId) ||
+                        templates.find(t => t.jenjangId === kelas?.jenjangId && !t.kelasId && !t.rombelId) ||
+                        templates.find(t => !t.jenjangId) ||
                         (templates.length > 0 ? templates[0] : null);
 
                     const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
                     const expectedCount = templateKeys.length;
 
-                    // Get Active Santri in this Rombel
-                    const santriInRombel = santriList.filter(s => s.rombelId === rombel.id && s.status === 'Aktif');
+                    // Get Active Non-Deleted Santri in this Rombel
+                    const santriInRombel = santriList.filter(
+                        s => !s.deleted && s.rombelId === rombel.id && s.status === 'Aktif'
+                    );
                     const totalSantri = santriInRombel.length;
 
                     let completeCount = 0;
@@ -81,9 +94,15 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                         let filled = 0;
                         try {
                             const parsed = JSON.parse(rec.customData);
-                            filled = Object.keys(parsed).filter(
-                                k => parsed[k] !== undefined && parsed[k] !== null && String(parsed[k]).trim() !== ''
-                            ).length;
+                            if (expectedCount > 0) {
+                                filled = templateKeys.filter(
+                                    tk => parsed[tk.key] !== undefined && parsed[tk.key] !== null && String(parsed[tk.key]).trim() !== ''
+                                ).length;
+                            } else {
+                                filled = Object.keys(parsed).filter(
+                                    k => parsed[k] !== undefined && parsed[k] !== null && String(parsed[k]).trim() !== ''
+                                ).length;
+                            }
                         } catch {
                             filled = 0;
                         }
@@ -147,7 +166,7 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
         };
 
         calculateStats();
-    }, [filterTahun, filterSemester, settings, santriList]);
+    }, [filterTahun, filterSemester, settings, santriList, availableYears, defaultAcademicYear]);
 
     // Audit specific rombel students
     useEffect(() => {
@@ -164,12 +183,23 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                     .equals([currentYear, filterSemester])
                     .toArray();
 
-                const rombelRecs = recs.filter(r => r.rombelId === selectedAuditRombel.id);
+                const rombelRecs = recs.filter(r => !r.deleted && r.rombelId === selectedAuditRombel.id);
                 const recMap = new Map<number, any>();
                 rombelRecs.forEach(r => recMap.set(r.santriId, r));
 
+                const rombelObj = settings.rombel.find(r => r.id === selectedAuditRombel.id);
+                const kelasObj = settings.kelas.find(k => k.id === rombelObj?.kelasId);
+                const templates = settings.raporTemplates || [];
+                const matchedTemplate =
+                    templates.find(t => t.rombelId === selectedAuditRombel.id) ||
+                    templates.find(t => t.jenjangId === kelasObj?.jenjangId && t.kelasId === kelasObj?.id && !t.rombelId) ||
+                    templates.find(t => t.jenjangId === kelasObj?.jenjangId && !t.kelasId && !t.rombelId) ||
+                    templates.find(t => !t.jenjangId) ||
+                    (templates.length > 0 ? templates[0] : null);
+                const templateKeys = matchedTemplate ? extractTemplateKeys(matchedTemplate, 'all') : [];
+
                 const students = santriList
-                    .filter(s => s.rombelId === selectedAuditRombel.id && s.status === 'Aktif')
+                    .filter(s => !s.deleted && s.rombelId === selectedAuditRombel.id && s.status === 'Aktif')
                     .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap))
                     .map(s => {
                         const rec = recMap.get(s.id);
@@ -178,7 +208,15 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                         if (rec?.customData) {
                             try {
                                 customData = JSON.parse(rec.customData);
-                                filledCount = Object.keys(customData).filter(k => customData[k] !== undefined && customData[k] !== '').length;
+                                if (templateKeys.length > 0) {
+                                    filledCount = templateKeys.filter(
+                                        tk => customData[tk.key] !== undefined && customData[tk.key] !== null && String(customData[tk.key]).trim() !== ''
+                                    ).length;
+                                } else {
+                                    filledCount = Object.keys(customData).filter(
+                                        k => customData[k] !== undefined && customData[k] !== null && String(customData[k]).trim() !== ''
+                                    ).length;
+                                }
                             } catch {}
                         }
                         return {
@@ -186,6 +224,7 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                             record: rec || null,
                             isSubmitted: !!rec,
                             filledCount,
+                            expectedCount: templateKeys.length,
                             lastModified: rec?.lastModified || rec?.tanggalRapor || null
                         };
                     });
@@ -381,13 +420,32 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                                             <i className="bi bi-list-check mr-1"></i>Audit
                                         </button>
                                         {onNavigateToTab && (
-                                            <button
-                                                onClick={() => onNavigateToTab('leger', rombel.id)}
-                                                className="px-2 py-1 bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all"
-                                                title="Buka Leger Nilai"
-                                            >
-                                                <i className="bi bi-table mr-1"></i>Leger
-                                            </button>
+                                            <>
+                                                <button
+                                                    onClick={() =>
+                                                        onNavigateToTab('leger', rombel.id, {
+                                                            tahunAjaran: filterTahun || availableYears[0] || defaultAcademicYear,
+                                                            semester: filterSemester
+                                                        })
+                                                    }
+                                                    className="px-2 py-1 bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all"
+                                                    title="Buka Leger Nilai"
+                                                >
+                                                    <i className="bi bi-table mr-1"></i>Leger
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        onNavigateToTab('print', rombel.id, {
+                                                            tahunAjaran: filterTahun || availableYears[0] || defaultAcademicYear,
+                                                            semester: filterSemester
+                                                        })
+                                                    }
+                                                    className="px-2 py-1 bg-slate-700 hover:bg-slate-800 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all"
+                                                    title="Buka Cetak Rapor Rombel Ini"
+                                                >
+                                                    <i className="bi bi-printer"></i>
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -463,10 +521,17 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
 
                                             <div>
                                                 {item.isSubmitted && item.filledCount > 0 ? (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                        <i className="bi bi-check-circle-fill"></i>
-                                                        <span>Terisi ({item.filledCount} field)</span>
-                                                    </span>
+                                                    item.expectedCount > 0 && item.filledCount < item.expectedCount ? (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                                            <i className="bi bi-exclamation-circle-fill"></i>
+                                                            <span>Sebagian ({item.filledCount}/{item.expectedCount})</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                            <i className="bi bi-check-circle-fill"></i>
+                                                            <span>Lengkap ({item.expectedCount > 0 ? `${item.filledCount}/${item.expectedCount}` : `${item.filledCount} field`})</span>
+                                                        </span>
+                                                    )
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                                         <i className="bi bi-x-circle-fill"></i>
@@ -493,8 +558,12 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                                         <button
                                             onClick={() => {
                                                 const rId = selectedAuditRombel.id;
+                                                const period = {
+                                                    tahunAjaran: filterTahun || availableYears[0] || defaultAcademicYear,
+                                                    semester: filterSemester
+                                                };
                                                 setSelectedAuditRombel(null);
-                                                onNavigateToTab('input_wali', rId);
+                                                onNavigateToTab('input_wali', rId, period);
                                             }}
                                             className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
                                         >
@@ -503,8 +572,26 @@ export const TabMonitoringNilai: React.FC<TabMonitoringNilaiProps> = ({ onNaviga
                                         <button
                                             onClick={() => {
                                                 const rId = selectedAuditRombel.id;
+                                                const period = {
+                                                    tahunAjaran: filterTahun || availableYears[0] || defaultAcademicYear,
+                                                    semester: filterSemester
+                                                };
                                                 setSelectedAuditRombel(null);
-                                                onNavigateToTab('leger', rId);
+                                                onNavigateToTab('print', rId, period);
+                                            }}
+                                            className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                                        >
+                                            <i className="bi bi-printer mr-1.5"></i>Cetak
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const rId = selectedAuditRombel.id;
+                                                const period = {
+                                                    tahunAjaran: filterTahun || availableYears[0] || defaultAcademicYear,
+                                                    semester: filterSemester
+                                                };
+                                                setSelectedAuditRombel(null);
+                                                onNavigateToTab('leger', rId, period);
                                             }}
                                             className="px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-all"
                                         >

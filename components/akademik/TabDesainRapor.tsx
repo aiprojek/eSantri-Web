@@ -33,6 +33,7 @@ import {
 import {
     RAPOR_FORMULA_SUGGESTIONS,
     applyCellTextTransform,
+    formatCellNumericDisplay,
     isFormulaReadyForCellPick,
     autoCloseFormulaParens,
     extractFormulaReferencedCoords,
@@ -365,9 +366,14 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
         const isLogo = typeof cell.value === 'string' && (cell.value.includes('LOGO') || cell.value === '$LOGO');
         const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
         const { content: rawContent, isMedia } = renderPreviewCell(cell);
-        const content = (!isMedia && (typeof rawContent === 'string' || typeof rawContent === 'number') && cell.textTransform && cell.textTransform !== 'none')
-            ? applyCellTextTransform(String(rawContent), cell.textTransform)
-            : rawContent;
+        let content: React.ReactNode = rawContent;
+        if (!isMedia && (typeof rawContent === 'string' || typeof rawContent === 'number')) {
+            let formattedStr = formatCellNumericDisplay(String(rawContent), cell.decimalPlaces);
+            if (cell.textTransform && cell.textTransform !== 'none') {
+                formattedStr = applyCellTextTransform(formattedStr, cell.textTransform);
+            }
+            content = formattedStr;
+        }
 
         const effectiveFontSize = cell.fontSize || 11;
         const hAlign = cell.align || 'center';
@@ -689,7 +695,11 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
     );
 };
 
-export const TabDesainRapor: React.FC = () => {
+export interface TabDesainRaporProps {
+    onDirtyChange?: (dirty: boolean) => void;
+}
+
+export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange }) => {
     const { settings, onSaveSettings, showToast, showConfirmation, showAlert, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
@@ -812,6 +822,11 @@ export const TabDesainRapor: React.FC = () => {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
     const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number; r: number; c: number } | null>(null);
+
+    useEffect(() => {
+        onDirtyChange?.(isEditing && isDirty);
+        return () => onDirtyChange?.(false);
+    }, [isEditing, isDirty, onDirtyChange]);
 
     // Auto-dismiss context menu on outside click or scroll
     useEffect(() => {
@@ -1380,6 +1395,7 @@ export const TabDesainRapor: React.FC = () => {
     const handleAddSheet = (name?: string) => {
         if (!activeTemplate) return;
         const synced = syncCurrentSheetToTemplate(activeTemplate, activeSheetId);
+        pushToHistory(synced);
         const sheets = synced.sheets ? [...synced.sheets] : [];
         const newSheetId = 'sheet_' + Date.now();
         const newSheetName = name || `Lembar ${sheets.length + 1}`;
@@ -1411,6 +1427,7 @@ export const TabDesainRapor: React.FC = () => {
         const synced = syncCurrentSheetToTemplate(activeTemplate, activeSheetId);
         const targetSheet = synced.sheets?.find(s => s.id === sheetId);
         if (!targetSheet) return;
+        pushToHistory(synced);
 
         const clonedCells: GridCell[][] = targetSheet.cells.map((row, r) =>
             row.map((cell, c) => ({
@@ -1466,6 +1483,7 @@ export const TabDesainRapor: React.FC = () => {
             'Hapus Lembar Rapor?',
             `Apakah Anda yakin ingin menghapus lembar "${targetSheet?.name || 'ini'}"? Seluruh format tabel pada lembar ini akan dihapus.`,
             () => {
+                pushToHistory(synced);
                 const filteredSheets = synced.sheets!.filter(s => s.id !== sheetId);
                 const nextSheet = filteredSheets[0];
                 setActiveSheetId(nextSheet.id);
@@ -1486,6 +1504,7 @@ export const TabDesainRapor: React.FC = () => {
 
     const handleRenameSheet = (sheetId: string, newName: string) => {
         if (!activeTemplate || !newName.trim()) return;
+        pushToHistory(activeTemplate);
         setActiveTemplate(prev => {
             if (!prev) return null;
             const sheets = (prev.sheets || []).map(s => s.id === sheetId ? { ...s, name: newName.trim() } : s);
@@ -1723,6 +1742,7 @@ export const TabDesainRapor: React.FC = () => {
                 setActiveTemplate(newTemplate);
                 setActiveSheetId(firstSheet.id);
                 setIsEditing(true);
+                setIsDirty(true);
                 setZoomScale(1);
                 showToast(`Import Berhasil! (${importedSheets.length} lembar dimuat)`, 'success');
             } catch (e) { showAlert('Gagal Import File', (e as Error).message); } finally { if (fileInputRef.current) fileInputRef.current.value = ''; }
@@ -1776,6 +1796,15 @@ export const TabDesainRapor: React.FC = () => {
         });
         const updated = { ...activeTemplate, cells: newCells };
         setActiveTemplate(syncCurrentSheetToTemplate(updated, activeSheetId));
+    };
+
+    const handleStepDecimalPlaces = (delta: 1 | -1) => {
+        if (!activeTemplate || selectedCells.length === 0) return;
+        const cur = activeCellData?.decimalPlaces;
+        const next = cur === undefined
+            ? (delta > 0 ? 2 : 1)
+            : Math.max(0, Math.min(3, cur + delta));
+        handleBulkUpdateCells({ decimalPlaces: next });
     };
 
     const handleBulkClearValues = () => {
@@ -2355,6 +2384,7 @@ export const TabDesainRapor: React.FC = () => {
             verticalAlign: activeCellData.verticalAlign,
             textWrap: activeCellData.textWrap,
             textTransform: activeCellData.textTransform,
+            decimalPlaces: activeCellData.decimalPlaces,
             backgroundColor: activeCellData.backgroundColor,
             color: activeCellData.color
         });
@@ -3096,6 +3126,7 @@ export const TabDesainRapor: React.FC = () => {
                             verticalAlign: fmtSrc.verticalAlign,
                             textWrap: fmtSrc.textWrap,
                             textTransform: fmtSrc.textTransform,
+                            decimalPlaces: fmtSrc.decimalPlaces,
                             backgroundColor: fmtSrc.backgroundColor,
                             color: fmtSrc.color
                         };
@@ -3587,6 +3618,7 @@ export const TabDesainRapor: React.FC = () => {
                         verticalAlign: copiedFormat.verticalAlign,
                         textWrap: copiedFormat.textWrap,
                         textTransform: copiedFormat.textTransform,
+                        decimalPlaces: copiedFormat.decimalPlaces,
                         backgroundColor: copiedFormat.backgroundColor,
                         color: copiedFormat.color
                     };
@@ -4657,8 +4689,9 @@ export const TabDesainRapor: React.FC = () => {
     };
 
     const getSimulatedValue = (cell: GridCell) => {
-        const formatText = (str: string) => applyCellTextTransform(str, cell.textTransform);
+        const formatText = (str: string) => applyCellTextTransform(formatCellNumericDisplay(str, cell.decimalPlaces), cell.textTransform);
         const val = cell.value?.trim() || '';
+        const decTag = cell.decimalPlaces !== undefined ? (cell.decimalPlaces === 0 ? ' (0)' : ` (.${'0'.repeat(cell.decimalPlaces)})`) : '';
 
         if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(val)) {
             const { simRombel, simKelas, simJenjang } = getTemplateSimulatedHierarchy();
@@ -4700,8 +4733,8 @@ export const TabDesainRapor: React.FC = () => {
         }
 
         if (cell.type === 'label') return formatText(cell.value || '');
-        if (cell.type === 'input') return <span className="text-blue-500 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key || 'NILAI'}]</span>;
-        if (cell.type === 'formula') return <span className="text-yellow-700 italic text-[10px] font-mono bg-yellow-50 px-1 rounded border border-yellow-100">{cell.value || '[Rumus]'}</span>;
+        if (cell.type === 'input') return <span className="text-blue-500 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key || 'NILAI'}{decTag}]</span>;
+        if (cell.type === 'formula') return <span className="text-yellow-700 italic text-[10px] font-mono bg-yellow-50 px-1 rounded border border-yellow-100">{cell.value || '[Rumus]'}{decTag}</span>;
         if (cell.type === 'dropdown') {
             const firstOpt = cell.options && cell.options.length > 0 ? cell.options[0] : (cell.key || 'Pilihan');
             return <span className="text-orange-700 italic text-[10px] font-mono bg-orange-50 px-1 rounded border border-orange-200">[▼ {formatText(firstOpt)}]</span>;
@@ -5071,7 +5104,10 @@ export const TabDesainRapor: React.FC = () => {
 
                     <select 
                         value={activeTemplate?.jenjangId || ''} 
-                        onChange={e => setActiveTemplate(t => t ? {...t, jenjangId: e.target.value ? parseInt(e.target.value) : undefined, kelasId: undefined, rombelId: undefined} : null)}
+                        onChange={e => {
+                            setIsDirty(true);
+                            setActiveTemplate(t => t ? {...t, jenjangId: e.target.value ? parseInt(e.target.value) : undefined, kelasId: undefined, rombelId: undefined} : null);
+                        }}
                         className="sm:hidden border border-slate-300 rounded-lg px-2 py-1 text-[11px] font-bold bg-white text-slate-700 shrink-0"
                     >
                         <option value="">Semua Marhalah</option>
@@ -5586,6 +5622,48 @@ export const TabDesainRapor: React.FC = () => {
                                 })}
                             </div>
 
+                            {/* Excel-style Decimal Places Rounding (.0<- / ->.00 + 0/1/2/3/Auto) */}
+                            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0" title="Pembulatan Angka di Belakang Koma (Seperti Decrease / Increase Decimal di Excel)">
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleStepDecimalPlaces(-1)}
+                                    className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold text-slate-700 hover:bg-white transition-colors disabled:opacity-40"
+                                    title="Kurangi Digit Desimal (Decrease Decimal)"
+                                >
+                                    .0←
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={selectedCells.length === 0}
+                                    onClick={() => handleStepDecimalPlaces(1)}
+                                    className="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold text-slate-700 hover:bg-white transition-colors disabled:opacity-40"
+                                    title="Tambah Digit Desimal hingga 3 angka di belakang koma (Increase Decimal)"
+                                >
+                                    →.00
+                                </button>
+                                <select
+                                    disabled={selectedCells.length === 0}
+                                    value={activeCellData?.decimalPlaces === undefined ? '' : String(activeCellData.decimalPlaces)}
+                                    onChange={(e) => {
+                                        const raw = e.target.value;
+                                        handleBulkUpdateCells({ decimalPlaces: raw === '' ? undefined : Number(raw) });
+                                    }}
+                                    className={`ml-0.5 px-1 py-0.5 rounded text-[11px] font-mono font-bold focus:outline-none cursor-pointer disabled:opacity-40 ${
+                                        activeCellData?.decimalPlaces !== undefined
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-white text-slate-700 border border-slate-200'
+                                    }`}
+                                    title="Pilih jumlah digit di belakang koma (Auto, Bulat 0, 1 digit .0, 2 digit .00, atau 3 digit .000)"
+                                >
+                                    <option value="" className="bg-white text-slate-800">Desimal: Auto</option>
+                                    <option value="0" className="bg-white text-slate-800">0 (Bulat)</option>
+                                    <option value="1" className="bg-white text-slate-800">.0 (1 Digit)</option>
+                                    <option value="2" className="bg-white text-slate-800">.00 (2 Digit)</option>
+                                    <option value="3" className="bg-white text-slate-800">.000 (3 Digit)</option>
+                                </select>
+                            </div>
+
                             {/* Horizontal Align */}
                             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                                 {(['left', 'center', 'right'] as const).map((al) => {
@@ -5928,6 +6006,29 @@ export const TabDesainRapor: React.FC = () => {
                             >
                                 Normal
                             </button>
+
+                            <div className="h-4 w-px bg-slate-700 shrink-0"></div>
+
+                            {/* Quick Decimal Places on Multi-cell Selection */}
+                            {([
+                                { val: 0, label: '0', tip: 'Bulatkan ke bilangan bulat (0 desimal)' },
+                                { val: 1, label: '.0', tip: 'Format 1 angka di belakang koma' },
+                                { val: 2, label: '.00', tip: 'Format 2 angka di belakang koma' },
+                                { val: 3, label: '.000', tip: 'Format 3 angka di belakang koma' },
+                                { val: undefined, label: 'Auto', tip: 'Kembalikan desimal otomatis' }
+                            ] as const).map(item => (
+                                <button
+                                    key={String(item.label)}
+                                    type="button"
+                                    onClick={() => handleBulkUpdateCells({ decimalPlaces: item.val })}
+                                    className="px-1.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-100 border border-emerald-400/30 rounded-lg text-[11px] font-mono font-bold shrink-0"
+                                    title={item.tip}
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+
+                            <div className="h-4 w-px bg-slate-700 shrink-0"></div>
                             <button
                                 type="button"
                                 onClick={() => handleBulkUpdateCells({ align: 'left' })}
@@ -6973,7 +7074,7 @@ export const TabDesainRapor: React.FC = () => {
                                         placeholder="=SUM(D6:D15) atau =RATA2(D6:D15)"
                                     />
                                     <div className="flex flex-wrap gap-1">
-                                        {(['=SUM(', '=RATA2(', '=RATA2_KELAS(', '=TERBILANG(', '=PREDIKAT('] as const).map(starter => (
+                                        {(['=SUM(', '=RATA2(', '=ROUND(', '=FIXED(', '=RATA2_KELAS(', '=TERBILANG(', '=PREDIKAT('] as const).map(starter => (
                                             <button
                                                 key={starter}
                                                 type="button"
@@ -7091,6 +7192,9 @@ export const TabDesainRapor: React.FC = () => {
                                             <li><code>=RATA2(D6:D15)</code> : Rata-rata blok sel santri (atau <code>=RATA2($A, $B)</code>)</li>
                                             <li><code>=RATA2_KELAS(D6)</code> : Rerata kelas suatu mapel (klik sel mapel / <code>$KODE</code>; alias <code>=RERATA_KELAS</code>, <code>=NRK</code>)</li>
                                             <li><code>=RATA2_KELAS()</code> / <code>$RATA_RATA_KELAS</code> : Rata-rata umum seluruh kelas/rombel</li>
+                                            <li><code>=ROUND(D6, 2)</code> / <code>=BULAT(D6, 2)</code> : Bulatkan ke 1, 2, atau 3 angka di belakang koma</li>
+                                            <li><code>=FIXED(RATA2(D6:D15), 2)</code> / <code>=DESIMAL(..., 2)</code> : Format desimal tetap (misal <code>85,50</code>)</li>
+                                            <li><code>=ROUNDUP(D6, 1)</code> / <code>=ROUNDDOWN(D6, 1)</code> : Bulatkan ke atas / ke bawah</li>
                                             <li><code>=TERBILANG(D6)</code> : Angka ke huruf Indonesia</li>
                                             <li><code>=ARAB(D6)</code> : Angka ke Arab-Timur (٨٨)</li>
                                             <li><code>=PREDIKAT(D6, "pesantren")</code> : Mumtaz / Jayyid Jiddan</li>
@@ -7401,6 +7505,55 @@ export const TabDesainRapor: React.FC = () => {
                                                     type="button"
                                                     onClick={() => updateActiveCell({ textTransform: opt.id })}
                                                     className={`py-1 px-1 rounded text-[11px] font-bold transition-colors flex items-center justify-center ${isCur ? 'bg-violet-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}`}
+                                                    title={opt.tip}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Pembulatan Desimal Ala Excel (0, 1, 2, 3 Digit di Belakang Koma) */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pembulatan Desimal (Ala Excel):</span>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleStepDecimalPlaces(-1)}
+                                                className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700"
+                                                title="Kurangi Digit Desimal (Decrease Decimal)"
+                                            >
+                                                .0←
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleStepDecimalPlaces(1)}
+                                                className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[10px] font-mono font-bold text-slate-700"
+                                                title="Tambah Digit Desimal (Increase Decimal)"
+                                            >
+                                                →.00
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-5 gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
+                                        {([
+                                            { val: undefined, label: 'Auto', tip: 'Otomatis (tanpa nol berlebih di belakang koma)' },
+                                            { val: 0, label: '0', tip: 'Bilangan bulat tanpa koma (Contoh: 86)' },
+                                            { val: 1, label: '.0', tip: '1 digit di belakang koma (Contoh: 85,7)' },
+                                            { val: 2, label: '.00', tip: '2 digit di belakang koma (Contoh: 85,67)' },
+                                            { val: 3, label: '.000', tip: '3 digit di belakang koma (Contoh: 85,667)' }
+                                        ] as const).map(opt => {
+                                            const isCur = activeCellData.decimalPlaces === opt.val;
+                                            return (
+                                                <button
+                                                    key={opt.label}
+                                                    type="button"
+                                                    onClick={() => updateActiveCell({ decimalPlaces: opt.val })}
+                                                    className={`py-1 px-1 rounded text-[11px] font-mono font-bold transition-colors flex items-center justify-center ${
+                                                        isCur ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:bg-slate-100'
+                                                    }`}
                                                     title={opt.tip}
                                                 >
                                                     {opt.label}
@@ -8199,6 +8352,7 @@ export const TabDesainRapor: React.FC = () => {
                 });
 
                 const applyModalPageSetup = (patch: Partial<RaporPageSetupInput>) => {
+                    pushToHistory(activeTemplate);
                     const next = normalizeRaporPageSetup({ ...modalPageSetup, ...patch });
                     const sheetUpdates: Partial<RaporSheet> = {
                         paperSize: next.paperSize,
@@ -8553,7 +8707,8 @@ export const TabDesainRapor: React.FC = () => {
                                                     content: resolveRaporText(rawExpr, {
                                                         ...baseResolveContext,
                                                         sheetCells: sh.cells,
-                                                        currentCellCoord: { r: cell.row, c: cell.col }
+                                                        currentCellCoord: { r: cell.row, c: cell.col },
+                                                        decimalPlaces: cell.decimalPlaces
                                                     }),
                                                     isMedia: false
                                                 };
@@ -8617,6 +8772,7 @@ export const TabDesainRapor: React.FC = () => {
                 }}
                 onApplyToCurrentSheet={(updatedCells, newRowCount, newColCount) => {
                     if (!activeTemplate) return;
+                    pushToHistory(activeTemplate);
                     const updated = {
                         ...activeTemplate,
                         rowCount: newRowCount,

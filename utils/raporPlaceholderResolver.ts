@@ -254,6 +254,7 @@ export interface RaporResolveContext {
     sheetCells?: GridCell[][];
     currentCellCoord?: { r: number; c: number };
     evaluatingCells?: Set<string>;
+    decimalPlaces?: number;
 }
 
 export const formatTeacherNip = (teacher?: TenagaPengajar | null): string => {
@@ -841,7 +842,7 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         const nonGradeSet = new Set(['sakit', 'izin', 'alpha', 'alpa', 'total_absen', 's', 'i', 'a']);
         Object.entries(customObj).forEach(([k, val]) => {
             if (!nonGradeSet.has(k.toLowerCase()) && val !== undefined && val !== null && String(val).trim() !== '') {
-                const num = Number(val);
+                const num = Number(String(val).trim().replace(',', '.'));
                 if (!isNaN(num) && num >= 0 && num <= 100) {
                     sum += num;
                     count += 1;
@@ -850,7 +851,7 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         });
         if (count > 0) {
             totalScore = sum;
-            avgScore = Math.round((sum / count) * 100) / 100;
+            avgScore = Math.round((sum / count) * 10000) / 10000;
             if (!predikatStr) {
                 if (avgScore >= 90) predikatStr = 'Mumtaz';
                 else if (avgScore >= 80) predikatStr = 'Jayyid Jiddan';
@@ -896,7 +897,7 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         }
         for (const [nk, st] of cohortAccum.entries()) {
             if (st.count > 0) {
-                effectiveClassAverages[nk] = Math.round((st.sum / st.count) * 100) / 100;
+                effectiveClassAverages[nk] = Math.round((st.sum / st.count) * 10000) / 10000;
             }
         }
     }
@@ -908,16 +909,22 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
             .filter(([k, v]) => !nonGradeSetForAvg.has(k.toLowerCase()) && v > 0 && v <= 100)
             .map(([, v]) => v);
         if (subjectAvgVals.length > 0) {
-            effectiveClassOverallAvg = Math.round((subjectAvgVals.reduce((a, b) => a + b, 0) / subjectAvgVals.length) * 100) / 100;
+            effectiveClassOverallAvg = Math.round((subjectAvgVals.reduce((a, b) => a + b, 0) / subjectAvgVals.length) * 10000) / 10000;
         }
     }
 
+    const tokenDigits = context.decimalPlaces !== undefined
+        ? Math.max(0, Math.min(4, Math.floor(context.decimalPlaces)))
+        : 2;
+
     const formattedClassOverall = effectiveClassOverallAvg !== undefined && effectiveClassOverallAvg > 0
-        ? Number(effectiveClassOverallAvg.toFixed(2)).toString()
+        ? (context.decimalPlaces !== undefined
+            ? effectiveClassOverallAvg.toFixed(tokenDigits)
+            : Number(effectiveClassOverallAvg.toFixed(2)).toString())
         : '-';
 
     setToken('$TOTAL_NILAI', totalScore !== undefined && totalScore > 0 ? String(totalScore) : '-');
-    setToken('$RATA_RATA', avgScore !== undefined && avgScore > 0 ? avgScore.toFixed(2) : '-');
+    setToken('$RATA_RATA', avgScore !== undefined && avgScore > 0 ? avgScore.toFixed(tokenDigits) : '-');
     setToken('$RATA_RATA_KELAS', formattedClassOverall);
     setToken('$RERATA_KELAS', formattedClassOverall);
     setToken('$RATA2_KELAS', formattedClassOverall);
@@ -928,7 +935,9 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
 
     // Daftarkan juga tag per mapel seperti $RATA2_KELAS_FIQIH, $RERATA_KELAS_FIQIH, dan $NRK_FIQIH untuk sel bertipe Data Dinamis
     for (const [normKey, avgNum] of Object.entries(effectiveClassAverages)) {
-        const cleanAvgStr = Number(avgNum.toFixed(2)).toString();
+        const cleanAvgStr = context.decimalPlaces !== undefined
+            ? avgNum.toFixed(tokenDigits)
+            : Number(avgNum.toFixed(2)).toString();
         setToken(`$RATA2_KELAS_${normKey}`, cleanAvgStr);
         setToken(`$RERATA_KELAS_${normKey}`, cleanAvgStr);
         setToken(`$NRK_${normKey}`, cleanAvgStr);
@@ -1519,6 +1528,7 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         tanggalRaporGabungan: hijriMasehiCombined,
         tanggalRaporMasehiHijriah: masehiHijriCombined,
         classAverages: effectiveClassAverages,
-        classOverallAverage: effectiveClassOverallAvg
+        classOverallAverage: effectiveClassOverallAvg,
+        decimalPlaces: context.decimalPlaces
     });
 };

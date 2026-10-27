@@ -43,6 +43,38 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         category: 'formula'
     },
     {
+        token: '=ROUND',
+        insertText: '=ROUND(',
+        label: 'Pembulatan Desimal Excel (ROUND / BULAT)',
+        syntax: '=ROUND(RATA2(D6:D15), 2)',
+        description: 'Bulatkan nilai ke 0, 1, 2, atau 3 angka di belakang koma (contoh: =ROUND(D6, 2))',
+        category: 'formula'
+    },
+    {
+        token: '=FIXED',
+        insertText: '=FIXED(',
+        label: 'Format Desimal Tetap (FIXED / DESIMAL)',
+        syntax: '=FIXED(RATA2(D6:D15), 2)',
+        description: 'Tampilkan selalu tepat N digit di belakang koma termasuk nol (contoh: 85,5 -> 85.50)',
+        category: 'formula'
+    },
+    {
+        token: '=ROUNDUP',
+        insertText: '=ROUNDUP(',
+        label: 'Pembulatan ke Atas (ROUNDUP / BULAT_ATAS)',
+        syntax: '=ROUNDUP(RATA2(D6:D15), 2)',
+        description: 'Bulatkan angka ke atas pada jumlah digit desimal tertentu (1, 2, atau 3 digit)',
+        category: 'formula'
+    },
+    {
+        token: '=ROUNDDOWN',
+        insertText: '=ROUNDDOWN(',
+        label: 'Pembulatan ke Bawah (ROUNDDOWN / BULAT_BAWAH)',
+        syntax: '=ROUNDDOWN(RATA2(D6:D15), 2)',
+        description: 'Potong/bulatkan angka ke bawah pada jumlah digit desimal tertentu (1, 2, atau 3 digit)',
+        category: 'formula'
+    },
+    {
         token: '=PREDIKAT',
         insertText: '=PREDIKAT(',
         label: 'Predikat Huruf / Arab-Latin',
@@ -272,6 +304,7 @@ export interface FormulaEvalMeta {
     tanggalRaporMasehiHijriah?: string;   // misal "20 Juni 2026 M / 5 Muharram 1448 H"
     classAverages?: Record<string, number>; // rata-rata kelas per kunci mapel (misal { FIQIH: 84.35 })
     classOverallAverage?: number;           // rata-rata umum seluruh mapel di kelas/rombel
+    decimalPlaces?: number;                 // jumlah digit desimal sel (0..4) agar evaluasi rumus tidak membulatkan terlalu dini
 }
 
 /**
@@ -311,6 +344,47 @@ export function applyCellTextTransform(text: string, mode?: TextTransformMode): 
     if (mode === 'capitalize') return toTitleCase(text);
     if (mode === 'sentence') return toSentenceCase(text);
     return text;
+}
+
+/**
+ * Pembulatan half-away-from-zero bebas galat floating-point (seperti perilaku standar Excel)
+ */
+export function roundHalfAwayFromZero(num: number, digits: number): number {
+    if (!isFinite(num) || isNaN(num)) return num;
+    const d = Math.max(0, Math.min(6, Math.floor(digits)));
+    const factor = Math.pow(10, d);
+    const sign = num < 0 ? -1 : 1;
+    const rounded = (sign * Math.round((Math.abs(num) + Number.EPSILON) * factor)) / factor;
+    return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+/**
+ * Format tampilan angka sel ala Excel (.0, .00, .000, atau bilangan bulat 0 desimal).
+ * Aman terhadap teks non-angka maupun nomor identitas berawalan nol seperti NISN/NIK/No. HP ("0081234567").
+ */
+export function formatCellNumericDisplay(val: string | number, decimalPlaces?: number): string {
+    if (decimalPlaces === undefined || decimalPlaces === null || decimalPlaces < 0) {
+        return String(val);
+    }
+    const rawStr = String(val);
+    const trimmed = rawStr.trim();
+    if (!trimmed || trimmed === '-') return rawStr;
+
+    // Abaikan string angka dengan leading zero (misal NISN "0081234567" atau telepon "08123456789")
+    if (!/^-?(?:0|[1-9]\d*)(?:[.,]\d+)?$/.test(trimmed)) {
+        return rawStr;
+    }
+
+    const num = Number(trimmed.replace(',', '.'));
+    if (!isFinite(num) || isNaN(num)) return rawStr;
+
+    const d = Math.max(0, Math.min(4, Math.floor(decimalPlaces)));
+    const rounded = roundHalfAwayFromZero(num, d);
+    const formatted = rounded.toFixed(d);
+    if (trimmed.includes(',') && !trimmed.includes('.')) {
+        return formatted.replace('.', ',');
+    }
+    return formatted;
 }
 
 const SATUAN = [
@@ -544,10 +618,11 @@ function parseNumericValues(evaluatedArgs: string[]): number[] {
     return nums;
 }
 
-function formatNumberClean(n: number): string {
+function formatNumberClean(n: number, maxDecimals = 2): string {
     if (!isFinite(n) || isNaN(n)) return '-';
     if (Number.isInteger(n)) return String(n);
-    return Number(n.toFixed(2)).toString();
+    const rounded = roundHalfAwayFromZero(n, maxDecimals);
+    return Number(rounded.toFixed(maxDecimals)).toString();
 }
 
 /**
@@ -662,9 +737,10 @@ function evaluateCondition(condExpr: string, meta?: FormulaEvalMeta): boolean {
     return Boolean(val && val !== '0' && val !== 'false' && val !== '-');
 }
 
-function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
+function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta, isNested = false): string {
     const trimmed = expr.trim();
     if (!trimmed) return '';
+    const autoDecimals = isNested ? 6 : (meta?.decimalPlaces !== undefined ? Math.max(6, Math.floor(meta.decimalPlaces)) : 2);
 
     // String literal murni
     if (isSingleQuotedLiteral(trimmed)) {
@@ -696,7 +772,7 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
         }
         if (ampParts.length > 0) {
             ampParts.push(cur);
-            return ampParts.map(p => unquote(evaluateFormulaNode(p, meta))).join('');
+            return ampParts.map(p => unquote(evaluateFormulaNode(p, meta, false))).join('');
         }
     }
 
@@ -733,13 +809,13 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
             if (fnName === 'IF' || fnName === 'JIKA') {
                 if (rawArgs.length >= 2) {
                     const cond = evaluateCondition(rawArgs[0], meta);
-                    if (cond) return unquote(evaluateFormulaNode(rawArgs[1], meta));
-                    return rawArgs[2] !== undefined ? unquote(evaluateFormulaNode(rawArgs[2], meta)) : '';
+                    if (cond) return unquote(evaluateFormulaNode(rawArgs[1], meta, isNested));
+                    return rawArgs[2] !== undefined ? unquote(evaluateFormulaNode(rawArgs[2], meta, isNested)) : '';
                 }
                 return '-';
             }
 
-            const evalArgs = rawArgs.map(a => evaluateFormulaNode(a, meta));
+            const evalArgs = rawArgs.map(a => evaluateFormulaNode(a, meta, true));
 
             if (fnName === 'CONCAT' || fnName === 'CONCATENATE' || fnName === 'GABUNG') {
                 return evalArgs.map(unquote).join('');
@@ -1059,12 +1135,12 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
             if (fnName === 'SUM' || fnName === 'JUMLAH' || fnName === 'TOTAL') {
                 const nums = parseNumericValues(evalArgs);
                 if (nums.length === 0) return '-';
-                return formatNumberClean(nums.reduce((a, b) => a + b, 0));
+                return formatNumberClean(nums.reduce((a, b) => a + b, 0), autoDecimals);
             }
             if (fnName === 'RATA2' || fnName === 'AVERAGE' || fnName === 'AVG' || fnName === 'RERATA') {
                 const nums = parseNumericValues(evalArgs);
                 if (nums.length === 0) return '-';
-                return formatNumberClean(nums.reduce((a, b) => a + b, 0) / nums.length);
+                return formatNumberClean(nums.reduce((a, b) => a + b, 0) / nums.length, autoDecimals);
             }
             if (
                 fnName === 'RATA2_KELAS' ||
@@ -1090,7 +1166,7 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
                 const nonEmptyArgs = evalArgs.filter(a => unquote(a).trim() !== '');
                 if (nonEmptyArgs.length === 0) {
                     if (typeof meta?.classOverallAverage === 'number' && isFinite(meta.classOverallAverage) && meta.classOverallAverage > 0) {
-                        return formatNumberClean(meta.classOverallAverage);
+                        return formatNumberClean(meta.classOverallAverage, autoDecimals);
                     }
                     return '-';
                 }
@@ -1150,25 +1226,52 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
                 if (collected.length === 0) return '-';
                 const meanVal = collected.reduce((a, b) => a + b, 0) / collected.length;
                 if (explicitDigits !== undefined) {
-                    return Number(meanVal.toFixed(explicitDigits)).toString();
+                    return roundHalfAwayFromZero(meanVal, explicitDigits).toFixed(explicitDigits);
                 }
-                return formatNumberClean(meanVal);
+                return formatNumberClean(meanVal, autoDecimals);
             }
             if (fnName === 'MAX') {
                 const nums = parseNumericValues(evalArgs);
                 if (nums.length === 0) return '-';
-                return formatNumberClean(Math.max(...nums));
+                return formatNumberClean(Math.max(...nums), autoDecimals);
             }
             if (fnName === 'MIN') {
                 const nums = parseNumericValues(evalArgs);
                 if (nums.length === 0) return '-';
-                return formatNumberClean(Math.min(...nums));
+                return formatNumberClean(Math.min(...nums), autoDecimals);
             }
             if (fnName === 'ROUND' || fnName === 'BULAT') {
                 const nums = parseNumericValues(evalArgs);
                 if (nums.length === 0) return '-';
                 const digits = nums[1] !== undefined ? Math.max(0, Math.min(4, Math.floor(nums[1]))) : 0;
-                return Number(nums[0].toFixed(digits)).toString();
+                const rounded = roundHalfAwayFromZero(nums[0], digits);
+                return Number(rounded.toFixed(digits)).toString();
+            }
+            if (fnName === 'ROUNDUP' || fnName === 'BULAT_ATAS') {
+                const nums = parseNumericValues(evalArgs);
+                if (nums.length === 0) return '-';
+                const digits = nums[1] !== undefined ? Math.max(0, Math.min(4, Math.floor(nums[1]))) : 0;
+                const factor = Math.pow(10, digits);
+                const sign = nums[0] < 0 ? -1 : 1;
+                const up = (sign * Math.ceil((Math.abs(nums[0]) - 1e-12) * factor)) / factor;
+                const clean = Object.is(up, -0) ? 0 : up;
+                return Number(clean.toFixed(digits)).toString();
+            }
+            if (fnName === 'ROUNDDOWN' || fnName === 'BULAT_BAWAH') {
+                const nums = parseNumericValues(evalArgs);
+                if (nums.length === 0) return '-';
+                const digits = nums[1] !== undefined ? Math.max(0, Math.min(4, Math.floor(nums[1]))) : 0;
+                const factor = Math.pow(10, digits);
+                const sign = nums[0] < 0 ? -1 : 1;
+                const down = (sign * Math.floor((Math.abs(nums[0]) + 1e-12) * factor)) / factor;
+                const clean = Object.is(down, -0) ? 0 : down;
+                return Number(clean.toFixed(digits)).toString();
+            }
+            if (fnName === 'FIXED' || fnName === 'DESIMAL') {
+                const nums = parseNumericValues(evalArgs);
+                if (nums.length === 0) return '-';
+                const digits = nums[1] !== undefined ? Math.max(0, Math.min(4, Math.floor(nums[1]))) : 2;
+                return roundHalfAwayFromZero(nums[0], digits).toFixed(digits);
             }
             if (fnName === 'TERBILANG') {
                 const val = evalArgs[0] !== undefined ? unquote(evalArgs[0]) : '';
@@ -1192,13 +1295,13 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta): string {
     // Coba evaluasi ekspresi matematika jika mengandung angka/operator
     const mathVal = evaluateSafeMath(trimmed);
     if (mathVal !== null) {
-        return formatNumberClean(mathVal);
+        return formatNumberClean(mathVal, autoDecimals);
     }
 
     return unquote(trimmed);
 }
 
-const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|MAX|MIN|ROUND|BULAT|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA|TEMPAT_RAPOR|KOTA_RAPOR|TEMPAT_TTD|KOTA_PONPES|TANGGAL_RAPOR|TANGGAL_TTD|TANGGAL_CETAK|TANGGAL_DOKUMEN|TANGGAL_RAPOR_MASEHI|TANGGAL_MASEHI|TANGGAL_RAPOR_HIJRIAH|TANGGAL_RAPOR_HIJRIYAH|TANGGAL_HIJRIAH|TANGGAL_HIJRIYAH|TANGGAL_RAPOR_GABUNGAN|TANGGAL_RAPOR_LENGKAP|TANGGAL_HIJRIAH_MASEHI|TANGGAL_MASEHI_HIJRIAH|TITIMANGSA|TITIMANGSA_RAPOR|KOTA_TANGGAL|TEMPAT_TANGGAL|KOTA_TANGGAL_DOKUMEN|TITIMANGSA_MASEHI|KOTA_TANGGAL_MASEHI|TEMPAT_TANGGAL_MASEHI|TITIMANGSA_HIJRIAH|TITIMANGSA_HIJRIYAH|KOTA_TANGGAL_HIJRIAH|TEMPAT_TANGGAL_HIJRIAH|TITIMANGSA_GABUNGAN|TITIMANGSA_HIJRIAH_MASEHI|TITIMANGSA_MASEHI_HIJRIAH|TITIMANGSA_LENGKAP|KOTA_TANGGAL_GABUNGAN|KOTA_TANGGAL_HIJRIAH_MASEHI)\s*\([\s\S]*\)$/i;
+const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|MAX|MIN|ROUND|BULAT|ROUNDUP|BULAT_ATAS|ROUNDDOWN|BULAT_BAWAH|FIXED|DESIMAL|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA|TEMPAT_RAPOR|KOTA_RAPOR|TEMPAT_TTD|KOTA_PONPES|TANGGAL_RAPOR|TANGGAL_TTD|TANGGAL_CETAK|TANGGAL_DOKUMEN|TANGGAL_RAPOR_MASEHI|TANGGAL_MASEHI|TANGGAL_RAPOR_HIJRIAH|TANGGAL_RAPOR_HIJRIYAH|TANGGAL_HIJRIAH|TANGGAL_HIJRIYAH|TANGGAL_RAPOR_GABUNGAN|TANGGAL_RAPOR_LENGKAP|TANGGAL_HIJRIAH_MASEHI|TANGGAL_MASEHI_HIJRIAH|TITIMANGSA|TITIMANGSA_RAPOR|KOTA_TANGGAL|TEMPAT_TANGGAL|KOTA_TANGGAL_DOKUMEN|TITIMANGSA_MASEHI|KOTA_TANGGAL_MASEHI|TEMPAT_TANGGAL_MASEHI|TITIMANGSA_HIJRIAH|TITIMANGSA_HIJRIYAH|KOTA_TANGGAL_HIJRIAH|TEMPAT_TANGGAL_HIJRIAH|TITIMANGSA_GABUNGAN|TITIMANGSA_HIJRIAH_MASEHI|TITIMANGSA_MASEHI_HIJRIAH|TITIMANGSA_LENGKAP|KOTA_TANGGAL_GABUNGAN|KOTA_TANGGAL_HIJRIAH_MASEHI)\s*\([\s\S]*\)$/i;
 
 /**
  * Mengecek apakah string teks sel merupakan ekspresi rumus rapor

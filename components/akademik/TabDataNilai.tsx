@@ -8,7 +8,15 @@ import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { formatAcademicYearDisplay } from '../../utils/academicYear';
 import { getTemplateSheets, extractTemplateKeys } from '../../services/raporExcelService';
 
-export const TabDataNilai: React.FC = () => {
+export interface TabDataNilaiProps {
+    initialContext?: {
+        rombelId?: number;
+        tahunAjaran?: string;
+        semester?: 'Ganjil' | 'Genap';
+    };
+}
+
+export const TabDataNilai: React.FC<TabDataNilaiProps> = ({ initialContext }) => {
     const { settings, showConfirmation, showToast, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
     const canWrite = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
@@ -40,13 +48,31 @@ export const TabDataNilai: React.FC = () => {
     const [modalActiveSheetId, setModalActiveSheetId] = useState<string>('all');
 
     useEffect(() => {
+        if (!initialContext) return;
+        if (initialContext.tahunAjaran) setFilterTahun(initialContext.tahunAjaran);
+        if (initialContext.semester) setFilterSemester(initialContext.semester);
+        if (initialContext.rombelId) {
+            const rObj = settings.rombel.find(r => r.id === initialContext.rombelId);
+            const kObj = rObj ? settings.kelas.find(k => k.id === rObj.kelasId) : undefined;
+            if (kObj) {
+                setFilterJenjang(String(kObj.jenjangId));
+                setTargetMode('single');
+                setFilterKelas(String(kObj.id));
+            }
+            if (rObj) {
+                setFilterRombel(String(rObj.id));
+            }
+        }
+    }, [initialContext, settings.rombel, settings.kelas, setFilterTahun, setFilterSemester]);
+
+    useEffect(() => {
         const fetchRecords = async () => {
             const currentYearFilter = filterTahun || availableYears[0] || defaultAcademicYear;
             const records = await db.raporRecords
                 .where('[tahunAjaran+semester]')
                 .equals([currentYearFilter, filterSemester])
                 .toArray();
-            setArchiveRecords(records);
+            setArchiveRecords(records.filter(r => !r.deleted));
         };
         fetchRecords();
     }, [filterTahun, filterSemester, defaultAcademicYear, availableYears]);
@@ -216,7 +242,7 @@ export const TabDataNilai: React.FC = () => {
             };
         });
 
-        let list = enriched;
+        let list = enriched.filter(item => !item.santri?.deleted);
 
         // Filter Jenjang
         if (filterJenjang) {
@@ -310,6 +336,7 @@ export const TabDataNilai: React.FC = () => {
             const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : (santri?.jenjangId ? settings.jenjang.find(j => j.id === santri.jenjangId) : null);
             return { rec, santri, rombel, kelas, jenjang, stats: getRecordStats(rec) };
         }).filter(item => {
+            if (item.santri?.deleted) return false;
             if (filterJenjang && item.jenjang?.id !== parseInt(filterJenjang)) return false;
             if (targetMode === 'range') {
                 if (selectedRangeKelas.length > 0) {

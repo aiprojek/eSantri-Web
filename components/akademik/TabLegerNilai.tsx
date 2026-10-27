@@ -30,10 +30,11 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
     const { santriList } = useSantriContext();
 
     const isWaliKelas = currentUser?.role === 'wali_kelas';
-    const assignedRombel = useMemo(() => {
-        if (!isWaliKelas) return null;
-        return settings.rombel.find(r => r.waliKelasUserId === currentUser?.id || r.waliKelasId === currentUser?.id);
+    const assignedRombels = useMemo(() => {
+        if (!isWaliKelas) return [];
+        return settings.rombel.filter(r => r.waliKelasUserId === currentUser?.id || r.waliKelasId === currentUser?.id);
     }, [isWaliKelas, currentUser, settings.rombel]);
+    const assignedRombel = assignedRombels[0] || null;
 
     const {
         filterTahun,
@@ -78,8 +79,24 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
     const [showRanking, setShowRanking] = useState<boolean>(true);
     const [showPredikat, setShowPredikat] = useState<boolean>(true);
     const [showPresensi, setShowPresensi] = useState<boolean>(true);
+    const [decimalPlaces, setDecimalPlaces] = useState<0 | 1 | 2 | 3>(() => {
+        try {
+            const saved = localStorage.getItem('esantri_leger_decimal_places');
+            if (saved !== null) {
+                const n = Number(saved);
+                if (n === 0 || n === 1 || n === 2 || n === 3) return n;
+            }
+        } catch {}
+        return 2;
+    });
     const [mobileViewMode, setMobileViewMode] = useState<'table' | 'cards'>('table');
     const [freezeMobileColumns, setFreezeMobileColumns] = useState<boolean>(false);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('esantri_leger_decimal_places', String(decimalPlaces));
+        } catch {}
+    }, [decimalPlaces]);
 
     // Modals
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -88,14 +105,30 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
 
     const printAreaRef = useRef<HTMLDivElement>(null);
 
-    // Filtered Kelas & Rombel options
+    // Filtered Jenjang, Kelas & Rombel options (scoped for Wali Kelas)
+    const availableJenjangList = useMemo(() => {
+        if (!isWaliKelas) return settings.jenjang;
+        const allowedKelasIds = new Set(assignedRombels.map(r => r.kelasId));
+        const allowedJenjangIds = new Set(
+            settings.kelas.filter(k => allowedKelasIds.has(k.id)).map(k => k.jenjangId)
+        );
+        return settings.jenjang.filter(j => allowedJenjangIds.has(j.id));
+    }, [isWaliKelas, assignedRombels, settings.kelas, settings.jenjang]);
+
     const filteredKelasList = useMemo(() => {
-        if (!selectedJenjangId) return settings.kelas;
-        return settings.kelas.filter(k => k.jenjangId === parseInt(selectedJenjangId));
-    }, [settings.kelas, selectedJenjangId]);
+        let list = settings.kelas;
+        if (isWaliKelas) {
+            const allowedKelasIds = new Set(assignedRombels.map(r => r.kelasId));
+            list = list.filter(k => allowedKelasIds.has(k.id));
+        }
+        if (selectedJenjangId) {
+            list = list.filter(k => k.jenjangId === parseInt(selectedJenjangId));
+        }
+        return list;
+    }, [settings.kelas, selectedJenjangId, isWaliKelas, assignedRombels]);
 
     const filteredRombelList = useMemo(() => {
-        let list = settings.rombel;
+        let list = isWaliKelas ? assignedRombels : settings.rombel;
         if (selectedKelasId) {
             list = list.filter(r => r.kelasId === parseInt(selectedKelasId));
         } else if (selectedJenjangId) {
@@ -103,7 +136,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
             list = list.filter(r => allowedKelasIds.has(r.kelasId));
         }
         return list;
-    }, [settings.rombel, selectedKelasId, selectedJenjangId, filteredKelasList]);
+    }, [settings.rombel, selectedKelasId, selectedJenjangId, filteredKelasList, isWaliKelas, assignedRombels]);
 
     // Auto-select initial rombel if not set
     useEffect(() => {
@@ -180,12 +213,12 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
         return settings.jenjang.find(j => j.id === currentKelas.jenjangId) || null;
     }, [currentKelas, settings.jenjang]);
 
-    // Load active students in selected rombel
+    // Load active non-deleted students in selected rombel
     const rombelStudents = useMemo(() => {
         if (!selectedRombelId) return [];
         const rId = parseInt(selectedRombelId);
         return santriList
-            .filter(s => s.rombelId === rId && s.status === 'Aktif')
+            .filter(s => !s.deleted && s.rombelId === rId && s.status === 'Aktif')
             .sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap));
     }, [selectedRombelId, santriList]);
 
@@ -197,8 +230,6 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
 
             try {
                 const rId = parseInt(selectedRombelId);
-                const rombel = settings.rombel.find(r => r.id === rId);
-                const kelas = settings.kelas.find(k => k.id === rombel?.kelasId);
 
                 // 1. Fetch matching template
                 let matchedTemplate: RaporTemplate | null = null;
@@ -211,13 +242,13 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                 setTemplate(matchedTemplate);
 
                 // 2. Fetch records
-                const currentYear = filterTahun || defaultAcademicYear;
+                const currentYear = filterTahun || availableYears[0] || defaultAcademicYear;
                 const recs = await db.raporRecords
                     .where('[tahunAjaran+semester]')
                     .equals([currentYear, filterSemester])
                     .toArray();
 
-                const filtered = recs.filter(r => r.rombelId === rId);
+                const filtered = recs.filter(r => !r.deleted && r.rombelId === rId);
                 setRecords(filtered);
             } catch (err) {
                 console.error('Error fetching leger data:', err);
@@ -227,7 +258,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
         };
 
         fetchData();
-    }, [selectedRombelId, selectedTemplateId, availableTemplates, filterTahun, filterSemester, settings, defaultAcademicYear]);
+    }, [selectedRombelId, selectedTemplateId, availableTemplates, filterTahun, filterSemester, settings, defaultAcademicYear, availableYears]);
 
     // Build consolidated Leger Data with full calculations
     const legerData = useMemo(() => {
@@ -235,9 +266,10 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
             template,
             santriList: rombelStudents,
             records,
-            targetSheetId: activeLegerSheetId
+            targetSheetId: activeLegerSheetId,
+            decimalPlaces
         });
-    }, [template, rombelStudents, records, activeLegerSheetId]);
+    }, [template, rombelStudents, records, activeLegerSheetId, decimalPlaces]);
 
     // Filter & Sort Students for UI display
     const displayedStudents = useMemo(() => {
@@ -292,7 +324,8 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                 tahunAjaran: filterTahun || defaultAcademicYear,
                 semester: filterSemester,
                 settings,
-                waliName: currentWaliName
+                waliName: currentWaliName,
+                decimalPlaces
             });
             showToast(`Leger Nilai berhasil diekspor: ${filename}`, 'success');
         } catch (err) {
@@ -365,8 +398,8 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                             }}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
                         >
-                            <option value="">Semua Jenjang</option>
-                            {settings.jenjang.map(j => (
+                            {!isWaliKelas && <option value="">Semua Jenjang</option>}
+                            {availableJenjangList.map(j => (
                                 <option key={j.id} value={j.id}>{j.nama}</option>
                             ))}
                         </select>
@@ -381,7 +414,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                             onChange={e => setSelectedKelasId(e.target.value)}
                             className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 transition-all"
                         >
-                            <option value="">Semua Kelas</option>
+                            {!isWaliKelas && <option value="">Semua Kelas</option>}
                             {filteredKelasList.map(k => (
                                 <option key={k.id} value={k.id}>{k.nama}</option>
                             ))}
@@ -478,7 +511,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                     <div>
                         <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Rata-Rata Kelas</div>
                         <div className="text-2xl font-black text-emerald-700 mt-1">
-                            {legerData.classAverage > 0 ? legerData.classAverage.toFixed(2) : '-'}
+                            {legerData.classAverage > 0 ? legerData.classAverage.toFixed(decimalPlaces) : '-'}
                         </div>
                         <div className="text-xs font-semibold text-emerald-600 mt-0.5">
                             {legerData.classAverage >= 80 ? 'Predikat Jayyid Jiddan (B)' : legerData.classAverage > 0 ? 'Predikat Jayyid (C)' : 'Belum Terhitung'}
@@ -624,6 +657,32 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                             />
                             <span>Presensi</span>
                         </label>
+
+                        <div className="inline-flex items-center gap-1.5 pl-2 border-l border-slate-200">
+                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Desimal:</span>
+                            <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200">
+                                {([
+                                    { d: 0, label: '0', tip: 'Bulatkan ke bilangan bulat (0 digit di belakang koma)' },
+                                    { d: 1, label: '.0', tip: '1 digit di belakang koma (contoh: 85.4)' },
+                                    { d: 2, label: '.00', tip: '2 digit di belakang koma (contoh: 85.43)' },
+                                    { d: 3, label: '.000', tip: '3 digit di belakang koma (contoh: 85.429)' }
+                                ] as const).map(opt => (
+                                    <button
+                                        key={opt.d}
+                                        type="button"
+                                        onClick={() => setDecimalPlaces(opt.d)}
+                                        title={opt.tip}
+                                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold transition-all ${
+                                            decimalPlaces === opt.d
+                                                ? 'bg-emerald-600 text-white shadow-2xs'
+                                                : 'text-slate-600 hover:bg-white'
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
 
                     {/* Mobile UX Controls: View Switcher (Tabel vs Kartu) & Freeze Toggle */}
@@ -922,7 +981,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                             </div>
                                             {legerData.subjectStats[k.key]?.average > 0 && (
                                                 <div className="mt-0.5 text-[9px] font-semibold text-slate-400">
-                                                    Avg: {legerData.subjectStats[k.key].average}
+                                                    Avg: {legerData.subjectStats[k.key].average.toFixed(decimalPlaces)}
                                                 </div>
                                             )}
                                         </th>
@@ -1122,13 +1181,13 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                     {legerData.gradeKeys.map(k => (
                                         <td key={k.key} className="p-3 text-center border-r border-slate-200">
                                             {legerData.subjectStats[k.key]?.average > 0
-                                                ? legerData.subjectStats[k.key].average
+                                                ? legerData.subjectStats[k.key].average.toFixed(decimalPlaces)
                                                 : '-'}
                                         </td>
                                     ))}
                                     <td className="p-3 text-center border-r border-slate-200 text-slate-500">-</td>
                                     <td className="p-3 text-center text-emerald-800 font-black border-r border-slate-200">
-                                        {legerData.classAverage > 0 ? legerData.classAverage.toFixed(2) : '-'}
+                                        {legerData.classAverage > 0 ? legerData.classAverage.toFixed(decimalPlaces) : '-'}
                                     </td>
                                     {showPredikat && <td className="p-3 text-center border-r border-slate-200">-</td>}
                                     {showRanking && <td className="p-3 text-center border-r border-slate-200">-</td>}
@@ -1328,11 +1387,13 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                                             <td colSpan={3} className="border border-black p-1.5 text-right uppercase">Rata-Rata Kelas</td>
                                             {legerData.gradeKeys.map(k => (
                                                 <td key={k.key} className="border border-black p-1 text-center">
-                                                    {legerData.subjectStats[k.key]?.average || '-'}
+                                                    {legerData.subjectStats[k.key]?.average > 0
+                                                        ? legerData.subjectStats[k.key].average.toFixed(decimalPlaces)
+                                                        : '-'}
                                                 </td>
                                             ))}
                                             <td className="border border-black p-1 text-center">-</td>
-                                            <td className="border border-black p-1 text-center font-black">{legerData.classAverage > 0 ? legerData.classAverage.toFixed(2) : '-'}</td>
+                                            <td className="border border-black p-1 text-center font-black">{legerData.classAverage > 0 ? legerData.classAverage.toFixed(decimalPlaces) : '-'}</td>
                                             <td colSpan={5} className="border border-black p-1 text-center">-</td>
                                         </tr>
                                     </tbody>
@@ -1405,8 +1466,8 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                             }}
                             className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-semibold"
                         >
-                            <option value="">Semua Jenjang</option>
-                            {settings.jenjang.map(j => (
+                            {!isWaliKelas && <option value="">Semua Jenjang</option>}
+                            {availableJenjangList.map(j => (
                                 <option key={j.id} value={j.id}>{j.nama}</option>
                             ))}
                         </select>
@@ -1419,7 +1480,7 @@ export const TabLegerNilai: React.FC<TabLegerNilaiProps> = ({
                             onChange={e => setSelectedKelasId(e.target.value)}
                             className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-semibold"
                         >
-                            <option value="">Semua Kelas</option>
+                            {!isWaliKelas && <option value="">Semua Kelas</option>}
                             {filteredKelasList.map(k => (
                                 <option key={k.id} value={k.id}>{k.nama}</option>
                             ))}

@@ -9,7 +9,7 @@ import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { getRaporRecordsByPeriod } from '../../services/academicQueries';
 import { resolveRaporText, isMediaTag, getMediaTagImageSrc, templateHasBuiltInBiodata } from '../../utils/raporPlaceholderResolver';
-import { applyCellTextTransform } from '../../utils/raporFormulaUtils';
+import { applyCellTextTransform, formatCellNumericDisplay } from '../../utils/raporFormulaUtils';
 import {
     formatLocalDate,
     parseLocalDateSafe,
@@ -40,7 +40,13 @@ import {
 } from '../../utils/raporPageLayout';
 
 export interface TabCetakRaporProps {
-    onNavigateToTab?: (tab: string, rombelId?: number) => void;
+    onNavigateToTab?: (tab: string, rombelId?: number, period?: { tahunAjaran: string; semester: 'Ganjil' | 'Genap' }) => void;
+    initialContext?: {
+        rombelId?: number;
+        tahunAjaran?: string;
+        semester?: 'Ganjil' | 'Genap';
+        templateId?: string;
+    };
 }
 
 export type RankingDisplayLimit = 'all' | '3' | '5' | '10' | 'none';
@@ -435,11 +441,11 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                 renderedContent = <span className="text-[10px] text-gray-400 italic">[{cell.value.replace('$', '')}]</span>;
             }
         } else if (cell.type === 'data') {
-            renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC } });
+            renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC }, decimalPlaces: cell.decimalPlaces });
         } else if (cell.type === 'formula') {
             if (cell.value && cell.value.trim() !== '') {
                 const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
-                renderedContent = resolveRaporText(rawExpr, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC } });
+                renderedContent = resolveRaporText(rawExpr, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC }, decimalPlaces: cell.decimalPlaces });
             } else if (cell.key && customData[cell.key] !== undefined && customData[cell.key] !== '') {
                 renderedContent = customData[cell.key];
             } else {
@@ -448,13 +454,17 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         } else if ((cell.type === 'input' || cell.type === 'dropdown') && cell.key) {
             renderedContent = (customData[cell.key] !== undefined && customData[cell.key] !== '')
                 ? customData[cell.key]
-                : resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC } });
+                : resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC }, decimalPlaces: cell.decimalPlaces });
         } else {
-            renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC } });
+            renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC }, decimalPlaces: cell.decimalPlaces });
         }
 
-        if (!isMediaElement && (typeof renderedContent === 'string' || typeof renderedContent === 'number') && cell.textTransform && cell.textTransform !== 'none') {
-            renderedContent = applyCellTextTransform(String(renderedContent), cell.textTransform);
+        if (!isMediaElement && (typeof renderedContent === 'string' || typeof renderedContent === 'number')) {
+            let formattedStr = formatCellNumericDisplay(String(renderedContent), cell.decimalPlaces);
+            if (cell.textTransform && cell.textTransform !== 'none') {
+                formattedStr = applyCellTextTransform(formattedStr, cell.textTransform);
+            }
+            renderedContent = formattedStr;
         }
 
         const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
@@ -817,7 +827,14 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
         return filtered.length > 0 ? filtered : allSheets;
     }, [template, targetSheetId]);
 
-    const customData = record?.customData ? JSON.parse(record.customData) : {};
+    const customData = useMemo(() => {
+        if (!record?.customData) return {};
+        try {
+            return JSON.parse(record.customData) || {};
+        } catch {
+            return {};
+        }
+    }, [record?.customData]);
     const effectiveDate =
         parseLocalDateSafe(record?.tanggalRapor) ||
         parseLocalDateSafe(tanggalRapor) ||
@@ -888,9 +905,31 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     );
 };
 
-export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab }) => {
-    const { settings, onUpdateSettings, showToast } = useAppContext();
+export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab, initialContext }) => {
+    const { settings, onUpdateSettings, showToast, currentUser } = useAppContext();
     const { santriList } = useSantriContext();
+    const isWaliKelas = currentUser?.role === 'wali_kelas';
+    const canLockRapor = currentUser?.role === 'admin' || currentUser?.permissions?.akademik === 'write';
+    const assignedWaliRombels = useMemo(() => {
+        if (!isWaliKelas || !currentUser) return [];
+        return settings.rombel.filter(
+            r => r.waliKelasUserId === currentUser.id || r.waliKelasId === currentUser.id
+        );
+    }, [isWaliKelas, currentUser, settings.rombel]);
+    const allowedWaliRombelIds = useMemo(() => new Set(assignedWaliRombels.map(r => r.id)), [assignedWaliRombels]);
+    const allowedWaliJenjangIds = useMemo(() => {
+        const set = new Set<number>();
+        assignedWaliRombels.forEach(r => {
+            const k = settings.kelas.find(kl => kl.id === r.kelasId);
+            if (k) set.add(k.jenjangId);
+        });
+        return set;
+    }, [assignedWaliRombels, settings.kelas]);
+    const availableJenjangs = useMemo(() => {
+        if (!isWaliKelas) return settings.jenjang;
+        return settings.jenjang.filter(j => allowedWaliJenjangIds.has(j.id));
+    }, [isWaliKelas, settings.jenjang, allowedWaliJenjangIds]);
+
     const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
     const {
         filterTahun,
@@ -905,6 +944,29 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const [printRombel, setPrintRombel] = useState('');
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [selectedPrintSheetId, setSelectedPrintSheetId] = useState<string>('all');
+
+    useEffect(() => {
+        if (initialContext) {
+            if (initialContext.tahunAjaran) setFilterTahun(initialContext.tahunAjaran);
+            if (initialContext.semester) setFilterSemester(initialContext.semester);
+            if (initialContext.templateId) setSelectedTemplateId(initialContext.templateId);
+            if (initialContext.rombelId && (!isWaliKelas || allowedWaliRombelIds.has(initialContext.rombelId))) {
+                const rObj = settings.rombel.find(r => r.id === initialContext.rombelId);
+                const kObj = rObj ? settings.kelas.find(k => k.id === rObj.kelasId) : undefined;
+                if (kObj) setFilterJenjang(String(kObj.jenjangId));
+                setPrintRombel(String(initialContext.rombelId));
+            }
+        }
+    }, [initialContext, isWaliKelas, allowedWaliRombelIds, settings.rombel, settings.kelas, setFilterTahun, setFilterSemester]);
+
+    useEffect(() => {
+        if (isWaliKelas && assignedWaliRombels.length > 0 && !printRombel) {
+            const firstRombel = assignedWaliRombels[0];
+            const kObj = settings.kelas.find(k => k.id === firstRombel.kelasId);
+            if (kObj) setFilterJenjang(String(kObj.jenjangId));
+            setPrintRombel(String(firstRombel.id));
+        }
+    }, [isWaliKelas, assignedWaliRombels, printRombel, settings.kelas]);
 
     useEffect(() => {
         setSelectedPrintSheetId('all');
@@ -1064,9 +1126,19 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
     const currentApprovalStatus = (settings.raporApprovalStatus?.[approvalKey]) || 'draft';
 
     const handleCycleApprovalStatus = async () => {
-        const nextStatus: 'draft' | 'verified' | 'locked' = 
-            currentApprovalStatus === 'draft' ? 'verified' :
-            currentApprovalStatus === 'verified' ? 'locked' : 'draft';
+        if (currentApprovalStatus === 'locked' && !canLockRapor) {
+            showToast('Rapor telah disahkan & dikunci. Hubungi Admin / Bagian Akademik untuk membuka kunci.', 'info');
+            return;
+        }
+
+        let nextStatus: 'draft' | 'verified' | 'locked';
+        if (!canLockRapor) {
+            nextStatus = currentApprovalStatus === 'draft' ? 'verified' : 'draft';
+        } else {
+            nextStatus =
+                currentApprovalStatus === 'draft' ? 'verified' :
+                currentApprovalStatus === 'verified' ? 'locked' : 'draft';
+        }
         
         const updatedStatusMap = {
             ...(settings.raporApprovalStatus || {}),
@@ -1199,7 +1271,9 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
             const records = await getRaporRecordsByPeriod(filterTahun, filterSemester);
             const map = new Map<number, RaporRecord>();
             records.forEach((record) => {
-                map.set(record.santriId, record);
+                if (!record.deleted) {
+                    map.set(record.santriId, record);
+                }
             });
             setPeriodRecordsMap(map);
         };
@@ -1207,22 +1281,26 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
         loadPeriodRecords();
     }, [filterTahun, filterSemester]);
 
-    // Derived Available Rombels based on Jenjang
+    // Derived Available Rombels based on Jenjang & RBAC
     const availableRombels = useMemo(() => {
-        if (!filterJenjang) return settings.rombel;
+        const baseRombels = isWaliKelas
+            ? settings.rombel.filter(r => allowedWaliRombelIds.has(r.id))
+            : settings.rombel;
+        if (!filterJenjang) return baseRombels;
         const kelasInJenjang = settings.kelas.filter(k => k.jenjangId === parseInt(filterJenjang)).map(k => k.id);
-        return settings.rombel.filter(r => kelasInJenjang.includes(r.kelasId));
-    }, [filterJenjang, settings]);
+        return baseRombels.filter(r => kelasInJenjang.includes(r.kelasId));
+    }, [filterJenjang, settings, isWaliKelas, allowedWaliRombelIds]);
 
-    // Base active students according to Jenjang and Rombel filter
+    // Base active students according to Jenjang, Rombel filter & RBAC
     const baseSantriList = useMemo(() => {
         return santriList.filter(s => {
-            if (s.status !== 'Aktif') return false;
+            if (s.deleted || s.status !== 'Aktif') return false;
+            if (isWaliKelas && !allowedWaliRombelIds.has(s.rombelId)) return false;
             if (filterJenjang && s.jenjangId !== parseInt(filterJenjang)) return false;
             if (printRombel && s.rombelId !== parseInt(printRombel)) return false;
             return true;
         });
-    }, [santriList, filterJenjang, printRombel]);
+    }, [santriList, filterJenjang, printRombel, isWaliKelas, allowedWaliRombelIds]);
 
     // Compute Leger Calculations per Rombel to get exact ranks, averages, and completeness
     useEffect(() => {
@@ -1592,19 +1670,33 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                         </p>
                     </div>
 
-                    {/* Mobile Filter & Quick Print Actions */}
-                    <div className="flex md:hidden gap-2 w-full">
+                    {/* Mobile Filter, Approval & Quick Print Actions */}
+                    <div className="flex flex-wrap md:hidden gap-2 w-full">
                         <button
                             onClick={() => setIsFilterDrawerOpen(true)}
-                            className="flex-grow flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-sm shadow-xs"
+                            className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 px-3 py-2.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl font-bold text-xs shadow-xs"
                         >
                             <i className="bi bi-funnel-fill"></i>
                             <span>Filter</span>
                         </button>
                         <button
+                            type="button"
+                            onClick={handleCycleApprovalStatus}
+                            className={`px-3 py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all shadow-2xs ${
+                                currentApprovalStatus === 'locked'
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                    : currentApprovalStatus === 'verified'
+                                    ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                    : 'bg-amber-50 text-amber-800 border-amber-300'
+                            }`}
+                        >
+                            <i className={`bi ${currentApprovalStatus === 'locked' ? 'bi-lock-fill text-emerald-600' : currentApprovalStatus === 'verified' ? 'bi-patch-check-fill text-blue-600' : 'bi-pencil-square text-amber-600'}`}></i>
+                            <span>{currentApprovalStatus === 'locked' ? 'Terkunci' : currentApprovalStatus === 'verified' ? 'Terverifikasi' : 'Draf'}</span>
+                        </button>
+                        <button
                             onClick={handleStartBatchPrint}
                             disabled={filteredSantriList.length === 0}
-                            className="shrink-0 px-4 h-[44px] bg-teal-600 text-white rounded-xl flex items-center justify-center gap-2 font-bold text-sm shadow-sm active:scale-95 transition-all disabled:opacity-50"
+                            className="shrink-0 px-3.5 h-[42px] bg-teal-600 text-white rounded-xl flex items-center justify-center gap-1.5 font-bold text-xs shadow-sm active:scale-95 transition-all disabled:opacity-50"
                         >
                             <i className="bi bi-printer-fill"></i>
                             <span>{selectedSantriIds.size > 0 ? `Cetak (${selectedSantriIds.size})` : `Cetak (${filteredSantriList.length})`}</span>
@@ -1624,7 +1716,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                     ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
                                     : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
                             }`}
-                            title="Klik untuk mengubah alur pengesahan: Draf -> Terverifikasi Wali -> Disahkan & Terkunci"
+                            title={canLockRapor ? "Klik untuk mengubah alur pengesahan: Draf -> Terverifikasi Wali -> Disahkan & Terkunci" : "Klik untuk menandai verifikasi Wali Kelas (Draf <-> Terverifikasi Wali)"}
                         >
                             <i className={`bi ${currentApprovalStatus === 'locked' ? 'bi-lock-fill text-emerald-600' : currentApprovalStatus === 'verified' ? 'bi-patch-check-fill text-blue-600' : 'bi-pencil-square text-amber-600'}`}></i>
                             <span>
@@ -1664,13 +1756,15 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 <strong>Rapor Telah Disahkan & Terkunci:</strong> Nilai rapor pada periode dan rombel ini telah diverifikasi dan dikunci untuk menjaga integritas dokumen cetak.
                             </span>
                         </div>
-                        <button
-                            type="button"
-                            onClick={handleCycleApprovalStatus}
-                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors shrink-0"
-                        >
-                            Buka Kunci
-                        </button>
+                        {canLockRapor && (
+                            <button
+                                type="button"
+                                onClick={handleCycleApprovalStatus}
+                                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors shrink-0"
+                            >
+                                Buka Kunci
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -1708,8 +1802,8 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                             onChange={e => { setFilterJenjang(e.target.value); setPrintRombel(''); }}
                             className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 transition-all"
                         >
-                            <option value="">Semua Jenjang</option>
-                            {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                            {!isWaliKelas && <option value="">Semua Jenjang</option>}
+                            {availableJenjangs.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                         </select>
                     </div>
 
@@ -2326,7 +2420,7 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                         {status !== 'Lengkap' && onNavigateToTab && (
                                             <button
                                                 type="button"
-                                                onClick={() => onNavigateToTab('input_wali', santri.rombelId)}
+                                                onClick={() => onNavigateToTab('input_wali', santri.rombelId, { tahunAjaran: filterTahun, semester: filterSemester })}
                                                 className="hidden md:flex bg-slate-50 hover:bg-teal-50 text-slate-600 hover:text-teal-700 border border-slate-200 hover:border-teal-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all items-center gap-1.5"
                                                 title="Input atau lengkapi nilai santri ini di Lembar Wali Kelas"
                                             >
@@ -3005,8 +3099,8 @@ export const TabCetakRapor: React.FC<TabCetakRaporProps> = ({ onNavigateToTab })
                                 onChange={e => { setFilterJenjang(e.target.value); setPrintRombel(''); }}
                                 className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold bg-white"
                             >
-                                <option value="">Semua Jenjang</option>
-                                {settings.jenjang.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
+                                {!isWaliKelas && <option value="">Semua Jenjang</option>}
+                                {availableJenjangs.map(j => <option key={j.id} value={j.id}>{j.nama}</option>)}
                             </select>
                         </div>
                         <div>

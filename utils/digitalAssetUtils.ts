@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { DigitalAsset, PondokSettings, TenagaPengajar } from '../types';
+import { DigitalAsset, Jenjang, PondokSettings, TenagaPengajar } from '../types';
 
 export const normalizePersonName = (name?: string | null): string => {
     return (name || '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -91,6 +91,124 @@ export const findStrictTeacherTtdAsset = (
             (a.guruId === undefined || a.guruId === null) &&
             normalizePersonName(a.namaPemilik) === targetName
     );
+};
+
+/**
+ * Mencari aset Stempel khusus milik suatu Jenjang / Marhalah secara ketat.
+ */
+export const findJenjangStempelAsset = (
+    digitalAssets: DigitalAsset[] | undefined | null,
+    jenjang?: { id?: number | null; nama?: string | null; kode?: string | null } | null
+): DigitalAsset | undefined => {
+    if (!digitalAssets || digitalAssets.length === 0 || !jenjang) return undefined;
+
+    if (jenjang.id !== undefined && jenjang.id !== null) {
+        const byJenjangId = digitalAssets.find(
+            (a) =>
+                a.type === 'stempel' &&
+                a.jenjangId !== undefined &&
+                a.jenjangId !== null &&
+                Number(a.jenjangId) === Number(jenjang.id)
+        );
+        if (byJenjangId) return byJenjangId;
+    }
+
+    const normNama = normalizePersonName(jenjang.nama);
+    if (!normNama) return undefined;
+
+    return digitalAssets.find(
+        (a) =>
+            a.type === 'stempel' &&
+            !a.systemRole &&
+            (a.jenjangId === undefined || a.jenjangId === null) &&
+            (normalizePersonName(a.namaPemilik) === normNama ||
+                normalizePersonName(a.namaPemilik) === `stempel ${normNama}` ||
+                normalizePersonName(a.namaPemilik) === `marhalah ${normNama}`)
+    );
+};
+
+/**
+ * Mengambil gambar Stempel Resmi Utama Pondok ($STEMPEL_PONPES).
+ */
+export const findPrimaryPonpesStempelSrc = (
+    settings?: PondokSettings | null,
+    digitalAssets?: DigitalAsset[] | null
+): string | null => {
+    if (settings?.stempelPonpesUrl && settings.stempelPonpesUrl.trim()) {
+        return settings.stempelPonpesUrl;
+    }
+    const list = digitalAssets || [];
+    const primary = list.find(
+        (a) => a.systemRole === 'stempel_ponpes' || a.id === 'aset_utama_stempel_ponpes'
+    );
+    if (primary?.base64Image) return primary.base64Image;
+    // Hanya fallback ke stempel umum yang TIDAK diikat khusus ke jenjang tertentu
+    const unlinkedStempel = list.find(
+        (a) => a.type === 'stempel' && (a.jenjangId === undefined || a.jenjangId === null)
+    );
+    return unlinkedStempel?.base64Image || null;
+};
+
+/**
+ * Menyimpan atau memperbarui Stempel khusus Jenjang / Marhalah ke `db.digitalAssets`
+ * sehingga otomatis terdaftar di Daftar Aset Digital dan terikat ke `jenjangId` Data Master.
+ */
+export const upsertJenjangStempelAsset = async (
+    jenjang: Jenjang,
+    base64Image: string,
+    customJabatan?: string
+): Promise<DigitalAsset> => {
+    const allAssets = await db.digitalAssets.toArray();
+    const existing = findJenjangStempelAsset(allAssets, jenjang);
+    const deterministicId = existing?.id || `stempel_jenjang_${jenjang.id}`;
+    const resolvedJabatan =
+        (customJabatan || '').trim() ||
+        `Stempel Resmi Marhalah ${jenjang.kode ? `(${jenjang.kode})` : jenjang.nama} ($STEMPEL_MARHALAH)`;
+
+    const nextAsset: DigitalAsset = {
+        id: deterministicId,
+        type: 'stempel',
+        jenjangId: jenjang.id,
+        namaPemilik: jenjang.nama.trim(),
+        jabatan: resolvedJabatan,
+        base64Image,
+        lastModified: Date.now(),
+    };
+
+    await db.digitalAssets.put(nextAsset);
+
+    const duplicates = allAssets.filter(
+        (a) =>
+            a.type === 'stempel' &&
+            !a.systemRole &&
+            a.id !== deterministicId &&
+            a.jenjangId !== undefined &&
+            Number(a.jenjangId) === Number(jenjang.id)
+    );
+    for (const dup of duplicates) {
+        await db.digitalAssets.delete(dup.id);
+    }
+
+    return nextAsset;
+};
+
+/**
+ * Menghapus Stempel khusus Jenjang / Marhalah dari `db.digitalAssets`.
+ */
+export const removeJenjangStempelAsset = async (jenjang: { id: number; nama?: string }): Promise<void> => {
+    const allAssets = await db.digitalAssets.toArray();
+    const matches = allAssets.filter(
+        (a) =>
+            a.type === 'stempel' &&
+            !a.systemRole &&
+            ((a.jenjangId !== undefined && Number(a.jenjangId) === Number(jenjang.id)) ||
+                ((a.jenjangId === undefined || a.jenjangId === null) &&
+                    Boolean(jenjang.nama) &&
+                    normalizePersonName(a.namaPemilik) === normalizePersonName(jenjang.nama)))
+    );
+    for (const m of matches) {
+        await db.digitalAssets.delete(m.id);
+    }
 };
 
 /**
@@ -250,49 +368,60 @@ export const upsertInstitutionDigitalAsset = async (
 
 /**
  * Rekonsiliasi otomatis non-destruktif untuk menautkan TTD lama yang belum memiliki `guruId`
- * ke Data Master serta memperbaiki label jabatan keliru (misal Mudir yang dulu terisi default "Pengajar / Wali Kelas"),
+ * ke Data Master serta memperbaiki label jabatan keliru, menyinkronkan Stempel Marhalah,
  * sekaligus mendaftarkan Logo/Stempel dari Pengaturan Umum ke Daftar Aset Digital jika belum terdaftar.
  */
 export const reconcileDigitalAssetsWithSettings = async (settings?: PondokSettings | null): Promise<number> => {
     if (!settings) return 0;
     const allAssets = await db.digitalAssets.toArray();
     const teachers = settings.tenagaPengajar || [];
+    const jenjangList = settings.jenjang || [];
     let updatedCount = 0;
 
     // 1. Tautkan TTD ke guruId & perbaiki label jabatan sesuai Data Master
     for (const asset of allAssets) {
-        if (asset.type !== 'ttd') continue;
-
-        let matchedTeacher: TenagaPengajar | undefined;
-        if (asset.guruId !== undefined && asset.guruId !== null) {
-            matchedTeacher = teachers.find((t) => Number(t.id) === Number(asset.guruId));
-        } else {
-            const normOwner = normalizePersonName(asset.namaPemilik);
-            const candidates = teachers.filter((t) => normalizePersonName(t.nama) === normOwner);
-            if (candidates.length === 1) {
-                matchedTeacher = candidates[0];
+        if (asset.type === 'ttd') {
+            let matchedTeacher: TenagaPengajar | undefined;
+            if (asset.guruId !== undefined && asset.guruId !== null) {
+                matchedTeacher = teachers.find((t) => Number(t.id) === Number(asset.guruId));
+            } else {
+                const normOwner = normalizePersonName(asset.namaPemilik);
+                const candidates = teachers.filter((t) => normalizePersonName(t.nama) === normOwner);
+                if (candidates.length === 1) {
+                    matchedTeacher = candidates[0];
+                }
             }
-        }
 
-        if (matchedTeacher) {
-            const accurateRole = getTeacherPrimaryRoleLabel(matchedTeacher, settings);
-            const hasStaleDefaultJabatan =
-                !asset.jabatan ||
-                asset.jabatan === 'Pengajar / Wali Kelas' ||
-                asset.guruId === undefined ||
-                asset.guruId === null;
+            if (matchedTeacher) {
+                const accurateRole = getTeacherPrimaryRoleLabel(matchedTeacher, settings);
+                const hasStaleDefaultJabatan =
+                    !asset.jabatan ||
+                    asset.jabatan === 'Pengajar / Wali Kelas' ||
+                    asset.guruId === undefined ||
+                    asset.guruId === null;
 
-            const nextJabatan = hasStaleDefaultJabatan ? accurateRole : asset.jabatan;
-            if (
-                asset.guruId !== matchedTeacher.id ||
-                asset.namaPemilik !== matchedTeacher.nama.trim() ||
-                asset.jabatan !== nextJabatan
-            ) {
+                const nextJabatan = hasStaleDefaultJabatan ? accurateRole : asset.jabatan;
+                if (
+                    asset.guruId !== matchedTeacher.id ||
+                    asset.namaPemilik !== matchedTeacher.nama.trim() ||
+                    asset.jabatan !== nextJabatan
+                ) {
+                    await db.digitalAssets.put({
+                        ...asset,
+                        guruId: matchedTeacher.id,
+                        namaPemilik: matchedTeacher.nama.trim(),
+                        jabatan: nextJabatan,
+                        lastModified: Date.now(),
+                    });
+                    updatedCount++;
+                }
+            }
+        } else if (asset.type === 'stempel' && !asset.systemRole && asset.jenjangId !== undefined && asset.jenjangId !== null) {
+            const matchedJenjang = jenjangList.find((j) => Number(j.id) === Number(asset.jenjangId));
+            if (matchedJenjang && asset.namaPemilik !== matchedJenjang.nama.trim()) {
                 await db.digitalAssets.put({
                     ...asset,
-                    guruId: matchedTeacher.id,
-                    namaPemilik: matchedTeacher.nama.trim(),
-                    jabatan: nextJabatan,
+                    namaPemilik: matchedJenjang.nama.trim(),
                     lastModified: Date.now(),
                 });
                 updatedCount++;

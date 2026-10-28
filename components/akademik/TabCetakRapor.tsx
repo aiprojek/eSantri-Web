@@ -8,7 +8,8 @@ import { PrintHeader } from '../common/PrintHeader';
 import { MobileFilterDrawer } from '../common/MobileFilterDrawer';
 import { useAcademicPeriodFilter } from '../../hooks/useAcademicPeriodFilter';
 import { getRaporRecordsByPeriod } from '../../services/academicQueries';
-import { resolveRaporText, isMediaTag, getMediaTagImageSrc, templateHasBuiltInBiodata } from '../../utils/raporPlaceholderResolver';
+import { resolveRaporText, isMediaTag, resolveCellMediaVisual, templateHasBuiltInBiodata } from '../../utils/raporPlaceholderResolver';
+import { RaporSignatureStampMedia } from '../common/RaporSignatureStampMedia';
 import { applyCellTextTransform, formatCellNumericDisplay } from '../../utils/raporFormulaUtils';
 import {
     formatLocalDate,
@@ -429,26 +430,14 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
 
         if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(cell.value)) {
             isMediaElement = true;
-            const imgSrc = getMediaTagImageSrc(cell.value, sheetResolveContext);
-            const upperCellVal = (cell.value || '').toUpperCase();
-            if (imgSrc) {
-                const isStempel = upperCellVal.includes('STEMPEL');
-                const isTtd = upperCellVal.includes('TTD');
-                const isKop = upperCellVal.includes('KOP');
-                renderedContent = (
-                    <div className="flex items-center justify-center p-0.5 w-full h-full">
-                        <img
-                            src={imgSrc}
-                            alt={cell.value}
-                            onLoad={triggerMeasure}
-                            className={`object-contain ${isKop ? 'w-full max-h-28' : isStempel ? 'max-h-16 max-w-[90px] opacity-90' : isTtd ? 'max-h-14 max-w-[120px]' : 'max-h-12 max-w-[100px]'}`}
-                        />
-                    </div>
-                );
-            } else {
-                // Kosongkan sel secara bersih (siap untuk tanda tangan basah) jika pejabat terkait belum memiliki aset TTD digital
-                renderedContent = null;
-            }
+            const mediaVisual = resolveCellMediaVisual(cell, sheetResolveContext);
+            renderedContent = mediaVisual ? (
+                <RaporSignatureStampMedia
+                    visual={mediaVisual}
+                    mode="print"
+                    onImageLoad={triggerMeasure}
+                />
+            ) : null;
         } else if (cell.type === 'data') {
             renderedContent = resolveRaporText(cell.value, { ...sheetResolveContext, currentCellCoord: { r: rIdx, c: masterC }, decimalPlaces: cell.decimalPlaces });
         } else if (cell.type === 'formula') {
@@ -505,6 +494,8 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         const isExpandableDynamic = (upperToken.includes('DESKRIPSI') || upperToken.includes('CATATAN')) && !isClip && !isFloat && (cellHeightPx === undefined || cellHeightPx >= 28);
         const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
 
+        const allowMediaOverflow = isMediaElement && !isLogoMedia && !borders.top && !borders.left && !borders.right;
+
         const tdStyle: React.CSSProperties = {
             borderTop: (!isLogoMedia && borders.top) ? '1px solid black' : 'none',
             borderRight: (!isLogoMedia && borders.right) ? '1px solid black' : 'none',
@@ -520,8 +511,8 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
             fontSize: `${effectiveFontSize}px`,
             padding: 0,
             boxSizing: 'border-box',
-            overflow: isFloat ? 'visible' : 'hidden',
-            position: isFloat ? 'relative' : undefined
+            overflow: (isFloat || allowMediaOverflow) ? 'visible' : 'hidden',
+            position: (isFloat || allowMediaOverflow) ? 'relative' : undefined
         };
 
         return (
@@ -571,10 +562,10 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                             width: '100%',
                             height: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : '100%',
                             minHeight: (isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
-                            maxHeight: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
+                            maxHeight: (!isExpandableDynamic && !allowMediaOverflow && cellHeightPx) ? `${cellHeightPx}px` : undefined,
                             padding: isMediaElement ? '1px' : cellPadding,
                             boxSizing: 'border-box',
-                            overflow: 'hidden',
+                            overflow: allowMediaOverflow ? 'visible' : 'hidden',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',

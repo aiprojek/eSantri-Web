@@ -1,9 +1,11 @@
 
 import React, { useEffect, useState } from 'react';
-import { Santri, PondokSettings, RaporRecord } from '../../../types';
+import { Santri, PondokSettings, RaporRecord, DigitalAsset } from '../../../types';
 import { PrintHeader } from '../../common/PrintHeader';
+import { RaporSignatureStampMedia } from '../../common/RaporSignatureStampMedia';
 import { ReportFooter, chunkArray, formatDate, formatAlamat } from './Common';
 import { formatTanggalDokumen, resolveTempatRapor } from '../../../utils/formatters';
+import { resolveCellMediaVisual, resolveMudirMarhalahTeacher, resolveWaliKelasTeacher } from '../../../utils/raporPlaceholderResolver';
 import { db } from '../../../db';
 import { formatAcademicYearDisplay } from '../../../utils/academicYear';
 
@@ -27,23 +29,27 @@ const AcademicHeader: React.FC<{ settings: PondokSettings, title: string, meta: 
 // --- RAPOR LENGKAP TEMPLATE ---
 export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSettings; options: any }> = ({ santri, settings, options }) => {
     const [raporData, setRaporData] = useState<RaporRecord | null>(null);
+    const [digitalAssets, setDigitalAssets] = useState<DigitalAsset[]>([]);
     const [loading, setLoading] = useState(true);
 
     const rombel = settings.rombel.find(r => r.id === santri.rombelId);
-    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : undefined;
-    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : undefined;
-    const waliKelas = rombel?.waliKelasId ? settings.tenagaPengajar.find(p => p.id === rombel.waliKelasId) : null;
-    const mudir = jenjang?.mudirId ? settings.tenagaPengajar.find(p => p.id === jenjang.mudirId) : null;
+    const kelas = rombel ? settings.kelas.find(k => k.id === rombel.kelasId) : (santri.kelasId ? settings.kelas.find(k => k.id === santri.kelasId) : undefined);
+    const jenjang = kelas ? settings.jenjang.find(j => j.id === kelas.jenjangId) : (santri.jenjangId ? settings.jenjang.find(j => j.id === santri.jenjangId) : undefined);
+    const waliKelas = resolveWaliKelasTeacher(rombel, settings) || null;
+    const mudir = resolveMudirMarhalahTeacher(jenjang, settings) || null;
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Correctly use the compound index defined in db.ts
-                const record = await db.raporRecords
-                    .where('[santriId+tahunAjaran+semester]')
-                    .equals([santri.id, options.tahunAjaran, options.semester])
-                    .first();
+                const [record, assets] = await Promise.all([
+                    db.raporRecords
+                        .where('[santriId+tahunAjaran+semester]')
+                        .equals([santri.id, options.tahunAjaran, options.semester])
+                        .first(),
+                    db.digitalAssets.toArray(),
+                ]);
                 setRaporData(record && !record.deleted ? record : null);
+                setDigitalAssets(assets || []);
             } catch (error) {
                 console.error("Gagal mengambil data rapor", error);
             } finally {
@@ -230,6 +236,10 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                         manualHijri
                     });
 
+                    const mediaCtx = { santri, settings, record: raporData, digitalAssets };
+                    const mudirVisual = resolveCellMediaVisual({ value: '$TTD_STEMPEL_MUDIR_MARHALAH' }, mediaCtx);
+                    const waliVisual = resolveCellMediaVisual({ value: '$TTD_WALI_KELAS' }, mediaCtx);
+
                     return (
                         <div className="flex justify-between items-end mt-4 px-4 text-xs" style={{ breakInside: 'avoid' }}>
                             <div className="text-center w-40">
@@ -238,15 +248,19 @@ export const RaporLengkapTemplate: React.FC<{ santri: Santri; settings: PondokSe
                                 <div className="h-16"></div>
                                 <p className="border-b border-black">.........................</p>
                             </div>
-                            <div className="text-center w-40">
+                            <div className="text-center w-44">
                                 <p>Mudir Marhalah</p>
-                                <div className="h-16"></div>
+                                <div className="h-16 flex items-center justify-center overflow-visible">
+                                    {mudirVisual && <RaporSignatureStampMedia visual={mudirVisual} mode="print" />}
+                                </div>
                                 <p className="font-bold underline">{mudir?.nama || '.........................'}</p>
                             </div>
                             <div className="text-center w-44">
                                 <p>{tempatRapor}, {tanggalDisplay}</p>
                                 <p>Wali Kelas</p>
-                                <div className="h-16"></div>
+                                <div className="h-16 flex items-center justify-center overflow-visible">
+                                    {waliVisual && <RaporSignatureStampMedia visual={waliVisual} mode="print" />}
+                                </div>
                                 <p className="font-bold underline">{waliKelas?.nama || '.........................'}</p>
                             </div>
                         </div>

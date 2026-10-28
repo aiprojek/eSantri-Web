@@ -1,5 +1,5 @@
 import React from 'react';
-import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTemplate, TenagaPengajar, Rombel, Jenjang, Kelas } from '../types';
+import { Santri, PondokSettings, RaporRecord, DigitalAsset, GridCell, RaporTemplate, TenagaPengajar, Rombel, Jenjang, Kelas, StempelOverlayConfig } from '../types';
 import {
     formatDate,
     getHijriDate,
@@ -11,7 +11,7 @@ import {
 } from './formatters';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
-import { findStrictTeacherTtdAsset } from './digitalAssetUtils';
+import { findStrictTeacherTtdAsset, findJenjangStempelAsset, findPrimaryPonpesStempelSrc } from './digitalAssetUtils';
 import {
     evaluateRaporFormula,
     isRaporFormulaExpression,
@@ -226,13 +226,16 @@ export const DYNAMIC_TAG_CATEGORIES: DynamicTagCategory[] = [
         icon: 'bi-image',
         color: 'text-rose-600 bg-rose-50 border-rose-200',
         tags: [
-            { tag: '$LOGO_PONPES', label: 'Logo Pondok Pesantren', description: 'Gambar logo resmi pondok', example: '[Gambar Logo Ponpes]', isMedia: true },
-            { tag: '$LOGO_YAYASAN', label: 'Logo Yayasan', description: 'Gambar logo yayasan', example: '[Gambar Logo Yayasan]', isMedia: true },
-            { tag: '$STEMPEL_PONPES', label: 'Stempel Resmi Pondok', description: 'Cap stempel lembaga', example: '[Gambar Stempel Ponpes]', isMedia: true },
-            { tag: '$KOP_SURAT', label: 'Kop Dokumen / Rapor', description: 'Gambar header kop lembaga dari Aset Digital', example: '[Gambar Kop]', isMedia: true },
+            { tag: '$TTD_STEMPEL_MUDIR_MARHALAH', label: 'TTD + Stempel Mudir Marhalah', description: 'TTD Mudir Marhalah dengan Stempel Marhalah/Pondok menimpa di atas TTD', example: '[Cap + TTD Mudir Marhalah]', isMedia: true },
+            { tag: '$TTD_STEMPEL_MUDIR', label: 'TTD + Stempel Mudir Aam / Pimpinan', description: 'TTD Pimpinan Pondok dengan Stempel Resmi Pondok di atas TTD', example: '[Cap + TTD Mudir]', isMedia: true },
             { tag: '$TTD_WALI_KELAS', label: 'Tanda Tangan Wali Kelas', description: 'TTD wali kelas sesuai rombel santri (kosong otomatis jika belum ada)', example: '[TTD Wali Kelas]', isMedia: true },
             { tag: '$TTD_MUDIR_MARHALAH', label: 'Tanda Tangan Mudir Marhalah', description: 'TTD Mudir Marhalah sesuai jenjang santri (kosong otomatis jika belum ada)', example: '[TTD Mudir Marhalah]', isMedia: true },
             { tag: '$TTD_MUDIR', label: 'Tanda Tangan Mudir Aam / Pimpinan', description: 'TTD Mudir Aam / Pimpinan Pondok (kosong otomatis jika belum ada)', example: '[TTD Mudir]', isMedia: true },
+            { tag: '$STEMPEL_MARHALAH', label: 'Stempel Marhalah / Jenjang', description: 'Stempel khusus marhalah santri (otomatis Stempel Pondok jika belum ada stempel khusus)', example: '[Gambar Stempel Marhalah]', isMedia: true },
+            { tag: '$STEMPEL_PONPES', label: 'Stempel Resmi Pondok', description: 'Cap stempel utama lembaga', example: '[Gambar Stempel Ponpes]', isMedia: true },
+            { tag: '$LOGO_PONPES', label: 'Logo Pondok Pesantren', description: 'Gambar logo resmi pondok', example: '[Gambar Logo Ponpes]', isMedia: true },
+            { tag: '$LOGO_YAYASAN', label: 'Logo Yayasan', description: 'Gambar logo yayasan', example: '[Gambar Logo Yayasan]', isMedia: true },
+            { tag: '$KOP_SURAT', label: 'Kop Dokumen / Rapor', description: 'Gambar header kop lembaga dari Aset Digital', example: '[Gambar Kop]', isMedia: true },
         ]
     }
 ];
@@ -412,12 +415,45 @@ const normalizeMediaTag = (raw: string): string => {
     if (/^\$ASSET_/i.test(trimmed)) {
         return `$ASSET_${trimmed.slice(7)}`;
     }
+    const idTagMatch = trimmed
+        .replace(/^\{+|\}+$/g, '')
+        .replace(/^\[+|\]+$/g, '')
+        .replace(/^\$/, '')
+        .trim()
+        .match(/^(TTD_PENGAJAR|STEMPEL_MARHALAH|STEMPEL_JENJANG)[:_](\d+)$/i);
+    if (idTagMatch) {
+        const prefix = idTagMatch[1].toUpperCase() === 'STEMPEL_JENJANG' ? 'STEMPEL_MARHALAH' : idTagMatch[1].toUpperCase();
+        return `$${prefix}:${idTagMatch[2]}`;
+    }
+
     const u = trimmed.replace(/^\{+|\}+$/g, '').replace(/^\[+|\]+$/g, '').replace(/^\$/, '').trim().toUpperCase().replace(/[\s-]+/g, '_');
     if (u === 'LOGO_PONPES' || u === 'LOGO') return '$LOGO_PONPES';
     if (u === 'LOGO_YAYASAN') return '$LOGO_YAYASAN';
     if (u === 'STEMPEL_PONPES' || u === 'STEMPEL') return '$STEMPEL_PONPES';
+    if (u === 'STEMPEL_MARHALAH' || u === 'STEMPEL_JENJANG' || u === 'STEMPEL_MADRASAH') return '$STEMPEL_MARHALAH';
     if (u === 'KOP_SURAT' || u === 'KOP_PONPES' || u === 'KOP') return '$KOP_SURAT';
     if (u === 'TTD_WALI_KELAS' || u === 'TTD_WALIKELAS' || u === 'TTD_WALI') return '$TTD_WALI_KELAS';
+    if (
+        u === 'TTD_STEMPEL_MUDIR_MARHALAH' ||
+        u === 'STEMPEL_TTD_MUDIR_MARHALAH' ||
+        u === 'TTD_CAP_MUDIR_MARHALAH' ||
+        u === 'CAP_TTD_MUDIR_MARHALAH' ||
+        u === 'TTD_DAN_STEMPEL_MUDIR_MARHALAH'
+    ) {
+        return '$TTD_STEMPEL_MUDIR_MARHALAH';
+    }
+    if (
+        u === 'TTD_STEMPEL_MUDIR' ||
+        u === 'TTD_STEMPEL_MUDIR_AAM' ||
+        u === 'STEMPEL_TTD_MUDIR' ||
+        u === 'TTD_CAP_MUDIR' ||
+        u === 'CAP_TTD_MUDIR' ||
+        u === 'TTD_STEMPEL_PIMPINAN' ||
+        u === 'TTD_STEMPEL_KEPALA_MADRASAH' ||
+        u === 'TTD_STEMPEL_KEPALA_SEKOLAH'
+    ) {
+        return '$TTD_STEMPEL_MUDIR';
+    }
     if (u === 'TTD_MUDIR_MARHALAH' || u === 'TTD_MUDIRMARHALAH' || u === 'TTD_KEPALA_MARHALAH' || u === 'TTD_MUDIR_JENJANG' || u === 'TTD_KEPALA_JENJANG') {
         return '$TTD_MUDIR_MARHALAH';
     }
@@ -427,20 +463,58 @@ const normalizeMediaTag = (raw: string): string => {
     return trimmed.startsWith('$') ? `$${u}` : '';
 };
 
-export const isMediaTag = (value: string): boolean => {
+const isSingleMediaTag = (value: string): boolean => {
     if (!value) return false;
     const v = normalizeMediaTag(value);
     if (!v) return false;
     return v === '$LOGO_PONPES' ||
            v === '$LOGO_YAYASAN' ||
            v === '$STEMPEL_PONPES' ||
+           v === '$STEMPEL_MARHALAH' ||
            v === '$KOP_SURAT' ||
            v === '$TTD_WALI_KELAS' ||
            v === '$TTD_MUDIR_MARHALAH' ||
            v === '$TTD_MUDIR' ||
+           v === '$TTD_STEMPEL_MUDIR_MARHALAH' ||
+           v === '$TTD_STEMPEL_MUDIR' ||
            v.startsWith('$TTD_PENGAJAR') ||
            v.startsWith('$STEMPEL_') ||
            v.startsWith('$ASSET_');
+};
+
+const splitMultiMediaTokens = (value: string): string[] => {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return [];
+    const parts = trimmed.split(/[\s+&]+/).map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 2 && parts.every(p => isSingleMediaTag(p))) {
+        return parts;
+    }
+    return [];
+};
+
+export const isMediaTag = (value: string): boolean => {
+    if (!value) return false;
+    if (isSingleMediaTag(value)) return true;
+    return splitMultiMediaTokens(value).length >= 2;
+};
+
+export const isTtdMediaCellValue = (value?: string | null, digitalAssets?: DigitalAsset[]): boolean => {
+    const raw = (value || '').trim();
+    if (!raw) return false;
+    const checkSingle = (tok: string): boolean => {
+        const n = normalizeMediaTag(tok);
+        if (!n) return false;
+        if (n.startsWith('$TTD_')) return true;
+        if (n.startsWith('$ASSET_') && digitalAssets && digitalAssets.length > 0) {
+            const assetId = n.slice(7);
+            const found = digitalAssets.find(a => a.id === assetId);
+            return found?.type === 'ttd';
+        }
+        return false;
+    };
+    if (checkSingle(raw)) return true;
+    const multi = splitMultiMediaTokens(raw);
+    return multi.some(checkSingle);
 };
 
 export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): string | null => {
@@ -459,11 +533,23 @@ export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): 
         return logoAsset?.base64Image || null;
     }
     if (t === '$STEMPEL_PONPES') {
-        if (settings?.stempelPonpesUrl) return settings.stempelPonpesUrl;
-        const primaryStempel = digitalAssets.find(a => a.systemRole === 'stempel_ponpes' || a.id === 'aset_utama_stempel_ponpes');
-        if (primaryStempel?.base64Image) return primaryStempel.base64Image;
-        const stempelAsset = digitalAssets.find(a => a.type === 'stempel');
-        return stempelAsset?.base64Image || null;
+        return findPrimaryPonpesStempelSrc(settings, digitalAssets);
+    }
+    if (t === '$STEMPEL_MARHALAH') {
+        const { jenjang } = resolveSantriAcademicHierarchy(santri, settings);
+        const targetJenjang = jenjang || (!santri ? settings?.jenjang?.[0] : undefined);
+        const marhalahStempel = findJenjangStempelAsset(digitalAssets, targetJenjang);
+        if (marhalahStempel?.base64Image) return marhalahStempel.base64Image;
+        return findPrimaryPonpesStempelSrc(settings, digitalAssets);
+    }
+    if (t.startsWith('$STEMPEL_MARHALAH:')) {
+        const jId = parseInt(t.split(':')[1] || '', 10);
+        if (!isNaN(jId)) {
+            const targetJenjang = settings?.jenjang?.find(j => Number(j.id) === jId) || { id: jId };
+            const marhalahStempel = findJenjangStempelAsset(digitalAssets, targetJenjang);
+            return marhalahStempel?.base64Image || null;
+        }
+        return null;
     }
     if (t === '$KOP_SURAT') {
         const kopAsset = digitalAssets.find(a => a.type === 'kop');
@@ -480,7 +566,7 @@ export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): 
         const teacherAsset = findStrictTeacherTtdAsset(digitalAssets, teacher);
         return teacherAsset?.base64Image || null;
     }
-    if (t === '$TTD_MUDIR_MARHALAH') {
+    if (t === '$TTD_MUDIR_MARHALAH' || t === '$TTD_STEMPEL_MUDIR_MARHALAH') {
         if (!settings) return null;
         const { jenjang } = resolveSantriAcademicHierarchy(santri, settings);
         const targetJenjang = jenjang || (!santri ? settings.jenjang?.[0] : undefined);
@@ -491,7 +577,7 @@ export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): 
         const mmAsset = findStrictTeacherTtdAsset(digitalAssets, mudirMarhalah);
         return mmAsset?.base64Image || null;
     }
-    if (t === '$TTD_MUDIR') {
+    if (t === '$TTD_MUDIR' || t === '$TTD_STEMPEL_MUDIR') {
         if (!settings) return null;
         const mudirInfo = resolveMudirAamInfo(settings);
         if (mudirInfo.teacher) {
@@ -522,6 +608,233 @@ export const getMediaTagImageSrc = (tag: string, context: RaporResolveContext): 
         return asset?.base64Image || null;
     }
     return null;
+};
+
+export interface ResolvedCellMediaVisual {
+    kind: 'kop' | 'logo' | 'stempel_only' | 'ttd_only' | 'ttd_with_stempel' | 'other_asset';
+    rawTag: string;
+    primarySrc: string | null;
+    stempelOverlaySrc: string | null;
+    position: 'left' | 'center' | 'right';
+    size: 'sm' | 'md' | 'lg';
+    showWhenTtdEmpty: boolean;
+    placeholderLabel: string;
+}
+
+export const resolveCellMediaVisual = (
+    cell: Pick<GridCell, 'value' | 'stempelOverlay'>,
+    context: RaporResolveContext
+): ResolvedCellMediaVisual | null => {
+    const rawVal = (cell.value || '').trim();
+    if (!rawVal || !isMediaTag(rawVal)) return null;
+
+    const { settings, santri, digitalAssets = [] } = context;
+    const overlayCfg: StempelOverlayConfig | undefined = cell.stempelOverlay;
+    const position: 'left' | 'center' | 'right' = overlayCfg?.position || 'left';
+    const size: 'sm' | 'md' | 'lg' = overlayCfg?.size || 'md';
+    const showWhenTtdEmpty = Boolean(overlayCfg?.showWhenTtdEmpty);
+
+    const resolveStampBySource = (
+        source: string | undefined,
+        defaultAutoMode: 'marhalah_then_ponpes' | 'ponpes_only'
+    ): string | null => {
+        const srcMode = source || 'auto';
+        if (srcMode === 'ponpes') {
+            return findPrimaryPonpesStempelSrc(settings, digitalAssets);
+        }
+        if (srcMode === 'marhalah') {
+            const { jenjang } = resolveSantriAcademicHierarchy(santri, settings);
+            const targetJenjang = jenjang || (!santri ? settings?.jenjang?.[0] : undefined);
+            return findJenjangStempelAsset(digitalAssets, targetJenjang)?.base64Image || null;
+        }
+        if (srcMode.startsWith('jenjang:')) {
+            const jId = parseInt(srcMode.slice(8), 10);
+            if (!isNaN(jId)) {
+                const targetJenjang = settings?.jenjang?.find(j => Number(j.id) === jId) || { id: jId };
+                return findJenjangStempelAsset(digitalAssets, targetJenjang)?.base64Image || null;
+            }
+            return null;
+        }
+        if (srcMode.startsWith('asset:')) {
+            const assetId = srcMode.slice(6);
+            return digitalAssets.find(a => a.id === assetId)?.base64Image || null;
+        }
+        // 'auto'
+        if (defaultAutoMode === 'ponpes_only') {
+            return findPrimaryPonpesStempelSrc(settings, digitalAssets);
+        }
+        const { jenjang } = resolveSantriAcademicHierarchy(santri, settings);
+        const targetJenjang = jenjang || (!santri ? settings?.jenjang?.[0] : undefined);
+        const marhalahStempel = findJenjangStempelAsset(digitalAssets, targetJenjang);
+        if (marhalahStempel?.base64Image) return marhalahStempel.base64Image;
+        return findPrimaryPonpesStempelSrc(settings, digitalAssets);
+    };
+
+    // 1. Multi-tag dalam 1 sel (misal: "$STEMPEL_PONPES $TTD_MUDIR_MARHALAH" atau "$STEMPEL_MARHALAH + $TTD_MUDIR_MARHALAH")
+    const multiTokens = splitMultiMediaTokens(rawVal);
+    if (multiTokens.length >= 2) {
+        const normTokens = multiTokens.map(tok => ({ raw: tok, norm: normalizeMediaTag(tok) }));
+        const ttdEntry = normTokens.find(e => e.norm.startsWith('$TTD_') || (e.norm.startsWith('$ASSET_') && digitalAssets.find(a => a.id === e.norm.slice(7))?.type === 'ttd'));
+        const stempelEntry = normTokens.find(e => e !== ttdEntry && (e.norm.startsWith('$STEMPEL_') || e.norm.startsWith('$ASSET_')));
+
+        if (ttdEntry && stempelEntry) {
+            const primarySrc = getMediaTagImageSrc(ttdEntry.raw, context);
+            if (overlayCfg?.enabled === false) {
+                return {
+                    kind: 'ttd_only',
+                    rawTag: rawVal,
+                    primarySrc,
+                    stempelOverlaySrc: null,
+                    position,
+                    size,
+                    showWhenTtdEmpty,
+                    placeholderLabel: ttdEntry.norm.replace(/^\$/, '')
+                };
+            }
+            const stempelOverlaySrc =
+                overlayCfg?.source && overlayCfg.source !== 'auto'
+                    ? resolveStampBySource(overlayCfg.source, 'marhalah_then_ponpes')
+                    : getMediaTagImageSrc(stempelEntry.raw, context);
+            return {
+                kind: 'ttd_with_stempel',
+                rawTag: rawVal,
+                primarySrc,
+                stempelOverlaySrc,
+                position,
+                size,
+                showWhenTtdEmpty,
+                placeholderLabel: `Cap + ${ttdEntry.norm.replace(/^\$/, '')}`
+            };
+        }
+    }
+
+    const normTag = normalizeMediaTag(rawVal);
+
+    // 2. Tag gabungan siap pakai ($TTD_STEMPEL_MUDIR_MARHALAH / $TTD_STEMPEL_MUDIR)
+    if (normTag === '$TTD_STEMPEL_MUDIR_MARHALAH' || normTag === '$TTD_STEMPEL_MUDIR') {
+        const isMarhalah = normTag === '$TTD_STEMPEL_MUDIR_MARHALAH';
+        const baseTtdTag = isMarhalah ? '$TTD_MUDIR_MARHALAH' : '$TTD_MUDIR';
+        const primarySrc = getMediaTagImageSrc(baseTtdTag, context);
+        if (overlayCfg?.enabled === false) {
+            return {
+                kind: 'ttd_only',
+                rawTag: rawVal,
+                primarySrc,
+                stempelOverlaySrc: null,
+                position,
+                size,
+                showWhenTtdEmpty,
+                placeholderLabel: isMarhalah ? 'TTD Mudir Marhalah' : 'TTD Mudir Aam'
+            };
+        }
+        const stempelOverlaySrc = resolveStampBySource(
+            overlayCfg?.source,
+            isMarhalah ? 'marhalah_then_ponpes' : 'ponpes_only'
+        );
+        return {
+            kind: 'ttd_with_stempel',
+            rawTag: rawVal,
+            primarySrc,
+            stempelOverlaySrc,
+            position,
+            size,
+            showWhenTtdEmpty,
+            placeholderLabel: isMarhalah ? 'Cap + TTD Mudir Marhalah' : 'Cap + TTD Mudir Aam'
+        };
+    }
+
+    // 3. Tag TTD tunggal (dengan atau tanpa toggle stempelOverlay di Inspector)
+    const isAssetTtd =
+        normTag.startsWith('$ASSET_') &&
+        digitalAssets.find(a => a.id === normTag.slice(7))?.type === 'ttd';
+
+    if (normTag.startsWith('$TTD_') || isAssetTtd) {
+        const primarySrc = getMediaTagImageSrc(rawVal, context);
+        const friendlyTtdLabel =
+            normTag === '$TTD_MUDIR_MARHALAH'
+                ? 'TTD Mudir Marhalah'
+                : normTag === '$TTD_MUDIR'
+                ? 'TTD Mudir Aam'
+                : normTag === '$TTD_WALI_KELAS'
+                ? 'TTD Wali Kelas'
+                : normTag.replace(/^\$/, '');
+
+        if (overlayCfg?.enabled) {
+            const defaultMode = normTag === '$TTD_MUDIR' ? 'ponpes_only' : 'marhalah_then_ponpes';
+            const stempelOverlaySrc = resolveStampBySource(overlayCfg.source, defaultMode);
+            return {
+                kind: 'ttd_with_stempel',
+                rawTag: rawVal,
+                primarySrc,
+                stempelOverlaySrc,
+                position,
+                size,
+                showWhenTtdEmpty,
+                placeholderLabel: `Cap + ${friendlyTtdLabel}`
+            };
+        }
+
+        return {
+            kind: 'ttd_only',
+            rawTag: rawVal,
+            primarySrc,
+            stempelOverlaySrc: null,
+            position,
+            size,
+            showWhenTtdEmpty: false,
+            placeholderLabel: friendlyTtdLabel
+        };
+    }
+
+    // 4. Kop, Logo, Stempel Tunggal, atau Aset Lainnya
+    const singleSrc = getMediaTagImageSrc(rawVal, context);
+    if (normTag === '$KOP_SURAT') {
+        return {
+            kind: 'kop',
+            rawTag: rawVal,
+            primarySrc: singleSrc,
+            stempelOverlaySrc: null,
+            position,
+            size,
+            showWhenTtdEmpty: false,
+            placeholderLabel: 'Kop Dokumen'
+        };
+    }
+    if (normTag === '$LOGO_PONPES' || normTag === '$LOGO_YAYASAN') {
+        return {
+            kind: 'logo',
+            rawTag: rawVal,
+            primarySrc: singleSrc,
+            stempelOverlaySrc: null,
+            position,
+            size,
+            showWhenTtdEmpty: false,
+            placeholderLabel: normTag === '$LOGO_YAYASAN' ? 'Logo Yayasan' : 'Logo Ponpes'
+        };
+    }
+    if (normTag.startsWith('$STEMPEL_') || (normTag.startsWith('$ASSET_') && digitalAssets.find(a => a.id === normTag.slice(7))?.type === 'stempel')) {
+        return {
+            kind: 'stempel_only',
+            rawTag: rawVal,
+            primarySrc: singleSrc,
+            stempelOverlaySrc: null,
+            position,
+            size,
+            showWhenTtdEmpty: false,
+            placeholderLabel: normTag === '$STEMPEL_MARHALAH' ? 'Stempel Marhalah' : 'Stempel Ponpes'
+        };
+    }
+
+    return {
+        kind: 'other_asset',
+        rawTag: rawVal,
+        primarySrc: singleSrc,
+        stempelOverlaySrc: null,
+        position,
+        size,
+        showWhenTtdEmpty: false,
+        placeholderLabel: rawVal.replace(/^\$/, '')
+    };
 };
 
 export const templateHasBuiltInBiodata = (template: RaporTemplate | null | undefined): boolean => {
@@ -631,6 +944,24 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
             u === 'NIP_KEPALA_JENJANG'
         ) {
             return '$NIP_MUDIR_MARHALAH';
+        }
+        if (
+            u === 'TTD_STEMPEL_MUDIR_MARHALAH' ||
+            u === 'STEMPEL_TTD_MUDIR_MARHALAH' ||
+            u === 'TTD_CAP_MUDIR_MARHALAH'
+        ) {
+            return '$TTD_STEMPEL_MUDIR_MARHALAH';
+        }
+        if (
+            u === 'TTD_STEMPEL_MUDIR' ||
+            u === 'TTD_STEMPEL_MUDIR_AAM' ||
+            u === 'STEMPEL_TTD_MUDIR' ||
+            u === 'TTD_CAP_MUDIR'
+        ) {
+            return '$TTD_STEMPEL_MUDIR';
+        }
+        if (u === 'STEMPEL_MARHALAH' || u === 'STEMPEL_JENJANG' || u === 'STEMPEL_MADRASAH') {
+            return '$STEMPEL_MARHALAH';
         }
         if (
             u === 'TTD_MUDIR_MARHALAH' ||

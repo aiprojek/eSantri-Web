@@ -14,6 +14,10 @@ import {
     upsertTeacherTtdAsset,
     removeTeacherTtdAsset,
     getTeacherPrimaryRoleLabel,
+    findJenjangStempelAsset,
+    upsertJenjangStempelAsset,
+    removeJenjangStempelAsset,
+    findPrimaryPonpesStempelSrc,
 } from '../../utils/digitalAssetUtils';
 
 type StructureItem = Jenjang | Kelas | Rombel;
@@ -50,6 +54,8 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
     const digitalAssets = useLiveQuery(() => db.digitalAssets.toArray(), []) || [];
     const [quickTtdTeacher, setQuickTtdTeacher] = useState<TenagaPengajar | null>(null);
     const [quickTtdDraft, setQuickTtdDraft] = useState<string | null>(null);
+    const [quickStempelJenjang, setQuickStempelJenjang] = useState<Jenjang | null>(null);
+    const [quickStempelDraft, setQuickStempelDraft] = useState<string | null>(null);
 
     // Seluruh tenaga pendidik & pengurus aktif untuk dropdown Mudir Marhalah & Wali Kelas
     const activeTeachers = useMemo(() => {
@@ -540,6 +546,43 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                                                         </span>
                                                     );
                                                 })()}
+                                                {listName === 'jenjang' && canWrite && (() => {
+                                                    const jenjangItem = item as Jenjang;
+                                                    const existingStempel = findJenjangStempelAsset(digitalAssets, jenjangItem);
+                                                    const hasPonpesStempel = Boolean(findPrimaryPonpesStempelSrc(localSettings, digitalAssets));
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setQuickStempelJenjang(jenjangItem);
+                                                                setQuickStempelDraft(existingStempel?.base64Image || null);
+                                                            }}
+                                                            className={`inline-flex items-center gap-1 text-[10px] font-semibold underline-offset-2 hover:underline ${
+                                                                existingStempel
+                                                                    ? 'text-rose-700'
+                                                                    : hasPonpesStempel
+                                                                    ? 'text-slate-500 hover:text-rose-700'
+                                                                    : 'text-amber-700'
+                                                            }`}
+                                                            title={
+                                                                existingStempel
+                                                                    ? 'Stempel khusus marhalah ini sudah siap — klik untuk lihat/ganti'
+                                                                    : hasPonpesStempel
+                                                                    ? 'Saat ini otomatis memakai Stempel Utama Pondok — klik jika marhalah ini memiliki stempel sendiri'
+                                                                    : 'Unggah Stempel Marhalah (untuk menimpa di atas TTD Mudir Marhalah pada Rapor)'
+                                                            }
+                                                        >
+                                                            <i className="bi bi-patch-check-fill"></i>
+                                                            <span>
+                                                                {existingStempel
+                                                                    ? '(✓ Stempel Marhalah)'
+                                                                    : hasPonpesStempel
+                                                                    ? '(+ Stempel Khusus)'
+                                                                    : '(+ Stempel)'}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     </div>
@@ -839,6 +882,82 @@ export const TabStrukturPendidikan: React.FC<TabStrukturPendidikanProps> = ({ lo
                             >
                                 <i className="bi bi-check-lg"></i>
                                 <span>Simpan TTD</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {quickStempelJenjang && (
+                <div
+                    className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+                    onClick={() => setQuickStempelJenjang(null)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-rose-50/60">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i className="bi bi-patch-check-fill text-rose-600"></i>
+                                    Stempel Marhalah: {quickStempelJenjang.nama}
+                                </h3>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                    Otomatis terdaftar di Aset Digital &amp; siap ditumpuk di atas TTD Mudir Marhalah
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setQuickStempelJenjang(null)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-3">
+                            <div className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-2.5 leading-relaxed">
+                                Jika marhalah <strong>{quickStempelJenjang.nama}</strong> menggunakan stempel tersendiri, unggah di bawah ini. Jika dikosongkan, Rapor otomatis menggunakan <strong>Stempel Resmi Utama Pondok</strong>.
+                            </div>
+                            <SignatureDropzone
+                                value={quickStempelDraft}
+                                onChange={(next) => setQuickStempelDraft(next)}
+                                label="Unggah / Seret Gambar Stempel Marhalah"
+                                helperText="Seret & lepas (drag & drop) gambar stempel ke sini, pilih berkas, atau tempel (Ctrl+V). Gunakan 'Hapus Background Putih' bila hasil scan kertas."
+                                onError={(msg) => showToast(msg, 'error')}
+                            />
+                        </div>
+
+                        <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setQuickStempelJenjang(null)}
+                                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 bg-white"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    try {
+                                        if (quickStempelDraft) {
+                                            await upsertJenjangStempelAsset(quickStempelJenjang, quickStempelDraft);
+                                            showToast(`Stempel Marhalah ${quickStempelJenjang.nama} tersimpan di Aset Digital!`, 'success');
+                                        } else {
+                                            await removeJenjangStempelAsset(quickStempelJenjang);
+                                            showToast(`Stempel khusus ${quickStempelJenjang.nama} dihapus (kembali ke Stempel Utama Pondok).`, 'info');
+                                        }
+                                        setQuickStempelJenjang(null);
+                                    } catch (err) {
+                                        console.error(err);
+                                        showToast('Gagal menyimpan stempel marhalah.', 'error');
+                                    }
+                                }}
+                                className="px-5 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs inline-flex items-center gap-1.5"
+                            >
+                                <i className="bi bi-check-lg"></i>
+                                <span>Simpan Stempel</span>
                             </button>
                         </div>
                     </div>

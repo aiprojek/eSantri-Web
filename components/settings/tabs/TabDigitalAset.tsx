@@ -11,6 +11,8 @@ import {
     getTeacherPrimaryRoleLabel,
     findStrictTeacherTtdAsset,
     upsertTeacherTtdAsset,
+    findJenjangStempelAsset,
+    upsertJenjangStempelAsset,
     reconcileDigitalAssetsWithSettings,
     upsertInstitutionDigitalAsset,
 } from '../../../utils/digitalAssetUtils';
@@ -101,6 +103,36 @@ export const TabDigitalAset: React.FC = () => {
             return;
         }
 
+        if (val === 'ponpes_primary') {
+            const primaryExisting = assets.find((a) => a.systemRole === 'stempel_ponpes');
+            setFormData((prev) => ({
+                ...prev,
+                selectedOwnerKey: val,
+                customNama: settings.namaPonpes || 'Pondok Pesantren',
+                jabatan: 'Stempel Resmi Utama ($STEMPEL_PONPES)',
+                setAsPrimaryStempel: true,
+                base64Image: prev.base64Image || primaryExisting?.base64Image || settings.stempelPonpesUrl || '',
+            }));
+            return;
+        }
+
+        if (val.startsWith('jenjang:')) {
+            const jId = Number(val.slice(8));
+            const jenjangObj = (settings.jenjang || []).find((j) => Number(j.id) === jId);
+            if (jenjangObj) {
+                const existingJ = findJenjangStempelAsset(assets, jenjangObj);
+                setFormData((prev) => ({
+                    ...prev,
+                    selectedOwnerKey: val,
+                    customNama: jenjangObj.nama,
+                    jabatan: `Stempel Resmi Marhalah ${jenjangObj.kode ? `(${jenjangObj.kode})` : jenjangObj.nama} ($STEMPEL_MARHALAH)`,
+                    setAsPrimaryStempel: false,
+                    base64Image: prev.base64Image || existingJ?.base64Image || '',
+                }));
+            }
+            return;
+        }
+
         if (val.startsWith('guru:')) {
             const guruId = Number(val.slice(5));
             const teacher = activeTeachers.find((t) => Number(t.id) === guruId);
@@ -121,6 +153,7 @@ export const TabDigitalAset: React.FC = () => {
     const handleSave = async () => {
         let finalNama = '';
         let linkedGuruId: number | undefined = undefined;
+        let linkedJenjangId: number | undefined = undefined;
 
         if (formData.selectedOwnerKey.startsWith('guru:')) {
             const guruId = Number(formData.selectedOwnerKey.slice(5));
@@ -128,6 +161,15 @@ export const TabDigitalAset: React.FC = () => {
             if (selectedTeacher) {
                 finalNama = selectedTeacher.nama.trim();
                 linkedGuruId = selectedTeacher.id;
+            }
+        } else if (formData.selectedOwnerKey === 'ponpes_primary') {
+            finalNama = settings.namaPonpes || 'Pondok Pesantren';
+        } else if (formData.selectedOwnerKey.startsWith('jenjang:')) {
+            const jId = Number(formData.selectedOwnerKey.slice(8));
+            const jenjangObj = (settings.jenjang || []).find((j) => Number(j.id) === jId);
+            if (jenjangObj) {
+                finalNama = jenjangObj.nama.trim();
+                linkedJenjangId = jenjangObj.id;
             }
         } else if (formData.selectedOwnerKey === '__custom__') {
             finalNama = formData.customNama.trim();
@@ -150,6 +192,18 @@ export const TabDigitalAset: React.FC = () => {
                 if (teacher) {
                     await upsertTeacherTtdAsset(teacher, formData.base64Image, settings, formData.jabatan.trim());
                     showToast(`TTD ${teacher.nama} tersimpan dan terhubung ke Data Master.`, 'success');
+                    setShowAddModal(false);
+                    resetForm();
+                    return;
+                }
+            }
+
+            // Jika Stempel untuk Jenjang/Marhalah dari Data Master, gunakan upsertJenjangStempelAsset
+            if (formData.type === 'stempel' && linkedJenjangId !== undefined) {
+                const jenjangObj = (settings.jenjang || []).find((j) => Number(j.id) === linkedJenjangId);
+                if (jenjangObj) {
+                    await upsertJenjangStempelAsset(jenjangObj, formData.base64Image, formData.jabatan.trim());
+                    showToast(`Stempel Marhalah ${jenjangObj.nama} tersimpan dan terhubung ke Data Master.`, 'success');
                     setShowAddModal(false);
                     resetForm();
                     return;
@@ -243,10 +297,21 @@ export const TabDigitalAset: React.FC = () => {
                 ? activeTeachers.find((t) => Number(t.id) === Number(asset.guruId))
                 : activeTeachers.find((t) => t.nama.trim().toLowerCase() === asset.namaPemilik.trim().toLowerCase());
 
+        let ownerKey = '__custom__';
+        if (asset.type === 'ttd' && matchedTeacher) {
+            ownerKey = `guru:${matchedTeacher.id}`;
+        } else if (asset.type === 'stempel') {
+            if (asset.systemRole === 'stempel_ponpes') {
+                ownerKey = 'ponpes_primary';
+            } else if (asset.jenjangId !== undefined && asset.jenjangId !== null) {
+                ownerKey = `jenjang:${asset.jenjangId}`;
+            }
+        }
+
         setFormData({
             type: asset.type,
-            selectedOwnerKey: matchedTeacher && asset.type === 'ttd' ? `guru:${matchedTeacher.id}` : '__custom__',
-            customNama: matchedTeacher && asset.type === 'ttd' ? '' : asset.namaPemilik,
+            selectedOwnerKey: ownerKey,
+            customNama: ownerKey === '__custom__' ? asset.namaPemilik : '',
             jabatan: asset.jabatan || '',
             base64Image: asset.base64Image,
             setAsPrimaryStempel: asset.systemRole === 'stempel_ponpes',
@@ -270,6 +335,7 @@ export const TabDigitalAset: React.FC = () => {
         if (asset.systemRole === 'logo_ponpes') tag = '$LOGO_PONPES';
         else if (asset.systemRole === 'logo_yayasan') tag = '$LOGO_YAYASAN';
         else if (asset.systemRole === 'stempel_ponpes') tag = '$STEMPEL_PONPES';
+        else if (asset.type === 'stempel' && asset.jenjangId !== undefined) tag = '$STEMPEL_MARHALAH';
         else if (asset.type === 'kop') tag = '$KOP_SURAT';
         else if (asset.type === 'ttd' && asset.guruId !== undefined) tag = `$TTD_PENGAJAR:${asset.guruId}`;
 
@@ -549,7 +615,9 @@ export const TabDigitalAset: React.FC = () => {
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {filteredAssets.map((asset, index) => {
-                                        const isLinkedMaster = asset.type === 'ttd' && asset.guruId !== undefined;
+                                        const isLinkedMaster =
+                                            (asset.type === 'ttd' && asset.guruId !== undefined) ||
+                                            (asset.type === 'stempel' && asset.jenjangId !== undefined);
                                         return (
                                             <tr key={asset.id} className="hover:bg-slate-50/80 transition-colors">
                                                 <td className="px-4 py-3 text-center text-slate-400 font-medium">{index + 1}</td>
@@ -643,7 +711,9 @@ export const TabDigitalAset: React.FC = () => {
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {filteredAssets.map((asset) => {
-                            const isLinkedMaster = asset.type === 'ttd' && asset.guruId !== undefined;
+                            const isLinkedMaster =
+                                (asset.type === 'ttd' && asset.guruId !== undefined) ||
+                                (asset.type === 'stempel' && asset.jenjangId !== undefined);
                             return (
                                 <div key={asset.id} className="rounded-xl border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow flex flex-col justify-between">
                                     <div>
@@ -810,11 +880,23 @@ export const TabDigitalAset: React.FC = () => {
                                             key={item.key}
                                             type="button"
                                             disabled={Boolean(editingAsset?.systemRole)}
-                                            onClick={() =>
+                                             onClick={() =>
                                                 setFormData((prev) => ({
                                                     ...prev,
                                                     type: item.key as DigitalAsset['type'],
-                                                    selectedOwnerKey: item.key === 'ttd' ? prev.selectedOwnerKey : '__custom__',
+                                                    selectedOwnerKey:
+                                                        item.key === 'ttd'
+                                                            ? prev.selectedOwnerKey.startsWith('guru:')
+                                                                ? prev.selectedOwnerKey
+                                                                : ''
+                                                            : item.key === 'stempel'
+                                                            ? 'ponpes_primary'
+                                                            : '__custom__',
+                                                    setAsPrimaryStempel: item.key === 'stempel',
+                                                    jabatan:
+                                                        item.key === 'stempel'
+                                                            ? 'Stempel Resmi Utama ($STEMPEL_PONPES)'
+                                                            : prev.jabatan,
                                                     customNama:
                                                         item.key !== 'ttd' && !prev.customNama
                                                             ? settings.namaPonpes || ''
@@ -865,6 +947,44 @@ export const TabDigitalAset: React.FC = () => {
                                         />
                                     )}
                                 </div>
+                            ) : formData.type === 'stempel' ? (
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                        Peruntukan Stempel (Pondok Utama / Marhalah)
+                                    </label>
+                                    <select
+                                        value={formData.selectedOwnerKey || 'ponpes_primary'}
+                                        disabled={Boolean(editingAsset?.systemRole)}
+                                        onChange={(e) => handleOwnerSelectChange(e.target.value)}
+                                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none disabled:opacity-60"
+                                    >
+                                        <option value="ponpes_primary">
+                                            Stempel Resmi Utama Pondok ($STEMPEL_PONPES)
+                                        </option>
+                                        {(settings.jenjang || []).map((j) => {
+                                            const hasJ = Boolean(findJenjangStempelAsset(assets, j));
+                                            return (
+                                                <option key={j.id} value={`jenjang:${j.id}`}>
+                                                    Stempel Marhalah: {j.nama} {j.kode ? `(${j.kode})` : ''}{' '}
+                                                    {hasJ ? '(Sudah ada - perbarui)' : ''}
+                                                </option>
+                                            );
+                                        })}
+                                        <option value="__custom__">
+                                            Stempel Unit / Kepanitiaan Lainnya (Input Manual)
+                                        </option>
+                                    </select>
+
+                                    {formData.selectedOwnerKey === '__custom__' && (
+                                        <input
+                                            type="text"
+                                            placeholder="Contoh: Panitia Ujian Akhir / Perpustakaan"
+                                            value={formData.customNama}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, customNama: e.target.value }))}
+                                            className="w-full mt-2 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                                        />
+                                    )}
+                                </div>
                             ) : (
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -897,17 +1017,19 @@ export const TabDigitalAset: React.FC = () => {
                                 />
                             </div>
 
-                            {formData.type === 'stempel' && !editingAsset?.systemRole && (
-                                <label className="flex items-center gap-2 text-xs text-slate-700 bg-rose-50/60 border border-rose-200 rounded-xl p-2.5 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.setAsPrimaryStempel}
-                                        onChange={(e) => setFormData((prev) => ({ ...prev, setAsPrimaryStempel: e.target.checked }))}
-                                        className="rounded text-rose-600 focus:ring-rose-500"
-                                    />
-                                    <span>Jadikan juga sebagai <strong>Stempel Resmi Utama Pondok</strong> ($STEMPEL_PONPES)</span>
-                                </label>
-                            )}
+                            {formData.type === 'stempel' &&
+                                !editingAsset?.systemRole &&
+                                formData.selectedOwnerKey === '__custom__' && (
+                                    <label className="flex items-center gap-2 text-xs text-slate-700 bg-rose-50/60 border border-rose-200 rounded-xl p-2.5 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.setAsPrimaryStempel}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, setAsPrimaryStempel: e.target.checked }))}
+                                            className="rounded text-rose-600 focus:ring-rose-500"
+                                        />
+                                        <span>Jadikan juga sebagai <strong>Stempel Resmi Utama Pondok</strong> ($STEMPEL_PONPES)</span>
+                                    </label>
+                                )}
 
                             <SignatureDropzone
                                 label="Berkas Gambar Aset"

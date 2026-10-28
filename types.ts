@@ -646,6 +646,14 @@ export interface RaporTemplate {
 export type RaporColumnType = 'label' | 'data' | 'input' | 'formula' | 'dropdown';
 export type RaporInputMode = 'auto' | 'number' | 'text';
 
+export interface StempelOverlayConfig {
+    enabled: boolean;
+    source?: 'auto' | 'ponpes' | 'marhalah' | string;
+    position?: 'left' | 'center' | 'right';
+    size?: 'sm' | 'md' | 'lg';
+    showWhenTtdEmpty?: boolean;
+}
+
 export interface GridCell {
     id: string;
     row: number;
@@ -653,6 +661,7 @@ export interface GridCell {
     value: string;
     type: RaporColumnType;
     inputMode?: RaporInputMode;
+    stempelOverlay?: StempelOverlayConfig;
     colSpan?: number;
     rowSpan?: number;
     width?: number;
@@ -740,6 +749,7 @@ export interface DigitalAsset {
     namaPemilik: string;
     jabatan: string;
     guruId?: number;
+    jenjangId?: number;
     systemRole?: 'logo_ponpes' | 'logo_yayasan' | 'stempel_ponpes' | 'kop_utama';
     base64Image: string;
     lastModified?: number;

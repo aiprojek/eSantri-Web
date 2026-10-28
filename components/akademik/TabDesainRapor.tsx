@@ -22,7 +22,8 @@ import {
 import {
     DYNAMIC_TAG_CATEGORIES,
     isMediaTag,
-    getMediaTagImageSrc,
+    isTtdMediaCellValue,
+    resolveCellMediaVisual,
     resolveRaporText,
     RaporResolveContext,
     resolveWaliKelasTeacher,
@@ -30,7 +31,8 @@ import {
     resolveMudirAamInfo,
     formatTeacherNip
 } from '../../utils/raporPlaceholderResolver';
-import { findStrictTeacherTtdAsset, reconcileDigitalAssetsWithSettings } from '../../utils/digitalAssetUtils';
+import { RaporSignatureStampMedia } from '../common/RaporSignatureStampMedia';
+import { findStrictTeacherTtdAsset, findJenjangStempelAsset, reconcileDigitalAssetsWithSettings } from '../../utils/digitalAssetUtils';
 import {
     RAPOR_FORMULA_SUGGESTIONS,
     applyCellTextTransform,
@@ -401,6 +403,8 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
         const isExpandableDynamic = (upperToken.includes('DESKRIPSI') || upperToken.includes('CATATAN')) && !isClip && !isFloat && (cellHeightPx === undefined || cellHeightPx >= 28);
         const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
 
+        const allowMediaOverflow = isMedia && !isLogo && !borders.top && !borders.left && !borders.right;
+
         return (
             <td
                 key={`${keyPrefix}-${rowIdx}-${sliceItem.renderCol}`}
@@ -421,8 +425,8 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                     fontSize: `${effectiveFontSize}px`,
                     padding: 0,
                     boxSizing: 'border-box',
-                    overflow: isFloat ? 'visible' : 'hidden',
-                    position: isFloat ? 'relative' : undefined
+                    overflow: (isFloat || allowMediaOverflow) ? 'visible' : 'hidden',
+                    position: (isFloat || allowMediaOverflow) ? 'relative' : undefined
                 }}
             >
                 {isFloat ? (
@@ -465,10 +469,10 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                             width: '100%',
                             height: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : '100%',
                             minHeight: (isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
-                            maxHeight: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
+                            maxHeight: (!isExpandableDynamic && !allowMediaOverflow && cellHeightPx) ? `${cellHeightPx}px` : undefined,
                             padding: isMedia ? '1px' : cellPadding,
                             boxSizing: 'border-box',
-                            overflow: 'hidden',
+                            overflow: allowMediaOverflow ? 'visible' : 'hidden',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
@@ -4715,25 +4719,10 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                 } as any,
                 targetDate: new Date()
             };
-            const imgSrc = getMediaTagImageSrc(val, simulatedContext);
-            const upperMedia = val.toUpperCase();
-            if (imgSrc) {
-                const isStempel = upperMedia.includes('STEMPEL');
-                const isTtd = upperMedia.includes('TTD');
-                return (
-                    <div className="flex items-center justify-center p-0.5">
-                        <img 
-                            src={imgSrc} 
-                            alt={val} 
-                            className={`object-contain ${isStempel ? 'max-h-12 max-w-[80px] opacity-90' : isTtd ? 'max-h-10 max-w-[100px]' : 'max-h-10 max-w-[80px]'}`} 
-                        />
-                    </div>
-                );
+            const mediaVisual = resolveCellMediaVisual(cell, simulatedContext);
+            if (mediaVisual) {
+                return <RaporSignatureStampMedia visual={mediaVisual} mode="canvas" />;
             }
-            if (upperMedia === '$STEMPEL_PONPES' || upperMedia === '$STEMPEL') return <span className="text-rose-600 font-bold text-[10px] bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-patch-check-fill"></i> Stempel Ponpes</span>;
-            if (upperMedia === '$LOGO_PONPES' || upperMedia === '$LOGO') return <span className="text-teal-700 font-bold text-[10px] bg-teal-50 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image"></i> Logo Ponpes</span>;
-            if (upperMedia === '$LOGO_YAYASAN') return <span className="text-indigo-700 font-bold text-[10px] bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-image-fill"></i> Logo Yayasan</span>;
-            if (upperMedia.includes('TTD')) return <span className="text-purple-600 font-bold text-[10px] bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded flex items-center gap-1 justify-center"><i className="bi bi-pen-fill"></i> {val.replace('$', '')}</span>;
             return <span className="text-rose-500 italic text-[10px] font-mono bg-rose-50 px-1 rounded border border-rose-100">[{val}]</span>;
         }
 
@@ -6963,6 +6952,210 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                 )}
                             </div>
                         )}
+
+                        {(activeCellData.type === 'data' || activeCellData.type === 'label') &&
+                            isTtdMediaCellValue(activeCellData.value, digitalAssets) && (() => {
+                                const upperRaw = (activeCellData.value || '').trim().toUpperCase();
+                                const isBuiltInCombined =
+                                    upperRaw.includes('TTD_STEMPEL_') ||
+                                    upperRaw.includes('STEMPEL_TTD_') ||
+                                    upperRaw.includes('TTD_CAP_') ||
+                                    (upperRaw.includes('STEMPEL') && upperRaw.includes('TTD'));
+                                const overlayCfg = activeCellData.stempelOverlay;
+                                const isOverlayActive = isBuiltInCombined
+                                    ? overlayCfg?.enabled !== false
+                                    : Boolean(overlayCfg?.enabled);
+                                const currentSource = overlayCfg?.source || 'auto';
+                                const currentPos = overlayCfg?.position || 'left';
+                                const currentSize = overlayCfg?.size || 'md';
+                                const showWhenEmpty = Boolean(overlayCfg?.showWhenTtdEmpty);
+                                const stempelAssets = digitalAssets.filter(a => a.type === 'stempel');
+
+                                return (
+                                    <div className="space-y-2.5 p-3 bg-rose-50/70 rounded-xl border border-rose-200">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                                                    <i className="bi bi-patch-check-fill text-rose-600"></i>
+                                                    <span>Stempel di Atas TTD</span>
+                                                </div>
+                                                <p className="text-[10px] text-rose-700/80 leading-tight mt-0.5">
+                                                    Tumpuk cap stempel menimpa tanda tangan secara proporsional
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    updateActiveCell({
+                                                        stempelOverlay: {
+                                                            enabled: !isOverlayActive,
+                                                            source: currentSource,
+                                                            position: currentPos,
+                                                            size: currentSize,
+                                                            showWhenTtdEmpty: showWhenEmpty,
+                                                        },
+                                                    })
+                                                }
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all shrink-0 ${
+                                                    isOverlayActive
+                                                        ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-rose-100'
+                                                }`}
+                                            >
+                                                {isOverlayActive ? 'Aktif' : 'Nonaktif'}
+                                            </button>
+                                        </div>
+
+                                        {isOverlayActive && (
+                                            <div className="space-y-2.5 pt-2 border-t border-rose-200/80">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-rose-900 uppercase mb-1">
+                                                        Sumber Gambar Stempel
+                                                    </label>
+                                                    <select
+                                                        value={currentSource}
+                                                        onChange={e =>
+                                                            updateActiveCell({
+                                                                stempelOverlay: {
+                                                                    enabled: true,
+                                                                    source: e.target.value,
+                                                                    position: currentPos,
+                                                                    size: currentSize,
+                                                                    showWhenTtdEmpty: showWhenEmpty,
+                                                                },
+                                                            })
+                                                        }
+                                                        className="w-full text-xs border border-rose-200 rounded-lg p-1.5 bg-white font-medium text-slate-800"
+                                                    >
+                                                        <option value="auto">
+                                                            Otomatis (Stempel Marhalah → Stempel Pondok)
+                                                        </option>
+                                                        <option value="ponpes">
+                                                            Stempel Resmi Utama Pondok ($STEMPEL_PONPES)
+                                                        </option>
+                                                        <option value="marhalah">
+                                                            Khusus Stempel Marhalah Santri ($STEMPEL_MARHALAH)
+                                                        </option>
+                                                        {(settings.jenjang || []).map(j => {
+                                                            const hasJStempel = Boolean(findJenjangStempelAsset(digitalAssets, j));
+                                                            return (
+                                                                <option key={j.id} value={`jenjang:${j.id}`}>
+                                                                    Stempel Marhalah: {j.nama} {hasJStempel ? '(✓ Ada)' : '(Belum diunggah)'}
+                                                                </option>
+                                                            );
+                                                        })}
+                                                        {stempelAssets
+                                                            .filter(a => !a.systemRole && a.jenjangId === undefined)
+                                                            .map(a => (
+                                                                <option key={a.id} value={`asset:${a.id}`}>
+                                                                    Aset Stempel: {a.namaPemilik}
+                                                                </option>
+                                                            ))}
+                                                    </select>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-rose-900 uppercase mb-1">
+                                                            Posisi Stempel
+                                                        </label>
+                                                        <div className="grid grid-cols-3 rounded-lg border border-rose-200 bg-white overflow-hidden">
+                                                            {([
+                                                                { id: 'left', label: 'Kiri', title: 'Sisi kiri TTD (Standar Resmi Indonesia)' },
+                                                                { id: 'center', label: 'Tengah', title: 'Tepat di tengah TTD' },
+                                                                { id: 'right', label: 'Kanan', title: 'Sisi kanan TTD (Cocok untuk Rapor Arab / RTL)' },
+                                                            ] as const).map(opt => (
+                                                                <button
+                                                                    key={opt.id}
+                                                                    type="button"
+                                                                    title={opt.title}
+                                                                    onClick={() =>
+                                                                        updateActiveCell({
+                                                                            stempelOverlay: {
+                                                                                enabled: true,
+                                                                                source: currentSource,
+                                                                                position: opt.id,
+                                                                                size: currentSize,
+                                                                                showWhenTtdEmpty: showWhenEmpty,
+                                                                            },
+                                                                        })
+                                                                    }
+                                                                    className={`py-1 text-[10px] font-bold transition-colors ${
+                                                                        currentPos === opt.id
+                                                                            ? 'bg-rose-600 text-white'
+                                                                            : 'text-slate-600 hover:bg-rose-50'
+                                                                    }`}
+                                                                >
+                                                                    {opt.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-rose-900 uppercase mb-1">
+                                                            Ukuran Cap
+                                                        </label>
+                                                        <div className="grid grid-cols-3 rounded-lg border border-rose-200 bg-white overflow-hidden">
+                                                            {([
+                                                                { id: 'sm', label: 'Kecil' },
+                                                                { id: 'md', label: 'Normal' },
+                                                                { id: 'lg', label: 'Besar' },
+                                                            ] as const).map(opt => (
+                                                                <button
+                                                                    key={opt.id}
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        updateActiveCell({
+                                                                            stempelOverlay: {
+                                                                                enabled: true,
+                                                                                source: currentSource,
+                                                                                position: currentPos,
+                                                                                size: opt.id,
+                                                                                showWhenTtdEmpty: showWhenEmpty,
+                                                                            },
+                                                                        })
+                                                                    }
+                                                                    className={`py-1 text-[10px] font-bold transition-colors ${
+                                                                        currentSize === opt.id
+                                                                            ? 'bg-rose-600 text-white'
+                                                                            : 'text-slate-600 hover:bg-rose-50'
+                                                                    }`}
+                                                                >
+                                                                    {opt.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <label className="flex items-start gap-2 pt-0.5 cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={showWhenEmpty}
+                                                        onChange={e =>
+                                                            updateActiveCell({
+                                                                stempelOverlay: {
+                                                                    enabled: true,
+                                                                    source: currentSource,
+                                                                    position: currentPos,
+                                                                    size: currentSize,
+                                                                    showWhenTtdEmpty: e.target.checked,
+                                                                },
+                                                            })
+                                                        }
+                                                        className="mt-0.5 rounded text-rose-600 focus:ring-rose-500"
+                                                    />
+                                                    <span className="text-[10px] text-slate-700 leading-snug">
+                                                        Tetap cetak stempel meskipun TTD pejabat belum diunggah{' '}
+                                                        <span className="text-slate-400">(jika tidak dicentang, area dikosongkan untuk TTD &amp; cap basah)</span>
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         {activeCellData.type === 'dropdown' && (
                             <div className="space-y-3 p-3 bg-orange-50/70 rounded-xl border border-orange-200">
                                 <div>
@@ -8769,28 +8962,13 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                     {visiblePreviewSheets.map((sh, sIdx) => {
                                         const renderPreviewCell = (cell: GridCell): { content: React.ReactNode; isMedia: boolean } => {
                                             if ((cell.type === 'data' || cell.type === 'label') && isMediaTag(cell.value || '')) {
-                                                const imgSrc = getMediaTagImageSrc(cell.value?.trim() || '', baseResolveContext);
-                                                if (imgSrc) {
-                                                    const val = cell.value?.trim() || '';
-                                                    const upperMedia = val.toUpperCase();
-                                                    const isStempel = upperMedia.includes('STEMPEL');
-                                                    const isTtd = upperMedia.includes('TTD');
-                                                    const isKop = upperMedia.includes('KOP');
-                                                    return {
-                                                        content: (
-                                                            <div className="flex items-center justify-center p-0.5">
-                                                                <img
-                                                                    src={imgSrc}
-                                                                    alt={val}
-                                                                    className={`object-contain ${isKop ? 'w-full max-h-24' : isStempel ? 'max-h-12 max-w-[80px] opacity-90' : isTtd ? 'max-h-10 max-w-[100px]' : 'max-h-10 max-w-[80px]'}`}
-                                                                />
-                                                            </div>
-                                                        ),
-                                                        isMedia: true
-                                                    };
-                                                }
-                                                // Di Mode Pratinjau Cetak, biarkan kosong bersih (sama seperti hasil cetak asli) jika TTD/aset belum diunggah
-                                                return { content: null, isMedia: true };
+                                                const mediaVisual = resolveCellMediaVisual(cell, baseResolveContext);
+                                                return {
+                                                    content: mediaVisual ? (
+                                                        <RaporSignatureStampMedia visual={mediaVisual} mode="print" />
+                                                    ) : null,
+                                                    isMedia: true
+                                                };
                                             }
                                             if (cell.type === 'input') {
                                                 const v = cell.key ? baseExtraVars[cell.key] : '';

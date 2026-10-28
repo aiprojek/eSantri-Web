@@ -465,7 +465,9 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
             renderedContent = formattedStr;
         }
 
-        const isLogoMedia = typeof cell.value === 'string' && (cell.value.includes('LOGO_PONPES') || cell.value.includes('LOGO_YAYASAN') || cell.value === '$LOGO');
+        const upperCellVal = typeof cell.value === 'string' ? cell.value.toUpperCase() : '';
+        const isLogoMedia = upperCellVal.includes('LOGO');
+        const isKopMedia = upperCellVal.includes('KOP');
         const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
         const effectiveBg = hasCustomBg ? cell.backgroundColor : 'transparent';
         const effectiveFontWeight = cell.bold ? 'bold' : 'normal';
@@ -494,7 +496,8 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
         const isExpandableDynamic = (upperToken.includes('DESKRIPSI') || upperToken.includes('CATATAN')) && !isClip && !isFloat && (cellHeightPx === undefined || cellHeightPx >= 28);
         const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
 
-        const allowMediaOverflow = isMediaElement && !isLogoMedia && !borders.top && !borders.left && !borders.right;
+        const isSigOrStampMedia = isMediaElement && !isLogoMedia && !isKopMedia;
+        const allowMediaOverflow = isSigOrStampMedia || (isMediaElement && !isLogoMedia && !borders.top && !borders.left && !borders.right);
 
         const tdStyle: React.CSSProperties = {
             borderTop: (!isLogoMedia && borders.top) ? '1px solid black' : 'none',
@@ -512,7 +515,8 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
             padding: 0,
             boxSizing: 'border-box',
             overflow: (isFloat || allowMediaOverflow) ? 'visible' : 'hidden',
-            position: (isFloat || allowMediaOverflow) ? 'relative' : undefined
+            position: (isFloat || allowMediaOverflow) ? 'relative' : undefined,
+            zIndex: isSigOrStampMedia ? 12 : undefined
         };
 
         return (
@@ -562,28 +566,39 @@ const ScaledRaporSheet: React.FC<ScaledRaporSheetProps> = ({
                             width: '100%',
                             height: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : '100%',
                             minHeight: (isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
-                            maxHeight: (!isExpandableDynamic && !allowMediaOverflow && cellHeightPx) ? `${cellHeightPx}px` : undefined,
+                            maxHeight: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
                             padding: isMediaElement ? '1px' : cellPadding,
                             boxSizing: 'border-box',
                             overflow: allowMediaOverflow ? 'visible' : 'hidden',
                             display: 'flex',
                             flexDirection: 'column',
+                            justifyContent: vAlign === 'top' ? 'flex-start' : vAlign === 'bottom' ? 'flex-end' : 'center',
                             alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
                             textAlign: hAlign,
                             lineHeight: 1.25
                         }}
                     >
                         <div
-                            style={{
-                                width: '100%',
-                                marginTop: vAlign === 'top' ? 0 : 'auto',
-                                marginBottom: vAlign === 'bottom' ? 0 : 'auto',
-                                whiteSpace: isClip ? 'pre' : 'pre-wrap',
-                                wordBreak: isClip ? 'normal' : 'break-word',
-                                overflowWrap: isClip ? 'normal' : 'anywhere',
-                                overflow: isClip ? 'hidden' : undefined,
-                                textAlign: hAlign
-                            }}
+                            style={
+                                isMediaElement
+                                    ? {
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
+                                          overflow: allowMediaOverflow ? 'visible' : 'hidden',
+                                      }
+                                    : {
+                                          width: '100%',
+                                          marginTop: vAlign === 'top' ? 0 : 'auto',
+                                          marginBottom: vAlign === 'bottom' ? 0 : 'auto',
+                                          whiteSpace: isClip ? 'pre' : 'pre-wrap',
+                                          wordBreak: isClip ? 'normal' : 'break-word',
+                                          overflowWrap: isClip ? 'normal' : 'anywhere',
+                                          overflow: isClip ? 'hidden' : undefined,
+                                          textAlign: hAlign
+                                      }
+                            }
                         >
                             {renderedContent}
                         </div>

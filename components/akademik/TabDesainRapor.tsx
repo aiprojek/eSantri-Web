@@ -366,7 +366,9 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
     const renderSliceCellTd = (sliceItem: PaginatedSliceCell, rowIdx: number, keyPrefix: string) => {
         const { cell, masterC, colSpan, rowSpan, borders } = sliceItem;
         const rH = configuredRowHeights[rowIdx];
-        const isLogo = typeof cell.value === 'string' && (cell.value.includes('LOGO') || cell.value === '$LOGO');
+        const upperValForMedia = typeof cell.value === 'string' ? cell.value.toUpperCase() : '';
+        const isLogo = upperValForMedia.includes('LOGO');
+        const isKop = upperValForMedia.includes('KOP');
         const hasCustomBg = Boolean(cell.backgroundColor && cell.backgroundColor !== 'transparent' && cell.backgroundColor !== '#ffffff');
         const { content: rawContent, isMedia } = renderPreviewCell(cell);
         let content: React.ReactNode = rawContent;
@@ -403,7 +405,8 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
         const isExpandableDynamic = (upperToken.includes('DESKRIPSI') || upperToken.includes('CATATAN')) && !isClip && !isFloat && (cellHeightPx === undefined || cellHeightPx >= 28);
         const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
 
-        const allowMediaOverflow = isMedia && !isLogo && !borders.top && !borders.left && !borders.right;
+        const isSigOrStampMedia = isMedia && !isLogo && !isKop;
+        const allowMediaOverflow = isSigOrStampMedia || (isMedia && !isLogo && !borders.top && !borders.left && !borders.right);
 
         return (
             <td
@@ -426,7 +429,8 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                     padding: 0,
                     boxSizing: 'border-box',
                     overflow: (isFloat || allowMediaOverflow) ? 'visible' : 'hidden',
-                    position: (isFloat || allowMediaOverflow) ? 'relative' : undefined
+                    position: (isFloat || allowMediaOverflow) ? 'relative' : undefined,
+                    zIndex: isSigOrStampMedia ? 12 : undefined
                 }}
             >
                 {isFloat ? (
@@ -469,28 +473,39 @@ const DesignPreviewSheetCard: React.FC<DesignPreviewSheetCardProps> = ({
                             width: '100%',
                             height: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : '100%',
                             minHeight: (isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
-                            maxHeight: (!isExpandableDynamic && !allowMediaOverflow && cellHeightPx) ? `${cellHeightPx}px` : undefined,
+                            maxHeight: (!isExpandableDynamic && cellHeightPx) ? `${cellHeightPx}px` : undefined,
                             padding: isMedia ? '1px' : cellPadding,
                             boxSizing: 'border-box',
                             overflow: allowMediaOverflow ? 'visible' : 'hidden',
                             display: 'flex',
                             flexDirection: 'column',
+                            justifyContent: vAlign === 'top' ? 'flex-start' : vAlign === 'bottom' ? 'flex-end' : 'center',
                             alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
                             textAlign: hAlign,
                             lineHeight: 1.25
                         }}
                     >
                         <div
-                            style={{
-                                width: '100%',
-                                marginTop: vAlign === 'top' ? 0 : 'auto',
-                                marginBottom: vAlign === 'bottom' ? 0 : 'auto',
-                                whiteSpace: isClip ? 'pre' : 'pre-wrap',
-                                wordBreak: isClip ? 'normal' : 'break-word',
-                                overflowWrap: isClip ? 'normal' : 'anywhere',
-                                overflow: isClip ? 'hidden' : undefined,
-                                textAlign: hAlign
-                            }}
+                            style={
+                                isMedia
+                                    ? {
+                                          width: '100%',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
+                                          overflow: allowMediaOverflow ? 'visible' : 'hidden',
+                                      }
+                                    : {
+                                          width: '100%',
+                                          marginTop: vAlign === 'top' ? 0 : 'auto',
+                                          marginBottom: vAlign === 'bottom' ? 0 : 'auto',
+                                          whiteSpace: isClip ? 'pre' : 'pre-wrap',
+                                          wordBreak: isClip ? 'normal' : 'break-word',
+                                          overflowWrap: isClip ? 'normal' : 'anywhere',
+                                          overflow: isClip ? 'hidden' : undefined,
+                                          textAlign: hAlign
+                                      }
+                            }
                         >
                             {content}
                         </div>
@@ -863,7 +878,17 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
     const activeSheets = useMemo(() => {
         if (!activeTemplate) return [];
         if (activeTemplate.sheets && activeTemplate.sheets.length > 0) {
-            return activeTemplate.sheets;
+            const curId = activeSheetId || activeTemplate.activeSheetId || activeTemplate.sheets[0].id;
+            return activeTemplate.sheets.map(s =>
+                s.id === curId
+                    ? {
+                          ...s,
+                          cells: activeTemplate.cells,
+                          rowCount: activeTemplate.rowCount,
+                          colCount: activeTemplate.colCount,
+                      }
+                    : s
+            );
         }
         return [{
             id: 'sheet_default',
@@ -873,7 +898,7 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
             cells: activeTemplate.cells,
             paperSize: 'A4' as const
         }];
-    }, [activeTemplate]);
+    }, [activeTemplate, activeSheetId]);
 
     const getExcelColName = (colIndex: number): string => {
         let name = '';
@@ -4520,18 +4545,18 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
     const updateActiveCell = (updates: Partial<GridCell>) => {
         if (!activeTemplate || !activeCellData) return;
         pushToHistory(activeTemplate);
-        const newCells = [...activeTemplate.cells];
+        const newCells = activeTemplate.cells.map(r => [...r]);
         const { row, col } = activeCellData;
         newCells[row][col] = { ...newCells[row][col], ...updates };
         if (updates.key) newCells[row][col].key = updates.key.toUpperCase().replace(/[^A-Z0-9_]/g, '');
         if (typeof updates.width === 'number') {
             for (let r = 0; r < newCells.length; r++) {
-                if (newCells[r][col]) newCells[r][col].width = updates.width;
+                if (newCells[r][col]) newCells[r][col] = { ...newCells[r][col], width: updates.width };
             }
         }
         if (typeof updates.height === 'number') {
             for (let c = 0; c < newCells[row].length; c++) {
-                if (newCells[row][c]) newCells[row][c].height = updates.height;
+                if (newCells[row][c]) newCells[row][c] = { ...newCells[row][c], height: updates.height };
             }
         }
         const updated = { ...activeTemplate, cells: newCells };
@@ -6363,7 +6388,10 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                 const hAlign = cell.align || 'center';
                                                 const vAlign = cell.verticalAlign || 'middle';
                                                 const textWrap = cell.textWrap || 'wrap';
-                                                const isFloat = textWrap === 'float' && !(cell.type === 'data' && isMediaTag(cell.value || ''));
+                                                const upperCanvasCellVal = (cell.value || '').toUpperCase();
+                                                const isCanvasMedia = (cell.type === 'data' || cell.type === 'label') && isMediaTag(cell.value || '');
+                                                const isCanvasSigOrStamp = isCanvasMedia && !upperCanvasCellVal.includes('LOGO') && !upperCanvasCellVal.includes('KOP');
+                                                const isFloat = textWrap === 'float' && !isCanvasMedia;
                                                 const isClip = textWrap === 'clip';
                                                 const cellPadding = cellWidthPx < 22 ? '1px' : '2px 4px';
 
@@ -6433,8 +6461,8 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                             backgroundColor: !isSelected && !isFillTargetPreview && !isLiveDragRef && !isFormulaRef && cell.backgroundColor ? cell.backgroundColor : undefined,
                                                             color: cell.color || undefined,
                                                             fontSize: `${effectiveFontSize}px`,
-                                                            overflow: (isEditingThisCell || isFloat || isFillHandleHost || isActive) ? 'visible' : 'hidden',
-                                                            zIndex: isEditingThisCell ? 40 : isFillHandleHost ? 28 : isActive ? 25 : isFloat ? 15 : undefined
+                                                            overflow: (isEditingThisCell || isFloat || isFillHandleHost || isActive || isCanvasSigOrStamp) ? 'visible' : 'hidden',
+                                                            zIndex: isEditingThisCell ? 40 : isFillHandleHost ? 28 : isActive ? 25 : isFloat ? 15 : isCanvasSigOrStamp ? 12 : undefined
                                                         }}
                                                     >
                                                         {isEditingThisCell && editingCell ? (
@@ -6576,27 +6604,38 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                                                     width: '100%',
                                                                     height: `${cellHeightPx}px`,
                                                                     maxHeight: `${cellHeightPx}px`,
-                                                                    padding: cellPadding,
+                                                                    padding: isCanvasMedia ? '1px' : cellPadding,
                                                                     boxSizing: 'border-box',
-                                                                    overflow: 'hidden',
+                                                                    overflow: isCanvasSigOrStamp ? 'visible' : 'hidden',
                                                                     display: 'flex',
                                                                     flexDirection: 'column',
+                                                                    justifyContent: vAlign === 'top' ? 'flex-start' : vAlign === 'bottom' ? 'flex-end' : 'center',
                                                                     alignItems: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
                                                                     textAlign: hAlign,
                                                                     lineHeight: 1.25
                                                                 }}
                                                             >
                                                                 <div
-                                                                    style={{
-                                                                        width: '100%',
-                                                                        marginTop: vAlign === 'top' ? 0 : 'auto',
-                                                                        marginBottom: vAlign === 'bottom' ? 0 : 'auto',
-                                                                        whiteSpace: isClip ? 'pre' : 'pre-wrap',
-                                                                        wordBreak: isClip ? 'normal' : 'break-word',
-                                                                        overflowWrap: isClip ? 'normal' : 'anywhere',
-                                                                        overflow: isClip ? 'hidden' : undefined,
-                                                                        textAlign: hAlign
-                                                                    }}
+                                                                    style={
+                                                                        isCanvasMedia
+                                                                            ? {
+                                                                                  width: '100%',
+                                                                                  display: 'flex',
+                                                                                  alignItems: 'center',
+                                                                                  justifyContent: hAlign === 'left' ? 'flex-start' : hAlign === 'right' ? 'flex-end' : 'center',
+                                                                                  overflow: isCanvasSigOrStamp ? 'visible' : 'hidden',
+                                                                              }
+                                                                            : {
+                                                                                  width: '100%',
+                                                                                  marginTop: vAlign === 'top' ? 0 : 'auto',
+                                                                                  marginBottom: vAlign === 'bottom' ? 0 : 'auto',
+                                                                                  whiteSpace: isClip ? 'pre' : 'pre-wrap',
+                                                                                  wordBreak: isClip ? 'normal' : 'break-word',
+                                                                                  overflowWrap: isClip ? 'normal' : 'anywhere',
+                                                                                  overflow: isClip ? 'hidden' : undefined,
+                                                                                  textAlign: hAlign
+                                                                              }
+                                                                    }
                                                                 >
                                                                     {getSimulatedValue(cell)}
                                                                 </div>

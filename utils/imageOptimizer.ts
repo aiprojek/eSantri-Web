@@ -200,3 +200,209 @@ export const optimizeSignatureImage = (
         });
     });
 };
+
+export type InkAssetKind = 'ttd' | 'stempel';
+
+const transparentInkCache = new Map<string, string>();
+const transparentInkInFlight = new Map<string, Promise<string>>();
+
+const makeInkCacheKey = (src: string, kind: InkAssetKind): string => `${kind}::${src}`;
+
+export const getCachedTransparentInkAsset = (src: string | null | undefined, kind: InkAssetKind): string | null => {
+    if (!src) return null;
+    return transparentInkCache.get(makeInkCacheKey(src, kind)) || null;
+};
+
+/**
+ * Menormalkan gambar TTD atau Stempel menjadi PNG transparan dengan batas tinta rapat (auto-trimmed):
+ * - Menghapus kertas putih/abu terang beserta efek halo putih (white-matte unmixing) pada tepi anti-aliasing,
+ *   sehingga tinta stempel berwarna dapat ditumpuk dengan `mix-blend-mode: normal` tepat DI ATAS goresan TTD hitam
+ *   tanpa kotak putih maupun tertelan warna hitam TTD.
+ * - Memangkas margin kosong berlebih di sekeliling goresan agar titik tengah stempel selalu sejajar akurat dengan TTD.
+ */
+export const prepareTransparentInkAsset = (
+    src: string,
+    kind: InkAssetKind
+): Promise<string> => {
+    const cacheKey = makeInkCacheKey(src, kind);
+    const cached = transparentInkCache.get(cacheKey);
+    if (cached) return Promise.resolve(cached);
+
+    const existingPromise = transparentInkInFlight.get(cacheKey);
+    if (existingPromise) return existingPromise;
+
+    const promise = new Promise<string>((resolve) => {
+        if (typeof document === 'undefined') {
+            resolve(src);
+            return;
+        }
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            try {
+                const maxDim = kind === 'stempel' ? 480 : 560;
+                let width = img.naturalWidth || img.width || 300;
+                let height = img.naturalHeight || img.height || 200;
+
+                const scale = Math.min(1, maxDim / Math.max(width, height));
+                width = Math.max(1, Math.round(width * scale));
+                height = Math.max(1, Math.round(height * scale));
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (!ctx) {
+                    resolve(src);
+                    return;
+                }
+
+                ctx.clearRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const imgData = ctx.getImageData(0, 0, width, height);
+                const data = imgData.data;
+
+                // Cek apakah gambar sudah punya transparansi asli di area tepi
+                let borderTotal = 0;
+                let borderTransparent = 0;
+                const step = Math.max(1, Math.floor(Math.min(width, height) / 40));
+                for (let x = 0; x < width; x += step) {
+                    borderTotal += 2;
+                    if (data[(0 * width + x) * 4 + 3] < 32) borderTransparent++;
+                    if (data[((height - 1) * width + x) * 4 + 3] < 32) borderTransparent++;
+                }
+                for (let y = 0; y < height; y += step) {
+                    borderTotal += 2;
+                    if (data[(y * width + 0) * 4 + 3] < 32) borderTransparent++;
+                    if (data[(y * width + (width - 1)) * 4 + 3] < 32) borderTransparent++;
+                }
+                const hasNativeTransparentBg = borderTotal > 0 && borderTransparent / borderTotal > 0.25;
+
+                const whitePoint = 242;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const a = data[i + 3];
+                    if (a === 0) continue;
+
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+
+                    const maxC = Math.max(r, g, b);
+                    const minC = Math.min(r, g, b);
+                    const chroma = maxC - minC;
+                    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                    if (hasNativeTransparentBg) {
+                        // Jika PNG memang sudah transparan, cukup bersihkan bercak putih kertas yang masih tertinggal
+                        if (a > 220 && lum >= 244 && chroma < 20) {
+                            data[i + 3] = 0;
+                        } else if (kind === 'stempel' && a < 255 && lum > 200 && chroma >= 20) {
+                            // Hilangkan sisa halo putih tipis di pinggir anti-aliasing PNG
+                            const cleanRatio = Math.min(0.92, (255 - a) / 255);
+                            const denom = Math.max(0.12, 1 - cleanRatio * 0.5);
+                            data[i] = Math.max(0, Math.min(255, Math.round((r - cleanRatio * 120) / denom)));
+                            data[i + 1] = Math.max(0, Math.min(255, Math.round((g - cleanRatio * 120) / denom)));
+                            data[i + 2] = Math.max(0, Math.min(255, Math.round((b - cleanRatio * 120) / denom)));
+                        }
+                        continue;
+                    }
+
+                    // Piksel kertas putih / abu terang dengan saturasi rendah -> 100% transparan
+                    if (lum >= 236 && chroma < 28) {
+                        data[i + 3] = 0;
+                        continue;
+                    }
+
+                    // White-matte unmixing: pisahkan pigmen tinta murni dari warna dasar kertas putih
+                    const darkCoverage = Math.max(0, Math.min(1, (whitePoint - minC) / whitePoint));
+                    const colorCoverage =
+                        kind === 'stempel' && chroma >= 18
+                            ? Math.min(1, (chroma - 14) / 135)
+                            : chroma >= 28
+                            ? Math.min(1, (chroma - 20) / 160)
+                            : 0;
+                    const rawCoverage = Math.max(darkCoverage, colorCoverage);
+
+                    if (rawCoverage < 0.055) {
+                        data[i + 3] = 0;
+                        continue;
+                    }
+
+                    // Pulihkan warna pigmen murni tanpa campuran putih kertas agar tidak muncul halo putih di atas TTD hitam
+                    const whiteMix = Math.max(0, Math.min(0.94, 1 - darkCoverage));
+                    const inkScale = Math.max(0.08, 1 - whiteMix);
+                    data[i] = Math.max(0, Math.min(255, Math.round((r - whiteMix * 255) / inkScale)));
+                    data[i + 1] = Math.max(0, Math.min(255, Math.round((g - whiteMix * 255) / inkScale)));
+                    data[i + 2] = Math.max(0, Math.min(255, Math.round((b - whiteMix * 255) / inkScale)));
+
+                    const gamma = kind === 'stempel' ? 0.72 : 0.84;
+                    const boostedAlpha = Math.round((a / 255) * Math.pow(rawCoverage, gamma) * 255);
+                    data[i + 3] = Math.max(0, Math.min(255, boostedAlpha));
+                }
+
+                ctx.putImageData(imgData, 0, 0);
+
+                // Auto-trim ruang kosong di sekeliling goresan tinta agar titik pusat akurat
+                let top = height;
+                let left = width;
+                let right = -1;
+                let bottom = -1;
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        if (data[(y * width + x) * 4 + 3] > 22) {
+                            if (x < left) left = x;
+                            if (x > right) right = x;
+                            if (y < top) top = y;
+                            if (y > bottom) bottom = y;
+                        }
+                    }
+                }
+
+                let resultDataUrl: string;
+                if (right >= left && bottom >= top) {
+                    const pad = 4;
+                    const cropX = Math.max(0, left - pad);
+                    const cropY = Math.max(0, top - pad);
+                    const cropW = Math.min(width - cropX, right - left + 1 + pad * 2);
+                    const cropH = Math.min(height - cropY, bottom - top + 1 + pad * 2);
+
+                    const trimmed = document.createElement('canvas');
+                    trimmed.width = Math.max(1, cropW);
+                    trimmed.height = Math.max(1, cropH);
+                    const tCtx = trimmed.getContext('2d');
+                    if (tCtx) {
+                        tCtx.clearRect(0, 0, trimmed.width, trimmed.height);
+                        tCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                        resultDataUrl = trimmed.toDataURL('image/png');
+                    } else {
+                        resultDataUrl = canvas.toDataURL('image/png');
+                    }
+                } else {
+                    resultDataUrl = canvas.toDataURL('image/png');
+                }
+
+                transparentInkCache.set(cacheKey, resultDataUrl);
+                resolve(resultDataUrl);
+            } catch {
+                // Fallback aman jika terkena pembatasan CORS eksternal
+                resolve(src);
+            } finally {
+                transparentInkInFlight.delete(cacheKey);
+            }
+        };
+        img.onerror = () => {
+            transparentInkInFlight.delete(cacheKey);
+            resolve(src);
+        };
+        img.src = src;
+    });
+
+    transparentInkInFlight.set(cacheKey, promise);
+    return promise;
+};
+

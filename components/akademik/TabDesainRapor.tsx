@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { useAppContext } from '../../AppContext';
 import { useSantriContext } from '../../contexts/SantriContext';
-import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, DigitalAsset, PageFitCount } from '../../types';
+import { RaporTemplate, RaporSheet, GridCell, RaporColumnType, RaporInputMode, DigitalAsset, PageFitCount } from '../../types';
 import { loadXLSX } from '../../utils/lazyClientLibs';
 import { printToPdfNative } from '../../utils/pdfGenerator';
 import { PrintHeader } from '../common/PrintHeader';
@@ -55,7 +55,7 @@ import {
     getHijriDate,
     ensureHijriSuffix
 } from '../../utils/formatters';
-import { computeClassAveragesFromRecords } from '../../services/raporCalculationService';
+import { computeClassAveragesFromRecords, classifyRaporInputField } from '../../services/raporCalculationService';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { RaporExcelPasteModal } from './modals/RaporExcelPasteModal';
@@ -4738,7 +4738,19 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
         }
 
         if (cell.type === 'label') return formatText(cell.value || '');
-        if (cell.type === 'input') return <span className="text-blue-500 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key || 'NILAI'}{decTag}]</span>;
+        if (cell.type === 'input') {
+            const cls = classifyRaporInputField({
+                key: cell.key || 'NILAI',
+                type: cell.type,
+                inputMode: cell.inputMode,
+                mataPelajaran: settings.mataPelajaran || [],
+                jenjangId: activeTemplate?.jenjangId
+            });
+            if (cls.isLongText) {
+                return <span className="text-teal-700 italic text-[10px] font-mono bg-teal-50 px-1 rounded border border-teal-200">[Catatan: {cell.key || 'TEKS'}]</span>;
+            }
+            return <span className="text-blue-500 italic text-[10px] font-mono bg-blue-50 px-1 rounded border border-blue-100">[Input: {cell.key || 'NILAI'}{decTag}]</span>;
+        }
         if (cell.type === 'formula') return <span className="text-yellow-700 italic text-[10px] font-mono bg-yellow-50 px-1 rounded border border-yellow-100">{cell.value || '[Rumus]'}{decTag}</span>;
         if (cell.type === 'dropdown') {
             const firstOpt = cell.options && cell.options.length > 0 ? cell.options[0] : (cell.key || 'Pilihan');
@@ -7020,17 +7032,51 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                             </div>
                         )}
                         {activeCellData.type === 'input' && (
-                            <div className="space-y-2">
+                            <div className="space-y-2.5">
                                 <div>
                                     <label className="block text-xs font-bold mb-1 text-blue-700">KODE VARIABEL ($)</label>
                                     <input 
                                         type="text" 
                                         value={activeCellData.key || ''} 
-                                        onChange={e => updateActiveCell({ key: e.target.value })} 
+                                        onChange={e => updateActiveCell({ key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })} 
                                         className="w-full border rounded p-2 text-sm font-mono uppercase" 
-                                        placeholder="CONTOH: UH1"
+                                        placeholder="CONTOH: AKHLAK atau UH1"
                                     />
-                                    <p className="text-[10px] text-gray-400 mt-0.5">Kode unik untuk referensi rumus (tanpa spasi).</p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Kode unik untuk referensi rumus &amp; kolom Leger Input (tanpa spasi).</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold mb-1 text-slate-700">JENIS ISIAN DI LEGER INPUT</label>
+                                    <select
+                                        value={activeCellData.inputMode || 'auto'}
+                                        onChange={e => {
+                                            const val = e.target.value as RaporInputMode;
+                                            updateActiveCell({ inputMode: val === 'auto' ? undefined : val });
+                                        }}
+                                        className="w-full border border-slate-300 rounded-lg p-2 text-xs font-bold bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    >
+                                        <option value="auto">Otomatis (Nilai Angka / Deteksi Cerdas)</option>
+                                        <option value="number">Nilai Angka (0–100 + Validasi KKM)</option>
+                                        <option value="text">Teks / Catatan Panjang</option>
+                                    </select>
+                                    <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                                        {(() => {
+                                            const cls = classifyRaporInputField({
+                                                key: activeCellData.key || 'NILAI',
+                                                type: activeCellData.type,
+                                                inputMode: activeCellData.inputMode,
+                                                mataPelajaran: settings.mataPelajaran || [],
+                                                jenjangId: activeTemplate?.jenjangId
+                                            });
+                                            if (cls.isLongText) {
+                                                return 'Tampil sebagai kolom Teks / Catatan lebar di Leger Input Wali Kelas.';
+                                            }
+                                            if (cls.isAttendanceCount) {
+                                                return 'Tampil sebagai kolom angka jumlah hari presensi (tanpa KKM).';
+                                            }
+                                            return `Tampil sebagai kolom Input Nilai Angka (KKM: ${cls.kkm}) di Leger Input & ikut dihitung rata-rata.`;
+                                        })()}
+                                    </p>
                                 </div>
                                 
                                 {/* Variable List Helper */}
@@ -8245,10 +8291,19 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                                 if (!selectedRealSantri || previewFallbackDummyGrades) {
                                     if (c.type === 'input') {
                                         const ku = c.key.toUpperCase();
-                                        if (ku.includes('CATATAN')) {
-                                            baseExtraVars[c.key] = 'Tingkatkan terus semangat belajar, muraja\'ah hafalan, dan adab keseharian di asrama.';
-                                        } else if (ku.includes('KEPUTUSAN')) {
+                                        const cls = classifyRaporInputField({
+                                            key: c.key,
+                                            type: c.type,
+                                            inputMode: c.inputMode,
+                                            mataPelajaran: settings.mataPelajaran || [],
+                                            jenjangId: activeTemplate.jenjangId
+                                        });
+                                        if (ku.includes('KEPUTUSAN')) {
                                             baseExtraVars[c.key] = 'NAIK KE KELAS BERIKUTNYA';
+                                        } else if (cls.isLongText) {
+                                            baseExtraVars[c.key] = 'Tingkatkan terus semangat belajar, muraja\'ah hafalan, dan adab keseharian di asrama.';
+                                        } else if (cls.isAttendanceCount) {
+                                            baseExtraVars[c.key] = '0';
                                         } else {
                                             baseExtraVars[c.key] = String(sampleGrades[sampleIdx % sampleGrades.length]);
                                             sampleIdx++;
@@ -8291,8 +8346,15 @@ export const TabDesainRapor: React.FC<TabDesainRaporProps> = ({ onDirtyChange })
                         sheetObj.cells.forEach(row => {
                             row.forEach(c => {
                                 if (c.hidden || !c.key || c.type !== 'input') return;
+                                const cls = classifyRaporInputField({
+                                    key: c.key,
+                                    type: c.type,
+                                    inputMode: c.inputMode,
+                                    mataPelajaran: settings.mataPelajaran || [],
+                                    jenjangId: activeTemplate.jenjangId
+                                });
+                                if (!cls.isNumericScore) return;
                                 const ku = normalizeSubjectKeyForAvg(c.key);
-                                if (ku.includes('CATATAN') || ku.includes('KEPUTUSAN')) return;
                                 if (previewClassAverages[ku] === undefined) {
                                     previewClassAverages[ku] = sampleClassAvgs[simAvgIdx % sampleClassAvgs.length];
                                     simAvgIdx++;

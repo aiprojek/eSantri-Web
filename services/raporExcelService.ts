@@ -1,11 +1,12 @@
 import { loadXLSX } from '../utils/lazyClientLibs';
-import { RaporTemplate, RaporSheet, Santri, PondokSettings, AbsensiRecord } from '../types';
+import { RaporTemplate, RaporSheet, Santri, PondokSettings, AbsensiRecord, RaporInputMode } from '../types';
 import { db } from '../db';
 
 export interface ExtractedTemplateKey {
     key: string;
     label: string;
     type: 'input' | 'dropdown' | 'formula';
+    inputMode?: RaporInputMode;
     options?: string[];
     sheetId?: string;
     sheetName?: string;
@@ -68,15 +69,30 @@ export const extractTemplateKeys = (template?: RaporTemplate | null, targetSheet
                     if (trimmedKey && !seen.has(trimmedKey)) {
                         seen.add(trimmedKey);
 
-                        // Find a readable label in the same row before this cell, or cell above
+                        // Find a readable subject/field label in the same row before this cell (skip pure numbers like KKM "70" or row number "1")
                         let label = cell.key;
                         const rowCells = sheet.cells[cell.row] || [];
-                        const labelCellLeft = [...rowCells]
+                        const isMeaningfulTextLabel = (rawText?: string) => {
+                            if (!rawText) return false;
+                            const t = rawText.trim();
+                            if (!t || t.startsWith('$') || t.startsWith('=')) return false;
+                            // Skip pure numbers / KKM / numbering / punctuation-only cells like "1", "1.", "70", "75,5", ":", "-"
+                            if (/^(?:-?\d+(?:[.,]\d+)?%?|[.:\-/#()]+)$/.test(t)) return false;
+                            return /[A-Za-z\u0600-\u06FF]/.test(t);
+                        };
+                        const leftCandidates = [...rowCells]
                             .reverse()
-                            .find(c => c.col < cell.col && c.type === 'label' && c.value && c.value.trim() !== '' && !c.value.startsWith('$'));
-                        
-                        if (labelCellLeft) {
-                            label = labelCellLeft.value.trim();
+                            .filter(c => c.col < cell.col && !c.hidden && c.type === 'label' && c.value && c.value.trim() !== '' && !c.value.startsWith('$'));
+
+                        const meaningfulLabelLeft = leftCandidates.find(c => isMeaningfulTextLabel(c.value));
+                        const fallbackLabelLeft = leftCandidates[0];
+
+                        if (meaningfulLabelLeft) {
+                            label = meaningfulLabelLeft.value.trim();
+                        } else if (isMeaningfulTextLabel(cell.value)) {
+                            label = cell.value.trim();
+                        } else if (fallbackLabelLeft) {
+                            label = fallbackLabelLeft.value.trim();
                         } else if (cell.value && cell.value.trim() !== '' && !cell.value.startsWith('$')) {
                             label = cell.value.trim();
                         }
@@ -85,6 +101,7 @@ export const extractTemplateKeys = (template?: RaporTemplate | null, targetSheet
                             key: trimmedKey,
                             label: label || trimmedKey,
                             type: cell.type,
+                            inputMode: cell.inputMode,
                             options: cell.options,
                             sheetId: sheet.id,
                             sheetName: sheet.name

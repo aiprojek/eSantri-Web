@@ -18,13 +18,7 @@ import { RaporPresensiSyncModal } from './RaporPresensiSyncModal';
 import { RaporWaCloudImportModal } from './RaporWaCloudImportModal';
 import { RaporTahfizhSyncModal, TahfizhSyncPayload, StudentTahfizhAggregate } from './RaporTahfizhSyncModal';
 import { RaporBulkHelperModal } from './modals/RaporBulkHelperModal';
-
-const NON_SCORE_TOKENS = [
-    'SAKIT', 'IZIN', 'ALPHA', 'ALPA', 'ABSEN',
-    'CATATAN', 'KEPUTUSAN', 'KELULUSAN', 'KENAIKAN',
-    'DESKRIPSI', 'CAPAIAN', 'SIKAP', 'AKHLAK', 'KEPRIBADIAN',
-    'EKSTRA', 'JUZ', 'SURAH', 'SETORAN', 'PREDIKAT', 'KETERANGAN'
-];
+import { classifyRaporInputField, RaporInputClassification } from '../../services/raporCalculationService';
 
 export interface TabInputNilaiWaliProps {
     initialContext?: {
@@ -276,41 +270,18 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         return extractTemplateKeys(template, activeInputSheetId);
     }, [template, activeInputSheetId]);
 
-    // Metadata KKM & Validasi Angka per Kolom
+    // Metadata KKM, Klasifikasi Jenis Isian & Validasi Angka per Kolom
     const keyValidationMeta = useMemo(() => {
-        const meta: Record<string, { isNumericScore: boolean; kkm: number }> = {};
-        const mapelPool = (settings.mataPelajaran || []).filter(
-            m => !activeJenjangId || m.jenjangId === activeJenjangId
-        );
-        const norm = (str: string) => str.toUpperCase().replace(/[^A-Z0-9]+/g, '');
-
+        const meta: Record<string, RaporInputClassification> = {};
         inputKeys.forEach(k => {
-            if (k.type === 'dropdown') {
-                meta[k.key] = { isNumericScore: false, kkm: 70 };
-                return;
-            }
-            const combinedUpper = `${k.key} ${k.label || ''}`.toUpperCase();
-            const isNonScore = NON_SCORE_TOKENS.some(tok => combinedUpper.includes(tok));
-            if (isNonScore) {
-                meta[k.key] = { isNumericScore: false, kkm: 70 };
-                return;
-            }
-
-            const nKey = norm(k.key);
-            const nLabel = norm(k.label || '');
-            const matchedMapel = mapelPool.find(mp => {
-                const nKode = mp.kodeMapel ? norm(mp.kodeMapel) : '';
-                const nNama = norm(mp.nama);
-                return (
-                    (nKode && (nKey === nKode || nKey.includes(nKode))) ||
-                    (nNama && (nKey === nNama || nLabel === nNama || nLabel.includes(nNama) || nNama.includes(nKey)))
-                );
+            meta[k.key] = classifyRaporInputField({
+                key: k.key,
+                label: k.label,
+                type: k.type,
+                inputMode: k.inputMode,
+                mataPelajaran: settings.mataPelajaran || [],
+                jenjangId: activeJenjangId || undefined
             });
-
-            meta[k.key] = {
-                isNumericScore: true,
-                kkm: matchedMapel?.kkm ?? 70
-            };
         });
         return meta;
     }, [inputKeys, settings.mataPelajaran, activeJenjangId]);
@@ -337,21 +308,17 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
         return JSON.stringify(grades) !== savedBaselineJson;
     }, [grades, savedBaselineJson, selectedTemplateId, studentsInRombel.length]);
 
-    const isLongTextKey = (key: string, type?: string) => {
-        if (type === 'text') return true;
-        const upper = key.toUpperCase();
-        return (
-            upper.includes('CATATAN') ||
-            upper.includes('DESKRIPSI') ||
-            upper.includes('KEPUTUSAN') ||
-            upper.includes('KETERANGAN') ||
-            upper.includes('SARAN') ||
-            upper.includes('PRESTASI') ||
-            upper.includes('EKSTRA') ||
-            upper.includes('SIKAP') ||
-            upper.includes('AKHLAK') ||
-            upper.includes('PERILAKU')
-        );
+    const isLongTextKey = (kItem: { key: string; label?: string; type?: string; inputMode?: 'auto' | 'number' | 'text' }) => {
+        const cached = keyValidationMeta[kItem.key];
+        if (cached) return cached.isLongText;
+        return classifyRaporInputField({
+            key: kItem.key,
+            label: kItem.label,
+            type: kItem.type,
+            inputMode: kItem.inputMode,
+            mataPelajaran: settings.mataPelajaran || [],
+            jenjangId: activeJenjangId || undefined
+        }).isLongText;
     };
 
     // Calculate student completeness for quick filtering
@@ -1751,7 +1718,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                             </th>
                                             {inputKeys.map(k => {
                                                 const meta = keyValidationMeta[k.key];
-                                                const isText = isLongTextKey(k.key, k.type);
+                                                const isText = isLongTextKey(k);
                                                 return (
                                                     <th
                                                         key={k.key}
@@ -1771,6 +1738,11 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                         {meta?.isNumericScore && (
                                                             <div className="text-[9px] font-semibold text-slate-400 mt-0.5">
                                                                 KKM: {meta.kkm}
+                                                            </div>
+                                                        )}
+                                                        {meta?.isAttendanceCount && (
+                                                            <div className="text-[9px] font-semibold text-indigo-500 mt-0.5">
+                                                                Presensi (Hari)
                                                             </div>
                                                         )}
                                                         {isText && (
@@ -1843,7 +1815,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                             </td>
                                                             {inputKeys.map((k, kIdx) => {
                                                                 const rawVal = grades[student.id]?.[k.key] || '';
-                                                                const isText = isLongTextKey(k.key, k.type);
+                                                                const isText = isLongTextKey(k);
+                                                                const meta = keyValidationMeta[k.key];
                                                                 const scoreCheck = getCellScoreStatus(k.key, rawVal);
                                                                 const cellColorClass =
                                                                     scoreCheck.status === 'invalid'
@@ -1955,8 +1928,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                                                             ? `Nilai di bawah KKM (${scoreCheck.kkm})`
                                                                                             : 'Ketik nilai, tekan Enter untuk turun, atau Ctrl+V blok nilai dari Excel'
                                                                                     }
-                                                                                    className={`w-full border rounded-lg p-2 text-center focus:ring-2 focus:ring-teal-500 outline-none font-mono disabled:bg-slate-100 disabled:text-slate-500 transition-colors ${cellColorClass}`}
-                                                                                    placeholder="0"
+                                                                                    className={`w-full border rounded-lg p-2 text-center focus:ring-2 focus:ring-teal-500 outline-none ${meta?.kind === 'short_text' ? 'font-sans' : 'font-mono'} disabled:bg-slate-100 disabled:text-slate-500 transition-colors ${cellColorClass}`}
+                                                                                    placeholder={meta?.kind === 'short_text' ? '-' : '0'}
                                                                                 />
                                                                                 {scoreCheck.status === 'invalid' && (
                                                                                     <div className="text-[9px] font-bold text-rose-600 text-center mt-0.5">
@@ -2112,7 +2085,7 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <div className="w-full sm:w-48">
+                                                    <div className={isLongTextKey(k) ? 'w-full sm:w-80' : 'w-full sm:w-48'}>
                                                         {k.type === 'dropdown' ? (
                                                             <select
                                                                 disabled={isRaporLocked}
@@ -2129,6 +2102,17 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                                     </option>
                                                                 ))}
                                                             </select>
+                                                        ) : isLongTextKey(k) ? (
+                                                            <textarea
+                                                                rows={2}
+                                                                disabled={isRaporLocked}
+                                                                value={val}
+                                                                onChange={e =>
+                                                                    handleInputChange(currentStudent.id, k.key, e.target.value)
+                                                                }
+                                                                className="w-full border-2 border-gray-200 rounded-lg p-2 text-xs text-left font-sans text-gray-800 focus:border-teal-500 outline-none bg-white disabled:bg-slate-100 resize-y"
+                                                                placeholder="Ketik catatan..."
+                                                            />
                                                         ) : (
                                                             <div>
                                                                 <input
@@ -2138,8 +2122,8 @@ export const TabInputNilaiWali: React.FC<TabInputNilaiWaliProps> = ({ initialCon
                                                                     onChange={e =>
                                                                         handleInputChange(currentStudent.id, k.key, e.target.value)
                                                                     }
-                                                                    className={`w-full border-2 rounded-lg p-2 text-sm font-bold text-center font-mono focus:border-teal-500 outline-none disabled:bg-slate-100 ${cardInputClass}`}
-                                                                    placeholder="0"
+                                                                    className={`w-full border-2 rounded-lg p-2 text-sm font-bold text-center ${keyValidationMeta[k.key]?.kind === 'short_text' ? 'font-sans' : 'font-mono'} focus:border-teal-500 outline-none disabled:bg-slate-100 ${cardInputClass}`}
+                                                                    placeholder={keyValidationMeta[k.key]?.kind === 'short_text' ? '-' : '0'}
                                                                 />
                                                                 {scoreCheck.status === 'invalid' && (
                                                                     <div className="text-[10px] font-bold text-rose-600 text-center mt-0.5">

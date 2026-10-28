@@ -827,19 +827,19 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
     printScale = 'auto',
     isLastDocument = true
 }) => {
+    const allTemplateSheets = useMemo(() => getTemplateSheets(template), [template]);
     const sheets = useMemo(() => {
-        const allSheets = getTemplateSheets(template);
         if (!targetSheetId || targetSheetId === 'all') {
-            return allSheets;
+            return allTemplateSheets;
         }
-        const filtered = allSheets.filter(s => s.id === targetSheetId);
-        return filtered.length > 0 ? filtered : allSheets;
-    }, [template, targetSheetId]);
+        const filtered = allTemplateSheets.filter(s => s.id === targetSheetId);
+        return filtered.length > 0 ? filtered : allTemplateSheets;
+    }, [allTemplateSheets, targetSheetId]);
 
     const customData = useMemo(() => {
         if (!record?.customData) return {};
         try {
-            return JSON.parse(record.customData) || {};
+            return typeof record.customData === 'string' ? (JSON.parse(record.customData) || {}) : record.customData;
         } catch {
             return {};
         }
@@ -857,17 +857,46 @@ const DynamicRaporPreview: React.FC<DynamicRaporPreviewProps> = ({
         manualHijriRaporDefault: manualHijriRapor !== undefined ? manualHijriRapor : settings?.manualHijriRaporDefault
     };
 
-    const resolveContext = {
-        santri,
-        settings: effectiveSettings,
-        record,
-        digitalAssets,
-        targetDate: effectiveDate,
-        tahunAjaran,
-        semester,
-        calculation,
-        cohortRecords
-    };
+    const resolveContext = useMemo(() => {
+        const sharedExtraVars: Record<string, any> = { ...customData };
+        const baseCtx = {
+            santri,
+            settings: effectiveSettings,
+            record,
+            digitalAssets,
+            targetDate: effectiveDate,
+            tahunAjaran,
+            semester,
+            calculation,
+            cohortRecords,
+            extraVars: sharedExtraVars
+        };
+
+        // Evaluasi berantai lintas lembar untuk sel rumus yang diberi $KEY (misal Lembar 2 memanggil hasil rumus dari Lembar 1)
+        for (let pass = 0; pass < 2; pass++) {
+            for (const sh of allTemplateSheets) {
+                if (!sh.cells) continue;
+                for (const row of sh.cells) {
+                    for (const cell of row) {
+                        if (!cell || cell.hidden) continue;
+                        if (cell.type === 'formula' && cell.key && cell.value) {
+                            const rawExpr = cell.value.trim().startsWith('=') ? cell.value : `=${cell.value.trim()}`;
+                            const val = resolveRaporText(rawExpr, {
+                                ...baseCtx,
+                                sheetCells: sh.cells,
+                                currentCellCoord: { r: cell.row, c: cell.col },
+                                decimalPlaces: cell.decimalPlaces !== undefined ? cell.decimalPlaces : 4
+                            });
+                            sharedExtraVars[cell.key] = cell.decimalPlaces !== undefined
+                                ? formatCellNumericDisplay(val, cell.decimalPlaces)
+                                : val;
+                        }
+                    }
+                }
+            }
+        }
+        return baseCtx;
+    }, [allTemplateSheets, customData, santri, effectiveSettings, record, digitalAssets, effectiveDate, tahunAjaran, semester, calculation, cohortRecords]);
 
     const hasBuiltInBiodata = useMemo(() => templateHasBuiltInBiodata(template), [template]);
 

@@ -1,4 +1,4 @@
-import { RaporTemplate, RaporSheet, Santri, RaporRecord, PondokSettings } from '../types';
+import { RaporTemplate, RaporSheet, Santri, RaporRecord, PondokSettings, MataPelajaran, RaporInputMode } from '../types';
 import { extractTemplateKeys, ExtractedTemplateKey, getTemplateSheets } from './raporExcelService';
 export { getTemplateSheets };
 import { loadXLSX } from '../utils/lazyClientLibs';
@@ -31,18 +31,230 @@ export const calculatePredikat = (score: number): PredikatResult => {
     return { predikat: 'Rasib', predikatHuruf: 'E', deskripsi: 'Perlu Bimbingan Khusus' };
 };
 
+export interface RaporInputClassification {
+    kind: 'score' | 'attendance' | 'note' | 'short_text' | 'dropdown';
+    isNumericScore: boolean;
+    isLongText: boolean;
+    isAttendanceCount: boolean;
+    kkm: number;
+}
+
+const NOTE_WORD_TOKENS = new Set([
+    'CATATAN',
+    'CATATANWALIKELAS',
+    'DESKRIPSI',
+    'NARASI',
+    'KOMENTAR',
+    'SARAN',
+    'NASEHAT',
+    'NASIHAT',
+    'PESAN',
+    'KESIMPULAN',
+    'KEPUTUSAN'
+]);
+
+const ATTENDANCE_WORD_TOKENS = new Set([
+    'SAKIT',
+    'IZIN',
+    'IJIN',
+    'ALPHA',
+    'ALPA',
+    'ABSEN',
+    'ABSENSI',
+    'KEHADIRAN',
+    'HADIR',
+    'TERLAMBAT',
+    'TELAT'
+]);
+
+const SHORT_TEXT_WORD_TOKENS = new Set([
+    'PREDIKAT',
+    'TAQDIR',
+    'KELULUSAN',
+    'KENAIKAN',
+    'TEMPAT',
+    'TANGGAL'
+]);
+
+/**
+ * Klasifikasi terpadu kolom input rapor agar Mata Pelajaran seperti Akhlak, Akidah Akhlak,
+ * Sikap, Adab, atau Tahfizh tetap terdeteksi sebagai Input Nilai Angka (0-100 + KKM)
+ * dan tidak pernah berubah menjadi kolom Teks/Catatan kecuali memang kolom Catatan/Deskripsi
+ * atau diatur manual melalui inputMode = 'text'.
+ */
+export const classifyRaporInputField = (params: {
+    key: string;
+    label?: string;
+    type?: string;
+    inputMode?: RaporInputMode;
+    mataPelajaran?: MataPelajaran[];
+    jenjangId?: number;
+}): RaporInputClassification => {
+    const { key, label = '', type, inputMode, mataPelajaran = [], jenjangId } = params;
+
+    if (type === 'dropdown') {
+        return {
+            kind: 'dropdown',
+            isNumericScore: false,
+            isLongText: false,
+            isAttendanceCount: false,
+            kkm: 70
+        };
+    }
+
+    const normAlnum = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    const tokenize = (s: string) => s.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+
+    const upperKey = (key || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    const upperLabel = (label || '').trim().toUpperCase();
+    const keyTokens = tokenize(upperKey);
+    const labelTokens = tokenize(upperLabel);
+
+    const mapelPool = jenjangId
+        ? mataPelajaran.filter(mp => !mp.jenjangId || mp.jenjangId === jenjangId)
+        : mataPelajaran;
+
+    const nKey = normAlnum(upperKey);
+    const nLabel = normAlnum(upperLabel);
+    const strippedKey = normAlnum(upperKey.replace(/^(?:NILAI|ANGKA|SKOR|MAPEL)_+/, '').replace(/_+(?:UH\d*|PTS|PAS|PAT|UTS|UAS|HARIAN|UJIAN|PRAKTEK|PRAKTIK|TEORI)$/, ''));
+
+    const matchedMapel = mapelPool.find(mp => {
+        const nKode = mp.kodeMapel ? normAlnum(mp.kodeMapel) : '';
+        const nNama = normAlnum(mp.nama || '');
+        if (nKode && (nKey === nKode || strippedKey === nKode || (nKode.length >= 3 && keyTokens.includes(nKode)))) {
+            return true;
+        }
+        if (nNama && (nKey === nNama || strippedKey === nNama || (nLabel.length >= 3 && nLabel === nNama))) {
+            return true;
+        }
+        return false;
+    });
+
+    const resolvedKkm = matchedMapel?.kkm ?? 70;
+
+    // 1. Prioritaskan pilihan manual eksplisit dari Desainer Rapor
+    if (inputMode === 'number') {
+        return {
+            kind: 'score',
+            isNumericScore: true,
+            isLongText: false,
+            isAttendanceCount: false,
+            kkm: resolvedKkm
+        };
+    }
+    if (inputMode === 'text' || type === 'text') {
+        return {
+            kind: 'note',
+            isNumericScore: false,
+            isLongText: true,
+            isAttendanceCount: false,
+            kkm: resolvedKkm
+        };
+    }
+
+    // 2. Jika diawali NILAI_ / ANGKA_ / SKOR_ secara eksplisit (selain NILAI_HURUF), pastikan berupa nilai angka
+    const hasExplicitScorePrefix = /^(?:NILAI|ANGKA|SKOR)(?:_|$)/.test(upperKey) && !keyTokens.includes('HURUF') && !keyTokens.includes('PREDIKAT') && !keyTokens.includes('DESKRIPSI') && !keyTokens.includes('CATATAN');
+    if (hasExplicitScorePrefix) {
+        return {
+            kind: 'score',
+            isNumericScore: true,
+            isLongText: false,
+            isAttendanceCount: false,
+            kkm: resolvedKkm
+        };
+    }
+
+    // 3. Cek apakah benar-benar kolom Catatan / Deskripsi / Narasi / Keputusan
+    const isGenericGeneratedKey = /^(?:INPUT|KOLOM|COL|FIELD|VAR|TEXT|SEL)_\d+$/.test(upperKey);
+    const hasNoteTokenInKey =
+        keyTokens.some(t => NOTE_WORD_TOKENS.has(t)) ||
+        upperKey === 'KETERANGAN' ||
+        upperKey.startsWith('KETERANGAN_') ||
+        upperKey === 'CAPAIAN_KOMPETENSI' ||
+        upperKey.startsWith('CAPAIAN_') ||
+        upperKey.endsWith('_DESKRIPSI') ||
+        upperKey.endsWith('_CATATAN');
+
+    const hasNoteTokenInLabelWhenGeneric =
+        isGenericGeneratedKey &&
+        (labelTokens.some(t => NOTE_WORD_TOKENS.has(t)) || upperLabel.startsWith('CATATAN ') || upperLabel.startsWith('DESKRIPSI '));
+
+    if (hasNoteTokenInKey || hasNoteTokenInLabelWhenGeneric) {
+        return {
+            kind: 'note',
+            isNumericScore: false,
+            isLongText: true,
+            isAttendanceCount: false,
+            kkm: resolvedKkm
+        };
+    }
+
+    // 4. Jika cocok dengan Mata Pelajaran terdaftar di Data Master (misal Akhlak, Sikap, Tahfizh, Fiqih, dll) -> pasti Nilai Angka
+    if (matchedMapel) {
+        return {
+            kind: 'score',
+            isNumericScore: true,
+            isLongText: false,
+            isAttendanceCount: false,
+            kkm: resolvedKkm
+        };
+    }
+
+    // 5. Cek kolom Presensi / Kehadiran (angka jumlah hari, bukan nilai 0-100 ber-KKM)
+    if (
+        keyTokens.some(t => ATTENDANCE_WORD_TOKENS.has(t)) ||
+        upperKey === 'S' ||
+        upperKey === 'I' ||
+        upperKey === 'A' ||
+        upperKey === 'TOTAL_ABSEN'
+    ) {
+        return {
+            kind: 'attendance',
+            isNumericScore: false,
+            isLongText: false,
+            isAttendanceCount: true,
+            kkm: 70
+        };
+    }
+
+    // 6. Cek kolom teks pendek khusus (misal Predikat manual, Nama Surah, Nilai Huruf)
+    if (
+        keyTokens.some(t => SHORT_TEXT_WORD_TOKENS.has(t)) ||
+        upperKey === 'HURUF' ||
+        upperKey === 'NILAI_HURUF' ||
+        upperKey === 'NAMA_SURAH' ||
+        upperKey === 'SURAH_TERAKHIR' ||
+        upperKey === 'JUZ_TERAKHIR'
+    ) {
+        return {
+            kind: 'short_text',
+            isNumericScore: false,
+            isLongText: false,
+            isAttendanceCount: false,
+            kkm: 70
+        };
+    }
+
+    // 7. Default semua sel bertipe 'input' (termasuk $AKHLAK, $ADAB, $SIKAP, $TAHFIZH, $UH1, dll) adalah Nilai Angka
+    return {
+        kind: 'score',
+        isNumericScore: true,
+        isLongText: false,
+        isAttendanceCount: false,
+        kkm: resolvedKkm
+    };
+};
+
 /**
  * Checks if a template key represents a subject grade rather than attendance/notes
  */
-export const isSubjectGradeKey = (key: string): boolean => {
-    const k = key.trim().toLowerCase();
-    const excluded = [
-        'sakit', 'izin', 'alpha', 'alpa', 'total_absen', 'absen', 'kehadiran',
-        'catatan', 'catatan_wali', 'catatan_wali_kelas', 'catatanwalikelas',
-        'keputusan', 'kenaikan', 'kelulusan', 'tanggal', 'tempat',
-        's', 'i', 'a'
-    ];
-    return !excluded.includes(k);
+export const isSubjectGradeKey = (
+    key: string,
+    inputMode?: RaporInputMode,
+    label?: string,
+    type?: string
+): boolean => {
+    return classifyRaporInputField({ key, label, type, inputMode }).isNumericScore;
 };
 
 export interface StudentLegerRow {
@@ -112,6 +324,13 @@ export const computeClassAveragesFromRecords = (
     const accum = new Map<string, { sum: number; count: number }>();
     const studentAvgs: number[] = [];
 
+    const templateKeyMap = new Map<string, ExtractedTemplateKey>();
+    if (template) {
+        extractTemplateKeys(template, 'all').forEach(k => {
+            templateKeyMap.set(normalizeSubjectKeyForAvg(k.key), k);
+        });
+    }
+
     for (const rec of records) {
         if (!rec?.customData) continue;
         let parsed: Record<string, any> = {};
@@ -139,7 +358,8 @@ export const computeClassAveragesFromRecords = (
             cur.count += 1;
             accum.set(normKey, cur);
 
-            if (isSubjectGradeKey(rawKey)) {
+            const tplMeta = templateKeyMap.get(normKey);
+            if (isSubjectGradeKey(rawKey, tplMeta?.inputMode, tplMeta?.label, tplMeta?.type)) {
                 sSum += num;
                 sCount += 1;
             }
@@ -193,8 +413,8 @@ export const buildRombelLegerData = (params: {
 
     const availableSheets = getTemplateSheets(template);
     const allKeys = extractTemplateKeys(template, targetSheetId);
-    const gradeKeys = allKeys.filter(k => isSubjectGradeKey(k.key));
-    const nonGradeKeys = allKeys.filter(k => !isSubjectGradeKey(k.key));
+    const gradeKeys = allKeys.filter(k => isSubjectGradeKey(k.key, k.inputMode, k.label, k.type));
+    const nonGradeKeys = allKeys.filter(k => !isSubjectGradeKey(k.key, k.inputMode, k.label, k.type));
 
     const recordBySantri = new Map<number, RaporRecord>();
     records.forEach(r => {

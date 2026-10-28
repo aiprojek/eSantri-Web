@@ -107,6 +107,62 @@ export const RAPOR_FORMULA_SUGGESTIONS: FormulaSuggestionItem[] = [
         category: 'formula'
     },
     {
+        token: '=IFS',
+        insertText: '=IFS(',
+        label: 'Multi Kondisi Bertingkat (IFS)',
+        syntax: '=IFS(D6>=90, "A", D6>=80, "B", D6>=70, "C", TRUE, "D")',
+        description: 'Mengecek beberapa syarat berurutan tanpa perlu IF bertumpuk',
+        category: 'formula'
+    },
+    {
+        token: '=AND',
+        insertText: '=AND(',
+        label: 'Semua Syarat Terpenuhi (AND / DAN)',
+        syntax: '=IF(AND(D6>=70, E6>=70), "Lulus", "Remedial")',
+        description: 'Bernilai TRUE jika seluruh syarat di dalamnya terpenuhi',
+        category: 'formula'
+    },
+    {
+        token: '=OR',
+        insertText: '=OR(',
+        label: 'Salah Satu Syarat Terpenuhi (OR / ATAU)',
+        syntax: '=IF(OR(D6<70, E6<70), "Perlu Bimbingan", "Tuntas")',
+        description: 'Bernilai TRUE jika minimal satu syarat terpenuhi',
+        category: 'formula'
+    },
+    {
+        token: '=COUNT',
+        insertText: '=COUNT(',
+        label: 'Hitung Jumlah Mapel Bernilai (COUNT)',
+        syntax: '=COUNT(D6:D15)',
+        description: 'Menghitung banyaknya sel yang berisi angka nilai pada rentang',
+        category: 'formula'
+    },
+    {
+        token: '=COUNTIF',
+        insertText: '=COUNTIF(',
+        label: 'Hitung Nilai Sesuai Kriteria (COUNTIF)',
+        syntax: '=COUNTIF(D6:D15, ">=75")',
+        description: 'Menghitung banyaknya nilai yang memenuhi kriteria (misal ">=75" atau "<70")',
+        category: 'formula'
+    },
+    {
+        token: '=AVERAGEIF',
+        insertText: '=AVERAGEIF(',
+        label: 'Rata-rata dengan Kriteria (AVERAGEIF)',
+        syntax: '=AVERAGEIF(D6:D15, ">0")',
+        description: 'Rata-rata sel yang memenuhi kriteria tertentu (misal abaikan nilai 0)',
+        category: 'formula'
+    },
+    {
+        token: '=IFERROR',
+        insertText: '=IFERROR(',
+        label: 'Antisipasi Nilai Kosong/Error (IFERROR)',
+        syntax: '=IFERROR(RATA2(D6:D15), "-")',
+        description: 'Tampilkan teks cadangan jika rumus belum memiliki nilai',
+        category: 'formula'
+    },
+    {
         token: '=MAX',
         insertText: '=MAX(',
         label: 'Nilai Tertinggi (MAX)',
@@ -633,11 +689,15 @@ function formatNumberClean(n: number, maxDecimals = 2): string {
 }
 
 /**
- * Evaluator aritmatika aman (+, -, *, /, tanda kurung) tanpa eval()
+ * Evaluator aritmatika aman (+, -, *, /, ^, %, tanda kurung) tanpa eval()
+ * Mendukung desimal koma Indonesia (0,4 -> 0.4) dan sel kosong "" / "-" sebagai 0 dalam operasi hitung
  */
 function evaluateSafeMath(expr: string): number | null {
-    const s = expr.replace(/\s+/g, '');
-    if (!s || !/^[0-9.+\-*/()]+$/.test(s)) return null;
+    const normalized = expr
+        .replace(/""|''|"-"|'-'/g, '0')
+        .replace(/(\d),(\d)/g, '$1.$2');
+    const s = normalized.replace(/\s+/g, '');
+    if (!s || !/[0-9]/.test(s) || !/^[0-9.+\-*/^%()]+$/.test(s)) return null;
 
     let pos = 0;
 
@@ -652,53 +712,135 @@ function evaluateSafeMath(expr: string): number | null {
     };
 
     const parseTerm = (): number => {
-        let val = parseFactor();
+        let val = parsePower();
         while (pos < s.length && (s[pos] === '*' || s[pos] === '/')) {
             const op = s[pos++];
-            const right = parseFactor();
+            const right = parsePower();
             val = op === '*' ? val * right : (right === 0 ? 0 : val / right);
         }
         return val;
     };
 
-    const parseFactor = (): number => {
+    const parsePower = (): number => {
+        let base = parseUnary();
+        if (pos < s.length && s[pos] === '^') {
+            pos++;
+            const exp = parsePower();
+            base = Math.pow(base, exp);
+        }
+        return base;
+    };
+
+    const parseUnary = (): number => {
         if (s[pos] === '+') {
             pos++;
-            return parseFactor();
+            return parseUnary();
         }
         if (s[pos] === '-') {
             pos++;
-            return -parseFactor();
+            return -parseUnary();
         }
+        return parsePostfix();
+    };
+
+    const parsePostfix = (): number => {
+        let val = parsePrimary();
+        while (pos < s.length && s[pos] === '%') {
+            pos++;
+            val = val / 100;
+        }
+        return val;
+    };
+
+    const parsePrimary = (): number => {
         if (s[pos] === '(') {
             pos++;
             const val = parseExpression();
-            if (s[pos] === ')') pos++;
+            if (s[pos] !== ')') return NaN;
+            pos++;
             return val;
         }
         const start = pos;
+        let dotCount = 0;
         while (pos < s.length && /[0-9.]/.test(s[pos])) {
+            if (s[pos] === '.') dotCount++;
             pos++;
         }
-        if (start === pos) return NaN;
+        if (start === pos || dotCount > 1) return NaN;
         return parseFloat(s.slice(start, pos));
     };
 
     try {
         const res = parseExpression();
-        if (pos !== s.length || isNaN(res)) return null;
+        if (pos !== s.length || isNaN(res) || !isFinite(res)) return null;
         return res;
     } catch {
         return null;
     }
 }
 
+/**
+ * Pencocokan kriteria ala Excel untuk COUNTIF, SUMIF, AVERAGEIF (contoh: ">=75", "<70", "<>-", "A", 80)
+ */
+function matchesExcelCriteria(rawItem: string, rawCriteria: string): boolean {
+    const itemStr = unquote(rawItem).trim();
+    const critRaw = unquote(rawCriteria).trim();
+
+    let op = '=';
+    let rhs = critRaw;
+    const opMatch = critRaw.match(/^(>=|<=|<>|!=|==|=|>|<)\s*([\s\S]*)$/);
+    if (opMatch) {
+        op = opMatch[1];
+        rhs = unquote(opMatch[2]).trim();
+    }
+
+    const itemNum = Number(itemStr.replace(',', '.'));
+    const rhsNum = Number(rhs.replace(',', '.'));
+    const itemIsNum = itemStr !== '' && itemStr !== '-' && !isNaN(itemNum) && isFinite(itemNum);
+    const rhsIsNum = rhs !== '' && rhs !== '-' && !isNaN(rhsNum) && isFinite(rhsNum);
+
+    if (itemIsNum && rhsIsNum) {
+        if (op === '>=') return itemNum >= rhsNum;
+        if (op === '<=') return itemNum <= rhsNum;
+        if (op === '>') return itemNum > rhsNum;
+        if (op === '<') return itemNum < rhsNum;
+        if (op === '<>' || op === '!=') return itemNum !== rhsNum;
+        return itemNum === rhsNum;
+    }
+
+    // Jika kriteria numerik dengan operator urutan (>, <, >=, <=) namun sel kosong/"-", abaikan sel non-angka (seperti perilaku COUNTIF/AVERAGEIF di Excel)
+    if ((op === '>' || op === '<' || op === '>=' || op === '<=') && rhsIsNum && !itemIsNum) {
+        return false;
+    }
+
+    const lLower = itemStr.toLowerCase();
+    const rLower = rhs.toLowerCase();
+    if (op === '<>' || op === '!=') return lLower !== rLower;
+    if (op === '>') return lLower.localeCompare(rLower) > 0;
+    if (op === '<') return lLower.localeCompare(rLower) < 0;
+    if (op === '>=') return lLower.localeCompare(rLower) >= 0;
+    if (op === '<=') return lLower.localeCompare(rLower) <= 0;
+
+    if (rLower.includes('*') || rLower.includes('?')) {
+        const pattern = '^' + rLower.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$';
+        return new RegExp(pattern, 'i').test(itemStr);
+    }
+    return lLower === rLower;
+}
+
 function evaluateCondition(condExpr: string, meta?: FormulaEvalMeta): boolean {
+    const trimmedCond = condExpr.trim();
+    const upperCond = trimmedCond.toUpperCase();
+    if (upperCond === 'TRUE' || upperCond === 'BENAR') return true;
+    if (upperCond === 'FALSE' || upperCond === 'SALAH') return false;
+
     const ops = ['>=', '<=', '<>', '!=', '==', '=', '>', '<'] as const;
     let inQuote: '"' | "'" | null = null;
     let depth = 0;
 
     for (const op of ops) {
+        inQuote = null;
+        depth = 0;
         for (let i = 0; i <= condExpr.length - op.length; i++) {
             const ch = condExpr[i];
             if (inQuote) {
@@ -717,31 +859,50 @@ function evaluateCondition(condExpr: string, meta?: FormulaEvalMeta): boolean {
                 if (op === '=' && (condExpr[i - 1] === '>' || condExpr[i - 1] === '<' || condExpr[i - 1] === '!' || condExpr[i + 1] === '=')) {
                     continue;
                 }
-                const leftRaw = evaluateFormulaNode(condExpr.slice(0, i), meta);
-                const rightRaw = evaluateFormulaNode(condExpr.slice(i + op.length), meta);
-                const leftNum = Number(unquote(leftRaw).replace(',', '.'));
-                const rightNum = Number(unquote(rightRaw).replace(',', '.'));
-                const bothNum = unquote(leftRaw).trim() !== '' && unquote(rightRaw).trim() !== '' && !isNaN(leftNum) && !isNaN(rightNum);
+                const leftRaw = evaluateFormulaNode(condExpr.slice(0, i), meta, true);
+                const rightRaw = evaluateFormulaNode(condExpr.slice(i + op.length), meta, true);
+                const lClean = unquote(leftRaw).trim();
+                const rClean = unquote(rightRaw).trim();
+                const leftNum = Number(lClean.replace(',', '.'));
+                const rightNum = Number(rClean.replace(',', '.'));
+                const lIsNum = lClean !== '' && lClean !== '-' && !isNaN(leftNum) && isFinite(leftNum);
+                const rIsNum = rClean !== '' && rClean !== '-' && !isNaN(rightNum) && isFinite(rightNum);
+                const lIsEmpty = lClean === '' || lClean === '-';
+                const rIsEmpty = rClean === '' || rClean === '-';
 
-                if (bothNum) {
+                if (lIsNum && rIsNum) {
                     if (op === '>=') return leftNum >= rightNum;
                     if (op === '<=') return leftNum <= rightNum;
-                    if (op === '>' ) return leftNum > rightNum;
-                    if (op === '<' ) return leftNum < rightNum;
+                    if (op === '>') return leftNum > rightNum;
+                    if (op === '<') return leftNum < rightNum;
                     if (op === '<>' || op === '!=') return leftNum !== rightNum;
                     return leftNum === rightNum;
-                } else {
-                    const lStr = unquote(leftRaw).trim().toLowerCase();
-                    const rStr = unquote(rightRaw).trim().toLowerCase();
-                    if (op === '<>' || op === '!=') return lStr !== rStr;
-                    return lStr === rStr;
                 }
+
+                // Jika salah satu sisi angka dan sisi lain sel kosong/"-", perlakukan sel kosong sebagai 0 pada perbandingan numerik (<, >, <=, >=) seperti sel kosong di Excel
+                if ((op === '>' || op === '<' || op === '>=' || op === '<=') && ((lIsNum && rIsEmpty) || (rIsNum && lIsEmpty))) {
+                    const effL = lIsNum ? leftNum : 0;
+                    const effR = rIsNum ? rightNum : 0;
+                    if (op === '>=') return effL >= effR;
+                    if (op === '<=') return effL <= effR;
+                    if (op === '>') return effL > effR;
+                    return effL < effR;
+                }
+
+                const lStr = lClean.toLowerCase();
+                const rStr = rClean.toLowerCase();
+                if (op === '<>' || op === '!=') return lStr !== rStr;
+                if (op === '>') return lStr.localeCompare(rStr) > 0;
+                if (op === '<') return lStr.localeCompare(rStr) < 0;
+                if (op === '>=') return lStr.localeCompare(rStr) >= 0;
+                if (op === '<=') return lStr.localeCompare(rStr) <= 0;
+                return lStr === rStr;
             }
         }
     }
 
-    const val = unquote(evaluateFormulaNode(condExpr, meta)).trim().toLowerCase();
-    return Boolean(val && val !== '0' && val !== 'false' && val !== '-');
+    const val = unquote(evaluateFormulaNode(condExpr, meta, true)).trim().toLowerCase();
+    return Boolean(val && val !== '0' && val !== 'false' && val !== 'salah' && val !== '-');
 }
 
 function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta, isNested = false): string {
@@ -820,6 +981,45 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta, isNested = fa
                     return rawArgs[2] !== undefined ? unquote(evaluateFormulaNode(rawArgs[2], meta, isNested)) : '';
                 }
                 return '-';
+            }
+
+            if (fnName === 'IFS') {
+                for (let idx = 0; idx + 1 < rawArgs.length; idx += 2) {
+                    if (evaluateCondition(rawArgs[idx], meta)) {
+                        return unquote(evaluateFormulaNode(rawArgs[idx + 1], meta, isNested));
+                    }
+                }
+                return '-';
+            }
+
+            if (fnName === 'AND' || fnName === 'DAN') {
+                if (rawArgs.length === 0) return 'FALSE';
+                return rawArgs.every(a => evaluateCondition(a, meta)) ? 'TRUE' : 'FALSE';
+            }
+
+            if (fnName === 'OR' || fnName === 'ATAU') {
+                if (rawArgs.length === 0) return 'FALSE';
+                return rawArgs.some(a => evaluateCondition(a, meta)) ? 'TRUE' : 'FALSE';
+            }
+
+            if (fnName === 'NOT' || fnName === 'BUKAN') {
+                if (rawArgs.length === 0) return 'TRUE';
+                return !evaluateCondition(rawArgs[0], meta) ? 'TRUE' : 'FALSE';
+            }
+
+            if (fnName === 'IFERROR' || fnName === 'JIKA_ERROR') {
+                if (rawArgs.length === 0) return '';
+                const primaryVal = unquote(evaluateFormulaNode(rawArgs[0], meta, isNested));
+                const trimmedPrimary = primaryVal.trim();
+                const isErrLike =
+                    trimmedPrimary === '' ||
+                    trimmedPrimary === '-' ||
+                    trimmedPrimary === 'NaN' ||
+                    trimmedPrimary.startsWith('#');
+                if (isErrLike) {
+                    return rawArgs[1] !== undefined ? unquote(evaluateFormulaNode(rawArgs[1], meta, isNested)) : '';
+                }
+                return primaryVal;
             }
 
             const evalArgs = rawArgs.map(a => evaluateFormulaNode(a, meta, true));
@@ -1293,6 +1493,89 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta, isNested = fa
                 const mode = evalArgs[1] !== undefined ? unquote(evalArgs[1]) : (fnName === 'TAQDIR' ? 'pesantren' : 'huruf');
                 return nilaiKePredikatOtomatis(val, mode);
             }
+            if (fnName === 'COUNT' || fnName === 'HITUNG') {
+                return String(parseNumericValues(evalArgs).length);
+            }
+            if (fnName === 'COUNTA' || fnName === 'HITUNG_ISI') {
+                const filled = evalArgs.filter(a => {
+                    const u = unquote(a).trim();
+                    return u !== '' && u !== '-';
+                });
+                return String(filled.length);
+            }
+            if (fnName === 'COUNTBLANK' || fnName === 'HITUNG_KOSONG') {
+                const blanks = evalArgs.filter(a => {
+                    const u = unquote(a).trim();
+                    return u === '' || u === '-';
+                });
+                return String(blanks.length);
+            }
+            if (fnName === 'COUNTIF' || fnName === 'HITUNG_JIKA') {
+                if (evalArgs.length < 2) return '0';
+                const crit = evalArgs[evalArgs.length - 1];
+                const items = evalArgs.slice(0, -1);
+                return String(items.filter(it => matchesExcelCriteria(it, crit)).length);
+            }
+            if (fnName === 'SUMIF' || fnName === 'JUMLAH_JIKA') {
+                if (evalArgs.length < 2) return '-';
+                const crit = evalArgs[evalArgs.length - 1];
+                const matched = evalArgs.slice(0, -1).filter(it => matchesExcelCriteria(it, crit));
+                const nums = parseNumericValues(matched);
+                if (nums.length === 0) return '0';
+                return formatNumberClean(nums.reduce((a, b) => a + b, 0), autoDecimals);
+            }
+            if (fnName === 'AVERAGEIF' || fnName === 'RATA2_JIKA' || fnName === 'RERATA_JIKA') {
+                if (evalArgs.length < 2) return '-';
+                const crit = evalArgs[evalArgs.length - 1];
+                const matched = evalArgs.slice(0, -1).filter(it => matchesExcelCriteria(it, crit));
+                const nums = parseNumericValues(matched);
+                if (nums.length === 0) return '-';
+                return formatNumberClean(nums.reduce((a, b) => a + b, 0) / nums.length, autoDecimals);
+            }
+            if (fnName === 'ABS') {
+                const nums = parseNumericValues(evalArgs);
+                if (nums.length === 0) return '-';
+                return formatNumberClean(Math.abs(nums[0]), autoDecimals);
+            }
+            if (fnName === 'INT' || fnName === 'TRUNC') {
+                const nums = parseNumericValues(evalArgs);
+                if (nums.length === 0) return '-';
+                return String(fnName === 'INT' ? Math.floor(nums[0]) : Math.trunc(nums[0]));
+            }
+            if (fnName === 'MOD') {
+                const nums = parseNumericValues(evalArgs);
+                if (nums.length < 2 || nums[1] === 0) return '-';
+                return formatNumberClean(nums[0] - nums[1] * Math.floor(nums[0] / nums[1]), autoDecimals);
+            }
+            if (fnName === 'POWER' || fnName === 'PANGKAT') {
+                const nums = parseNumericValues(evalArgs);
+                if (nums.length < 2) return '-';
+                return formatNumberClean(Math.pow(nums[0], nums[1]), autoDecimals);
+            }
+            if (fnName === 'SQRT' || fnName === 'AKAR') {
+                const nums = parseNumericValues(evalArgs);
+                if (nums.length === 0 || nums[0] < 0) return '-';
+                return formatNumberClean(Math.sqrt(nums[0]), autoDecimals);
+            }
+            if (fnName === 'LEN' || fnName === 'PANJANG') {
+                return String(unquote(evalArgs[0] ?? '').length);
+            }
+            if (fnName === 'LEFT' || fnName === 'KIRI') {
+                const str = unquote(evalArgs[0] ?? '');
+                const len = evalArgs[1] !== undefined ? Math.max(0, parseInt(unquote(evalArgs[1]).trim(), 10) || 0) : 1;
+                return str.slice(0, len);
+            }
+            if (fnName === 'RIGHT' || fnName === 'KANAN') {
+                const str = unquote(evalArgs[0] ?? '');
+                const len = evalArgs[1] !== undefined ? Math.max(0, parseInt(unquote(evalArgs[1]).trim(), 10) || 0) : 1;
+                return len === 0 ? '' : str.slice(-len);
+            }
+            if (fnName === 'MID' || fnName === 'TENGAH') {
+                const str = unquote(evalArgs[0] ?? '');
+                const start = evalArgs[1] !== undefined ? Math.max(1, parseInt(unquote(evalArgs[1]).trim(), 10) || 1) : 1;
+                const len = evalArgs[2] !== undefined ? Math.max(0, parseInt(unquote(evalArgs[2]).trim(), 10) || 0) : str.length;
+                return str.slice(start - 1, start - 1 + len);
+            }
             if (fnName === 'RANK' || fnName === 'PERINGKAT') {
                 let scope: 'rombel' | 'kelas' | 'jenjang' | 'global' = 'rombel';
                 let limit = 0;
@@ -1328,16 +1611,87 @@ function evaluateFormulaNode(expr: string, meta?: FormulaEvalMeta, isNested = fa
         }
     }
 
+    // Evaluasi fungsi yang tertanam di dalam ekspresi gabungan/aritmatika (contoh: =SUM(D6:D10)/5 atau =RATA2(D6:D8)*0.4 + RATA2(E6:E8)*0.6)
+    let exprForMath = trimmed;
+    if (/[A-Za-z]/.test(exprForMath) && exprForMath.includes('(')) {
+        let rebuilt = '';
+        let i = 0;
+        let q: '"' | "'" | null = null;
+        let replacedAny = false;
+        while (i < exprForMath.length) {
+            const ch = exprForMath[i];
+            if (q) {
+                if (ch === q && exprForMath[i - 1] !== '\\') q = null;
+                rebuilt += ch;
+                i++;
+                continue;
+            }
+            if (ch === '"' || ch === "'") {
+                q = ch;
+                rebuilt += ch;
+                i++;
+                continue;
+            }
+            if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_$]/.test(exprForMath[i - 1]))) {
+                const subMatch = exprForMath.slice(i).match(/^([A-Za-z0-9_]+)(\s*)\(/);
+                if (subMatch) {
+                    const candName = subMatch[1];
+                    const openPos = i + subMatch[0].length - 1;
+                    let d = 0;
+                    let iq: '"' | "'" | null = null;
+                    let closePos = -1;
+                    for (let j = openPos; j < exprForMath.length; j++) {
+                        const jc = exprForMath[j];
+                        if (iq) {
+                            if (jc === iq && exprForMath[j - 1] !== '\\') iq = null;
+                            continue;
+                        }
+                        if (jc === '"' || jc === "'") { iq = jc; continue; }
+                        if (jc === '(') d++;
+                        else if (jc === ')') {
+                            d--;
+                            if (d === 0) {
+                                closePos = j;
+                                break;
+                            }
+                        }
+                    }
+                    if (closePos !== -1) {
+                        const subCall = exprForMath.slice(i, closePos + 1);
+                        if (KNOWN_FORMULA_CALL_REGEX.test(subCall)) {
+                            const subRes = unquote(evaluateFormulaNode(subCall, meta, true)).trim();
+                            if (subRes === '' || subRes === '-') {
+                                rebuilt += '0';
+                            } else if (/^-?(?:0|[1-9]\d*)(?:[.,]\d+)?$/.test(subRes)) {
+                                rebuilt += subRes.replace(',', '.');
+                            } else {
+                                rebuilt += `"${subRes.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+                            }
+                            replacedAny = true;
+                            i = closePos + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+            rebuilt += ch;
+            i++;
+        }
+        if (replacedAny) {
+            exprForMath = rebuilt;
+        }
+    }
+
     // Coba evaluasi ekspresi matematika jika mengandung angka/operator
-    const mathVal = evaluateSafeMath(trimmed);
+    const mathVal = evaluateSafeMath(exprForMath);
     if (mathVal !== null) {
         return formatNumberClean(mathVal, autoDecimals);
     }
 
-    return unquote(trimmed);
+    return unquote(exprForMath);
 }
 
-const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|MAX|MIN|ROUND|BULAT|ROUNDUP|BULAT_ATAS|ROUNDDOWN|BULAT_BAWAH|FIXED|DESIMAL|IF|JIKA|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA|TEMPAT_RAPOR|KOTA_RAPOR|TEMPAT_TTD|KOTA_PONPES|TANGGAL_RAPOR|TANGGAL_TTD|TANGGAL_CETAK|TANGGAL_DOKUMEN|TANGGAL_RAPOR_MASEHI|TANGGAL_MASEHI|TANGGAL_RAPOR_HIJRIAH|TANGGAL_RAPOR_HIJRIYAH|TANGGAL_HIJRIAH|TANGGAL_HIJRIYAH|TANGGAL_RAPOR_GABUNGAN|TANGGAL_RAPOR_LENGKAP|TANGGAL_HIJRIAH_MASEHI|TANGGAL_MASEHI_HIJRIAH|TITIMANGSA|TITIMANGSA_RAPOR|KOTA_TANGGAL|TEMPAT_TANGGAL|KOTA_TANGGAL_DOKUMEN|TITIMANGSA_MASEHI|KOTA_TANGGAL_MASEHI|TEMPAT_TANGGAL_MASEHI|TITIMANGSA_HIJRIAH|TITIMANGSA_HIJRIYAH|KOTA_TANGGAL_HIJRIAH|TEMPAT_TANGGAL_HIJRIAH|TITIMANGSA_GABUNGAN|TITIMANGSA_HIJRIAH_MASEHI|TITIMANGSA_MASEHI_HIJRIAH|TITIMANGSA_LENGKAP|KOTA_TANGGAL_GABUNGAN|KOTA_TANGGAL_HIJRIAH_MASEHI)\s*\([\s\S]*\)$/i;
+const KNOWN_FORMULA_CALL_REGEX = /^(?:SUM|JUMLAH|TOTAL|RATA2|AVERAGE|AVG|RERATA|RATA2_KELAS|RERATA_KELAS|RATA_KELAS|NRK|AVG_KELAS|MAX|MIN|COUNT|HITUNG|COUNTA|HITUNG_ISI|COUNTBLANK|HITUNG_KOSONG|COUNTIF|HITUNG_JIKA|SUMIF|JUMLAH_JIKA|AVERAGEIF|RATA2_JIKA|RERATA_JIKA|ROUND|BULAT|ROUNDUP|BULAT_ATAS|ROUNDDOWN|BULAT_BAWAH|FIXED|DESIMAL|ABS|INT|TRUNC|MOD|POWER|PANGKAT|SQRT|AKAR|LEN|PANJANG|LEFT|KIRI|RIGHT|KANAN|MID|TENGAH|IF|JIKA|IFS|AND|DAN|OR|ATAU|NOT|BUKAN|IFERROR|JIKA_ERROR|TERBILANG|ARAB|ANGKA_ARAB|PREDIKAT|HURUF|TAQDIR|RANK|PERINGKAT|CONCAT|CONCATENATE|GABUNG|CONCAT_SPASI|GABUNG_SPASI|TEXTJOIN_SPASI|UPPER|BESAR|KAPITAL|LOWER|KECIL|PROPER|JUDUL|TITLE|CAPITALIZE|SENTENCE|KALIMAT|TRIM|TAHUN_AJAR|TAHUN_AJARAN|TAHUNAJAR|TAHUNAJARAN|TAPEL|TAHUN_PELAJARAN|TAHUN_AJAR_MASEHI|TAHUN_AJARAN_MASEHI|TAPEL_MASEHI|TAHUN_AJAR_HIJRIAH|TAHUN_AJARAN_HIJRIAH|TAHUN_AJAR_HIJRIYAH|TAHUN_AJARAN_HIJRIYAH|TAPEL_HIJRIAH|TAHUN_AJAR_GABUNGAN|TAHUN_AJAR_LENGKAP|TAHUN_AJARAN_GABUNGAN|TAHUN_AJARAN_LENGKAP|TAPEL_GABUNGAN|SEMESTER|SEMESTER_ANGKA|TEMPAT_RAPOR|KOTA_RAPOR|TEMPAT_TTD|KOTA_PONPES|TANGGAL_RAPOR|TANGGAL_TTD|TANGGAL_CETAK|TANGGAL_DOKUMEN|TANGGAL_RAPOR_MASEHI|TANGGAL_MASEHI|TANGGAL_RAPOR_HIJRIAH|TANGGAL_RAPOR_HIJRIYAH|TANGGAL_HIJRIAH|TANGGAL_HIJRIYAH|TANGGAL_RAPOR_GABUNGAN|TANGGAL_RAPOR_LENGKAP|TANGGAL_HIJRIAH_MASEHI|TANGGAL_MASEHI_HIJRIAH|TITIMANGSA|TITIMANGSA_RAPOR|KOTA_TANGGAL|TEMPAT_TANGGAL|KOTA_TANGGAL_DOKUMEN|TITIMANGSA_MASEHI|KOTA_TANGGAL_MASEHI|TEMPAT_TANGGAL_MASEHI|TITIMANGSA_HIJRIAH|TITIMANGSA_HIJRIYAH|KOTA_TANGGAL_HIJRIAH|TEMPAT_TANGGAL_HIJRIAH|TITIMANGSA_GABUNGAN|TITIMANGSA_HIJRIAH_MASEHI|TITIMANGSA_MASEHI_HIJRIAH|TITIMANGSA_LENGKAP|KOTA_TANGGAL_GABUNGAN|KOTA_TANGGAL_HIJRIAH_MASEHI)\s*\([\s\S]*\)$/i;
 
 /**
  * Mengecek apakah string teks sel merupakan ekspresi rumus rapor
@@ -1371,7 +1725,7 @@ export function evaluateRaporFormula(resolvedText: string, rankOrMeta?: number |
         return resolvedText;
     }
 
-    // Jika masih ada variabel $BELUM_DIISI yang tersisa di dalam rumus, bersihkan secara sadar-kutip agar tidak merusak string literal atau SUM/RATA2
+    // Jika masih ada variabel $BELUM_DIISI di luar tanda kutip, ganti menjadi "" agar tidak merusak SUM/RATA2/aritmatika
     let sanitizedBody = '';
     let inQ: '"' | "'" | null = null;
     let idx = 0;
@@ -1380,16 +1734,6 @@ export function evaluateRaporFormula(resolvedText: string, rankOrMeta?: number |
         if (inQ) {
             if (ch === inQ && body[idx - 1] !== '\\') {
                 inQ = null;
-                sanitizedBody += ch;
-                idx++;
-                continue;
-            }
-            if (ch === '$') {
-                const m = body.slice(idx).match(/^\$[A-Za-z0-9_]+/);
-                if (m) {
-                    idx += m[0].length;
-                    continue;
-                }
             }
             sanitizedBody += ch;
             idx++;

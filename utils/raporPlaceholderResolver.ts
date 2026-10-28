@@ -554,9 +554,45 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     const { santri, settings, record } = context;
     let res = text;
 
+    // Parse customData lebih awal agar semua $KEY milik pengguna (baik di lembar aktif, lintas lembar, maupun customData) tidak tertimpa alias sistem umum
+    let customObj: Record<string, any> = {};
+    if (record?.customData) {
+        try {
+            customObj = typeof record.customData === 'string' ? JSON.parse(record.customData) : record.customData;
+        } catch {
+            customObj = {};
+        }
+    }
+
+    const sheetCells = context.sheetCells;
+    const sheetRowCount = sheetCells?.length || 0;
+    const sheetColCount = sheetCells?.[0]?.length || 0;
+    const definedSheetKeys = new Set<string>();
+    const userDefinedUpperKeys = new Set<string>();
+    if (sheetCells) {
+        for (let r = 0; r < sheetRowCount; r++) {
+            const row = sheetCells[r] || [];
+            for (let c = 0; c < row.length; c++) {
+                const cell = row[c];
+                if (cell && !cell.hidden && cell.key) {
+                    const uk = cell.key.trim().toUpperCase().replace(/[\s-]+/g, '_');
+                    if (uk) {
+                        definedSheetKeys.add(`$${uk}`);
+                        userDefinedUpperKeys.add(uk);
+                    }
+                }
+            }
+        }
+    }
+    for (const rawK of [...Object.keys(customObj || {}), ...Object.keys(context.extraVars || {})]) {
+        const uk = rawK.trim().toUpperCase().replace(/[\s-]+/g, '_');
+        if (uk) userDefinedUpperKeys.add(uk);
+    }
+
     // Normalisasi tag format {{nama}}, {nama}, [nama] dsb ke $TAG untuk fleksibilitas maksimal dari Excel
     const normalizeTagWord = (word: string): string => {
         const u = word.trim().toUpperCase().replace(/[\s-]+/g, '_');
+        if (userDefinedUpperKeys.has(u)) return `$${u}`;
         if (u === 'NAMA' || u === 'NAMA_SANTRI' || u === 'NAMASANTRI') return '$NAMA';
         if (u === 'NAMA_LENGKAP' || u === 'NAMALENGKAP') return '$NAMA_LENGKAP';
         if (u === 'NIS') return '$NIS';
@@ -696,14 +732,49 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         return `$${u}`;
     };
 
-    // Replace {{tag}}
-    res = res.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, p1) => normalizeTagWord(p1));
-    // Replace {tag} (single curly)
-    res = res.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, p1) => normalizeTagWord(p1));
-    // Replace [tag] (square brackets)
-    res = res.replace(/\[([a-zA-Z0-9_]+)\]/g, (_match, p1) => normalizeTagWord(p1));
-    // Replace $tag (mendukung penulisan $Jenjang, $jenjang, $tahunajar, dsb. secara case-insensitive)
-    res = res.replace(/\$([a-zA-Z0-9_]+)/g, (_match, p1) => normalizeTagWord(p1));
+    const normalizeTagsInSegment = (segment: string, insideFormulaQuotes: boolean): string => {
+        let s = segment.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, p1) => normalizeTagWord(p1));
+        if (!insideFormulaQuotes) {
+            s = s.replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, p1) => normalizeTagWord(p1));
+            s = s.replace(/\[([a-zA-Z0-9_]+)\]/g, (_match, p1) => normalizeTagWord(p1));
+        }
+        // Jangan merusak koordinat absolut Excel seperti $D$6 saat menormalisasi $tag
+        s = s.replace(/(\$[A-Za-z]{1,2}\$[1-9]\d{0,2})(?![A-Za-z0-9_])|\$([a-zA-Z0-9_]+)/g, (full, absRef, tagWord) => {
+            if (absRef) return absRef;
+            return normalizeTagWord(tagWord);
+        });
+        return s;
+    };
+
+    if (isRaporFormulaExpression(res)) {
+        let normOut = '';
+        let curSeg = '';
+        let qChar: '"' | "'" | null = null;
+        for (let i = 0; i < res.length; i++) {
+            const ch = res[i];
+            if (qChar) {
+                if (ch === qChar && res[i - 1] !== '\\') {
+                    normOut += normalizeTagsInSegment(curSeg, true) + ch;
+                    curSeg = '';
+                    qChar = null;
+                } else {
+                    curSeg += ch;
+                }
+            } else if (ch === '"' || ch === "'") {
+                normOut += normalizeTagsInSegment(curSeg, false) + ch;
+                curSeg = '';
+                qChar = ch;
+            } else {
+                curSeg += ch;
+            }
+        }
+        if (curSeg) {
+            normOut += normalizeTagsInSegment(curSeg, qChar !== null);
+        }
+        res = normOut;
+    } else {
+        res = normalizeTagsInSegment(res, false);
+    }
 
     const tokenMap = new Map<string, string>();
     const setToken = (key: string, val: string) => {
@@ -811,12 +882,6 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     setToken('$TAHUN_AJAR_LENGKAP', yearInfo.gabungan);
 
     // Presensi & Catatan Wali
-    let customObj: Record<string, any> = {};
-    if (record?.customData) {
-        try {
-            customObj = JSON.parse(record.customData);
-        } catch {}
-    }
     const findCustomVal = (...keys: string[]) => {
         for (const k of keys) {
             if (customObj[k] !== undefined && customObj[k] !== null && String(customObj[k]).trim() !== '') {
@@ -829,7 +894,7 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     const izinVal = record?.izin ?? (findCustomVal('IZIN', 'izin', 'I', 'ABSENSI_IZIN') ?? 0);
     const alphaVal = record?.alpha ?? (findCustomVal('ALPHA', 'alpha', 'ALPA', 'alpa', 'A', 'ABSENSI_ALPHA') ?? 0);
     const totalAbsen = Number(sakitVal || 0) + Number(izinVal || 0) + Number(alphaVal || 0);
-    const catatanWali = record?.catatanWaliKelas || findCustomVal('CATATAN_WALI_KELAS', 'catatanWaliKelas', 'CATATAN_WALI', 'catatan_wali') || '-';
+    const catatanWali = record?.catatanWaliKelas || findCustomVal('CATATAN_WALI_KELAS', 'catatanWaliKelas', 'CATATAN_WALI', 'catatan_wali', 'CATATAN', 'catatan') || '-';
     const keputusanVal = record?.keputusan || findCustomVal('KEPUTUSAN', 'keputusan') || '-';
 
     setToken('$SAKIT', String(sakitVal));
@@ -1088,25 +1153,8 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
     }
 
     const isFormula = isRaporFormulaExpression(res);
-    const PURE_NUMBER_REGEX = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
-
-    // Helper resolusi sel koordinat Excel (misal D6, $D$6, $D6, D$6 atau rentang D6:D15) bila konteks tabel lembar tersedia
-    const sheetCells = context.sheetCells;
-    const sheetRowCount = sheetCells?.length || 0;
-    const sheetColCount = sheetCells?.[0]?.length || 0;
-    const definedSheetKeys = new Set<string>();
-    if (sheetCells) {
-        for (let r = 0; r < sheetRowCount; r++) {
-            const row = sheetCells[r] || [];
-            for (let c = 0; c < row.length; c++) {
-                const cell = row[c];
-                if (cell && !cell.hidden && cell.key) {
-                    const uk = cell.key.trim().toUpperCase().replace(/[\s-]+/g, '_');
-                    if (uk) definedSheetKeys.add(`$${uk}`);
-                }
-            }
-        }
-    }
+    // Mendukung angka bulat maupun desimal titik (85.5) atau koma Indonesia (85,5)
+    const NUMERIC_SCALAR_REGEX = /^-?(?:0|[1-9]\d*)(?:[.,]\d+)?$/;
 
     const findMasterCoord = (r: number, c: number): { r: number; c: number } => {
         if (!sheetCells) return { r, c };
@@ -1137,7 +1185,9 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
         const strVal = rawVal ?? '';
         const trimmedVal = strVal.trim();
         if (strVal === '' || trimmedVal === '-') return '""';
-        if (trimmedVal !== '' && PURE_NUMBER_REGEX.test(trimmedVal)) return trimmedVal;
+        if (trimmedVal !== '' && NUMERIC_SCALAR_REGEX.test(trimmedVal)) {
+            return trimmedVal.replace(',', '.');
+        }
         const escaped = strVal.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         return `"${escaped}"`;
     };
@@ -1502,12 +1552,7 @@ export const resolveRaporText = (text: string, context: RaporResolveContext): st
                 const upperTok = rawTok.toUpperCase();
                 const found = tokenMap.get(upperTok);
                 if (found !== undefined) {
-                    if (isFormula && !PURE_NUMBER_REGEX.test(found.trim())) {
-                        const escaped = found.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                        substituted += `"${escaped}"`;
-                    } else {
-                        substituted += found;
-                    }
+                    substituted += isFormula ? formatScalarForFormula(found) : found;
                     idx += rawTok.length;
                     continue;
                 }

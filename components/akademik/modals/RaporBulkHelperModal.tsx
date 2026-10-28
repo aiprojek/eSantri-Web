@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Santri } from '../../../types';
 import { ExtractedTemplateKey } from '../../../services/raporExcelService';
+import { classifyRaporInputField } from '../../../services/raporCalculationService';
 
 interface RaporBulkHelperModalProps {
     isOpen: boolean;
@@ -11,21 +12,24 @@ interface RaporBulkHelperModalProps {
     onApplyBulkUpdates: (updatesBySantri: Record<number, Record<string, string>>) => void;
 }
 
-const NON_SCORE_KEY_PATTERNS = [
-    'SAKIT', 'IZIN', 'ALPHA', 'ALPA', 'ABSEN',
-    'CATATAN', 'KEPUTUSAN', 'DESKRIPSI', 'CAPAIAN',
-    'SIKAP', 'AKHLAK', 'EKSTRA', 'JUZ', 'SURAH', 'SETORAN'
-];
-
-function computeStudentAverage(studentGrades: Record<string, string> | undefined): number | null {
+function computeStudentAverage(
+    studentGrades: Record<string, string> | undefined,
+    keyMetaMap: Map<string, ExtractedTemplateKey>
+): number | null {
     if (!studentGrades) return null;
     let sum = 0;
     let count = 0;
     Object.entries(studentGrades).forEach(([k, val]) => {
-        const up = k.toUpperCase();
-        if (NON_SCORE_KEY_PATTERNS.some(p => up.includes(p))) return;
+        const meta = keyMetaMap.get(k);
+        const cls = classifyRaporInputField({
+            key: k,
+            label: meta?.label,
+            type: meta?.type,
+            inputMode: meta?.inputMode
+        });
+        if (!cls.isNumericScore) return;
         const cleaned = String(val ?? '').trim().replace(',', '.');
-        if (!cleaned) return;
+        if (!cleaned || cleaned === '-') return;
         const num = Number(cleaned);
         if (!isNaN(num) && num >= 0 && num <= 100) {
             sum += num;
@@ -99,9 +103,15 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
         }
     }, [isOpen, inputKeys]);
 
+    const keyMetaMap = useMemo(() => {
+        const m = new Map<string, ExtractedTemplateKey>();
+        inputKeys.forEach(k => m.set(k.key, k));
+        return m;
+    }, [inputKeys]);
+
     const previewItems = useMemo(() => {
         return santriList.map(s => {
-            const avg = computeStudentAverage(currentGrades[s.id]);
+            const avg = computeStudentAverage(currentGrades[s.id], keyMetaMap);
             const existingCat = (currentGrades[s.id]?.[catatanTargetKey] || '').trim();
             const generatedCat = buildPesantrenCatatan(s.namaLengkap, avg, catatanTone);
 
@@ -124,6 +134,7 @@ export const RaporBulkHelperModal: React.FC<RaporBulkHelperModalProps> = ({
     }, [
         santriList,
         currentGrades,
+        keyMetaMap,
         catatanTargetKey,
         catatanTone,
         overwriteExistingCatatan,

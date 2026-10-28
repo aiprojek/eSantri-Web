@@ -644,6 +644,7 @@ export interface RaporTemplate {
 }
 
 export type RaporColumnType = 'label' | 'data' | 'input' | 'formula' | 'dropdown';
+export type RaporInputMode = 'auto' | 'number' | 'text';
 
 export interface GridCell {
     id: string;
@@ -651,6 +652,7 @@ export interface GridCell {
     col: number;
     value: string;
     type: RaporColumnType;
+    inputMode?: RaporInputMode;
     colSpan?: number;
     rowSpan?: number;
     width?: number;
